@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { RequestContext } from "../../rpc/requestContext.js";
+import type { ApprovalRequester } from "../../controllers/approval/types.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type {
   BeginTransactionApprovalOptions,
@@ -8,7 +8,12 @@ import type {
   TransactionRequestBinding,
 } from "../provider/types.js";
 import type { SendTransactionApprovalReview } from "../review/types.js";
-import type { NamespaceTransactionDraftEdit, TransactionPrepared, TransactionRequest } from "../types.js";
+import type {
+  NamespaceTransactionDraftEdit,
+  TransactionCaller,
+  TransactionPrepared,
+  TransactionRequest,
+} from "../types.js";
 import type { TransactionProposal, TransactionProposalStatus, TransactionProposalTermination } from "./index.js";
 
 type TransactionMetaBase = {
@@ -99,15 +104,15 @@ export type TransactionApprovalReviewReader = {
 };
 
 export type TransactionProposalBeginCommands = {
-  createProposal(intent: TransactionIntent, requestContext: RequestContext): TransactionProposalMeta;
+  createProposal(intent: TransactionIntent, caller: TransactionCaller): TransactionProposalMeta;
   requestApproval(
     proposalMeta: TransactionProposalMeta,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     requestBinding?: TransactionRequestBinding | null,
   ): string;
   beginTransactionApproval(
     intent: TransactionIntent,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalRequestRef>;
 };

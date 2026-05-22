@@ -7,12 +7,11 @@ import {
   ApprovalKinds,
   type ApprovalRequester,
 } from "../controllers/approval/types.js";
-import type { RequestContext } from "../rpc/requestContext.js";
 import { requestApproval } from "./creation.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const REQUEST_CONTEXT: RequestContext = {
+const REQUESTER: ApprovalRequester = {
   transport: "provider",
   origin: "https://dapp.example",
   portId: "port-1",
@@ -48,7 +47,7 @@ const createApprovals = () => {
 };
 
 describe("requestApproval", () => {
-  it("derives approval record fields from requestContext and request payload", () => {
+  it("derives approval record fields from requester and request payload", () => {
     const approvals = createApprovals();
 
     const handle = requestApproval(
@@ -58,7 +57,7 @@ describe("requestApproval", () => {
       },
       {
         kind: ApprovalKinds.RequestAccounts,
-        requestContext: REQUEST_CONTEXT,
+        requester: REQUESTER,
         request: {
           chainRef: "eip155:1",
           suggestedAccounts: ["0xabc"],
@@ -72,7 +71,7 @@ describe("requestApproval", () => {
       request: expect.objectContaining({
         approvalId: handle.approvalId,
         kind: ApprovalKinds.RequestAccounts,
-        origin: REQUEST_CONTEXT.origin,
+        origin: REQUESTER.origin,
         namespace: "eip155",
         chainRef: "eip155:1",
         createdAt: 123,
@@ -82,11 +81,11 @@ describe("requestApproval", () => {
         },
       }),
       requester: {
-        transport: REQUEST_CONTEXT.transport,
-        origin: REQUEST_CONTEXT.origin,
-        portId: REQUEST_CONTEXT.portId,
-        sessionId: REQUEST_CONTEXT.sessionId,
-        requestId: REQUEST_CONTEXT.requestId,
+        transport: REQUESTER.transport,
+        origin: REQUESTER.origin,
+        portId: REQUESTER.portId,
+        sessionId: REQUESTER.sessionId,
+        requestId: REQUESTER.requestId,
       },
     });
   });
@@ -101,7 +100,7 @@ describe("requestApproval", () => {
       },
       {
         kind: ApprovalKinds.SendTransaction,
-        requestContext: REQUEST_CONTEXT,
+        requester: REQUESTER,
         approvalId: "22222222-2222-4222-8222-222222222222",
         createdAt: 456,
         subject: {
@@ -110,7 +109,7 @@ describe("requestApproval", () => {
         },
         request: {
           chainRef: "eip155:10",
-          origin: REQUEST_CONTEXT.origin,
+          origin: REQUESTER.origin,
           chain: null,
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           request: {
@@ -139,16 +138,16 @@ describe("requestApproval", () => {
         },
       }),
       requester: {
-        transport: REQUEST_CONTEXT.transport,
-        origin: REQUEST_CONTEXT.origin,
-        portId: REQUEST_CONTEXT.portId,
-        sessionId: REQUEST_CONTEXT.sessionId,
-        requestId: REQUEST_CONTEXT.requestId,
+        transport: REQUESTER.transport,
+        origin: REQUESTER.origin,
+        portId: REQUESTER.portId,
+        sessionId: REQUESTER.sessionId,
+        requestId: REQUESTER.requestId,
       },
     });
   });
 
-  it("rejects transaction approval requests whose payload origin mismatches requestContext", () => {
+  it("rejects transaction approval requests whose payload origin mismatches requester", () => {
     const approvals = createApprovals();
 
     expect(() =>
@@ -159,7 +158,7 @@ describe("requestApproval", () => {
         },
         {
           kind: ApprovalKinds.SendTransaction,
-          requestContext: REQUEST_CONTEXT,
+          requester: REQUESTER,
           subject: {
             kind: "transaction",
             transactionId: "33333333-3333-4333-8333-333333333333",

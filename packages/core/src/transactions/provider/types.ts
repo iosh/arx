@@ -1,4 +1,4 @@
-import type { RequestContext } from "../../rpc/requestContext.js";
+import type { ApprovalRequester } from "../../controllers/approval/types.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type { TransactionSubmissionResolution } from "../orchestration/types.js";
 
@@ -31,7 +31,7 @@ export type ProviderTransactionSubmission = TransactionApprovalRequestRef & {
 export type ProviderTransactionApprovalCommands = {
   beginTransactionApproval(
     intent: TransactionIntent,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
   ): Promise<ProviderTransactionSubmission>;
 };

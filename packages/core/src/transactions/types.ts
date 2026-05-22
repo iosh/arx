@@ -9,6 +9,10 @@ export type TransactionError = {
   data?: unknown;
 };
 
+export type TransactionCaller = {
+  origin: string;
+};
+
 export type TransactionPayload = Record<string, unknown>;
 
 export type Eip155TransactionAccessListEntry = {

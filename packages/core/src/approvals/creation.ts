@@ -7,10 +7,9 @@ import {
   type ApprovalKind,
   ApprovalKinds,
   type ApprovalRequest,
+  type ApprovalRequester,
   type ApprovalSubjectFor,
 } from "../controllers/approval/types.js";
-import { toApprovalRequester } from "../controllers/approval/utils.js";
-import type { RequestContext } from "../rpc/requestContext.js";
 
 export type ApprovalCreationDeps = {
   approvals: Pick<ApprovalController, "create">;
@@ -20,7 +19,7 @@ export type ApprovalCreationDeps = {
 export type ApprovalCreationInput<K extends ApprovalKind = ApprovalKind> = {
   kind: K;
   request: ApprovalRequest<K>;
-  requestContext: RequestContext;
+  requester: ApprovalRequester;
   approvalId?: string;
   createdAt?: number;
 } & (ApprovalSubjectFor<K> extends undefined
@@ -57,7 +56,7 @@ const assertApprovalRequestConsistency = <K extends ApprovalKind>(input: Approva
   // Transaction approvals keep origin in their payload for downstream review/execution.
   // Keep it aligned with the requester origin before the approval enters pending state.
   const request = input.request as ApprovalRequest<typeof ApprovalKinds.SendTransaction>;
-  if (request.origin === input.requestContext.origin) {
+  if (request.origin === input.requester.origin) {
     return;
   }
 
@@ -67,7 +66,7 @@ const assertApprovalRequestConsistency = <K extends ApprovalKind>(input: Approva
     data: {
       kind: input.kind,
       requestOrigin: request.origin,
-      requesterOrigin: input.requestContext.origin,
+      requesterOrigin: input.requester.origin,
     },
   });
 };
@@ -84,13 +83,12 @@ export const requestApproval = <K extends ApprovalKind>(
 ): ApprovalHandle<K> => {
   assertApprovalRequestConsistency(input);
 
-  const requester = toApprovalRequester(input.requestContext);
   const context = deriveApprovalRecordContext(input);
 
   const createParams: ApprovalCreateParams<K> = {
     approvalId: input.approvalId ?? globalThis.crypto.randomUUID(),
     kind: input.kind,
-    origin: requester.origin,
+    origin: input.requester.origin,
     namespace: context.namespace,
     chainRef: context.chainRef,
     request: input.request,
@@ -102,5 +100,5 @@ export const requestApproval = <K extends ApprovalKind>(
     throw new Error("Send-transaction approvals require a transaction subject.");
   }
 
-  return deps.approvals.create(createParams, requester);
+  return deps.approvals.create(createParams, input.requester);
 };

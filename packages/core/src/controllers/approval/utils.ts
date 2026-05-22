@@ -1,4 +1,3 @@
-import type { RequestContext } from "../../rpc/requestContext.js";
 import type {
   ApprovalCreatedEvent,
   ApprovalFinalStatus,
@@ -96,14 +95,6 @@ export const toSimpleError = (error: unknown): { name: string; message: string }
   const err = error instanceof Error ? error : new Error(String(error));
   return { name: err.name || "Error", message: err.message || "Unknown error" };
 };
-
-export const toApprovalRequester = (requestContext: RequestContext): ApprovalRequester => ({
-  transport: requestContext.transport,
-  origin: requestContext.origin,
-  portId: requestContext.portId,
-  sessionId: requestContext.sessionId,
-  requestId: requestContext.requestId,
-});
 
 export const matchesApprovalScope = (requester: ApprovalRequester, scope: ApprovalScope) => {
   return (

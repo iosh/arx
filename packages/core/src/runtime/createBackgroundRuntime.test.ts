@@ -889,19 +889,15 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
       },
       expect.objectContaining({
-        requestContext: expect.objectContaining({
-          transport: "ui",
-          portId: "ui",
-          sessionId: "11111111-1111-4111-8111-111111111111",
-          requestId: expect.any(String),
+        caller: {
           origin: "chrome-extension://arx",
-        }),
+        },
       }),
     );
     expect(requestApproval).toHaveBeenCalledWith(
       approvalId,
       expect.objectContaining({
-        requestContext: expect.objectContaining({
+        requester: expect.objectContaining({
           transport: "ui",
           portId: "ui",
           sessionId: "11111111-1111-4111-8111-111111111111",
@@ -1057,14 +1053,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(createProposal).toHaveBeenCalledTimes(3);
     expect(requestApproval).toHaveBeenCalledTimes(3);
 
-    const firstSurfaceId = createProposal.mock.calls[0]?.[1].requestContext?.sessionId;
-    const repeatedSurfaceId = createProposal.mock.calls[1]?.[1].requestContext?.sessionId;
-    const secondSurfaceId = createProposal.mock.calls[2]?.[1].requestContext?.sessionId;
-
-    expect(firstSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    expect(repeatedSurfaceId).toBe(firstSurfaceId);
-    expect(secondSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    expect(secondSurfaceId).not.toBe(firstSurfaceId);
+    expect(createProposal.mock.calls[0]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
+    expect(createProposal.mock.calls[1]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
+    expect(createProposal.mock.calls[2]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
 
     runtime.lifecycle.shutdown();
   });

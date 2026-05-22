@@ -96,4 +96,44 @@ describe("TransactionProposalBeginService", () => {
     expect(createPendingApproval).toHaveBeenCalledTimes(1);
     expect(queue).toHaveBeenCalledWith(REQUEST_ID);
   });
+
+  it("rejects approval requests from a different origin than the proposal", () => {
+    const createPendingApproval = vi.fn();
+    const service = createBeginService({
+      approvals: { createPending: createPendingApproval as never },
+    });
+
+    const proposalMeta = service.createProposal(
+      {
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        account: {
+          accountKey: accountCodecs.toAccountKeyFromAddress({
+            chainRef: DEFAULT_CHAIN_REF,
+            address: DEFAULT_FROM,
+          }),
+          accountAddress: DEFAULT_FROM,
+        },
+        request: {
+          namespace: "eip155",
+          chainRef: DEFAULT_CHAIN_REF,
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x0",
+            data: "0x",
+          },
+        },
+      } satisfies TransactionIntent,
+      { origin: REQUEST_CONTEXT.origin },
+    );
+
+    expect(() =>
+      service.requestApproval(proposalMeta, {
+        ...REQUEST_CONTEXT,
+        origin: "https://other.example",
+      }),
+    ).toThrow(/origin/i);
+    expect(createPendingApproval).not.toHaveBeenCalled();
+  });
 });

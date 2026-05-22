@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
-import type { RequestContext } from "../../../rpc/requestContext.js";
+import type { ApprovalRequester } from "../../../controllers/approval/types.js";
 import type { TransactionIntent } from "../../../transactions/intent/index.js";
-import type { TransactionRequest } from "../../../transactions/types.js";
+import type { TransactionCaller, TransactionRequest } from "../../../transactions/types.js";
 import type {
   UiAccountsAccess,
   UiChainsAccess,
@@ -14,11 +14,15 @@ import type {
 } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
-const createUiRequestContext = (surface: UiSurfaceIdentity): RequestContext => ({
+const createUiApprovalRequester = (surface: UiSurfaceIdentity): ApprovalRequester => ({
   transport: surface.transport,
   portId: surface.portId,
   sessionId: surface.surfaceId,
   requestId: crypto.randomUUID(),
+  origin: surface.origin,
+});
+
+const createUiTransactionCaller = (surface: UiSurfaceIdentity): TransactionCaller => ({
   origin: surface.origin,
 });
 
@@ -76,7 +80,8 @@ export const createTransactionsHandlers = (deps: {
         });
       }
 
-      const requestContext = createUiRequestContext(deps.surface);
+      const caller = createUiTransactionCaller(deps.surface);
+      const requester = createUiApprovalRequester(deps.surface);
 
       const request: TransactionRequest = uiBindings.createSendTransactionRequest({
         chainRef: resolvedChainRef,
@@ -94,11 +99,11 @@ export const createTransactionsHandlers = (deps: {
       };
 
       const proposal = await deps.transactions.commands.createProposal(intent, {
-        requestContext,
+        caller,
       });
 
       const approval = await deps.transactions.commands.requestApproval(proposal.transactionId, {
-        requestContext,
+        requester,
       });
 
       return { approvalId: approval.approvalId };

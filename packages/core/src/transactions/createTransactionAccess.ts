@@ -1,5 +1,4 @@
 import type { ApprovalController } from "../controllers/approval/types.js";
-import type { RequestContext } from "../rpc/requestContext.js";
 import type {
   TransactionAccess,
   TransactionCreateProposalResult,
@@ -23,6 +22,7 @@ import type {
 import type { TransactionRecordView as RuntimeTransactionRecordView, TransactionRecordView } from "./record/index.js";
 import type { TransactionRecordReader } from "./record/types.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
+import type { TransactionCaller } from "./types.js";
 
 const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
 
@@ -40,12 +40,8 @@ type CreateTransactionAccessDeps = {
   logger?: (message: string, data?: unknown) => void;
 };
 
-const createInternalRequestContext = (): RequestContext => ({
-  transport: "ui",
+const createInternalTransactionCaller = (): TransactionCaller => ({
   origin: INTERNAL_TRANSACTION_ORIGIN,
-  portId: "transactions",
-  sessionId: crypto.randomUUID(),
-  requestId: crypto.randomUUID(),
 });
 
 const mapPreview = (input: SendTransactionApprovalReview): TransactionApprovalPreview => ({
@@ -197,8 +193,8 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
   return {
     commands: {
       async createProposal(intent, options): Promise<TransactionCreateProposalResult> {
-        const requestContext = options?.requestContext ?? createInternalRequestContext();
-        const proposalMeta = deps.proposalBegin.createProposal(intent, requestContext);
+        const caller = options?.caller ?? createInternalTransactionCaller();
+        const proposalMeta = deps.proposalBegin.createProposal(intent, caller);
         return {
           transactionId: proposalMeta.id,
         };
@@ -212,11 +208,7 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
           throw new Error(`Transaction proposal ${transactionId} is no longer pending approval.`);
         }
 
-        const approvalId = deps.proposalBegin.requestApproval(
-          toProposalMeta(runtimeView),
-          options.requestContext,
-          null,
-        );
+        const approvalId = deps.proposalBegin.requestApproval(toProposalMeta(runtimeView), options.requester, null);
         if (options.requestScope?.abortSignal) {
           bindApprovalAbort({
             transactionId,

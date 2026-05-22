@@ -2,9 +2,8 @@ import { ArxReasons, arxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountAddress, AccountController, OwnedAccountView } from "../../controllers/account/types.js";
-import type { ApprovalController, ApprovalCreateParams } from "../../controllers/approval/types.js";
+import type { ApprovalController, ApprovalCreateParams, ApprovalRequester } from "../../controllers/approval/types.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../namespace/types.js";
@@ -14,7 +13,7 @@ import type {
   TransactionApprovalRequestRef,
   TransactionRequestBinding,
 } from "../provider/types.js";
-import type { TransactionRequest } from "../types.js";
+import type { TransactionCaller, TransactionRequest } from "../types.js";
 import {
   coerceTransactionError,
   createMissingNamespaceTransactionError,
@@ -57,11 +56,11 @@ export class TransactionProposalBeginService {
 
   async beginTransactionApproval(
     intent: TransactionIntent,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalRequestRef> {
-    const proposalMeta = this.createProposal(intent, requestContext);
-    const approvalId = this.requestApproval(proposalMeta, requestContext, options.requestBinding ?? null);
+    const proposalMeta = this.createProposal(intent, requester);
+    const approvalId = this.requestApproval(proposalMeta, requester, options.requestBinding ?? null);
 
     return {
       transactionId: proposalMeta.id,
@@ -69,7 +68,7 @@ export class TransactionProposalBeginService {
     };
   }
 
-  createProposal(intent: TransactionIntent, requestContext: RequestContext): TransactionProposalMeta {
+  createProposal(intent: TransactionIntent, caller: TransactionCaller): TransactionProposalMeta {
     const { request } = intent;
     const derived = parseChainRef(request.chainRef);
     if (request.namespace !== derived.namespace) {
@@ -122,7 +121,7 @@ export class TransactionProposalBeginService {
     const validationContext: TransactionValidationContext = {
       namespace: derived.namespace,
       chainRef: request.chainRef,
-      origin: requestContext.origin,
+      origin: caller.origin,
       from: ownedAccount.canonicalAddress,
       request: structuredClone(derivedRequest),
     };
@@ -135,7 +134,7 @@ export class TransactionProposalBeginService {
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef: request.chainRef,
-      origin: requestContext.origin,
+      origin: caller.origin,
       fromAccountKey: ownedAccount.accountKey,
       requestedAddress: intent.account.requestedAddress ?? null,
       request: structuredClone(derivedRequest),
@@ -148,23 +147,35 @@ export class TransactionProposalBeginService {
 
   requestApproval(
     proposalMeta: TransactionProposalMeta,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     requestBinding?: TransactionRequestBinding | null,
   ): string {
+    if (requester.origin !== proposalMeta.origin) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "Transaction approval requester origin must match the proposal origin.",
+        data: {
+          transactionId: proposalMeta.id,
+          proposalOrigin: proposalMeta.origin,
+          requesterOrigin: requester.origin,
+        },
+      });
+    }
+
     const createApprovalParams = (
       approvalId: string,
       createdAt: number,
     ): ApprovalCreateParams<typeof ApprovalKinds.SendTransaction> => ({
       approvalId,
       kind: ApprovalKinds.SendTransaction,
-      origin: requestContext.origin,
+      origin: proposalMeta.origin,
       namespace: proposalMeta.namespace,
       chainRef: proposalMeta.chainRef,
       createdAt,
       request: {
         transactionId: proposalMeta.id,
         chainRef: proposalMeta.chainRef,
-        origin: requestContext.origin,
+        origin: proposalMeta.origin,
       },
       subject: {
         kind: "transaction",
@@ -176,7 +187,7 @@ export class TransactionProposalBeginService {
       if (requestBinding) {
         return requestBinding.attachBlockingApproval(
           ({ approvalId, createdAt }) => {
-            this.#approvals.createPending(createApprovalParams(approvalId, createdAt), requestContext);
+            this.#approvals.createPending(createApprovalParams(approvalId, createdAt), requester);
             return {};
           },
           {
@@ -186,10 +197,7 @@ export class TransactionProposalBeginService {
         ).approvalId;
       }
 
-      this.#approvals.createPending(
-        createApprovalParams(proposalMeta.approvalId, proposalMeta.createdAt),
-        requestContext,
-      );
+      this.#approvals.createPending(createApprovalParams(proposalMeta.approvalId, proposalMeta.createdAt), requester);
       return proposalMeta.approvalId;
     } catch (error) {
       const approvalError = error instanceof Error ? error : new Error(String(error));

@@ -78,5 +78,6 @@ export type {
   Eip155TransactionReceipt,
   Eip155TransactionRequest,
   NamespaceTransactionDraftEdit,
+  TransactionCaller,
   TransactionRequest,
 } from "./types.js";

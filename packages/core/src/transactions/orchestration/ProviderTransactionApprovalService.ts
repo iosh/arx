@@ -1,4 +1,4 @@
-import type { RequestContext } from "../../rpc/requestContext.js";
+import type { ApprovalRequester } from "../../controllers/approval/types.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type { TransactionProposalBeginCommands } from "../proposal/types.js";
 import type {
@@ -34,10 +34,10 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
 
   async beginTransactionApproval(
     intent: TransactionIntent,
-    requestContext: RequestContext,
+    requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
   ): Promise<ProviderTransactionSubmission> {
-    const submission = await this.#begin.beginTransactionApproval(intent, requestContext, options);
+    const submission = await this.#begin.beginTransactionApproval(intent, requester, options);
     const abortSignal = options.requestBinding?.abortSignal ?? null;
 
     if (!abortSignal) {

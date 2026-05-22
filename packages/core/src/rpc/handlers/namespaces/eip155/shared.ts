@@ -73,7 +73,7 @@ export const requestProviderApproval = <K extends ProviderApprovalKind>(args: {
       },
       {
         kind: args.kind,
-        requestContext,
+        requester: requestContext,
         request: args.request,
         subject: undefined,
         approvalId,

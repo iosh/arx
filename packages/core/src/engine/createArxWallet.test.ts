@@ -606,17 +606,13 @@ describe("createArxWallet", () => {
           },
         },
         {
-          requestContext: {
-            transport: "provider",
+          caller: {
             origin: ORIGIN,
-            portId: PROVIDER_PORT_ID,
-            sessionId: PROVIDER_SESSION_ID,
-            requestId: "request-1",
           },
         },
       );
       const approval = await runtime.transactions.access.commands.requestApproval(proposal.transactionId, {
-        requestContext: {
+        requester: {
           transport: "provider",
           origin: ORIGIN,
           portId: PROVIDER_PORT_ID,
@@ -724,12 +720,8 @@ describe("createArxWallet", () => {
             },
           },
           {
-            requestContext: {
-              transport: "provider",
+            caller: {
               origin: ORIGIN,
-              portId: PROVIDER_PORT_ID,
-              sessionId: PROVIDER_SESSION_ID,
-              requestId: "request-intent-mismatch",
             },
           },
         ),

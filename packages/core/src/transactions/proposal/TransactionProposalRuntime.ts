@@ -1,16 +1,19 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalFinishedEvent } from "../../controllers/approval/types.js";
-import type { TransactionProposalStatus, TransactionProposalTermination } from "../proposal/index.js";
-import type { TransactionReviewBlocker, TransactionReviewError } from "../review/types.js";
+import type { TransactionProposalStatusChange } from "../events.js";
+import type {
+  TransactionProposalStatus,
+  TransactionProposalTermination,
+  TransactionProposalTerminationReason,
+} from "../proposal/index.js";
 import type {
   TransactionProposalMeta,
   TransactionProposalPrepareSnapshot,
-  TransactionProposalSnapshot,
   TransactionProposalReviewState,
+  TransactionProposalSnapshot,
   TransactionProposalStateSnapshot,
-  TransactionProposalStatusChange,
-  TransactionProposalTerminationReason,
-} from "../runtime.js";
+} from "../proposal/types.js";
+import type { TransactionReviewBlocker, TransactionReviewError } from "../review/types.js";
 import { canPrepareProposal } from "../status.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "../topics.js";
 import type { TransactionError, TransactionPrepared, TransactionRequest } from "../types.js";

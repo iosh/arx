@@ -5,14 +5,10 @@ import type {
   TransactionProposalTerminationReason,
   TransactionProposalView,
 } from "./proposal/index.js";
+import type { TransactionApprovalReviewReader, TransactionProposalReader } from "./proposal/types.js";
+import type { BeginTransactionApprovalOptions, ProviderTransactionSubmission } from "./provider/types.js";
 import type { TransactionRecordView } from "./record/index.js";
-import type {
-  BeginTransactionApprovalOptions,
-  ProviderTransactionSubmission,
-  TransactionApprovalReviewReader,
-  TransactionProposalReader,
-  TransactionRecordReader,
-} from "./runtime.js";
+import type { TransactionRecordReader } from "./record/types.js";
 import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "./types.js";
 
 export type TransactionRequestScope = {

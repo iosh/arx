@@ -5,7 +5,7 @@ import type {
   TransactionBroadcastStartedChange,
   TransactionStatusChange,
   TransactionSubmittedChange,
-} from "./runtime.js";
+} from "./events.js";
 
 export const TRANSACTION_STATUS_CHANGED = eventTopic<TransactionStatusChange>("transaction:statusChanged");
 

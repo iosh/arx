@@ -1,4 +1,4 @@
-import type { TransactionApprovalResult } from "../runtime.js";
+import type { TransactionApprovalResult } from "../orchestration/types.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 
 type TransactionProposalApprovalServiceDeps = {

@@ -7,11 +7,9 @@ import type {
   TransactionSignContext,
   TransactionTrackingContext,
 } from "./namespace/types.js";
-import type {
-  TransactionProposalMeta,
-  TransactionProposalTerminationReason,
-  TransactionRecordView,
-} from "./runtime.js";
+import type { TransactionProposalTerminationReason } from "./proposal/index.js";
+import type { TransactionProposalMeta } from "./proposal/types.js";
+import type { TransactionRecordView } from "./record/index.js";
 import type { TransactionError, TransactionSubmitted } from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {

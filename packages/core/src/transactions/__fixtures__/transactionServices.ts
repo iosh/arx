@@ -8,13 +8,11 @@ import type { TransactionStatus as StorageTransactionStatus, TransactionRecord }
 import { buildEip155ApprovalReview } from "../namespace/eip155/approvalReview.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../namespace/types.js";
+import type { TransactionProposalTerminationReason } from "../proposal/index.js";
 import { TransactionProposalRuntime } from "../proposal/TransactionProposalRuntime.js";
+import type { TransactionProposalMeta } from "../proposal/types.js";
+import type { TransactionRecordView } from "../record/index.js";
 import type { TransactionRecordViewStore } from "../record/TransactionRecordViewStore.js";
-import type {
-  TransactionProposalMeta,
-  TransactionProposalTerminationReason,
-  TransactionRecordView,
-} from "../runtime.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 
 export const REQUEST_ID = "11111111-1111-4111-8111-111111111111";

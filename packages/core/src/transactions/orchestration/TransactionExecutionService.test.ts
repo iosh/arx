@@ -22,8 +22,9 @@ import {
   toRecord,
 } from "../__fixtures__/transactionServices.js";
 import { TransactionProposalApprovalService } from "../proposal/TransactionProposalApprovalService.js";
+import type { TransactionProposalMeta } from "../proposal/types.js";
+import type { TransactionRecordView } from "../record/index.js";
 import { TransactionRecordRuntime } from "../record/TransactionRecordRuntime.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "../runtime.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "../topics.js";
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";

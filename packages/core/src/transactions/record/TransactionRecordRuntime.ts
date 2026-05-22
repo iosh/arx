@@ -1,9 +1,10 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
-import type { TransactionProposalMeta, TransactionRecordStatus, TransactionRecordView } from "../runtime.js";
+import type { TransactionProposalMeta } from "../proposal/types.js";
 import type { ReceiptTracker } from "../tracker/ReceiptTracker.js";
 import type { TransactionError, TransactionSubmitted } from "../types.js";
+import type { TransactionRecordStatus, TransactionRecordView } from "./index.js";
 import { TransactionPersistenceRuntime } from "./TransactionPersistenceRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { TransactionTrackingRuntime } from "./TransactionTrackingRuntime.js";

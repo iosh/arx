@@ -1,14 +1,13 @@
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionIntent } from "../intent/index.js";
+import type { TransactionProposalBeginCommands } from "../proposal/types.js";
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
   ProviderTransactionSubmission,
-  TransactionApprovalExecutor,
-  TransactionProposalBeginCommands,
-  TransactionSubmissionTracker,
-} from "../runtime.js";
+} from "../provider/types.js";
 import type { TransactionError } from "../types.js";
+import type { TransactionApprovalExecutor, TransactionSubmissionTracker } from "./types.js";
 
 const createTransactionTransportDisconnectedError = (): TransactionError => ({
   name: "TransportDisconnectedError",

@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionIntent } from "../intent/index.js";
-import type {
-  BeginTransactionApprovalOptions,
-  TransactionApprovalRequestRef,
-  TransactionSubmissionResolution,
-} from "../runtime.js";
+import type { BeginTransactionApprovalOptions, TransactionApprovalRequestRef } from "../provider/types.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
+import type { TransactionSubmissionResolution } from "./types.js";
 
 const TRANSACTION_ID = "11111111-1111-4111-8111-111111111111";
 const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";

@@ -8,12 +8,12 @@ import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../namespace/types.js";
+import type { TransactionProposalMeta } from "../proposal/types.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalRequestRef,
-  TransactionProposalMeta,
   TransactionRequestBinding,
-} from "../runtime.js";
+} from "../provider/types.js";
 import type { TransactionRequest } from "../types.js";
 import {
   coerceTransactionError,

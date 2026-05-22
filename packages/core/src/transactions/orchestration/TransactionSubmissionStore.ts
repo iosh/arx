@@ -3,8 +3,8 @@ import type {
   TransactionSubmissionPersistenceFailure,
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,
-} from "../runtime.js";
-import { TransactionSubmissionError } from "../runtime.js";
+} from "./types.js";
+import { TransactionSubmissionError } from "./types.js";
 
 type TransactionSubmissionStoreOptions = {
   stateLimit: number;

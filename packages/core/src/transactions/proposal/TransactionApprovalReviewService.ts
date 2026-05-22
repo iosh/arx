@@ -1,6 +1,6 @@
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
+import type { TransactionApprovalReviewReader } from "../proposal/types.js";
 import { buildSendTransactionApprovalReview } from "../review/projector.js";
-import type { TransactionApprovalReviewReader } from "../runtime.js";
 import { buildProposalStateContext } from "../utils.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 

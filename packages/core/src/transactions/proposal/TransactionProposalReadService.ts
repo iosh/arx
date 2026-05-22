@@ -1,4 +1,4 @@
-import type { TransactionApprovalReviewReader, TransactionProposalReader } from "../runtime.js";
+import type { TransactionApprovalReviewReader, TransactionProposalReader } from "../proposal/types.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 
 type CreateTransactionProposalReaderDeps = {

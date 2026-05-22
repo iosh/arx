@@ -6,22 +6,23 @@ import type {
   TransactionRequestApprovalResult,
   TransactionSubmissionResolution,
 } from "./access.js";
-import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
-import type { TransactionRecordView } from "./record/index.js";
-import type { SendTransactionApprovalReview } from "./review/types.js";
 import type {
   ApprovalDetailInvalidationEvents,
   TransactionApprovalExecutor,
+  TransactionRecoveryRuntime,
+  TransactionSubmissionTracker,
+} from "./orchestration/types.js";
+import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
+import type {
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
   TransactionProposalMeta,
   TransactionProposalReader,
   TransactionProposalRuntimeReader,
-  TransactionRecordReader,
-  TransactionRecordView as RuntimeTransactionRecordView,
-  TransactionRecoveryRuntime,
-  TransactionSubmissionTracker,
-} from "./runtime.js";
+} from "./proposal/types.js";
+import type { TransactionRecordView as RuntimeTransactionRecordView, TransactionRecordView } from "./record/index.js";
+import type { TransactionRecordReader } from "./record/types.js";
+import type { SendTransactionApprovalReview } from "./review/types.js";
 
 const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
 

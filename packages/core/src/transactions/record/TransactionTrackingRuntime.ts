@@ -2,12 +2,12 @@ import type { ListTransactionsCursor, TransactionsService } from "../../services
 import type { TransactionRecord } from "../../storage/records.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionReplacementKey } from "../namespace/types.js";
-import type { TransactionRecordStatus, TransactionRecordView } from "../runtime.js";
 import { isTransactionRecordTerminal } from "../status.js";
 import type { ReceiptTracker } from "../tracker/ReceiptTracker.js";
 import { createReceiptTracker } from "../tracker/ReceiptTracker.js";
 import type { TransactionError } from "../types.js";
 import { buildTrackingContext, coerceTransactionError, isUserRejectedError } from "../utils.js";
+import type { TransactionRecordStatus, TransactionRecordView } from "./index.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 
 type TransactionTrackingRuntimeDeps = {

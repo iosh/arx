@@ -7,9 +7,10 @@ import type {
 import { TransactionSubmittedSchema } from "../../storage/schemas.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { TransactionReplacementKey as NamespaceTransactionReplacementKey } from "../namespace/types.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "../runtime.js";
+import type { TransactionProposalMeta } from "../proposal/types.js";
 import type { TransactionError, TransactionSubmitted } from "../types.js";
 import { createTransactionPersistenceError } from "../utils.js";
+import type { TransactionRecordView } from "./index.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 
 type ProposalPersistenceBridge = {

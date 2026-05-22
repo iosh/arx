@@ -1,9 +1,10 @@
 import type { ApprovalController, ApprovalFinishedEvent } from "../../controllers/approval/types.js";
+import type { ApprovalDetailInvalidation } from "../events.js";
 import type { TransactionProposalRuntime } from "../proposal/TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "../record/TransactionRecordViewStore.js";
-import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } from "../runtime.js";
 import type { TransactionMessenger } from "../topics.js";
 import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
+import type { ApprovalDetailInvalidationEvents } from "./types.js";
 
 type CreateApprovalDetailInvalidationsDeps = {
   messenger: TransactionMessenger;

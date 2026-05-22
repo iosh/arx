@@ -18,9 +18,10 @@ import { TransactionProposalBeginService } from "./proposal/TransactionProposalB
 import { TransactionProposalDraftService } from "./proposal/TransactionProposalDraftService.js";
 import { createTransactionProposalReader } from "./proposal/TransactionProposalReadService.js";
 import { TransactionProposalRuntime } from "./proposal/TransactionProposalRuntime.js";
+import type { ProviderTransactionApprovalCommands } from "./provider/types.js";
 import { TransactionRecordRuntime } from "./record/TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./record/TransactionRecordViewStore.js";
-import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./runtime.js";
+import type { TransactionRuntime } from "./runtime.js";
 import type { TransactionMessenger } from "./topics.js";
 import type { ReceiptTracker } from "./tracker/ReceiptTracker.js";
 

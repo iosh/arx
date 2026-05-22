@@ -1,12 +1,9 @@
+import type { TransactionProposalTerminationReason } from "../proposal/index.js";
 import type { TransactionProposalApprovalService } from "../proposal/TransactionProposalApprovalService.js";
 import type { TransactionProposalRuntime } from "../proposal/TransactionProposalRuntime.js";
-import type {
-  TransactionApprovalExecutor,
-  TransactionApprovalResult,
-  TransactionProposalTerminationReason,
-} from "../runtime.js";
 import type { TransactionError } from "../types.js";
 import type { TransactionExecutionAttemptPhase, TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
+import type { TransactionApprovalExecutor, TransactionApprovalResult } from "./types.js";
 
 type TransactionExecutionServiceDeps = {
   proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;

@@ -304,10 +304,8 @@ describe("createArxWallet", () => {
           },
         },
         {
-          transport: "provider",
           origin: ORIGIN,
-          portId: "port-1",
-          sessionId: "11111111-1111-4111-8111-111111111111",
+          initiator: "dapp",
           requestId: "request-1",
         },
       );
@@ -613,10 +611,8 @@ describe("createArxWallet", () => {
       );
       const approval = await runtime.transactions.access.commands.requestApproval(proposal.transactionId, {
         requester: {
-          transport: "provider",
           origin: ORIGIN,
-          portId: PROVIDER_PORT_ID,
-          sessionId: PROVIDER_SESSION_ID,
+          initiator: "dapp",
           requestId: "request-1",
         },
       });

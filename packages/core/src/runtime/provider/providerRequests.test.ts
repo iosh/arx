@@ -36,12 +36,12 @@ describe("createProviderRequests", () => {
       approvalId,
     }));
 
-    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
     expect(cancelApproval).toHaveBeenCalledTimes(1);
     expect(cancelApproval).toHaveBeenCalledWith({
       approvalId: "approval-1",
-      reason: "session_lost",
+      reason: "caller_disconnected",
     });
     expect(providerRequests.has("request-1")).toBe(false);
     expect(providerRequests.has("request-2")).toBe(true);
@@ -65,7 +65,7 @@ describe("createProviderRequests", () => {
       method: "eth_chainId",
     });
 
-    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
     expect(handle.fulfill()).toBe(false);
     expect(handle.reject()).toBe(false);
@@ -89,7 +89,7 @@ describe("createProviderRequests", () => {
     });
 
     expect(handle.signal.aborted).toBe(false);
-    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
     expect(handle.signal.aborted).toBe(true);
     expect(handle.signal.reason).toMatchObject({
@@ -112,7 +112,7 @@ describe("createProviderRequests", () => {
       method: "eth_sendTransaction",
     });
 
-    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
     expect(handle.reject()).toBe(false);
     expect(handle.getTerminalError()).toMatchObject({
@@ -144,7 +144,7 @@ describe("createProviderRequests", () => {
         id: "request-3",
         blockingApprovalId: approvalId,
       });
-      cancelPromise = handle.cancel("session_lost");
+      cancelPromise = handle.cancel("caller_disconnected");
 
       return {
         approvalId,
@@ -156,7 +156,7 @@ describe("createProviderRequests", () => {
     expect(cancelApproval).toHaveBeenCalledTimes(1);
     expect(cancelApproval).toHaveBeenCalledWith({
       approvalId: "approval-3",
-      reason: "session_lost",
+      reason: "caller_disconnected",
     });
     expect(providerRequests.has("request-3")).toBe(false);
     expect(providerRequests.get("request-3")).toBeUndefined();

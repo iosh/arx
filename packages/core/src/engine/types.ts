@@ -253,7 +253,6 @@ export type WalletApprovals = Readonly<{
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
   cancel: ApprovalController["cancel"];
-  cancelByScope: ApprovalController["cancelByScope"];
   onStateChanged: ApprovalController["onStateChanged"];
   onCreated(listener: (event: ApprovalCreatedEvent) => void): () => void;
   onFinished(listener: (event: ApprovalFinishedEvent<unknown>) => void): () => void;

@@ -27,7 +27,6 @@ import {
   cloneState,
   createDeferred,
   deriveApprovalFinalStatus,
-  matchesApprovalScope,
   toSimpleError,
 } from "./utils.js";
 
@@ -368,32 +367,6 @@ export class InMemoryApprovalController implements ApprovalController {
     });
   }
 
-  async cancelByScope(input: {
-    scope:
-      | ApprovalRequester
-      | { transport: ApprovalRequester["transport"]; origin: string; portId: string; sessionId: string };
-    reason: ApprovalTerminalReason;
-  }): Promise<number> {
-    const cancelledIds: string[] = [];
-
-    for (const [id, entry] of this.#pending) {
-      if (matchesApprovalScope(entry.record.requester, input.scope)) {
-        cancelledIds.push(id);
-      }
-    }
-
-    await Promise.all(
-      cancelledIds.map((id) =>
-        this.cancel({
-          approvalId: id,
-          reason: input.reason,
-        }),
-      ),
-    );
-
-    return cancelledIds.length;
-  }
-
   listPendingIdsBySubject(subject: ApprovalSubject): string[] {
     const approvalIds = this.#subjectApprovalIndex.get(this.#toSubjectKey(subject));
     if (!approvalIds) {
@@ -564,7 +537,7 @@ export class InMemoryApprovalController implements ApprovalController {
   }): Error {
     const data = { approvalId: params.approvalId, terminalReason: params.terminalReason, ...params.meta };
 
-    if (params.terminalReason === "session_lost") {
+    if (params.terminalReason === "caller_disconnected") {
       return arxError({ reason: ArxReasons.TransportDisconnected, message: "Transport disconnected.", data });
     }
     if (params.terminalReason === "timeout") {
@@ -576,11 +549,14 @@ export class InMemoryApprovalController implements ApprovalController {
     if (params.terminalReason === "internal_error") {
       return arxError({ reason: ArxReasons.RpcInternal, message: "Internal error.", data });
     }
-    if (params.terminalReason === "window_closed") {
-      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Approval window closed.", data });
+    if (params.terminalReason === "user_dismissed") {
+      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Approval dismissed.", data });
     }
-    if (params.terminalReason === "replaced") {
-      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request replaced.", data });
+    if (params.terminalReason === "superseded") {
+      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request superseded.", data });
+    }
+    if (params.terminalReason === "runtime_shutdown") {
+      return arxError({ reason: ArxReasons.RpcInternal, message: "Runtime shut down.", data });
     }
     if (params.terminalReason === "user_approve") {
       throw new Error(`Unexpected approval cancellation for approved request: ${JSON.stringify(data)}`);

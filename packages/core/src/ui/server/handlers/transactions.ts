@@ -15,11 +15,9 @@ import type {
 import { assertUnlocked } from "./lib.js";
 
 const createUiApprovalRequester = (surface: UiSurfaceIdentity): ApprovalRequester => ({
-  transport: surface.transport,
-  portId: surface.portId,
-  sessionId: surface.surfaceId,
-  requestId: crypto.randomUUID(),
   origin: surface.origin,
+  initiator: "wallet_ui",
+  requestId: crypto.randomUUID(),
 });
 
 const createUiTransactionCaller = (surface: UiSurfaceIdentity): TransactionCaller => ({

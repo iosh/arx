@@ -129,10 +129,8 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
   request: overrides?.request ?? { chainRef: overrides?.chainRef ?? "eip155:1" },
   createdAt: overrides?.createdAt ?? Date.now(),
   requester: {
-    transport: overrides?.requester?.transport ?? "provider",
     origin: overrides?.requester?.origin ?? "https://dapp.example",
-    portId: overrides?.requester?.portId ?? "port-1",
-    sessionId: overrides?.requester?.sessionId ?? "11111111-1111-4111-8111-111111111111",
+    initiator: overrides?.requester?.initiator ?? "dapp",
     requestId: overrides?.requester?.requestId ?? "request-1",
   },
 });
@@ -277,10 +275,8 @@ describe("uiEntryCoordinator", () => {
       createRecord({
         approvalId: "approval-2",
         requester: {
-          transport: "provider",
           origin: "https://dapp.example",
-          portId: "port-2",
-          sessionId: "22222222-2222-4222-8222-222222222222",
+          initiator: "dapp",
           requestId: "request-2",
         },
       }),
@@ -291,12 +287,12 @@ describe("uiEntryCoordinator", () => {
     harness.closeWindow(11);
 
     await vi.waitFor(() =>
-      expect(harness.approvals.cancel).toHaveBeenCalledWith({ approvalId: "approval-1", reason: "window_closed" }),
+      expect(harness.approvals.cancel).toHaveBeenCalledWith({ approvalId: "approval-1", reason: "user_dismissed" }),
     );
 
     expect(harness.approvals.cancel).not.toHaveBeenCalledWith({
       approvalId: "approval-2",
-      reason: "window_closed",
+      reason: "user_dismissed",
     });
     expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual(["approval-2"]);
 
@@ -319,10 +315,8 @@ describe("uiEntryCoordinator", () => {
       createRecord({
         approvalId: "ui-approval",
         requester: {
-          transport: "ui",
           origin: "chrome-extension://wallet",
-          portId: "ui-port",
-          sessionId: "33333333-3333-4333-8333-333333333333",
+          initiator: "wallet_ui",
           requestId: "ui-request",
         },
       }),
@@ -335,7 +329,7 @@ describe("uiEntryCoordinator", () => {
     await vi.waitFor(() =>
       expect(harness.approvals.cancel).toHaveBeenCalledWith({
         approvalId: "provider-approval",
-        reason: "window_closed",
+        reason: "user_dismissed",
       }),
     );
 
@@ -360,10 +354,8 @@ describe("uiEntryCoordinator", () => {
       createRecord({
         approvalId: "ui-approval",
         requester: {
-          transport: "ui",
           origin: "chrome-extension://wallet",
-          portId: "ui-port",
-          sessionId: "33333333-3333-4333-8333-333333333333",
+          initiator: "wallet_ui",
           requestId: "ui-request",
         },
       }),
@@ -383,7 +375,7 @@ describe("uiEntryCoordinator", () => {
     await vi.waitFor(() =>
       expect(harness.approvals.cancel).toHaveBeenCalledWith({
         approvalId: "provider-approval",
-        reason: "window_closed",
+        reason: "user_dismissed",
       }),
     );
 

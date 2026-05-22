@@ -12,10 +12,8 @@ import { requestApproval } from "./creation.js";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const REQUESTER: ApprovalRequester = {
-  transport: "provider",
   origin: "https://dapp.example",
-  portId: "port-1",
-  sessionId: "11111111-1111-4111-8111-111111111111",
+  initiator: "dapp",
   requestId: "rpc-1",
 };
 
@@ -81,10 +79,8 @@ describe("requestApproval", () => {
         },
       }),
       requester: {
-        transport: REQUESTER.transport,
         origin: REQUESTER.origin,
-        portId: REQUESTER.portId,
-        sessionId: REQUESTER.sessionId,
+        initiator: REQUESTER.initiator,
         requestId: REQUESTER.requestId,
       },
     });
@@ -138,10 +134,8 @@ describe("requestApproval", () => {
         },
       }),
       requester: {
-        transport: REQUESTER.transport,
         origin: REQUESTER.origin,
-        portId: REQUESTER.portId,
-        sessionId: REQUESTER.sessionId,
+        initiator: REQUESTER.initiator,
         requestId: REQUESTER.requestId,
       },
     });

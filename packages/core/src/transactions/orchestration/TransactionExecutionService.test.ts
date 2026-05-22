@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
+  APPROVAL_REQUESTER,
   accountCodecs,
   createDefaultAccountKey,
   createNamespacesStub,
@@ -17,7 +18,6 @@ import {
   DEFAULT_SUBMITTED,
   DEFAULT_TO,
   markReviewReady,
-  REQUEST_CONTEXT,
   REQUEST_ID,
   toRecord,
 } from "../__fixtures__/transactionServices.js";
@@ -145,7 +145,7 @@ const createRecordView = (input: {
     id: input.id ?? REQUEST_ID,
     namespace: "eip155",
     chainRef: DEFAULT_CHAIN_REF,
-    origin: REQUEST_CONTEXT.origin,
+    origin: APPROVAL_REQUESTER.origin,
     accountAddress: DEFAULT_FROM,
     accountKey: createDefaultAccountKey(),
     status: input.status,

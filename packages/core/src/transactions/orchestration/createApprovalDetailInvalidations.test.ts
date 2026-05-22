@@ -81,7 +81,7 @@ describe("createApprovalDetailInvalidations", () => {
 
     expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "invalidated",
-      invalidatedBy: "locked",
+      invalidatedBy: "cancelled",
     });
     expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toBeNull();
   });

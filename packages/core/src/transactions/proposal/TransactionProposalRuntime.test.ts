@@ -783,9 +783,9 @@ describe("TransactionProposalRuntime", () => {
       ),
     ).toMatchObject({
       status: "invalidated",
-      invalidatedBy: "locked",
+      invalidatedBy: "cancelled",
       error: {
-        reason: "approval.locked",
+        reason: "approval.cancelled",
       },
     });
 
@@ -803,7 +803,7 @@ describe("TransactionProposalRuntime", () => {
       }),
     ).toEqual({
       status: "invalidated",
-      invalidatedBy: "locked",
+      invalidatedBy: "cancelled",
     });
 
     expect(

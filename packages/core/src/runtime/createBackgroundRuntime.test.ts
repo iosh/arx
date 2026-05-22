@@ -461,11 +461,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         request: { chainRef: ALT_CHAIN.chainRef },
       },
       {
-        transport: "provider",
-        portId: "port-1",
-        sessionId: "session-1",
-        requestId: "request-1",
         origin: "https://dapp.example",
+        initiator: "dapp",
+        requestId: "request-1",
       },
     ).settled;
 
@@ -570,11 +568,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
       },
       {
-        transport: "provider",
-        portId: "port-1",
-        sessionId: "session-1",
-        requestId: "request-1",
         origin: "https://dapp.example",
+        initiator: "dapp",
+        requestId: "request-1",
       },
     ).settled;
 
@@ -898,11 +894,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       approvalId,
       expect.objectContaining({
         requester: expect.objectContaining({
-          transport: "ui",
-          portId: "ui",
-          sessionId: "11111111-1111-4111-8111-111111111111",
-          requestId: expect.any(String),
           origin: "chrome-extension://arx",
+          initiator: "wallet_ui",
+          requestId: expect.any(String),
         }),
       }),
     );

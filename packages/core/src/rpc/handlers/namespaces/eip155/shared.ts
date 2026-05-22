@@ -2,12 +2,13 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
-import type { ApprovalKinds, ApprovalRequest } from "../../../../controllers/approval/types.js";
+import type { ApprovalKinds, ApprovalRequest, ApprovalRequester } from "../../../../controllers/approval/types.js";
 import type {
   PermissionViewsService,
   PermittedAccountView,
 } from "../../../../services/runtime/permissionViews/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
+import type { RequestContext } from "../../../requestContext.js";
 import {
   ApprovalRequirements,
   AuthorizationRequirements,
@@ -43,6 +44,12 @@ export const requireProviderRequestHandle = (rpcContext: RpcInvocationContext | 
   return providerRequestHandle;
 };
 
+export const buildDappApprovalRequester = (requestContext: RequestContext): ApprovalRequester => ({
+  origin: requestContext.origin,
+  initiator: "dapp",
+  requestId: requestContext.requestId,
+});
+
 type ProviderApprovalKind = Exclude<
   (typeof ApprovalKinds)[keyof typeof ApprovalKinds],
   typeof ApprovalKinds.SendTransaction
@@ -73,7 +80,7 @@ export const requestProviderApproval = <K extends ProviderApprovalKind>(args: {
       },
       {
         kind: args.kind,
-        requester: requestContext,
+        requester: buildDappApprovalRequester(requestContext),
         request: args.request,
         subject: undefined,
         approvalId,

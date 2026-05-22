@@ -91,6 +91,21 @@ type TransactionProposalInit = Omit<
   updatedAt: number;
 };
 
+const toApprovalInvalidationReason = (event: ApprovalFinishedEvent<unknown>): string => {
+  switch (event.status) {
+    case "rejected":
+      return "rejected";
+    case "cancelled":
+      return "cancelled";
+    case "expired":
+      return "expired";
+    case "failed":
+      return "failed";
+    case "approved":
+      throw new Error("Approved approvals do not invalidate transaction proposals.");
+  }
+};
+
 type StartPrepareInput = {
   id: string;
   requestRevision: number;
@@ -684,6 +699,7 @@ export class TransactionProposalRuntime {
       return null;
     }
 
+    const invalidationReason = toApprovalInvalidationReason(event);
     const prepare: TransactionProposalInvalidatedState = {
       requestRevision: current.prepare.requestRevision,
       sessionToken: current.prepare.sessionToken,
@@ -691,11 +707,11 @@ export class TransactionProposalRuntime {
       status: "invalidated",
       prepared: null,
       error: {
-        reason: `approval.${event.terminalReason}`,
+        reason: `approval.${invalidationReason}`,
         message: event.error?.message ?? "Approval is no longer active.",
         ...(event.error ? { data: event.error } : {}),
       },
-      invalidatedBy: event.terminalReason,
+      invalidatedBy: invalidationReason,
     };
 
     const next = applyTransactionProposalUpdate(current, {

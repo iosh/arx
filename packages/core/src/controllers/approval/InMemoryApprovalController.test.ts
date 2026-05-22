@@ -12,14 +12,11 @@ import {
 } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
-const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
 const requester = {
-  transport: "provider" as const,
-  portId: "p1",
-  sessionId: SESSION_ID,
-  requestId: "1",
   origin: ORIGIN,
+  initiator: "dapp" as const,
+  requestId: "1",
 };
 
 const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>>) => {
@@ -171,7 +168,7 @@ describe("InMemoryApprovalController", () => {
     expect(approve).toHaveBeenCalledTimes(1);
   });
 
-  it("cancelByScope() rejects matching approvals and removes them from state", async () => {
+  it("cancel() rejects caller-disconnected approvals and removes them from state", async () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
@@ -180,16 +177,7 @@ describe("InMemoryApprovalController", () => {
 
     expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);
 
-    const count = await controller.cancelByScope({
-      scope: {
-        transport: "provider",
-        origin: ORIGIN,
-        portId: "p1",
-        sessionId: SESSION_ID,
-      },
-      reason: "session_lost",
-    });
-    expect(count).toBe(1);
+    await controller.cancel({ approvalId: request.approvalId, reason: "caller_disconnected" });
     expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
 
     await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.TransportDisconnected });

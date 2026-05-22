@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  APPROVAL_REQUESTER,
   createProposalRuntime,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
-  REQUEST_CONTEXT,
   REQUEST_ID,
 } from "../__fixtures__/transactionServices.js";
 import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
@@ -217,7 +217,7 @@ describe("TransactionProposalApprovalService", () => {
           data: "0x",
         },
       },
-      origin: REQUEST_CONTEXT.origin,
+      origin: APPROVAL_REQUESTER.origin,
     });
 
     expect(approved.service.approvePendingProposal("tx-approved")).toMatchObject({

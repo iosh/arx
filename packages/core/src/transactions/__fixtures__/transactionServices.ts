@@ -21,11 +21,9 @@ export const DEFAULT_CHAIN_REF = "eip155:10";
 export const DEFAULT_FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 export const DEFAULT_TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-export const REQUEST_CONTEXT = {
-  transport: "provider" as const,
+export const APPROVAL_REQUESTER = {
   origin: "https://dapp.example",
-  portId: "port-1",
-  sessionId: "session-1",
+  initiator: "dapp" as const,
   requestId: "request-1",
 };
 
@@ -168,7 +166,7 @@ export const createTransactionProposal = (
     id: input?.id ?? REQUEST_ID,
     namespace: input?.namespace ?? "eip155",
     chainRef,
-    origin: input?.origin ?? REQUEST_CONTEXT.origin,
+    origin: input?.origin ?? APPROVAL_REQUESTER.origin,
     fromAccountKey: input?.fromAccountKey ?? createDefaultAccountKey({ chainRef, from }),
     request: input?.request ?? {
       namespace: "eip155",

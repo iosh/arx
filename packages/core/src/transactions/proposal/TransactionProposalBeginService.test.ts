@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   APPROVAL_ID,
+  APPROVAL_REQUESTER,
   accountCodecs,
   createAccountControllerStub,
   createNamespacesStub,
@@ -9,7 +10,6 @@ import {
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
-  REQUEST_CONTEXT,
   REQUEST_ID,
 } from "../__fixtures__/transactionServices.js";
 import type { TransactionIntent } from "../intent/index.js";
@@ -83,7 +83,7 @@ describe("TransactionProposalBeginService", () => {
           },
         },
       } satisfies TransactionIntent,
-      REQUEST_CONTEXT,
+      APPROVAL_REQUESTER,
       {},
     );
 
@@ -125,12 +125,12 @@ describe("TransactionProposalBeginService", () => {
           },
         },
       } satisfies TransactionIntent,
-      { origin: REQUEST_CONTEXT.origin },
+      { origin: APPROVAL_REQUESTER.origin },
     );
 
     expect(() =>
       service.requestApproval(proposalMeta, {
-        ...REQUEST_CONTEXT,
+        ...APPROVAL_REQUESTER,
         origin: "https://other.example",
       }),
     ).toThrow(/origin/i);

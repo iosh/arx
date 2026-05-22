@@ -19,7 +19,7 @@ export type ProviderRequestRecord = {
   blockingApprovalId?: string;
 };
 
-export type ProviderRequestCancellationReason = Extract<ApprovalTerminalReason, "session_lost">;
+export type ProviderRequestCancellationReason = "caller_disconnected";
 
 type ProviderRequestTerminalState =
   | { status: "fulfilled" }
@@ -95,7 +95,7 @@ const createTerminalRequestError = (
     ...(terminalState.status === "cancelled" ? { terminalReason: terminalState.reason } : {}),
   };
 
-  if (terminalState.status === "cancelled" && terminalState.reason === "session_lost") {
+  if (terminalState.status === "cancelled" && terminalState.reason === "caller_disconnected") {
     return arxError({
       reason: ArxReasons.TransportDisconnected,
       message: "Transport disconnected.",

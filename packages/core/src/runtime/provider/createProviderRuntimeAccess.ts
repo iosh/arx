@@ -319,7 +319,7 @@ export const createProviderRuntimeAccess = ({
   };
 
   const cancelRequestScope = async (input: ProviderRuntimeRequestScope) => {
-    return await providerRequests.cancelScope(input, "session_lost");
+    return await providerRequests.cancelScope(input, "caller_disconnected");
   };
 
   return {

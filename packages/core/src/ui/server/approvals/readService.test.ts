@@ -97,10 +97,8 @@ const createRecord = <K extends ApprovalRecord["kind"]>(
   record: Omit<ApprovalRecord<K>, "requester"> & { request: ApprovalRecord<K>["request"] },
 ): ApprovalRecord<K> => ({
   requester: {
-    transport: "provider",
     origin: record.origin,
-    portId: "test-port",
-    sessionId: "session-1",
+    initiator: "dapp",
     requestId: "request-1",
   },
   ...record,

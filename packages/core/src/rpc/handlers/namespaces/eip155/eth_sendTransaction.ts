@@ -4,6 +4,7 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
+  buildDappApprovalRequester,
   buildEip155TransactionIntent,
   defineEip155AuthorizedAccountApprovalMethod,
   requireProviderRequestHandle,
@@ -51,6 +52,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     try {
       const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
       const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
+      const requester = buildDappApprovalRequester(requestContext);
       const intent = buildEip155TransactionIntent({
         origin,
         method: "eth_sendTransaction",
@@ -58,16 +60,12 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         request: prepared,
         account,
       });
-      const submission = await controllers.providerTransactionCommands.beginTransactionApproval(
-        intent,
-        requestContext,
-        {
-          requestBinding: {
-            abortSignal: providerRequestHandle.signal,
-            attachBlockingApproval: providerRequestHandle.attachBlockingApproval,
-          },
+      const submission = await controllers.providerTransactionCommands.beginTransactionApproval(intent, requester, {
+        requestBinding: {
+          abortSignal: providerRequestHandle.signal,
+          attachBlockingApproval: providerRequestHandle.attachBlockingApproval,
         },
-      );
+      });
       const settled = await submission.waitForSubmission();
       const submitted = settled.submitted as { hash?: unknown };
       const hash = typeof submitted?.hash === "string" ? submitted.hash : null;

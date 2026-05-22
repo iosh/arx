@@ -595,7 +595,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
         pendingApprovalIds.map((approvalId) =>
           sessionScope.controllersBase.approvals.cancel({
             approvalId,
-            reason: "session_lost",
+            reason: "runtime_shutdown",
           }),
         ),
       );

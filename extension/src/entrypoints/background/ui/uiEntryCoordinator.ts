@@ -172,7 +172,7 @@ export const createUiEntryCoordinator = ({
     platform.trackWindowClose(windowId, () => {
       trackedWindowIds.delete(windowId);
       const approvalIds = approvalWindowTracker.takeWindowApprovalIds(windowId);
-      void cancelApprovalIds(uiEntryAccess, approvalIds, "window_closed");
+      void cancelApprovalIds(uiEntryAccess, approvalIds, "user_dismissed");
     });
   };
 
@@ -240,7 +240,7 @@ export const createUiEntryCoordinator = ({
   };
 
   const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, record: UiApprovalRecord) => {
-    if (record.requester.transport !== "provider") {
+    if (record.requester.initiator !== "dapp") {
       return;
     }
 

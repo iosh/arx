@@ -29,11 +29,9 @@ const INTENT: TransactionIntent = {
   request: REQUEST,
 };
 
-const REQUEST_CONTEXT = {
-  transport: "provider" as const,
+const APPROVAL_REQUESTER = {
   origin: "https://dapp.example",
-  portId: "port-1",
-  sessionId: "session-1",
+  initiator: "dapp" as const,
   requestId: "request-1",
 };
 
@@ -66,7 +64,7 @@ describe("ProviderTransactionApprovalService", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const submission = await service.beginTransactionApproval(INTENT, REQUEST_CONTEXT, {
+    const submission = await service.beginTransactionApproval(INTENT, APPROVAL_REQUESTER, {
       requestBinding: {
         abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),
@@ -103,7 +101,7 @@ describe("ProviderTransactionApprovalService", () => {
     const addEventListener = vi.spyOn(controller.signal, "addEventListener");
     const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
 
-    const submission = await service.beginTransactionApproval(INTENT, REQUEST_CONTEXT, {
+    const submission = await service.beginTransactionApproval(INTENT, APPROVAL_REQUESTER, {
       requestBinding: {
         abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),

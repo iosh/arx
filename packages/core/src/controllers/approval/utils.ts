@@ -4,8 +4,6 @@ import type {
   ApprovalFinishedEvent,
   ApprovalKind,
   ApprovalRecord,
-  ApprovalRequester,
-  ApprovalScope,
   ApprovalState,
   ApprovalTerminalReason,
 } from "./types.js";
@@ -96,15 +94,6 @@ export const toSimpleError = (error: unknown): { name: string; message: string }
   return { name: err.name || "Error", message: err.message || "Unknown error" };
 };
 
-export const matchesApprovalScope = (requester: ApprovalRequester, scope: ApprovalScope) => {
-  return (
-    requester.transport === scope.transport &&
-    requester.origin === scope.origin &&
-    requester.portId === scope.portId &&
-    requester.sessionId === scope.sessionId
-  );
-};
-
 export const deriveApprovalFinalStatus = (terminalReason: ApprovalTerminalReason): ApprovalFinalStatus => {
   switch (terminalReason) {
     case "user_approve":
@@ -116,9 +105,10 @@ export const deriveApprovalFinalStatus = (terminalReason: ApprovalTerminalReason
     case "internal_error":
       return "failed";
     case "locked":
-    case "session_lost":
-    case "window_closed":
-    case "replaced":
+    case "caller_disconnected":
+    case "user_dismissed":
+    case "superseded":
+    case "runtime_shutdown":
       return "cancelled";
   }
 };

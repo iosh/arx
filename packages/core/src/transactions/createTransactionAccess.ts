@@ -162,7 +162,7 @@ const bindApprovalAbort = (params: {
     cleanUp();
     void params.approvals.cancel({
       approvalId: params.approvalId,
-      reason: "session_lost",
+      reason: "caller_disconnected",
     });
     void params.execution.rejectTransaction({
       id: params.transactionId,

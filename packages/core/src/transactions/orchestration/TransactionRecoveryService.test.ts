@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
+  APPROVAL_REQUESTER,
   accountCodecs,
   createNamespacesStub,
   createRecordViewStub,
@@ -8,7 +9,6 @@ import {
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_SUBMITTED,
-  REQUEST_CONTEXT,
 } from "../__fixtures__/transactionServices.js";
 import { TransactionRecordRuntime } from "../record/TransactionRecordRuntime.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
@@ -51,7 +51,7 @@ describe("createTransactionRecoveryService", () => {
           id: "durable-tx",
           namespace: "eip155",
           chainRef: DEFAULT_CHAIN_REF,
-          origin: REQUEST_CONTEXT.origin,
+          origin: APPROVAL_REQUESTER.origin,
           accountKey: accountCodecs.toAccountKeyFromAddress({
             chainRef: DEFAULT_CHAIN_REF,
             address: DEFAULT_FROM,

@@ -15,7 +15,6 @@ export const createWalletApprovals = (deps: { approvals: ApprovalController }): 
     create: (request, requester) => approvals.create(request, requester),
     resolve: (input) => approvals.resolve(input),
     cancel: (input) => approvals.cancel(input),
-    cancelByScope: (input) => approvals.cancelByScope(input),
     onStateChanged: (listener) => approvals.onStateChanged(listener),
     onCreated: (listener) => approvals.onCreated(listener),
     onFinished: (listener) => approvals.onFinished(listener),

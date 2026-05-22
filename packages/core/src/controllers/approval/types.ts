@@ -14,22 +14,18 @@ export type ApprovalTerminalReason =
   | "user_reject"
   | "timeout"
   | "locked"
-  | "session_lost"
-  | "window_closed"
-  | "replaced"
+  | "caller_disconnected"
+  | "user_dismissed"
+  | "superseded"
+  | "runtime_shutdown"
   | "internal_error";
 
 export type ApprovalFinalStatus = "approved" | "rejected" | "cancelled" | "expired" | "failed";
 
-export type ApprovalScope = {
-  transport: "provider" | "ui";
+export type ApprovalRequester = {
   origin: string;
-  portId: string;
-  sessionId: string;
-};
-
-export type ApprovalRequester = ApprovalScope & {
-  requestId: string;
+  initiator: "dapp" | "wallet_ui";
+  requestId?: string | undefined;
 };
 
 export type ApprovalQueueItem = {
@@ -215,6 +211,4 @@ export type ApprovalController = {
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 
   cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
-
-  cancelByScope(input: { scope: ApprovalScope; reason: ApprovalTerminalReason }): Promise<number>;
 };

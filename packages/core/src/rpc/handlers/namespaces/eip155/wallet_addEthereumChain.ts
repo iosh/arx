@@ -43,7 +43,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
   },
-  handler: async ({ origin: _origin, params: metadata, controllers, rpcContext }) => {
+  handler: async ({ origin: _origin, params: metadata, controllers, executionContext }) => {
     if (metadata.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
@@ -79,9 +79,9 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       return null;
     }
 
-    const approval = requestProviderApproval({
+    const approval = await requestProviderApproval({
       controllers,
-      rpcContext,
+      executionContext,
       method: "wallet_addEthereumChain",
       kind: ApprovalKinds.AddChain,
       request: {

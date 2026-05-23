@@ -1,6 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import type { HandlerControllers, RpcInvocationContext } from "./handlers/types.js";
+import type { HandlerControllers, RpcInvocationHint } from "./handlers/types.js";
 import { resolveRpcInvocation } from "./invocation.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
@@ -67,27 +67,27 @@ describe("resolveRpcInvocation", () => {
     });
   });
 
-  it("uses provider binding when namespace cannot be inferred from explicit context or method prefix", () => {
+  it("uses explicit namespace when method prefix cannot infer it", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
     const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" });
 
-    expect(resolveRpcInvocation(registry, controllers, "custom_ping", { providerNamespace: "conflux" })).toEqual({
+    expect(resolveRpcInvocation(registry, controllers, "custom_ping", { namespace: "conflux" })).toEqual({
       namespace: "conflux",
       chainRef: "conflux:1029",
     });
   });
 
-  it("keeps method-prefix resolution ahead of provider binding", () => {
+  it("keeps method-prefix resolution ahead of absent explicit context", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
     const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" });
 
-    expect(resolveRpcInvocation(registry, controllers, "eth_chainId", { providerNamespace: "conflux" })).toEqual({
+    expect(resolveRpcInvocation(registry, controllers, "eth_chainId", undefined)).toEqual({
       namespace: "eip155",
       chainRef: "eip155:10",
     });
@@ -99,35 +99,13 @@ describe("resolveRpcInvocation", () => {
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
     const controllers = makeControllers(undefined);
-    const context: RpcInvocationContext = { namespace: "eip155", chainRef: "conflux:cfx" };
+    const context: RpcInvocationHint = { namespace: "eip155", chainRef: "conflux:cfx" };
     try {
       resolveRpcInvocation(registry, controllers, "eth_chainId", context);
       throw new Error("Expected resolveRpcInvocation to throw");
     } catch (error) {
       expect(getErrorReason(error)).toBe(ArxReasons.RpcInvalidRequest);
     }
-  });
-
-  it("rejects mismatched provider binding vs explicit namespace", () => {
-    const registry = new RpcRegistry();
-    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
-    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
-
-    const controllers = makeControllers({ eip155: "eip155:1", conflux: "conflux:1029" });
-    const context: RpcInvocationContext = { namespace: "eip155", providerNamespace: "conflux" };
-
-    expect(() => resolveRpcInvocation(registry, controllers, "eth_chainId", context)).toThrow(/providerNamespace/);
-  });
-
-  it("rejects mismatched provider binding vs chainRef prefix", () => {
-    const registry = new RpcRegistry();
-    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
-    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
-
-    const controllers = makeControllers({ eip155: "eip155:1", conflux: "conflux:1029" });
-    const context: RpcInvocationContext = { providerNamespace: "conflux", chainRef: "eip155:1" };
-
-    expect(() => resolveRpcInvocation(registry, controllers, "custom_ping", context)).toThrow(/providerNamespace/);
   });
 
   it("rejects invalid chainRef identifiers", () => {

@@ -4,7 +4,7 @@ import type { AttentionService, RequestAttentionParams } from "../../services/ru
 import type { BackgroundRuntime } from "../createBackgroundRuntime.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
 import { createAccessPolicyGuardMiddleware } from "./middlewares/accessPolicyGuard.js";
-import { createInvocationContextMiddleware } from "./middlewares/invocationContext.js";
+import { createInvocationContextMiddleware, requireArxInvocation } from "./middlewares/invocationContext.js";
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
 import { createRequireInitializedMiddleware } from "./middlewares/requireInitialized.js";
 
@@ -25,6 +25,23 @@ export type BackgroundRpcEnvHooks = {
     chainRef: string | null;
     namespace: string | null;
   }) => boolean;
+};
+
+const deriveBestEffortErrorSurfaceContext = (req: { method: string; origin?: string } & ArxMiddlewareRequest) => {
+  const rpcHint = req.arx;
+  const namespace =
+    req.arxInvocation?.namespace ??
+    (typeof rpcHint?.namespace === "string" && rpcHint.namespace.length > 0 ? rpcHint.namespace : null);
+  const chainRef =
+    req.arxInvocation?.chainRef ??
+    (typeof rpcHint?.chainRef === "string" && rpcHint.chainRef.trim().length > 0 ? rpcHint.chainRef : null);
+
+  return {
+    namespace,
+    chainRef,
+    origin: req.origin ?? UNKNOWN_ORIGIN,
+    method: req.method,
+  };
 };
 
 const BACKGROUND_RPC_ENGINE_ASSEMBLED = Symbol.for("@arx/core/backgroundRpcEngineAssembled");
@@ -53,33 +70,26 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
 };
 
 export const createBackgroundRpcMiddlewares = (runtime: BackgroundRpcRuntime, envHooks: BackgroundRpcEnvHooks) => {
-  const controllers = runtime.controllers;
-  const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
   const executeRequest = runtime.rpc.executeRequest;
 
   const invocationContext: Middleware = createInvocationContextMiddleware({
-    resolve: (method, ctx) => runtime.rpc.resolveInvocationDetails(method, ctx),
+    resolve: (method, hint) => runtime.rpc.resolveInvocationDetails(method, hint),
   }) as unknown as Middleware;
 
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
     const encode = (error: unknown) => {
       const invocation = reqWithArx.arxInvocation;
-      const rpcContext = invocation?.rpcContext ?? reqWithArx.arx ?? undefined;
-      const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
-      const namespace = invocation?.namespace ?? resolveMethodNamespace(req.method, rpcContext) ?? null;
-      const chainRef =
-        invocation?.chainRef ??
-        rpcContext?.chainRef ??
-        (namespace ? (controllers.networkSelection?.getSelectedChainRef(namespace) ?? null) : null) ??
-        null;
+      const surfaceContext = invocation
+        ? {
+            namespace: invocation.namespace,
+            chainRef: invocation.chainRef,
+            origin: invocation.origin,
+            method: req.method,
+          }
+        : deriveBestEffortErrorSurfaceContext(reqWithArx);
 
-      return runtime.surfaceErrors.encodeDapp(error, {
-        namespace,
-        chainRef,
-        origin,
-        method: req.method,
-      }) as JsonRpcError;
+      return runtime.surfaceErrors.encodeDapp(error, surfaceContext) as JsonRpcError;
     };
 
     try {
@@ -125,9 +135,9 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRpcRuntime, en
 
   const executor: Middleware = createAsyncMiddleware(async (req, res) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
-    const arxInvocation = reqWithArx.arxInvocation;
-    const origin = arxInvocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
-    const rpcContext = arxInvocation?.rpcContext ?? reqWithArx.arx;
+    const arxInvocation = requireArxInvocation(reqWithArx);
+    const origin = arxInvocation.origin;
+    const executionContext = arxInvocation.executionContext;
 
     const rpcInvocation = {
       origin,
@@ -135,7 +145,8 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRpcRuntime, en
         method: req.method,
         ...(req.params !== undefined ? { params: req.params } : {}),
       },
-      ...(rpcContext ? { context: rpcContext } : {}),
+      invocation: arxInvocation,
+      executionContext,
     };
 
     const result = await executeRequest(rpcInvocation);

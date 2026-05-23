@@ -8,7 +8,6 @@ import type { NetworkController } from "../../controllers/network/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
-import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type {
@@ -19,13 +18,26 @@ import type {
   TransactionProposalDraftCommands,
   TransactionRecoveryRuntime,
 } from "../../transactions/runtime.js";
-import type { RequestContext } from "../requestContext.js";
+import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
 
+export type {
+  RpcBlockingApprovalReservation,
+  RpcExecutionContext,
+  RpcProviderExecutionContext,
+  RpcProviderRequestCancellationReason,
+  RpcProviderRequestContext,
+  RpcProviderRequestHandle,
+} from "../executionContext.js";
+export {
+  NO_RPC_EXECUTION_CONTEXT,
+  RpcExecutionContextKinds,
+} from "../executionContext.js";
+
 export type HandlerControllers = {
   network: NetworkController;
-  networkSelection?: NetworkSelectionService;
+  networkSelection: NetworkSelectionService;
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
@@ -52,13 +64,9 @@ export type RpcRequest = {
   params?: JsonRpcParams;
 };
 
-export type RpcInvocationContext = {
-  chainRef?: ChainRef | null;
-  namespace?: Namespace | null;
-  providerNamespace?: Namespace | null;
-  requestContext?: RequestContext | null;
-  providerRequestHandle?: ProviderRequestHandle | null;
-  meta?: unknown;
+export type RpcInvocationHint = {
+  namespace?: Namespace;
+  chainRef?: ChainRef;
 };
 
 type MethodHandlerContext<P> = {
@@ -68,7 +76,7 @@ type MethodHandlerContext<P> = {
   controllers: HandlerControllers;
   services: HandlerRuntimeServices;
   invocation: { namespace: Namespace; chainRef: ChainRef };
-  rpcContext?: RpcInvocationContext;
+  executionContext: RpcExecutionContext;
 };
 
 // Bivariant callback so narrower param types (e.g. `undefined`) can still be stored
@@ -166,10 +174,10 @@ export type MethodDefinition<P = unknown> = {
    */
   paramsSchema?: ZodType<P>;
   /**
-   * Optional custom parser for params (useful when validation depends on rpcContext).
+   * Optional custom parser for params when validation depends on the resolved invocation target.
    * Prefer `paramsSchema` when possible.
    */
-  parseParams?: (params: JsonRpcParams | undefined, context?: RpcInvocationContext) => P;
+  parseParams?: (params: JsonRpcParams | undefined, invocation: { namespace: Namespace; chainRef: ChainRef }) => P;
   handler: MethodHandler<P>;
 };
 

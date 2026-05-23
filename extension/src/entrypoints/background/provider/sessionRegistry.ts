@@ -1,5 +1,5 @@
 import type { Runtime } from "webextension-polyfill";
-import type { PortContext } from "../types";
+import type { ConnectedPortContext, PortContext, ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderSessionRegistryDeps = {
@@ -13,7 +13,7 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
   const sessionByPort = new Map<Runtime.Port, string>();
   const portIdByPort = new Map<Runtime.Port, string>();
 
-  const registerConnectedPort = (port: Runtime.Port, initialContext: PortContext) => {
+  const registerConnectedPort = (port: Runtime.Port, initialContext: ConnectedPortContext) => {
     connections.add(port);
     if (!portIdByPort.has(port)) {
       portIdByPort.set(port, createPortId());
@@ -34,7 +34,7 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
   const listConnectedNamespaces = () => {
     const namespaces = new Set<string>();
     for (const portContext of portContexts.values()) {
-      if (portContext.providerNamespace) {
+      if ("providerNamespace" in portContext) {
         namespaces.add(portContext.providerNamespace);
       }
     }
@@ -44,7 +44,8 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
   const listPortsBoundToNamespaces = (namespaces: Iterable<string>) => {
     const allowed = new Set(namespaces);
     return listConnectedPorts().filter((port) => {
-      const namespace = portContexts.get(port)?.providerNamespace;
+      const portContext = portContexts.get(port);
+      const namespace = portContext && "providerNamespace" in portContext ? portContext.providerNamespace : null;
       return typeof namespace === "string" && allowed.has(namespace);
     });
   };
@@ -53,8 +54,13 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     return portContexts.get(port);
   };
 
-  const writePortContext = (port: Runtime.Port, context: PortContext) => {
+  const writePortContext = (port: Runtime.Port, context: ProviderSessionContext) => {
     portContexts.set(port, context);
+  };
+
+  const readSessionContext = (port: Runtime.Port): ProviderSessionContext | null => {
+    const portContext = portContexts.get(port);
+    return portContext && "providerNamespace" in portContext ? portContext : null;
   };
 
   const readSessionId = (port: Runtime.Port) => {
@@ -122,6 +128,7 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     listConnectedNamespaces,
     listPortsBoundToNamespaces,
     readPortContext,
+    readSessionContext,
     writePortContext,
     readSessionId,
     writeSessionId,

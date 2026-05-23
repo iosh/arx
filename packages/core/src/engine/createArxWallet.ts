@@ -2,7 +2,7 @@ import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals
 import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
 import type { ViolationMode } from "../messenger/Messenger.js";
 import {
-  createRpcContextNamespaceResolver,
+  createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
   createRpcRegistry,
@@ -120,15 +120,15 @@ type ArxWalletRuntime = Readonly<{
     engine: RuntimeSessionScope["engine"];
     namespaceIndex: RuntimeBootstrapScope["rpcRegistry"];
     clients: RuntimeSupportScope["rpcClientRegistry"];
-    resolveContextNamespace: ReturnType<typeof createRpcContextNamespaceResolver>;
+    resolveHintNamespace: ReturnType<typeof createRpcHintNamespaceResolver>;
     resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
     resolveInvocation: (
       method: string,
-      context?: Parameters<typeof resolveRpcInvocation>[3],
+      hint?: Parameters<typeof resolveRpcInvocation>[3],
     ) => ReturnType<typeof resolveRpcInvocation>;
     resolveInvocationDetails: (
       method: string,
-      context?: Parameters<typeof resolveRpcInvocationDetails>[3],
+      hint?: Parameters<typeof resolveRpcInvocationDetails>[3],
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
     executeRequest: ReturnType<typeof createRpcMethodExecutor>;
   }>;
@@ -386,11 +386,11 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     signers: runtimeSupportScope.signers,
   };
   const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
-  const resolveContextNamespace = createRpcContextNamespaceResolver(rpcRegistry);
-  const resolveInvocation = (method: string, context?: Parameters<typeof resolveRpcInvocation>[3]) =>
-    resolveRpcInvocation(rpcRegistry, controllers, method, context);
-  const resolveInvocationDetails = (method: string, context?: Parameters<typeof resolveRpcInvocationDetails>[3]) =>
-    resolveRpcInvocationDetails(rpcRegistry, controllers, method, context);
+  const resolveHintNamespace = createRpcHintNamespaceResolver(rpcRegistry);
+  const resolveInvocation = (method: string, hint?: Parameters<typeof resolveRpcInvocation>[3]) =>
+    resolveRpcInvocation(rpcRegistry, controllers, method, hint);
+  const resolveInvocationDetails = (method: string, hint?: Parameters<typeof resolveRpcInvocationDetails>[3]) =>
+    resolveRpcInvocationDetails(rpcRegistry, controllers, method, hint);
   const executeRequest = createRpcMethodExecutor({
     registry: rpcRegistry,
     controllers,
@@ -623,7 +623,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       engine: sessionScope.engine,
       namespaceIndex: rpcRegistry,
       clients: runtimeSupportScope.rpcClientRegistry,
-      resolveContextNamespace,
+      resolveHintNamespace,
       resolveMethodNamespace,
       resolveInvocation,
       resolveInvocationDetails,

@@ -6,8 +6,9 @@ import type {
   JsonRpcParams,
   JsonRpcRequest,
   JsonRpcResponse,
-  RpcInvocationContext,
+  RpcInvocationHint,
 } from "../../rpc/index.js";
+import { RpcExecutionContextKinds } from "../../rpc/index.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
@@ -16,6 +17,7 @@ import type {
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
+  ProviderRuntimeExecutionContext,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
@@ -25,7 +27,8 @@ import type {
 
 type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
   origin: string;
-  arx?: RpcInvocationContext;
+  arx: RpcInvocationHint;
+  arxExecution: ProviderRuntimeExecutionContext;
 };
 
 const UNKNOWN_ORIGIN = "unknown://";
@@ -45,7 +48,7 @@ type ProviderRuntimeAccessDeps = {
   getActiveChainByNamespace: () => Record<string, ChainRef>;
   listPermittedAccountsView: (origin: string, options: { chainRef: ChainRef }) => Array<{ canonicalAddress: string }>;
   formatAddress: (input: { chainRef: ChainRef; canonical: string }) => string;
-  resolveMethodNamespace: (method: string, context?: RpcInvocationContext) => string | null;
+  resolveMethodNamespace: (method: string, hint?: RpcInvocationHint) => string | null;
   handleRpcRequest: (
     request: ProviderRuntimeRequestEnvelope,
     callback: (error: unknown, response: JsonRpcResponse | null | undefined) => void,
@@ -71,20 +74,16 @@ type ProviderRuntimeAccessDeps = {
 type BegunProviderRuntimeRequest = {
   providerRequestHandle: ProviderRequestHandle;
   resolvedContext: ProviderRuntimeRpcContext;
+  resolvedExecutionContext: ProviderRuntimeExecutionContext;
   engineRequest: ProviderRuntimeRequestEnvelope;
 };
 
-const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocationContext | undefined => {
-  if (!context) {
-    return undefined;
+const buildRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => {
+  if (context.chainRef !== undefined) {
+    return { namespace: context.providerNamespace, chainRef: context.chainRef };
   }
 
-  return {
-    ...(context.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
-    ...(context.providerNamespace !== undefined ? { providerNamespace: context.providerNamespace } : {}),
-    ...(context.requestContext !== undefined ? { requestContext: context.requestContext } : {}),
-    ...(context.providerRequestHandle !== undefined ? { providerRequestHandle: context.providerRequestHandle } : {}),
-  };
+  return { namespace: context.providerNamespace };
 };
 
 const rejectProviderRequestHandle = (handle: ProviderRequestHandle | null) => {
@@ -159,15 +158,12 @@ export const createProviderRuntimeAccess = ({
     );
   };
 
-  const encodeRpcError = (
-    error: unknown,
-    { origin, method, rpcContext }: ProviderRuntimeErrorContext,
-  ): JsonRpcError => {
-    const resolvedRpcContext = toRpcInvocationContext(rpcContext);
+  const encodeRpcError = (error: unknown, { origin, method, context }: ProviderRuntimeErrorContext): JsonRpcError => {
+    const invocationHint = buildRpcInvocationHint(context);
 
     return encodeDappError(error, {
-      namespace: resolveMethodNamespace(method, resolvedRpcContext) ?? null,
-      chainRef: rpcContext?.chainRef ?? null,
+      namespace: resolveMethodNamespace(method, invocationHint) ?? null,
+      chainRef: context.chainRef ?? null,
       origin,
       method,
     });
@@ -176,35 +172,26 @@ export const createProviderRuntimeAccess = ({
   const executeRpcRequest = async ({
     origin,
     context,
+    execution,
     ...request
   }: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse> => {
     let providerRequestHandle: ProviderRequestHandle | null = null;
-    let errorContext: ProviderRuntimeRpcContext | undefined = context;
+    let errorContext: ProviderRuntimeRpcContext = context;
 
-    const buildErrorResponse = (
-      error: unknown,
-      nextErrorContext: ProviderRuntimeRpcContext | undefined,
-    ): JsonRpcResponse => ({
+    const buildErrorResponse = (error: unknown, nextErrorContext: ProviderRuntimeRpcContext): JsonRpcResponse => ({
       id: request.id,
       jsonrpc: request.jsonrpc,
       error: encodeRpcError(error, {
         origin,
         method: request.method,
-        rpcContext: nextErrorContext,
+        context: nextErrorContext,
       }),
     });
 
     const validateAndBeginRequest = (): BegunProviderRuntimeRequest => {
-      const requestScope = context?.requestScope;
-      if (!requestScope) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidRequest,
-          message: "Missing provider request scope.",
-          data: { origin },
-        });
-      }
+      const requestScope = execution.requestScope;
 
-      const providerNamespace = resolveMethodNamespace(request.method, toRpcInvocationContext(context));
+      const providerNamespace = resolveMethodNamespace(request.method, buildRpcInvocationHint(context));
       if (!providerNamespace) {
         throw arxError({
           reason: ArxReasons.RpcInvalidRequest,
@@ -229,23 +216,28 @@ export const createProviderRuntimeAccess = ({
       };
 
       const resolvedContext: ProviderRuntimeRpcContext = {
-        ...(context?.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
         providerNamespace,
+        ...(context.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
+      };
+      const resolvedExecutionContext: ProviderRuntimeExecutionContext = {
+        kind: RpcExecutionContextKinds.Provider,
         requestContext,
         providerRequestHandle,
       };
-      const rpcContext = toRpcInvocationContext(resolvedContext);
+      const invocationHint = buildRpcInvocationHint(resolvedContext);
 
       return {
         providerRequestHandle,
         resolvedContext,
+        resolvedExecutionContext,
         engineRequest: {
           id: request.id,
           jsonrpc: request.jsonrpc,
           method: request.method,
           origin,
           ...(request.params !== undefined ? { params: request.params } : {}),
-          ...(rpcContext ? { arx: rpcContext } : {}),
+          arx: invocationHint,
+          arxExecution: resolvedExecutionContext,
         },
       };
     };

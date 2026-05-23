@@ -1,21 +1,19 @@
 import type { WalletProvider } from "@arx/core/engine";
 import type { JsonRpcParams } from "@arx/core/rpc";
 import type {
+  ProviderRuntimeRequestExecution,
   ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
 } from "@arx/core/runtime";
 import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
-import { getPortOrigin } from "../origin";
-import { buildRpcContext } from "../rpc";
-import type { PortContext } from "../types";
+import { buildProviderRpcContext } from "../rpc";
+import type { ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
-  extensionOrigin: string;
   getProvider: () => Promise<WalletProvider>;
-  getPortContext: (port: Runtime.Port) => PortContext | undefined;
+  getSessionContext: (port: Runtime.Port) => ProviderSessionContext;
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
   clearPendingForPort: (port: Runtime.Port) => void;
@@ -23,24 +21,17 @@ type ProviderRequestExecutorDeps = {
 };
 
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
-  const {
-    extensionOrigin,
-    getProvider,
-    getPortContext,
-    getOrCreatePortId,
-    getPendingRequestMap,
-    clearPendingForPort,
-    sendReply,
-  } = deps;
+  const { getProvider, getSessionContext, getOrCreatePortId, getPendingRequestMap, clearPendingForPort, sendReply } =
+    deps;
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
     const { id: rpcId, jsonrpc, method } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
     pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
 
-    const portContext = getPortContext(port);
-    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const rpcContext = buildRpcContext(portContext);
+    const sessionContext = getSessionContext(port);
+    const origin = sessionContext.origin;
+    const providerContext = buildProviderRpcContext(sessionContext);
     const portId = getOrCreatePortId(port);
 
     const requestScope: ProviderRuntimeRequestScope = {
@@ -49,12 +40,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       portId,
       sessionId: envelope.sessionId,
     };
-    const context: ProviderRuntimeRpcContext | undefined = rpcContext
-      ? {
-          ...(rpcContext.providerNamespace !== undefined ? { providerNamespace: rpcContext.providerNamespace } : {}),
-          requestScope,
-        }
-      : { requestScope };
+    const execution: ProviderRuntimeRequestExecution = { requestScope };
 
     const request: ProviderRuntimeRpcRequest = {
       id: envelope.payload.id,
@@ -62,7 +48,8 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       method: envelope.payload.method,
       params: envelope.payload.params as JsonRpcParams,
       origin,
-      ...(context ? { context } : {}),
+      context: providerContext,
+      execution,
     };
 
     let provider: WalletProvider | null = null;
@@ -77,7 +64,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
         ? provider.encodeRpcError(error, {
             origin,
             method,
-            rpcContext: context,
+            context: providerContext,
           })
         : ({ code: -32603, message: "Internal error" } as const);
 

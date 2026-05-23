@@ -16,7 +16,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params) => parseWalletSwitchEthereumChainParams(params),
-  handler: async ({ origin: _origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin: _origin, params, controllers, executionContext, invocation }) => {
     const supportedChains = controllers.supportedChains;
     if (!supportedChains) {
       throw arxError({
@@ -35,9 +35,9 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       return null;
     }
 
-    const approval = requestProviderApproval({
+    const approval = await requestProviderApproval({
       controllers,
-      rpcContext,
+      executionContext,
       method: "wallet_switchEthereumChain",
       kind: ApprovalKinds.SwitchChain,
       request: {

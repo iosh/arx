@@ -10,7 +10,7 @@ import { createProviderEventBroadcaster } from "./provider/eventBroadcaster";
 import { createProviderHandshakeCoordinator } from "./provider/handshakeCoordinator";
 import { createProviderRequestExecutor } from "./provider/requestExecutor";
 import { createProviderSessionRegistry } from "./provider/sessionRegistry";
-import type { PortContext, ProviderBridgeSnapshot } from "./types";
+import type { ProviderBridgeSnapshot, ProviderSessionContext } from "./types";
 
 type ProviderPortServerDeps = {
   extensionOrigin: string;
@@ -72,7 +72,8 @@ export const createProviderPortServer = ({
   const bindingRegistry = createProviderBindingRegistry();
   const portContextStore = {
     readPortContext: (port: Runtime.Port) => sessionRegistry.readPortContext(port),
-    writePortContext: (port: Runtime.Port, context: PortContext) => sessionRegistry.writePortContext(port, context),
+    writePortContext: (port: Runtime.Port, context: ProviderSessionContext) =>
+      sessionRegistry.writePortContext(port, context),
   };
 
   const getCachedProvider = () => provider;
@@ -155,12 +156,12 @@ export const createProviderPortServer = ({
   };
 
   const findPortSnapshot = (port: Runtime.Port): ProviderBridgeSnapshot | null => {
-    const namespace = sessionRegistry.readPortContext(port)?.providerNamespace;
-    if (!namespace) {
+    const sessionContext = sessionRegistry.readSessionContext(port);
+    if (!sessionContext) {
       return null;
     }
 
-    return readProviderSnapshot(namespace);
+    return readProviderSnapshot(sessionContext.providerNamespace);
   };
 
   const syncPortContextsForPorts = (ports: Runtime.Port[]) => {
@@ -232,6 +233,7 @@ export const createProviderPortServer = ({
     getProvider: getCachedProvider,
     getSessionIdForPort: (port) => sessionRegistry.readSessionId(port),
     getPortContext: (port) => sessionRegistry.readPortContext(port),
+    getSessionContext: (port) => sessionRegistry.readSessionContext(port),
     getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
     clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
     detachPortListeners,
@@ -260,14 +262,15 @@ export const createProviderPortServer = ({
     dropStalePort: disconnectFinalizer.dropStalePort,
     getPermittedAccountsForPort: async (port) => {
       const activeProvider = await loadProvider();
-      const portContext = sessionRegistry.readPortContext(port);
-      const namespace = portContext?.providerNamespace;
-      if (!namespace) {
+      const sessionContext = sessionRegistry.readSessionContext(port);
+      if (!sessionContext) {
         return [];
       }
 
-      const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-      return activeProvider.buildConnectionProjection({ origin, namespace }).accounts;
+      return activeProvider.buildConnectionProjection({
+        origin: sessionContext.origin,
+        namespace: sessionContext.providerNamespace,
+      }).accounts;
     },
   });
 
@@ -291,9 +294,14 @@ export const createProviderPortServer = ({
   };
 
   const requestExecutor = createProviderRequestExecutor({
-    extensionOrigin,
     getProvider: loadProvider,
-    getPortContext: (port) => sessionRegistry.readPortContext(port),
+    getSessionContext: (port) => {
+      const sessionContext = sessionRegistry.readSessionContext(port);
+      if (!sessionContext) {
+        throw new Error("Provider request reached executor before session context was established.");
+      }
+      return sessionContext;
+    },
     getOrCreatePortId: (port) => sessionRegistry.allocatePortId(port),
     getPendingRequestMap: (port) => sessionRegistry.openPendingRequestMap(port),
     clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
@@ -523,7 +531,6 @@ export const createProviderPortServer = ({
     const origin = getPortOrigin(port, extensionOrigin);
     sessionRegistry.registerConnectedPort(port, {
       origin,
-      providerNamespace: null,
     });
     portLog("connect", { origin, portName: port.name, total: sessionRegistry.countConnectedPorts() });
 
@@ -546,6 +553,10 @@ export const createProviderPortServer = ({
             return;
           }
           if (envelope.sessionId !== expectedSessionId) {
+            return;
+          }
+          if (!sessionRegistry.readSessionContext(port)) {
+            disconnectFinalizer.dropStalePort(port, "request_without_session_context");
             return;
           }
 

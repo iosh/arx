@@ -18,6 +18,7 @@ import {
   TEST_NAMESPACE_MANIFESTS,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
+import { RpcExecutionContextKinds } from "../../../../index.js";
 
 export const ORIGIN = "https://dapp.example";
 
@@ -185,22 +186,20 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
       args.context?.chainRef ??
       runtime.services.networkSelection.getSelectedChainRef("eip155") ??
       runtime.services.chainViews.getSelectedChainView().chainRef;
-    const ctx = args.context ?? {};
-    const context = {
-      ...ctx,
-      requestContext:
-        ctx.requestContext ??
-        ({
-          transport: "provider",
-          portId: "test-port",
-          sessionId: crypto.randomUUID(),
-          requestId: "test-request",
-          origin: args.origin,
-        } as const),
-      providerRequestHandle:
-        ctx.providerRequestHandle ??
-        ({
-          id: (ctx.requestContext?.requestId ?? "test-request") as string,
+    const requestContext = {
+      transport: "provider",
+      portId: "test-port",
+      sessionId: crypto.randomUUID(),
+      requestId: "test-request",
+      origin: args.origin,
+    } as const;
+    const executionContext =
+      args.executionContext ??
+      ({
+        kind: RpcExecutionContextKinds.Provider,
+        requestContext,
+        providerRequestHandle: {
+          id: requestContext.requestId,
           providerNamespace: "eip155",
           signal: new AbortController().signal,
           attachBlockingApproval: <T extends object>(
@@ -220,8 +219,8 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           reject: () => true,
           cancel: async () => true,
           getTerminalError: () => null,
-        } as const),
-    };
+        } as const,
+      } as const);
     const result = await runtime.surfaceErrors.executeWithEncoding(
       {
         surface: "dapp",
@@ -230,7 +229,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
         origin: args.origin,
         method: args.request.method,
       },
-      () => executeRequest({ ...args, context }),
+      () => executeRequest({ ...args, executionContext }),
     );
     if (result.ok) return result.result;
     throw result.error;

@@ -109,10 +109,7 @@ export type TransactionProposalBeginCommands = {
     caller: TransactionCaller,
     approvalIdentity?: TransactionApprovalIdentity | null,
   ): TransactionProposalMeta;
-  requestApproval(
-    proposalMeta: TransactionProposalMeta,
-    requester: ApprovalRequester,
-  ): string;
+  requestApproval(proposalMeta: TransactionProposalMeta, requester: ApprovalRequester): string;
   beginTransactionApproval(
     intent: TransactionIntent,
     requester: ApprovalRequester,

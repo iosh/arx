@@ -443,15 +443,14 @@ describe("providerPortServer", () => {
     });
 
     await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
-    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as {
-      context?: {
-        providerNamespace?: string;
-        requestScope?: { transport?: string; sessionId?: string; portId?: string; origin?: string };
-      };
-    };
+    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as Parameters<
+      WalletProvider["executeRpcRequest"]
+    >[0];
 
     expect(request.context).toMatchObject({
       providerNamespace: "eip155",
+    });
+    expect(request.execution).toMatchObject({
       requestScope: {
         transport: "provider",
         sessionId: "session-1",
@@ -814,12 +813,9 @@ describe("providerPortServer", () => {
     });
 
     await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
-    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as {
-      context?: {
-        providerNamespace?: string;
-        chainRef?: string;
-      };
-    };
+    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as Parameters<
+      WalletProvider["executeRpcRequest"]
+    >[0];
 
     expect(request.context).toMatchObject({
       providerNamespace: "eip155",

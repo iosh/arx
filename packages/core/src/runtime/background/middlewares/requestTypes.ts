@@ -1,4 +1,4 @@
-import type { RpcInvocationContext } from "../../../rpc/index.js";
+import type { RpcExecutionContext, RpcInvocationHint } from "../../../rpc/index.js";
 import type { ArxInvocation } from "./invocationContext.js";
 
 /**
@@ -7,6 +7,7 @@ import type { ArxInvocation } from "./invocationContext.js";
  */
 export type ArxMiddlewareRequest = {
   origin?: string;
-  arx?: RpcInvocationContext;
+  arx?: RpcInvocationHint;
+  arxExecution?: RpcExecutionContext;
   arxInvocation?: ArxInvocation;
 };

@@ -5,6 +5,7 @@ import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainNamespace } from "../../../controllers/index.js";
 import { type AuthorizationRequirement, AuthorizationRequirements } from "../../../rpc/handlers/types.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
+import { requireArxInvocation } from "./invocationContext.js";
 import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
 type AccessPolicyGuardDeps = {
@@ -43,9 +44,8 @@ export const createAccessPolicyGuardMiddleware = ({
   return createAsyncMiddleware(async (req, res, next) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
 
-    const invocation = reqWithArx.arxInvocation;
-    const rpcContext = invocation?.rpcContext ?? reqWithArx.arx;
-    const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
+    const invocation = requireArxInvocation(reqWithArx);
+    const origin = invocation.origin;
 
     if (isInternalOrigin(origin)) {
       await next();
@@ -57,8 +57,8 @@ export const createAccessPolicyGuardMiddleware = ({
         !shouldRequestUnlock({
           origin,
           method: req.method,
-          chainRef: invocation?.chainRef ?? rpcContext?.chainRef ?? null,
-          namespace: invocation?.namespace ?? rpcContext?.namespace ?? null,
+          chainRef: invocation.chainRef,
+          namespace: invocation.namespace,
         })
       ) {
         return;
@@ -69,8 +69,8 @@ export const createAccessPolicyGuardMiddleware = ({
           reason: "unlock_required",
           origin,
           method: req.method,
-          chainRef: invocation?.chainRef ?? rpcContext?.chainRef ?? null,
-          namespace: invocation?.namespace ?? rpcContext?.namespace ?? null,
+          chainRef: invocation.chainRef,
+          namespace: invocation.namespace,
         });
       } catch {
         // best-effort
@@ -78,8 +78,8 @@ export const createAccessPolicyGuardMiddleware = ({
     };
 
     const unlocked = isUnlocked();
-    const definition = invocation?.definition;
-    const passthrough = invocation?.passthrough ?? { isPassthrough: false, allowWhenLocked: false };
+    const definition = invocation.definition;
+    const passthrough = invocation.passthrough;
 
     // No definition => either passthrough or method-not-found.
     if (!definition) {
@@ -99,7 +99,7 @@ export const createAccessPolicyGuardMiddleware = ({
       throw arxError({
         reason: ArxReasons.RpcUnsupportedMethod,
         message: `Method "${req.method}" is not supported`,
-        data: { origin, method: req.method, namespace: rpcContext?.namespace ?? null },
+        data: { origin, method: req.method, namespace: invocation.namespace },
       });
     }
 
@@ -135,13 +135,11 @@ export const createAccessPolicyGuardMiddleware = ({
         return;
       }
       case AuthorizationRequirements.Required: {
-        const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? null;
-        const namespace = invocation?.namespace ?? rpcContext?.namespace ?? null;
+        const chainRef = invocation.chainRef;
+        const namespace = invocation.namespace;
 
         const authorized =
           origin !== UNKNOWN_ORIGIN &&
-          namespace !== null &&
-          chainRef !== null &&
           chainRef.length > 0 &&
           isAuthorized(origin, {
             namespace,

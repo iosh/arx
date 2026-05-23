@@ -161,7 +161,7 @@ const makeRuntime = () => {
     rpc: {
       engine: {},
       registry: {},
-      resolveContextNamespace: vi.fn(),
+      resolveHintNamespace: vi.fn(),
       resolveMethodNamespace: vi.fn(),
       resolveInvocation: vi.fn(),
       resolveInvocationDetails: vi.fn(),

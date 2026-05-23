@@ -7,7 +7,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
-import type { RpcInvocationContext } from "../../rpc/index.js";
+import { type RpcExecutionContext, RpcExecutionContextKinds, type RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
@@ -766,7 +766,8 @@ type RpcCallOptions = {
   method: string;
   params?: JsonRpcParams;
   origin?: string;
-  rpcContext?: Partial<RpcInvocationContext>;
+  rpcHint?: Partial<RpcInvocationHint>;
+  executionContext?: RpcExecutionContext;
 };
 
 export type RpcHarness = TestBackgroundContext & {
@@ -804,70 +805,79 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const deriveMethodNamespace = runtime.rpc.resolveMethodNamespace;
   const engine = runtime.rpc.engine;
 
-  const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
+  const buildRpcHint = (overrides?: Partial<RpcInvocationHint>): RpcInvocationHint => {
     const chain = requireActiveChainMetadata(runtime);
     const namespace = overrides?.namespace ?? chain.namespace;
     const chainRef = overrides?.chainRef ?? chain.chainRef;
-    const requestContext = overrides?.requestContext;
 
     return {
       namespace,
       chainRef,
-      ...(requestContext !== undefined ? { requestContext } : {}),
-      ...(requestContext?.transport === "provider" && overrides?.providerRequestHandle === undefined
-        ? {
-            providerRequestHandle: {
-              id: requestContext.requestId,
-              providerNamespace: namespace,
-              signal: new AbortController().signal,
-              attachBlockingApproval: <T extends object>(
-                createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
-                reservation?: Partial<{ approvalId: string; createdAt: number }>,
-              ) => {
-                const approvalIdentity = {
-                  approvalId: reservation?.approvalId ?? `${requestContext.requestId}-approval`,
-                  createdAt: reservation?.createdAt ?? 0,
-                };
-                return {
-                  ...createApproval(approvalIdentity),
-                  ...approvalIdentity,
-                };
-              },
-              fulfill: () => true,
-              reject: () => true,
-              cancel: async () => true,
-              getTerminalError: () => null,
-            },
-          }
-        : {}),
-      ...(overrides?.providerRequestHandle !== undefined
-        ? { providerRequestHandle: overrides.providerRequestHandle }
-        : {}),
-      ...(overrides?.meta ? { meta: overrides.meta } : {}),
+    };
+  };
+
+  const buildProviderExecutionContext = (args: {
+    namespace: string;
+    requestContext: {
+      transport: "provider";
+      portId: string;
+      sessionId: string;
+      requestId: string;
+      origin: string;
+    };
+  }): RpcExecutionContext => {
+    const { namespace, requestContext } = args;
+
+    return {
+      kind: RpcExecutionContextKinds.Provider,
+      requestContext,
+      providerRequestHandle: {
+        id: requestContext.requestId,
+        providerNamespace: namespace,
+        signal: new AbortController().signal,
+        attachBlockingApproval: <T extends object>(
+          createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+          reservation?: Partial<{ approvalId: string; createdAt: number }>,
+        ) => {
+          const approvalIdentity = {
+            approvalId: reservation?.approvalId ?? `${requestContext.requestId}-approval`,
+            createdAt: reservation?.createdAt ?? 0,
+          };
+          return {
+            ...createApproval(approvalIdentity),
+            ...approvalIdentity,
+          };
+        },
+        fulfill: () => true,
+        reject: () => true,
+        cancel: async () => true,
+        getTerminalError: () => null,
+      },
     };
   };
 
   let nextRequestId = 0;
   const sessionId = crypto.randomUUID();
   const portId = "test-port";
-  const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {
+  const callRpc = async ({ method, params, origin = externalOrigin, rpcHint, executionContext }: RpcCallOptions) => {
     const requestId = `${++nextRequestId}`;
-    const contextPayload = buildRpcContext({
-      ...(rpcContext ?? {}),
-      requestContext:
-        rpcContext?.requestContext ??
-        ({
-          transport: "provider",
-          portId,
-          sessionId,
-          requestId,
-          origin,
-        } as const),
-    });
-    const namespace = deriveMethodNamespace(method, contextPayload);
+    const hintPayload = buildRpcHint(rpcHint);
+    const namespace = deriveMethodNamespace(method, hintPayload);
+    const requestContext = {
+      transport: "provider",
+      portId,
+      sessionId,
+      requestId,
+      origin,
+    } as const;
+    const executionPayload =
+      executionContext ??
+      buildProviderExecutionContext({
+        namespace: namespace ?? hintPayload.namespace ?? "eip155",
+        requestContext,
+      });
     const resolvedChainRef =
-      contextPayload.chainRef ??
-      (namespace ? runtime.controllers.networkSelection.getSelectedChainRef(namespace) : null);
+      hintPayload.chainRef ?? (namespace ? runtime.controllers.networkSelection.getSelectedChainRef(namespace) : null);
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {
@@ -876,7 +886,8 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
           method,
           params,
           origin,
-          arx: contextPayload,
+          arx: hintPayload,
+          arxExecution: executionPayload,
         } as JsonRpcRequest,
         (error, response) => {
           if (error) {

@@ -102,9 +102,12 @@ const createUiPlatform = () => ({
   openNotificationPopup: vi.fn(async () => ({ activationPath: "focus" as const })),
 });
 
-const createProviderRpcContext = () => ({
+const createProviderContext = () => ({
   chainRef: EIP155_CHAIN_REF,
   providerNamespace: EIP155_NAMESPACE,
+});
+
+const createProviderExecutionContext = () => ({
   requestScope: {
     transport: "provider" as const,
     origin: ORIGIN,
@@ -824,7 +827,8 @@ describe("createArxWallet", () => {
           jsonrpc: "2.0",
           method: "eth_accounts",
           origin: ORIGIN,
-          context: createProviderRpcContext(),
+          context: createProviderContext(),
+          execution: createProviderExecutionContext(),
         }),
       ).resolves.toMatchObject({
         id: "rpc-accounts-locked",
@@ -836,7 +840,7 @@ describe("createArxWallet", () => {
         provider.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
           origin: ORIGIN,
           method: "eth_sendTransaction",
-          rpcContext: createProviderRpcContext(),
+          context: createProviderContext(),
         }),
       ).toMatchObject({
         code: 4100,

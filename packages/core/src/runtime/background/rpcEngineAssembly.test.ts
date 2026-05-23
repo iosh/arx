@@ -154,7 +154,7 @@ describe("background rpc engine assembly", () => {
     expect(typeof res?.error?.message).toBe("string");
   });
 
-  it("uses provider binding for best-effort namespace encoding when explicit namespace is absent", async () => {
+  it("uses explicit namespace for best-effort error encoding", async () => {
     const runtime = createTestRuntime();
 
     const encodeSpy = vi.spyOn(runtime.surfaceErrors, "encodeDapp");
@@ -167,7 +167,7 @@ describe("background rpc engine assembly", () => {
     const req = {
       method: "custom_ping",
       origin: "https://dapp.example",
-      arx: { providerNamespace: "eip155" },
+      arx: { namespace: "eip155" },
     } as unknown as Parameters<typeof errorBoundary>[0];
 
     const res = createPendingRes() as unknown as PendingResWithUnknownError;
@@ -186,6 +186,86 @@ describe("background rpc engine assembly", () => {
       expect.any(Error),
       expect.objectContaining({
         namespace: "eip155",
+        chainRef: null,
+        method: "custom_ping",
+      }),
+    );
+  });
+
+  it("does not re-resolve malformed chainRef values while encoding unresolved errors", async () => {
+    const runtime = createTestRuntime();
+
+    const encodeSpy = vi.spyOn(runtime.surfaceErrors, "encodeDapp");
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
+      isInternalOrigin: () => false,
+    });
+    const errorBoundary = middlewares[0];
+    if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
+
+    const req = {
+      method: "custom_ping",
+      origin: "https://dapp.example",
+      arx: { namespace: "eip155", chainRef: "not-a-chain-ref" },
+    } as unknown as Parameters<typeof errorBoundary>[0];
+
+    const res = createPendingRes() as unknown as PendingResWithUnknownError;
+    const next = createNextStubWithSideEffect(() => {
+      res.error = new Error("boom");
+    });
+
+    await expect(
+      errorBoundary(
+        req,
+        res,
+        next as unknown as Parameters<typeof errorBoundary>[2],
+        vi.fn() as unknown as Parameters<typeof errorBoundary>[3],
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        namespace: "eip155",
+        chainRef: "not-a-chain-ref",
+        method: "custom_ping",
+      }),
+    );
+    expect(res.error).toBeTruthy();
+    expect(res.error).not.toBeInstanceOf(Error);
+  });
+
+  it("does not infer namespace from unresolved chainRef values while encoding errors", async () => {
+    const runtime = createTestRuntime();
+
+    const encodeSpy = vi.spyOn(runtime.surfaceErrors, "encodeDapp");
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
+      isInternalOrigin: () => false,
+    });
+    const errorBoundary = middlewares[0];
+    if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
+
+    const req = {
+      method: "custom_ping",
+      origin: "https://dapp.example",
+      arx: { chainRef: "eip155:1" },
+    } as unknown as Parameters<typeof errorBoundary>[0];
+
+    const res = createPendingRes() as unknown as PendingResWithUnknownError;
+    const next = createNextStubWithSideEffect(() => {
+      res.error = new Error("boom");
+    });
+
+    await errorBoundary(
+      req,
+      res,
+      next as unknown as Parameters<typeof errorBoundary>[2],
+      vi.fn() as unknown as Parameters<typeof errorBoundary>[3],
+    );
+
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        namespace: null,
         chainRef: "eip155:1",
         method: "custom_ping",
       }),

@@ -78,7 +78,7 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
-  parseParams: (params, _rpcContext) => {
+  parseParams: (params) => {
     try {
       return WalletRequestPermissionsParamsSchema.parse(params);
     } catch (error) {
@@ -93,14 +93,14 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
     try {
-      const approval = requestProviderApproval({
+      const approval = await requestProviderApproval({
         controllers,
-        rpcContext,
+        executionContext,
         method: "wallet_requestPermissions",
         kind: ApprovalKinds.RequestPermissions,
         request: { chainRef, requestedGrants },

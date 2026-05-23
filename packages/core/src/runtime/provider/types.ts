@@ -1,9 +1,15 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
-import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
-import type { RequestContext } from "../../rpc/requestContext.js";
+import type {
+  JsonRpcError,
+  JsonRpcParams,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  RpcProviderExecutionContext,
+  RpcProviderRequestContext,
+} from "../../rpc/index.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
-import type { ProviderRequestHandle, ProviderRuntimeRequestScope } from "./providerRequests.js";
+import type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 
 export type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 
@@ -32,27 +38,29 @@ export type ProviderRuntimeConnectionState = {
   accounts: string[];
 };
 
-export type ProviderRuntimeRequestContext = RequestContext & {
-  transport: "provider";
+export type ProviderRuntimeRequestContext = RpcProviderRequestContext;
+
+export type ProviderRuntimeExecutionContext = RpcProviderExecutionContext;
+
+export type ProviderRuntimeRequestExecution = {
+  requestScope: ProviderRuntimeRequestScope;
 };
 
 export type ProviderRuntimeRpcContext = {
-  chainRef?: ChainRef | null;
-  providerNamespace?: string | null;
-  requestScope?: ProviderRuntimeRequestScope | null;
-  requestContext?: ProviderRuntimeRequestContext | null;
-  providerRequestHandle?: ProviderRequestHandle | null;
+  providerNamespace: string;
+  chainRef?: ChainRef;
 };
 
 export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
   origin: string;
-  context?: ProviderRuntimeRpcContext;
+  context: ProviderRuntimeRpcContext;
+  execution: ProviderRuntimeRequestExecution;
 };
 
 export type ProviderRuntimeErrorContext = {
   origin: string;
   method: string;
-  rpcContext?: ProviderRuntimeRpcContext | undefined;
+  context: ProviderRuntimeRpcContext;
 };
 
 export type ProviderRuntimeAccountsQuery = {

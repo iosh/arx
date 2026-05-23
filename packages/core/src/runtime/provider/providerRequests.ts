@@ -1,6 +1,11 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import type { ApprovalTerminalReason } from "../../controllers/approval/types.js";
+import type {
+  RpcBlockingApprovalReservation,
+  RpcProviderRequestCancellationReason,
+  RpcProviderRequestHandle,
+} from "../../rpc/executionContext.js";
 
 export type ProviderRuntimeRequestScope = {
   transport: "provider";
@@ -19,31 +24,16 @@ export type ProviderRequestRecord = {
   blockingApprovalId?: string;
 };
 
-export type ProviderRequestCancellationReason = "caller_disconnected";
+export type ProviderRequestCancellationReason = RpcProviderRequestCancellationReason;
 
 type ProviderRequestTerminalState =
   | { status: "fulfilled" }
   | { status: "rejected" }
   | { status: "cancelled"; reason: ProviderRequestCancellationReason };
 
-export type BlockingApprovalReservation = {
-  approvalId: string;
-  createdAt: number;
-};
+export type BlockingApprovalReservation = RpcBlockingApprovalReservation;
 
-export type ProviderRequestHandle = {
-  id: string;
-  providerNamespace: string;
-  signal: AbortSignal;
-  attachBlockingApproval<T extends object>(
-    createApproval: (reservation: BlockingApprovalReservation) => T,
-    reservation?: Partial<BlockingApprovalReservation>,
-  ): T & BlockingApprovalReservation;
-  fulfill(): boolean;
-  reject(): boolean;
-  cancel(reason: ProviderRequestCancellationReason): Promise<boolean>;
-  getTerminalError(): Error | null;
-};
+export type ProviderRequestHandle = RpcProviderRequestHandle;
 
 export type ProviderRequestBeginInput = Omit<ProviderRequestRecord, "id" | "createdAt">;
 

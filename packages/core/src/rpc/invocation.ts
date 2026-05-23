@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { HandlerControllers, MethodDefinition, Namespace, RpcInvocationContext } from "./handlers/types.js";
+import type { HandlerControllers, MethodDefinition, Namespace, RpcInvocationHint } from "./handlers/types.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 
 export type RpcPassthroughAllowance = {
@@ -26,58 +26,16 @@ type RpcInvocationCatalog = {
   getPassthroughPolicy(namespace: Namespace): RpcPassthroughPolicy | null;
 };
 
-const namespaceFromChainRef = (chainRef: string | null | undefined): Namespace | null => {
-  if (!chainRef) {
-    return null;
-  }
-
-  const [namespace] = chainRef.split(":");
-  return namespace ? (namespace as Namespace) : null;
-};
-
-const deriveRegisteredNamespaceFromCandidate = (
-  catalog: RpcInvocationCatalog,
-  candidate: string | null | undefined,
-): Namespace | null => {
-  if (typeof candidate !== "string") {
-    return null;
-  }
-
-  const trimmed = candidate.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const [prefix] = trimmed.split(":");
-  const normalized = (prefix || trimmed) as Namespace;
-  return catalog.hasNamespace(normalized) ? normalized : null;
-};
-
-const deriveNamespacePrefixFromCandidate = (candidate: string | null | undefined): string | null => {
-  if (typeof candidate !== "string") {
-    return null;
-  }
-
-  const trimmed = candidate.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const [prefix] = trimmed.split(":");
-  return prefix || trimmed;
-};
-
 const deriveInvocationNamespace = (
   catalog: RpcInvocationCatalog,
   method: string,
-  context?: RpcInvocationContext,
+  hint?: RpcInvocationHint,
 ): Namespace | null => {
-  if (context?.namespace) {
-    const normalized = deriveRegisteredNamespaceFromCandidate(catalog, context.namespace);
-    if (normalized) return normalized;
+  if (hint?.namespace !== undefined) {
+    return catalog.hasNamespace(hint.namespace) ? hint.namespace : null;
   }
 
-  const fromChain = namespaceFromChainRef(context?.chainRef ?? null);
+  const fromChain = hint?.chainRef !== undefined ? getChainRefNamespace(hint.chainRef) : null;
   if (fromChain && catalog.hasNamespace(fromChain)) {
     return fromChain;
   }
@@ -87,20 +45,15 @@ const deriveInvocationNamespace = (
     return fromMethod;
   }
 
-  if (context?.providerNamespace) {
-    const normalized = deriveRegisteredNamespaceFromCandidate(catalog, context.providerNamespace);
-    if (normalized) return normalized;
-  }
-
   return null;
 };
 
 const resolveInvocationNamespace = (
   catalog: RpcInvocationCatalog,
   method: string,
-  context?: RpcInvocationContext,
+  hint?: RpcInvocationHint,
 ): Namespace => {
-  const namespace = deriveInvocationNamespace(catalog, method, context);
+  const namespace = deriveInvocationNamespace(catalog, method, hint);
   if (namespace) {
     return namespace;
   }
@@ -110,9 +63,8 @@ const resolveInvocationNamespace = (
     message: method ? `Missing namespace context for "${method}"` : "Missing namespace context",
     data: {
       ...(method ? { method } : {}),
-      ...(context?.namespace ? { contextNamespace: context.namespace } : {}),
-      ...(context?.chainRef ? { chainRef: context.chainRef } : {}),
-      ...(context?.providerNamespace ? { providerNamespace: context.providerNamespace } : {}),
+      ...(hint?.namespace !== undefined ? { contextNamespace: hint.namespace } : {}),
+      ...(hint?.chainRef !== undefined ? { chainRef: hint.chainRef } : {}),
     },
   });
 };
@@ -122,7 +74,7 @@ const parseOptionalInvocationChainRef = (
   namespace: Namespace,
   raw: unknown,
 ): { kind: "present"; value: ChainRef } | { kind: "absent" } => {
-  if (raw === undefined || raw === null) {
+  if (raw === undefined) {
     return { kind: "absent" };
   }
 
@@ -147,32 +99,32 @@ const parseOptionalInvocationChainRef = (
   }
 };
 
-const assertInvocationContextNamespaceConsistency = (method: string, context?: RpcInvocationContext) => {
-  const contextNamespace = deriveNamespacePrefixFromCandidate(context?.namespace);
-  const contextChainNamespace = typeof context?.chainRef === "string" ? context.chainRef.split(":")[0] : null;
-  const providerNamespace = deriveNamespacePrefixFromCandidate(context?.providerNamespace);
+const assertInvocationHintConsistency = (method: string, hint?: RpcInvocationHint) => {
+  const contextNamespace = hint?.namespace;
+  const contextChainRef = hint?.chainRef;
+  let contextChainNamespace: string | null = null;
+  if (contextChainRef !== undefined) {
+    try {
+      contextChainNamespace = getChainRefNamespace(contextChainRef);
+    } catch (error) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: "Invalid chainRef identifier",
+        data: { method, chainRef: contextChainRef },
+        cause: error,
+      });
+    }
+  }
 
   if (contextNamespace && contextChainNamespace && contextNamespace !== contextChainNamespace) {
     throw arxError({
       reason: ArxReasons.RpcInvalidRequest,
-      message: `Namespace mismatch: namespace="${contextNamespace}" chainRef="${context?.chainRef}"`,
-      data: { method, namespace: contextNamespace, chainRef: context?.chainRef ?? null },
-    });
-  }
-
-  if (providerNamespace && contextNamespace && providerNamespace !== contextNamespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
-      message: `Namespace mismatch: providerNamespace="${providerNamespace}" namespace="${contextNamespace}"`,
-      data: { method, providerNamespace, namespace: contextNamespace },
-    });
-  }
-
-  if (providerNamespace && contextChainNamespace && providerNamespace !== contextChainNamespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
-      message: `Namespace mismatch: providerNamespace="${providerNamespace}" chainRef="${context?.chainRef}"`,
-      data: { method, providerNamespace, chainRef: context?.chainRef ?? null },
+      message: `Namespace mismatch: namespace="${contextNamespace}" chainRef="${contextChainRef ?? ""}"`,
+      data: {
+        method,
+        namespace: contextNamespace,
+        chainRef: contextChainRef ?? null,
+      },
     });
   }
 };
@@ -237,16 +189,16 @@ export const resolveRpcInvocation = (
   catalog: RpcInvocationCatalog,
   controllers: HandlerControllers,
   method: string,
-  context?: RpcInvocationContext,
+  hint?: RpcInvocationHint,
 ): ResolvedRpcInvocation => {
-  assertInvocationContextNamespaceConsistency(method, context);
+  assertInvocationHintConsistency(method, hint);
 
-  const namespace = resolveInvocationNamespace(catalog, method, context);
-  const namespaceActiveChainRef = controllers.networkSelection?.getSelectedChainRef(namespace) ?? null;
+  const namespace = resolveInvocationNamespace(catalog, method, hint);
+  const namespaceActiveChainRef = controllers.networkSelection.getSelectedChainRef(namespace);
   const chainRef = resolveInvocationChainRef({
     method,
     namespace,
-    contextChainRef: context?.chainRef,
+    contextChainRef: hint?.chainRef,
     namespaceActiveChainRef,
   });
   assertInvocationChainRefMatchesNamespace(method, namespace, chainRef);
@@ -258,9 +210,9 @@ export const resolveRpcInvocationDetails = (
   catalog: RpcInvocationCatalog,
   controllers: HandlerControllers,
   method: string,
-  context?: RpcInvocationContext,
+  hint?: RpcInvocationHint,
 ): ResolvedRpcInvocationDetails => {
-  const { namespace, chainRef } = resolveRpcInvocation(catalog, controllers, method, context);
+  const { namespace, chainRef } = resolveRpcInvocation(catalog, controllers, method, hint);
 
   return {
     namespace,
@@ -271,13 +223,13 @@ export const resolveRpcInvocationDetails = (
 };
 
 export const createRpcMethodNamespaceResolver = (catalog: RpcInvocationCatalog) => {
-  return (method: string, context?: RpcInvocationContext): Namespace | null => {
-    return deriveInvocationNamespace(catalog, method, context);
+  return (method: string, hint?: RpcInvocationHint): Namespace | null => {
+    return deriveInvocationNamespace(catalog, method, hint);
   };
 };
 
-export const createRpcContextNamespaceResolver = (catalog: RpcInvocationCatalog) => {
-  return (context?: RpcInvocationContext): Namespace | null => {
-    return deriveInvocationNamespace(catalog, "", context);
+export const createRpcHintNamespaceResolver = (catalog: RpcInvocationCatalog) => {
+  return (hint?: RpcInvocationHint): Namespace | null => {
+    return deriveInvocationNamespace(catalog, "", hint);
   };
 };

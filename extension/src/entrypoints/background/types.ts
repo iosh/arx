@@ -4,10 +4,15 @@ import type {
   ProviderRuntimeSnapshot,
 } from "@arx/core/runtime";
 
-export type PortContext = {
+export type ConnectedPortContext = {
   origin: string;
-  providerNamespace: string | null;
 };
+
+export type ProviderSessionContext = ConnectedPortContext & {
+  providerNamespace: string;
+};
+
+export type PortContext = ConnectedPortContext | ProviderSessionContext;
 
 export type ProviderBridgeSnapshot = ProviderRuntimeSnapshot;
 export type ProviderBridgeConnectionState = ProviderRuntimeConnectionState;

@@ -139,16 +139,15 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     transactions: runtime.transactions.review,
   });
 
-const buildProviderContext = (input: {
-  chainRef: string;
-  namespace: string;
-  origin?: string;
-  portId?: string;
-  sessionId?: string;
-}) => {
+const buildProviderContext = (input: { chainRef: string; namespace: string }) => {
   return {
     providerNamespace: input.namespace,
     chainRef: input.chainRef,
+  };
+};
+
+const buildProviderExecutionContext = (input: { origin?: string; portId?: string; sessionId?: string }) => {
+  return {
     requestScope: {
       transport: "provider" as const,
       origin: input.origin ?? ORIGIN,
@@ -411,6 +410,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       expect(response).toMatchObject({
@@ -461,6 +461,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await approvalCreated;
@@ -542,6 +543,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await approvalCreated;
@@ -655,6 +657,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await approvalCreated;
@@ -770,6 +773,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
@@ -862,6 +866,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -969,6 +974,7 @@ describe("createBackgroundRuntime provider access", () => {
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
         }),
+        execution: buildProviderExecutionContext({}),
       });
 
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
@@ -1061,6 +1067,7 @@ describe("createBackgroundRuntime provider access", () => {
             namespace: activeChain.namespace,
             chainRef: activeChain.chainRef,
           }),
+          execution: buildProviderExecutionContext({}),
         }),
       ).resolves.toMatchObject({
         id: "rpc-send-broadcast-fail",
@@ -1086,7 +1093,7 @@ describe("createBackgroundRuntime provider access", () => {
         runtime.providerAccess.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
           origin: ORIGIN,
           method: "sol_getBalance",
-          rpcContext: buildProviderContext({
+          context: buildProviderContext({
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,
           }),
@@ -1114,6 +1121,7 @@ describe("createBackgroundRuntime provider access", () => {
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,
           }),
+          execution: buildProviderExecutionContext({}),
         }),
       ).resolves.toEqual({
         id: "rpc-sol-1",

@@ -23,13 +23,13 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext, invocation }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, executionContext, invocation }) => {
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      const approval = requestProviderApproval({
+      const approval = await requestProviderApproval({
         controllers,
-        rpcContext,
+        executionContext,
         method: "eth_signTypedData_v4",
         kind: ApprovalKinds.SignTypedData,
         request: {

@@ -18,18 +18,23 @@ export {
   EIP155_PASSTHROUGH_FILTER_METHODS,
   EIP155_PASSTHROUGH_READONLY_METHODS,
 } from "./handlers/namespaces/index.js";
-export { namespaceFromContext } from "./handlers/namespaces/utils.js";
-export type {
-  HandlerControllers,
-  HandlerRuntimeServices,
-  MethodDefinition,
-  Namespace,
-  RpcInvocationContext,
-  RpcRequest,
+export {
+  type HandlerControllers,
+  type HandlerRuntimeServices,
+  type MethodDefinition,
+  type Namespace,
+  NO_RPC_EXECUTION_CONTEXT,
+  type RpcExecutionContext,
+  RpcExecutionContextKinds,
+  type RpcInvocationHint,
+  type RpcProviderExecutionContext,
+  type RpcProviderRequestContext,
+  type RpcProviderRequestHandle,
+  type RpcRequest,
 } from "./handlers/types.js";
 export type { ResolvedRpcInvocation, ResolvedRpcInvocationDetails, RpcPassthroughAllowance } from "./invocation.js";
 export {
-  createRpcContextNamespaceResolver,
+  createRpcHintNamespaceResolver,
   createRpcMethodNamespaceResolver,
   resolveRpcInvocation,
   resolveRpcInvocationDetails,

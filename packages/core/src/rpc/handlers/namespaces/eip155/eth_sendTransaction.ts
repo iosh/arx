@@ -48,10 +48,10 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       prepared: txRequest,
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, executionContext }) => {
     try {
-      const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
-      const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
+      const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
+      const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
       const requester = buildDappApprovalRequester(requestContext);
       const intent = buildEip155TransactionIntent({
         origin,
@@ -60,7 +60,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         request: prepared,
         account,
       });
-      const submission = providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
+      const submission = await providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
         controllers.providerTransactionCommands.beginTransactionApproval(intent, requester, {
           approvalIdentity: {
             approvalId,

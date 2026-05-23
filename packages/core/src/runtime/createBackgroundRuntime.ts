@@ -5,7 +5,7 @@ import type { ArxWallet, WalletCreateUiOptions } from "../engine/types.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import type { RpcInvocationContext, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
+import type { RpcInvocationHint, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
@@ -105,12 +105,12 @@ export type BackgroundRuntime = {
     engine: ReturnType<typeof initEngine>;
     registry: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["namespaceIndex"];
     clients: ReturnType<typeof initRpcLayer>;
-    resolveContextNamespace: (context?: RpcInvocationContext) => Namespace | null;
-    resolveMethodNamespace: (method: string, context?: RpcInvocationContext) => Namespace | null;
-    resolveInvocation: (method: string, context?: RpcInvocationContext) => ReturnType<typeof resolveRpcInvocation>;
+    resolveHintNamespace: (hint?: RpcInvocationHint) => Namespace | null;
+    resolveMethodNamespace: (method: string, hint?: RpcInvocationHint) => Namespace | null;
+    resolveInvocation: (method: string, hint?: RpcInvocationHint) => ReturnType<typeof resolveRpcInvocation>;
     resolveInvocationDetails: (
       method: string,
-      context?: RpcInvocationContext,
+      hint?: RpcInvocationHint,
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
     executeRequest: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["executeRequest"];
   };
@@ -207,7 +207,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       engine: runtime.rpc.engine,
       registry: runtime.rpc.namespaceIndex,
       clients: runtime.rpc.clients,
-      resolveContextNamespace: runtime.rpc.resolveContextNamespace,
+      resolveHintNamespace: runtime.rpc.resolveHintNamespace,
       resolveMethodNamespace: runtime.rpc.resolveMethodNamespace,
       resolveInvocation: runtime.rpc.resolveInvocation,
       resolveInvocationDetails: runtime.rpc.resolveInvocationDetails,

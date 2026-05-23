@@ -58,8 +58,8 @@ export type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
   ProviderTransactionSubmission,
-  TransactionApprovalRequestRef,
   TransactionApprovalIdentity,
+  TransactionApprovalRequestRef,
   TransactionRequestScope,
 } from "./provider/types.js";
 export type { TransactionRecordStatus, TransactionRecordView } from "./record/index.js";

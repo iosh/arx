@@ -8,7 +8,6 @@ import type {
   PermittedAccountView,
 } from "../../../../services/runtime/permissionViews/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
-import type { RequestContext } from "../../../requestContext.js";
 import {
   ApprovalRequirements,
   AuthorizationRequirements,
@@ -17,34 +16,34 @@ import {
   defineNoParamsMethod,
   type MethodDefinition,
   type MethodHandler,
-  type RpcInvocationContext,
+  type RpcExecutionContext,
+  RpcExecutionContextKinds,
+  type RpcProviderRequestContext,
 } from "../../types.js";
 
-export const requireRequestContext = (rpcContext: RpcInvocationContext | undefined, method: string) => {
-  const requestContext = rpcContext?.requestContext;
-  if (!requestContext) {
+export const requireRequestContext = (executionContext: RpcExecutionContext, method: string) => {
+  if (executionContext.kind !== RpcExecutionContextKinds.Provider) {
     throw arxError({
       reason: ArxReasons.RpcInvalidRequest,
       message: `Missing request context for ${method}.`,
       data: { method },
     });
   }
-  return requestContext;
+  return executionContext.requestContext;
 };
 
-export const requireProviderRequestHandle = (rpcContext: RpcInvocationContext | undefined, method: string) => {
-  const providerRequestHandle = rpcContext?.providerRequestHandle;
-  if (!providerRequestHandle) {
+export const requireProviderRequestHandle = (executionContext: RpcExecutionContext, method: string) => {
+  if (executionContext.kind !== RpcExecutionContextKinds.Provider) {
     throw arxError({
       reason: ArxReasons.RpcInvalidRequest,
       message: `Missing provider request lifecycle for ${method}.`,
       data: { method },
     });
   }
-  return providerRequestHandle;
+  return executionContext.providerRequestHandle;
 };
 
-export const buildDappApprovalRequester = (requestContext: RequestContext): ApprovalRequester => ({
+export const buildDappApprovalRequester = (requestContext: RpcProviderRequestContext): ApprovalRequester => ({
   origin: requestContext.origin,
   initiator: "dapp",
   requestId: requestContext.requestId,
@@ -64,13 +63,13 @@ export const requestProviderApproval = <K extends ProviderApprovalKind>(args: {
       now: () => number;
     };
   };
-  rpcContext: RpcInvocationContext | undefined;
+  executionContext: RpcExecutionContext;
   method: string;
   kind: K;
   request: ApprovalRequest<K>;
 }) => {
-  const requestContext = requireRequestContext(args.rpcContext, args.method);
-  const providerRequestHandle = requireProviderRequestHandle(args.rpcContext, args.method);
+  const requestContext = requireRequestContext(args.executionContext, args.method);
+  const providerRequestHandle = requireProviderRequestHandle(args.executionContext, args.method);
 
   return providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
     requestApproval(

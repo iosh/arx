@@ -1,10 +1,10 @@
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
-import type { PortContext, ProviderBridgeSnapshot } from "./types";
+import type { PortContext, ProviderBridgeSnapshot, ProviderSessionContext } from "./types";
 
 export type PortContextStore = {
   readPortContext: (port: Runtime.Port) => PortContext | undefined;
-  writePortContext: (port: Runtime.Port, context: PortContext) => void;
+  writePortContext: (port: Runtime.Port, context: ProviderSessionContext) => void;
 };
 
 export const syncPortContext = (

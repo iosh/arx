@@ -11,16 +11,16 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
-  handler: async ({ origin, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, controllers, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
     const suggested = controllers.accounts
       .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
       .map((account) => account.displayAddress);
 
     try {
-      const approval = requestProviderApproval({
+      const approval = await requestProviderApproval({
         controllers,
-        rpcContext,
+        executionContext,
         method: "eth_requestAccounts",
         kind: ApprovalKinds.RequestAccounts,
         request: {

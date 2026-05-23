@@ -7,8 +7,11 @@ import type {
   HandlerRuntimeServices,
   MethodDefinition,
   Namespace,
+  RpcExecutionContext,
+  RpcInvocationHint,
   RpcRequest,
 } from "./handlers/types.js";
+import type { ResolvedRpcInvocationDetails } from "./invocation.js";
 import { resolveRpcInvocationDetails } from "./invocation.js";
 import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
@@ -26,6 +29,24 @@ type CreateRpcMethodExecutorOptions = {
   rpcClientRegistry: RpcClientRegistry;
   services: HandlerRuntimeServices;
 };
+
+type RpcExecutorBaseArgs = {
+  origin: string;
+  request: RpcRequest;
+  executionContext: RpcExecutionContext;
+};
+
+type RpcExecutorWithInvocation = RpcExecutorBaseArgs & {
+  invocation: ResolvedRpcInvocationDetails;
+  hint?: never;
+};
+
+type RpcExecutorWithHint = RpcExecutorBaseArgs & {
+  hint?: RpcInvocationHint;
+  invocation?: never;
+};
+
+type RpcExecutorArgs = RpcExecutorWithInvocation | RpcExecutorWithHint;
 
 const rpcLogger = createLogger("core:rpc");
 const passthroughLogger = extendLogger(rpcLogger, "passthrough");
@@ -46,16 +67,16 @@ export const createRpcMethodExecutor = ({
     definition: MethodDefinition,
     args: {
       namespace: Namespace;
+      chainRef: ChainRef;
       method: string;
       params: RpcRequest["params"];
-      context?: Parameters<typeof resolveRpcInvocationDetails>[3];
     },
   ): unknown => {
     if (!definition.parseParams && !definition.paramsSchema) return args.params;
 
     try {
       if (definition.parseParams) {
-        return definition.parseParams(args.params, args.context);
+        return definition.parseParams(args.params, { namespace: args.namespace, chainRef: args.chainRef });
       }
       if (!definition.paramsSchema) {
         return args.params;
@@ -92,34 +113,24 @@ export const createRpcMethodExecutor = ({
     namespace: Namespace;
     chainRef: ChainRef;
     definition: MethodDefinition;
-    context?: Parameters<typeof resolveRpcInvocationDetails>[3];
+    executionContext: RpcExecutionContext;
   }) => {
     const params = parseDefinitionParams(args.definition, {
       namespace: args.namespace,
+      chainRef: args.chainRef,
       method: args.request.method,
       params: args.request.params,
-      ...(args.context !== undefined ? { context: args.context } : {}),
     });
 
-    const handlerArgs =
-      args.context === undefined
-        ? {
-            origin: args.origin,
-            request: args.request,
-            params,
-            controllers,
-            services,
-            invocation: { namespace: args.namespace, chainRef: args.chainRef },
-          }
-        : {
-            origin: args.origin,
-            request: args.request,
-            params,
-            controllers,
-            services,
-            invocation: { namespace: args.namespace, chainRef: args.chainRef },
-            rpcContext: args.context,
-          };
+    const handlerArgs = {
+      origin: args.origin,
+      request: args.request,
+      params,
+      controllers,
+      services,
+      invocation: { namespace: args.namespace, chainRef: args.chainRef },
+      executionContext: args.executionContext,
+    };
 
     return args.definition.handler(handlerArgs);
   };
@@ -201,24 +212,19 @@ export const createRpcMethodExecutor = ({
     }
   };
 
-  return async (args: {
-    origin: string;
-    request: RpcRequest;
-    context?: Parameters<typeof resolveRpcInvocationDetails>[3];
-  }) => {
-    const { namespace, chainRef, definition } = resolveRpcInvocationDetails(
-      registry,
-      controllers,
-      args.request.method,
-      args.context,
-    );
+  return async (args: RpcExecutorArgs) => {
+    const { namespace, chainRef, definition } =
+      args.invocation ?? resolveRpcInvocationDetails(registry, controllers, args.request.method, args.hint);
 
     if (definition) {
-      return executeLocal(
-        args.context === undefined
-          ? { origin: args.origin, request: args.request, namespace, chainRef, definition }
-          : { origin: args.origin, request: args.request, namespace, chainRef, definition, context: args.context },
-      );
+      return executeLocal({
+        origin: args.origin,
+        request: args.request,
+        namespace,
+        chainRef,
+        definition,
+        executionContext: args.executionContext,
+      });
     }
 
     assertPassthroughAllowed(namespace, args.request.method);

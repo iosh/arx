@@ -4,8 +4,8 @@ import type { JsonRpcError } from "@arx/core/rpc";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
-import { buildRpcContext, deriveRpcContextNamespace } from "../rpc";
-import type { PortContext } from "../types";
+import { buildProviderRpcContext } from "../rpc";
+import type { PortContext, ProviderSessionContext } from "../types";
 import type { ProviderBinding } from "./bindingRegistry";
 import type { PendingEntry } from "./types";
 
@@ -14,6 +14,7 @@ type ProviderDisconnectFinalizerDeps = {
   getProvider: () => WalletProvider | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
+  getSessionContext: (port: Runtime.Port) => ProviderSessionContext | null;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;
   detachPortListeners: (port: Runtime.Port) => void;
@@ -30,6 +31,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     getProvider,
     getSessionIdForPort,
     getPortContext,
+    getSessionContext,
     getPendingRequestMap,
     clearPendingForPort,
     detachPortListeners,
@@ -45,20 +47,20 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       return overrideError;
     }
 
-    const portContext = getPortContext(port);
-    const rpcContext = buildRpcContext(portContext);
-    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
+    const sessionContext = getSessionContext(port);
+    const origin = sessionContext?.origin ?? getPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
     const provider = getProvider();
     const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
 
-    if (!provider) {
+    if (!provider || !sessionContext) {
       return { code: 4900, message: "Disconnected" } as const;
     }
 
+    const providerContext = buildProviderRpcContext(sessionContext);
     return provider.encodeRpcError(disconnectError, {
       origin,
       method: PROVIDER_EVENTS.disconnect,
-      rpcContext,
+      context: providerContext,
     }) as JsonRpcError;
   };
 
@@ -161,10 +163,9 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       if (!sessionId) continue;
 
       const error = encodeDisconnectError(port);
-      const portContext = getPortContext(port);
-      const rpcContext = buildRpcContext(portContext);
+      const sessionContext = getSessionContext(port);
       const origin = getPortOrigin(port, extensionOrigin);
-      const namespace = deriveRpcContextNamespace(rpcContext);
+      const namespace = sessionContext?.providerNamespace ?? null;
 
       void cancelRequestScope(port, sessionId, "failed to expire request scope on provider disconnect");
 

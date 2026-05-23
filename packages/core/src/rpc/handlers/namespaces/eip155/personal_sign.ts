@@ -52,13 +52,13 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext, invocation }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, executionContext, invocation }) => {
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      const approval = requestProviderApproval({
+      const approval = await requestProviderApproval({
         controllers,
-        rpcContext,
+        executionContext,
         method: "personal_sign",
         kind: ApprovalKinds.SignMessage,
         request: {

@@ -7,7 +7,7 @@ import {
   AuthorizedScopeChecks,
   type MethodDefinition,
 } from "../../../rpc/handlers/types.js";
-import type { RpcInvocationContext } from "../../../rpc/index.js";
+import type { RpcInvocationHint } from "../../../rpc/index.js";
 import { RpcRequestKinds } from "../../../rpc/requestKind.js";
 import { createAccessPolicyGuardMiddleware } from "./accessPolicyGuard.js";
 import { createInvocationContextMiddleware } from "./invocationContext.js";
@@ -28,10 +28,10 @@ const buildMethodDefinition = (overrides: Partial<MethodDefinition> = {}): Metho
 const run = async (args: {
   origin: string;
   method: string;
-  context?: RpcInvocationContext;
+  hint?: RpcInvocationHint;
   resolve: (
     method: string,
-    ctx?: RpcInvocationContext,
+    hint?: RpcInvocationHint,
   ) => {
     namespace: string;
     chainRef: "eip155:1";
@@ -60,7 +60,7 @@ const run = async (args: {
     jsonrpc: "2.0",
     method: args.method,
     origin: args.origin,
-    ...(args.context ? { arx: args.context } : {}),
+    ...(args.hint ? { arx: args.hint } : {}),
   } as const;
 
   await new Promise<void>((resolve, reject) => {
@@ -208,7 +208,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
       run({
         origin: ORIGINS.external,
         method: "personal_sign",
-        context: { namespace: "eip155", chainRef: "eip155:1" },
+        hint: { namespace: "eip155", chainRef: "eip155:1" },
         resolve: () => ({
           namespace: "eip155",
           chainRef: "eip155:1",

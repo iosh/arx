@@ -60,7 +60,6 @@ export type {
   ProviderTransactionSubmission,
   TransactionApprovalIdentity,
   TransactionApprovalRequestRef,
-  TransactionRequestScope,
 } from "./provider/types.js";
 export type { TransactionRecordStatus, TransactionRecordView } from "./record/index.js";
 export type { TransactionRecordReader } from "./record/types.js";

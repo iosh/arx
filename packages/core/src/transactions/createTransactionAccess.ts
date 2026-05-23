@@ -1,4 +1,3 @@
-import type { ApprovalController } from "../controllers/approval/types.js";
 import type {
   TransactionAccess,
   TransactionCreateProposalResult,
@@ -36,8 +35,6 @@ type CreateTransactionAccessDeps = {
   proposalReader: TransactionProposalReader;
   recordView: TransactionRecordReader;
   approvalDetailInvalidations: ApprovalDetailInvalidationEvents;
-  approvals: Pick<ApprovalController, "cancel" | "onFinished">;
-  logger?: (message: string, data?: unknown) => void;
 };
 
 const createInternalTransactionCaller = (): TransactionCaller => ({
@@ -138,57 +135,6 @@ const mapRecordView = (record: RuntimeTransactionRecordView): TransactionRecordV
   updatedAt: record.updatedAt,
 });
 
-const bindApprovalAbort = (params: {
-  transactionId: string;
-  approvalId: string;
-  abortSignal: AbortSignal;
-  approvals: Pick<ApprovalController, "cancel" | "onFinished">;
-  execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
-}) => {
-  let didCleanUp = false;
-  let unsubscribeFinished = () => {};
-
-  const cleanUp = () => {
-    if (didCleanUp) {
-      return;
-    }
-    didCleanUp = true;
-    params.abortSignal.removeEventListener("abort", cancelBeforeBroadcast);
-    unsubscribeFinished();
-    unsubscribeFinished = () => {};
-  };
-
-  const cancelBeforeBroadcast = () => {
-    cleanUp();
-    void params.approvals.cancel({
-      approvalId: params.approvalId,
-      reason: "caller_disconnected",
-    });
-    void params.execution.rejectTransaction({
-      id: params.transactionId,
-      terminationReason: "approval_cancelled",
-      reason: {
-        name: "TransportDisconnectedError",
-        message: "Transport disconnected.",
-        code: 4900,
-      },
-    });
-  };
-
-  if (params.abortSignal.aborted) {
-    cancelBeforeBroadcast();
-    return;
-  }
-
-  unsubscribeFinished = params.approvals.onFinished((event) => {
-    if (event.approvalId === params.approvalId) {
-      cleanUp();
-    }
-  });
-
-  params.abortSignal.addEventListener("abort", cancelBeforeBroadcast, { once: true });
-};
-
 export const createTransactionAccess = (deps: CreateTransactionAccessDeps): TransactionAccess => {
   return {
     commands: {
@@ -209,15 +155,6 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
         }
 
         const approvalId = deps.proposalBegin.requestApproval(toProposalMeta(runtimeView), options.requester);
-        if (options.requestScope?.abortSignal) {
-          bindApprovalAbort({
-            transactionId,
-            approvalId,
-            abortSignal: options.requestScope.abortSignal,
-            approvals: deps.approvals,
-            execution: deps.execution,
-          });
-        }
 
         return {
           approvalId,

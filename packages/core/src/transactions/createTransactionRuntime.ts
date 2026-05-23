@@ -176,8 +176,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     proposalReader,
     recordView,
     approvalDetailInvalidations,
-    approvals: options.approvals,
-    logger,
   });
 
   return {

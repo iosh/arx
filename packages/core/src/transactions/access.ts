@@ -9,7 +9,6 @@ import type { TransactionApprovalReviewReader, TransactionProposalReader } from 
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionSubmission,
-  TransactionRequestScope,
 } from "./provider/types.js";
 import type { TransactionRecordView } from "./record/index.js";
 import type { TransactionRecordReader } from "./record/types.js";
@@ -20,15 +19,12 @@ import type {
   TransactionSubmitted,
 } from "./types.js";
 
-export type { TransactionRequestScope } from "./provider/types.js";
-
 export type TransactionCreateProposalOptions = {
   caller?: TransactionCaller;
 };
 
 export type TransactionRequestApprovalOptions = {
   requester: ApprovalRequester;
-  requestScope?: TransactionRequestScope;
 };
 
 /** Identifier allocated during proposal creation. */

@@ -12,7 +12,6 @@ export type {
   TransactionRecovery,
   TransactionRequestApprovalOptions,
   TransactionRequestApprovalResult,
-  TransactionRequestScope,
   TransactionSubmissionPersistenceFailure,
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,

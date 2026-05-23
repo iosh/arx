@@ -32,13 +32,13 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     this.#submission = options.submission;
   }
 
-  async beginTransactionApproval(
+  beginTransactionApproval(
     intent: TransactionIntent,
     requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
-  ): Promise<ProviderTransactionSubmission> {
-    const submission = await this.#begin.beginTransactionApproval(intent, requester, options);
-    const abortSignal = options.requestBinding?.abortSignal ?? null;
+  ): ProviderTransactionSubmission {
+    const submission = this.#begin.beginTransactionApproval(intent, requester, options);
+    const abortSignal = options.requestScope?.abortSignal ?? null;
 
     if (!abortSignal) {
       return {

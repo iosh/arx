@@ -35,7 +35,7 @@ export type ProviderRequestHandle = {
   id: string;
   providerNamespace: string;
   signal: AbortSignal;
-  attachBlockingApproval<T>(
+  attachBlockingApproval<T extends object>(
     createApproval: (reservation: BlockingApprovalReservation) => T,
     reservation?: Partial<BlockingApprovalReservation>,
   ): T & BlockingApprovalReservation;
@@ -177,7 +177,7 @@ export const createProviderRequests = ({
       id,
       providerNamespace: currentRecord.providerNamespace,
       signal: abortController.signal,
-      attachBlockingApproval: <T>(
+      attachBlockingApproval: <T extends object>(
         createApproval: (reservation: BlockingApprovalReservation) => T,
         reservationInput?: Partial<BlockingApprovalReservation>,
       ): T & BlockingApprovalReservation => {

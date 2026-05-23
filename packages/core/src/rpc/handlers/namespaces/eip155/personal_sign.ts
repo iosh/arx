@@ -56,7 +56,7 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      return await requestProviderApproval({
+      const approval = requestProviderApproval({
         controllers,
         rpcContext,
         method: "personal_sign",
@@ -66,7 +66,8 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
           from: account.canonicalAddress,
           message,
         },
-      }).settled;
+      });
+      return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

@@ -6,7 +6,11 @@ import type {
   TransactionProposalView,
 } from "./proposal/index.js";
 import type { TransactionApprovalReviewReader, TransactionProposalReader } from "./proposal/types.js";
-import type { BeginTransactionApprovalOptions, ProviderTransactionSubmission } from "./provider/types.js";
+import type {
+  BeginTransactionApprovalOptions,
+  ProviderTransactionSubmission,
+  TransactionRequestScope,
+} from "./provider/types.js";
 import type { TransactionRecordView } from "./record/index.js";
 import type { TransactionRecordReader } from "./record/types.js";
 import type {
@@ -16,10 +20,7 @@ import type {
   TransactionSubmitted,
 } from "./types.js";
 
-export type TransactionRequestScope = {
-  /** Caller-owned lifetime that can cancel approval before broadcast. */
-  abortSignal?: AbortSignal | null;
-};
+export type { TransactionRequestScope } from "./provider/types.js";
 
 export type TransactionCreateProposalOptions = {
   caller?: TransactionCaller;
@@ -126,7 +127,7 @@ export type ProviderTransactionSubmissionCommands = {
     intent: TransactionIntent,
     requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
-  ): Promise<ProviderTransactionSubmission>;
+  ): ProviderTransactionSubmission;
 };
 
 export type TransactionPublicRuntime = {

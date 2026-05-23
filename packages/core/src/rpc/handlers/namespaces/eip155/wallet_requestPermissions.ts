@@ -98,13 +98,14 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
     try {
-      await requestProviderApproval({
+      const approval = requestProviderApproval({
         controllers,
         rpcContext,
         method: "wallet_requestPermissions",
         kind: ApprovalKinds.RequestPermissions,
         request: { chainRef, requestedGrants },
-      }).settled;
+      });
+      await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
       throw arxError({

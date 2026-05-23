@@ -10,8 +10,8 @@ import type { TransactionValidationContext } from "../namespace/types.js";
 import type { TransactionProposalMeta } from "../proposal/types.js";
 import type {
   BeginTransactionApprovalOptions,
+  TransactionApprovalIdentity,
   TransactionApprovalRequestRef,
-  TransactionRequestBinding,
 } from "../provider/types.js";
 import type { TransactionCaller, TransactionRequest } from "../types.js";
 import {
@@ -54,13 +54,13 @@ export class TransactionProposalBeginService {
     this.#logger = deps.logger ?? (() => {});
   }
 
-  async beginTransactionApproval(
+  beginTransactionApproval(
     intent: TransactionIntent,
     requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalRequestRef> {
-    const proposalMeta = this.createProposal(intent, requester);
-    const approvalId = this.requestApproval(proposalMeta, requester, options.requestBinding ?? null);
+  ): TransactionApprovalRequestRef {
+    const proposalMeta = this.createProposal(intent, requester, options.approvalIdentity ?? null);
+    const approvalId = this.requestApproval(proposalMeta, requester);
 
     return {
       transactionId: proposalMeta.id,
@@ -68,7 +68,11 @@ export class TransactionProposalBeginService {
     };
   }
 
-  createProposal(intent: TransactionIntent, caller: TransactionCaller): TransactionProposalMeta {
+  createProposal(
+    intent: TransactionIntent,
+    caller: TransactionCaller,
+    approvalIdentity?: TransactionApprovalIdentity | null,
+  ): TransactionProposalMeta {
     const { request } = intent;
     const derived = parseChainRef(request.chainRef);
     if (request.namespace !== derived.namespace) {
@@ -127,10 +131,10 @@ export class TransactionProposalBeginService {
     };
     namespaceTransaction.request?.validateRequest?.(validationContext);
 
-    const timestamp = this.#now();
+    const timestamp = approvalIdentity?.createdAt ?? this.#now();
     const proposalMeta = this.#proposalRuntime.createPendingProposal({
       id: crypto.randomUUID(),
-      approvalId: crypto.randomUUID(),
+      approvalId: approvalIdentity?.approvalId ?? crypto.randomUUID(),
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef: request.chainRef,
@@ -145,11 +149,7 @@ export class TransactionProposalBeginService {
     return proposalMeta;
   }
 
-  requestApproval(
-    proposalMeta: TransactionProposalMeta,
-    requester: ApprovalRequester,
-    requestBinding?: TransactionRequestBinding | null,
-  ): string {
+  requestApproval(proposalMeta: TransactionProposalMeta, requester: ApprovalRequester): string {
     if (requester.origin !== proposalMeta.origin) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
@@ -184,19 +184,6 @@ export class TransactionProposalBeginService {
     });
 
     try {
-      if (requestBinding) {
-        return requestBinding.attachBlockingApproval(
-          ({ approvalId, createdAt }) => {
-            this.#approvals.createPending(createApprovalParams(approvalId, createdAt), requester);
-            return {};
-          },
-          {
-            approvalId: proposalMeta.approvalId,
-            createdAt: proposalMeta.createdAt,
-          },
-        ).approvalId;
-      }
-
       this.#approvals.createPending(createApprovalParams(proposalMeta.approvalId, proposalMeta.createdAt), requester);
       return proposalMeta.approvalId;
     } catch (error) {

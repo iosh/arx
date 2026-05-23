@@ -51,7 +51,7 @@ const buildSubmissionResolution = (): TransactionSubmissionResolution => ({
 
 describe("ProviderTransactionApprovalService", () => {
   it("rejects immediately when request binding is already aborted", async () => {
-    const begin = vi.fn(async () => buildApprovalRequestRef());
+    const begin = vi.fn(() => buildApprovalRequestRef());
     const rejectTransaction = vi.fn(async () => {});
     const waitForSubmissionOutcome = vi.fn(async () => buildSubmissionResolution());
 
@@ -65,9 +65,8 @@ describe("ProviderTransactionApprovalService", () => {
     controller.abort();
 
     const submission = await service.beginTransactionApproval(INTENT, APPROVAL_REQUESTER, {
-      requestBinding: {
+      requestScope: {
         abortSignal: controller.signal,
-        attachBlockingApproval: vi.fn(),
       },
     });
 
@@ -86,7 +85,7 @@ describe("ProviderTransactionApprovalService", () => {
   });
 
   it("removes the abort listener after submission settles", async () => {
-    const begin = vi.fn(async () => buildApprovalRequestRef());
+    const begin = vi.fn(() => buildApprovalRequestRef());
     const rejectTransaction = vi.fn(async () => {});
     const resolution = buildSubmissionResolution();
     const waitForSubmissionOutcome = vi.fn(async () => resolution);
@@ -102,10 +101,9 @@ describe("ProviderTransactionApprovalService", () => {
     const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
 
     const submission = await service.beginTransactionApproval(INTENT, APPROVAL_REQUESTER, {
-      requestBinding: {
+      requestScope: {
         abortSignal: controller.signal,
-        attachBlockingApproval: vi.fn(),
-      } satisfies BeginTransactionApprovalOptions["requestBinding"],
+      } satisfies BeginTransactionApprovalOptions["requestScope"],
     });
 
     const settled = await submission.waitForSubmission();

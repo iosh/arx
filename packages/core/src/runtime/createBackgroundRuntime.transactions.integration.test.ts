@@ -678,7 +678,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
 
     try {
-      await expect(
+      let unsupportedTrackingError: unknown;
+      try {
         context.runtime.transactions.provider.beginTransactionApproval(
           buildProviderIntent({
             chainRef: chain.chainRef,
@@ -688,8 +689,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           }),
           makeRequestContext("https://dapp.example"),
           {},
-        ),
-      ).rejects.toMatchObject({
+        );
+      } catch (error) {
+        unsupportedTrackingError = error;
+      }
+
+      expect(unsupportedTrackingError).toMatchObject({
         reason: "ChainNotSupported",
       });
 

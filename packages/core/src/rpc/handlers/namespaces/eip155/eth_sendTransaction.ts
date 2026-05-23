@@ -60,12 +60,17 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         request: prepared,
         account,
       });
-      const submission = await controllers.providerTransactionCommands.beginTransactionApproval(intent, requester, {
-        requestBinding: {
-          abortSignal: providerRequestHandle.signal,
-          attachBlockingApproval: providerRequestHandle.attachBlockingApproval,
-        },
-      });
+      const submission = providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
+        controllers.providerTransactionCommands.beginTransactionApproval(intent, requester, {
+          approvalIdentity: {
+            approvalId,
+            createdAt,
+          },
+          requestScope: {
+            abortSignal: providerRequestHandle.signal,
+          },
+        }),
+      );
       const settled = await submission.waitForSubmission();
       const submitted = settled.submitted as { hash?: unknown };
       const hash = typeof submitted?.hash === "string" ? submitted.hash : null;

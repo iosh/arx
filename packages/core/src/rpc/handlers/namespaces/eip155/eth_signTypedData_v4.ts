@@ -27,7 +27,7 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      return await requestProviderApproval({
+      const approval = requestProviderApproval({
         controllers,
         rpcContext,
         method: "eth_signTypedData_v4",
@@ -37,7 +37,8 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
           from: account.canonicalAddress,
           typedData,
         },
-      }).settled;
+      });
+      return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

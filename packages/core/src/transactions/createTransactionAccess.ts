@@ -208,7 +208,7 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
           throw new Error(`Transaction proposal ${transactionId} is no longer pending approval.`);
         }
 
-        const approvalId = deps.proposalBegin.requestApproval(toProposalMeta(runtimeView), options.requester, null);
+        const approvalId = deps.proposalBegin.requestApproval(toProposalMeta(runtimeView), options.requester);
         if (options.requestScope?.abortSignal) {
           bindApprovalAbort({
             transactionId,

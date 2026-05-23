@@ -1208,9 +1208,12 @@ describe("eip155 handlers - core error paths", () => {
         }),
         expect.any(Object),
         expect.objectContaining({
-          requestBinding: expect.objectContaining({
+          approvalIdentity: expect.objectContaining({
+            approvalId: "test-request-approval",
+            createdAt: 0,
+          }),
+          requestScope: expect.objectContaining({
             abortSignal: expect.any(AbortSignal),
-            attachBlockingApproval: expect.any(Function),
           }),
         }),
       );

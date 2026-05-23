@@ -4,8 +4,8 @@ import type { ApprovalRequester } from "../../controllers/approval/types.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type {
   BeginTransactionApprovalOptions,
+  TransactionApprovalIdentity,
   TransactionApprovalRequestRef,
-  TransactionRequestBinding,
 } from "../provider/types.js";
 import type { SendTransactionApprovalReview } from "../review/types.js";
 import type {
@@ -104,17 +104,20 @@ export type TransactionApprovalReviewReader = {
 };
 
 export type TransactionProposalBeginCommands = {
-  createProposal(intent: TransactionIntent, caller: TransactionCaller): TransactionProposalMeta;
+  createProposal(
+    intent: TransactionIntent,
+    caller: TransactionCaller,
+    approvalIdentity?: TransactionApprovalIdentity | null,
+  ): TransactionProposalMeta;
   requestApproval(
     proposalMeta: TransactionProposalMeta,
     requester: ApprovalRequester,
-    requestBinding?: TransactionRequestBinding | null,
   ): string;
   beginTransactionApproval(
     intent: TransactionIntent,
     requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalRequestRef>;
+  ): TransactionApprovalRequestRef;
 };
 
 export type TransactionProposalDraftCommands = {

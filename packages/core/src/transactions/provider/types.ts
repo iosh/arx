@@ -2,17 +2,13 @@ import type { ApprovalRequester } from "../../controllers/approval/types.js";
 import type { TransactionIntent } from "../intent/index.js";
 import type { TransactionSubmissionResolution } from "../orchestration/types.js";
 
-export type TransactionApprovalReservation = {
+export type TransactionApprovalIdentity = {
   approvalId: string;
   createdAt: number;
 };
 
-export type TransactionRequestBinding = {
+export type TransactionRequestScope = {
   abortSignal?: AbortSignal | null;
-  attachBlockingApproval<T>(
-    createApproval: (reservation: TransactionApprovalReservation) => T,
-    reservation?: Partial<TransactionApprovalReservation>,
-  ): T & TransactionApprovalReservation;
 };
 
 export type TransactionApprovalRequestRef = {
@@ -21,7 +17,8 @@ export type TransactionApprovalRequestRef = {
 };
 
 export type BeginTransactionApprovalOptions = {
-  requestBinding?: TransactionRequestBinding | null;
+  approvalIdentity?: TransactionApprovalIdentity | null;
+  requestScope?: TransactionRequestScope | null;
 };
 
 export type ProviderTransactionSubmission = TransactionApprovalRequestRef & {
@@ -33,5 +30,5 @@ export type ProviderTransactionApprovalCommands = {
     intent: TransactionIntent,
     requester: ApprovalRequester,
     options: BeginTransactionApprovalOptions,
-  ): Promise<ProviderTransactionSubmission>;
+  ): ProviderTransactionSubmission;
 };

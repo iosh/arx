@@ -35,7 +35,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       return null;
     }
 
-    return await requestProviderApproval({
+    const approval = requestProviderApproval({
       controllers,
       rpcContext,
       method: "wallet_switchEthereumChain",
@@ -43,6 +43,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       request: {
         chainRef: target.chainRef,
       },
-    }).settled;
+    });
+    return await approval.settled;
   },
 });

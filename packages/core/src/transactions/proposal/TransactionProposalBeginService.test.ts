@@ -97,6 +97,68 @@ describe("TransactionProposalBeginService", () => {
     expect(queue).toHaveBeenCalledWith(REQUEST_ID);
   });
 
+  it("uses an externally allocated approval identity when beginning an approval", async () => {
+    const chainRef = DEFAULT_CHAIN_REF;
+    const proposalRuntime = createProposalRuntime();
+    const createPendingApproval = vi.fn();
+    const service = createBeginService({
+      proposalRuntime,
+      approvals: { createPending: createPendingApproval as never },
+    });
+
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValueOnce(REQUEST_ID);
+
+    const approvalRef = await service.beginTransactionApproval(
+      {
+        namespace: "eip155",
+        chainRef,
+        account: {
+          accountKey: accountCodecs.toAccountKeyFromAddress({
+            chainRef,
+            address: DEFAULT_FROM,
+          }),
+          accountAddress: DEFAULT_FROM,
+        },
+        request: {
+          namespace: "eip155",
+          chainRef,
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x0",
+            data: "0x",
+          },
+        },
+      } satisfies TransactionIntent,
+      APPROVAL_REQUESTER,
+      {
+        approvalIdentity: {
+          approvalId: APPROVAL_ID,
+          createdAt: 42,
+        },
+      },
+    );
+
+    randomUuidSpy.mockRestore();
+
+    expect(approvalRef).toEqual({
+      transactionId: REQUEST_ID,
+      approvalId: APPROVAL_ID,
+    });
+    expect(createPendingApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalId: APPROVAL_ID,
+        createdAt: 42,
+      }),
+      APPROVAL_REQUESTER,
+    );
+    expect(proposalRuntime.getProposalStateSnapshot(REQUEST_ID)).toMatchObject({
+      id: REQUEST_ID,
+      approvalId: APPROVAL_ID,
+      createdAt: 42,
+    });
+  });
+
   it("rejects approval requests from a different origin than the proposal", () => {
     const createPendingApproval = vi.fn();
     const service = createBeginService({

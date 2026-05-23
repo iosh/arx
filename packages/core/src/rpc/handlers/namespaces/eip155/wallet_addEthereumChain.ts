@@ -79,7 +79,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       return null;
     }
 
-    await requestProviderApproval({
+    const approval = requestProviderApproval({
       controllers,
       rpcContext,
       method: "wallet_addEthereumChain",
@@ -88,7 +88,8 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
         metadata,
         isUpdate,
       },
-    }).settled;
+    });
+    await approval.settled;
 
     return null;
   },

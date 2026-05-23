@@ -18,7 +18,7 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
       .map((account) => account.displayAddress);
 
     try {
-      return await requestProviderApproval({
+      const approval = requestProviderApproval({
         controllers,
         rpcContext,
         method: "eth_requestAccounts",
@@ -27,7 +27,8 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
           chainRef,
           suggestedAccounts: [...suggested],
         },
-      }).settled;
+      });
+      return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

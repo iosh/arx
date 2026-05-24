@@ -113,14 +113,6 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     portIdByPort.delete(port);
   };
 
-  const clearAllState = () => {
-    connections.clear();
-    pendingRequests.clear();
-    portContexts.clear();
-    sessionByPort.clear();
-    portIdByPort.clear();
-  };
-
   return {
     registerConnectedPort,
     countConnectedPorts,
@@ -139,6 +131,5 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     readPendingRequestMap,
     dropPendingRequests,
     removePortState,
-    clearAllState,
   };
 };

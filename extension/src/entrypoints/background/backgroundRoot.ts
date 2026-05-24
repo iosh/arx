@@ -12,7 +12,6 @@ import { createUiBridge } from "./uiBridge";
 
 export type BackgroundRoot = {
   initialize(): Promise<void>;
-  shutdown(): Promise<void>;
 };
 
 export const createBackgroundRoot = (): BackgroundRoot => {
@@ -39,18 +38,9 @@ export const createBackgroundRoot = (): BackgroundRoot => {
 
   let initialized = false;
   let initializePromise: Promise<void> | null = null;
-  let shutdownPromise: Promise<void> | null = null;
   let uiBridge: ReturnType<typeof createUiBridge> | null = null;
   let uiBridgePromise: Promise<ReturnType<typeof createUiBridge>> | null = null;
   let listenersAttached = false;
-  let lifecycleGeneration = 0;
-  let closed = false;
-
-  const assertOpen = () => {
-    if (closed) {
-      throw new Error("Background root is shut down");
-    }
-  };
 
   const attachBrowserListeners = () => {
     if (listenersAttached) {
@@ -73,15 +63,12 @@ export const createBackgroundRoot = (): BackgroundRoot => {
   };
 
   const getOrInitUiBridge = async () => {
-    assertOpen();
     if (uiBridge) {
       return uiBridge;
     }
     if (uiBridgePromise) {
       return await uiBridgePromise;
     }
-
-    const bridgeGeneration = lifecycleGeneration;
 
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
@@ -90,15 +77,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
         uiOrigin,
       });
 
-      if (closed || bridgeGeneration !== lifecycleGeneration || shutdownPromise) {
-        throw new Error("Background root is shutting down");
-      }
-
       const bridge = createUiBridge({ uiAccess });
-      if (closed || bridgeGeneration !== lifecycleGeneration || shutdownPromise) {
-        bridge.teardown();
-        throw new Error("Background root is shutting down");
-      }
 
       uiBridge = bridge;
       return bridge;
@@ -125,10 +104,6 @@ export const createBackgroundRoot = (): BackgroundRoot => {
   };
 
   const handleConnect = (port: Runtime.Port) => {
-    if (closed) {
-      return;
-    }
-
     if (port.name === UI_CHANNEL) {
       void attachUiPort(port).catch((error) => {
         rootLog("failed to attach UI port", error);
@@ -139,35 +114,12 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     providerPortServer.handleConnect(port);
   };
 
-  const cleanupOwnedComponents = async () => {
-    lifecycleGeneration += 1;
+  const recoverFailedBoot = () => {
     detachBrowserListeners();
-    uiEntries.destroy();
-    providerPortServer.destroy();
-
-    const activeUiBridge = uiBridge;
-    const pendingUiBridgePromise = uiBridgePromise;
-    uiBridge = null;
-    uiBridgePromise = null;
-
-    activeUiBridge?.teardown();
-    await runtimeHost.shutdown();
-
-    if (pendingUiBridgePromise) {
-      try {
-        const pendingUiBridge = await pendingUiBridgePromise;
-        pendingUiBridge.teardown();
-      } catch {
-        // The pending bridge creation already failed or was interrupted by shutdown.
-      }
-    }
-
-    uiPlatform.teardown();
     initialized = false;
   };
 
   const initialize = async () => {
-    assertOpen();
     if (initialized) {
       return;
     }
@@ -179,22 +131,13 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       runtimeHost.applyDebugNamespacesFromEnv();
       attachBrowserListeners();
 
-      const runtimeBootPromise = runtimeHost.initializeRuntime();
-      providerPortServer.start();
-      uiEntries.start();
-      const uiBridgeWarmupPromise = getOrInitUiBridge();
-
       try {
-        await Promise.all([runtimeBootPromise, uiBridgeWarmupPromise]);
-        assertOpen();
+        await runtimeHost.initializeRuntime();
+        providerPortServer.start();
+        uiEntries.start();
         initialized = true;
       } catch (error) {
-        if (shutdownPromise) {
-          await shutdownPromise;
-          throw new Error("Background root is shut down");
-        }
-
-        await cleanupOwnedComponents();
+        recoverFailedBoot();
         throw error;
       } finally {
         initializePromise = null;
@@ -204,18 +147,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     return await initializePromise;
   };
 
-  const shutdown = async () => {
-    if (shutdownPromise) {
-      return await shutdownPromise;
-    }
-
-    closed = true;
-    shutdownPromise = cleanupOwnedComponents();
-    return await shutdownPromise;
-  };
-
   return {
     initialize,
-    shutdown,
   };
 };

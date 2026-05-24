@@ -20,7 +20,6 @@ type ProviderPortServerDeps = {
 export type ProviderPortServer = {
   start(): void;
   handleConnect(port: Runtime.Port): void;
-  destroy(): void;
 };
 
 const sortEntries = (value: Record<string, string>) => {
@@ -63,9 +62,7 @@ export const createProviderPortServer = ({
   let providerPromise: Promise<WalletProvider> | null = null;
   let projectionQueue: Promise<void> = Promise.resolve();
   let started = false;
-  let disposed = false;
   let startTask: Promise<void> | null = null;
-  let lifecycleGeneration = 0;
 
   const createPortId = () => globalThis.crypto.randomUUID();
   const sessionRegistry = createProviderSessionRegistry({ createPortId });
@@ -86,14 +83,8 @@ export const createProviderPortServer = ({
       return await providerPromise;
     }
 
-    const providerGeneration = lifecycleGeneration;
-
     providerPromise = getOrInitProvider()
       .then((activeProvider) => {
-        if (providerGeneration !== lifecycleGeneration) {
-          throw new Error("provider port server was reset during provider bootstrap");
-        }
-
         provider = activeProvider;
         return activeProvider;
       })
@@ -353,10 +344,6 @@ export const createProviderPortServer = ({
   const enqueueProjection = (label: string, project: () => void | Promise<void>) => {
     projectionQueue = projectionQueue
       .then(async () => {
-        if (disposed) {
-          return;
-        }
-
         await project();
       })
       .catch((error) => {
@@ -438,15 +425,9 @@ export const createProviderPortServer = ({
       return;
     }
 
-    disposed = false;
-    const startGeneration = lifecycleGeneration;
-
     startTask = (async () => {
       try {
         const activeProvider = await loadProvider();
-        if (disposed || startGeneration !== lifecycleGeneration) {
-          return;
-        }
 
         const publishAccountsState = async (namespaces?: Iterable<string>) => {
           if (namespaces) {
@@ -579,29 +560,8 @@ export const createProviderPortServer = ({
     disconnectHandlers.set(port, handleDisconnect);
   };
 
-  const destroy = () => {
-    lifecycleGeneration += 1;
-    started = false;
-    disposed = true;
-
-    clearSubscriptions();
-    resetDerivedState();
-
-    for (const port of sessionRegistry.listConnectedPorts()) {
-      disconnectFinalizer.dropStalePort(port, "destroy");
-    }
-
-    sessionRegistry.clearAllState();
-    bindingRegistry.clearAllState();
-    messageHandlers.clear();
-    disconnectHandlers.clear();
-    provider = null;
-    providerPromise = null;
-  };
-
   return {
     start,
     handleConnect,
-    destroy,
   };
 };

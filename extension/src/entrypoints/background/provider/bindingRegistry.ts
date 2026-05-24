@@ -151,12 +151,6 @@ export const createProviderBindingRegistry = () => {
     return [...ports];
   };
 
-  const clearAllState = () => {
-    bindingFacts.clear();
-    portsByBinding.clear();
-    bindingKeyByPort.clear();
-  };
-
   return {
     bindPort,
     releasePort,
@@ -165,6 +159,5 @@ export const createProviderBindingRegistry = () => {
     listBindingsForNamespaces,
     listActiveNamespaces,
     listPortsBoundToNamespaces,
-    clearAllState,
   };
 };

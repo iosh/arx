@@ -13,20 +13,17 @@ describe("background app", () => {
     vi.clearAllMocks();
     createBackgroundRootMock.mockReturnValue({
       initialize: vi.fn(async () => {}),
-      shutdown: vi.fn(async () => {}),
     });
   });
 
-  it("delegates start and stop to the background root", async () => {
+  it("delegates start to the background root", async () => {
     const { createBackgroundApp } = await import("./app");
 
     const app = createBackgroundApp();
     await app.start();
-    await app.stop();
 
     expect(createBackgroundRootMock).toHaveBeenCalledTimes(1);
     const root = createBackgroundRootMock.mock.results[0]?.value;
     expect(root.initialize).toHaveBeenCalledTimes(1);
-    expect(root.shutdown).toHaveBeenCalledTimes(1);
   });
 });

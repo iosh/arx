@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { UI_CHANNEL } from "@arx/core/ui";
+import type { Runtime } from "webextension-polyfill";
 
 const {
   createUiEntryCoordinatorMock,
@@ -69,17 +71,6 @@ vi.mock("webextension-polyfill", () => ({
   },
 }));
 
-const createDeferred = <T>() => {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-
-  return { promise, resolve, reject };
-};
-
 const createUiAccess = () => ({
   buildSnapshotEvent: vi.fn(),
   dispatchRequest: vi.fn(),
@@ -106,11 +97,10 @@ describe("backgroundRoot", () => {
       clearWindowCloseTracks: vi.fn(),
       teardown: vi.fn(),
     });
-    createProviderPortServerMock.mockReturnValue({
-      destroy: vi.fn(),
+    createProviderPortServerMock.mockImplementation(() => ({
       start: vi.fn(),
       handleConnect: vi.fn(),
-    });
+    }));
     createUiEntryCoordinatorMock.mockReturnValue({
       getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
         environment,
@@ -179,7 +169,6 @@ describe("backgroundRoot", () => {
         events.push("uiAccess");
         return createUiAccess();
       }),
-      shutdown: vi.fn(async () => {}),
     });
 
     const { createBackgroundRoot } = await import("./backgroundRoot");
@@ -190,8 +179,8 @@ describe("backgroundRoot", () => {
 
     const runtimeHost = createBackgroundRuntimeHostMock.mock.results[0]?.value;
     expect(runtimeHost.initializeRuntime).toHaveBeenCalledTimes(1);
-    expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(1);
-    expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
+    expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(0);
+    expect(createUiBridgeMock).toHaveBeenCalledTimes(0);
     expect(createProviderPortServerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(createUiEntryCoordinatorMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(events.indexOf("onConnect")).toBeLessThan(events.indexOf("boot"));
@@ -204,11 +193,6 @@ describe("backgroundRoot", () => {
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
       getOrInitProvider: vi.fn(),
       getOrInitUiEntryAccess: vi.fn(async () => createUiEntryAccess()),
-      getOrInitUiAccess: vi
-        .fn()
-        .mockRejectedValueOnce(new Error("ui access failed"))
-        .mockResolvedValueOnce(createUiAccess()),
-      shutdown: vi.fn(async () => {}),
     };
     createBackgroundRuntimeHostMock.mockReturnValue(runtimeHost);
 
@@ -218,48 +202,65 @@ describe("backgroundRoot", () => {
     await expect(root.initialize()).rejects.toThrow();
     await root.initialize();
 
-    expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
-    expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(createProviderPortServerMock).toHaveBeenCalledTimes(1);
+    expect(createProviderPortServerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
+    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(onConnectRemoveListenerMock).toHaveBeenCalledTimes(1);
     expect(onInstalledRemoveListenerMock).toHaveBeenCalledTimes(1);
     expect(runtimeHost.initializeRuntime).toHaveBeenCalledTimes(2);
-    expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
+    expect(createUiBridgeMock).toHaveBeenCalledTimes(0);
   });
 
-  it("shuts down cleanly while boot is still in flight", async () => {
-    const runtimeBoot = createDeferred<void>();
-    const uiAccessBoot = createDeferred<{
-      buildSnapshotEvent: ReturnType<typeof vi.fn>;
-      dispatchRequest: ReturnType<typeof vi.fn>;
-      getRequestBroadcastPolicy: ReturnType<typeof vi.fn>;
-      subscribeStateChanged: ReturnType<typeof vi.fn>;
-      subscribeUiEvents: ReturnType<typeof vi.fn>;
-    }>();
-
+  it("lazily creates the UI bridge on first UI port connect and retries after failure", async () => {
     const runtimeHost = {
       applyDebugNamespacesFromEnv: vi.fn(),
-      initializeRuntime: vi.fn(() => runtimeBoot.promise),
+      initializeRuntime: vi.fn(async () => {}),
       getOrInitProvider: vi.fn(),
       getOrInitUiEntryAccess: vi.fn(async () => createUiEntryAccess()),
-      getOrInitUiAccess: vi.fn(() => uiAccessBoot.promise),
-      shutdown: vi.fn(async () => {
-        runtimeBoot.reject(new Error("runtime interrupted"));
-        uiAccessBoot.reject(new Error("ui interrupted"));
-      }),
+      getOrInitUiAccess: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("ui access failed"))
+        .mockResolvedValueOnce(createUiAccess()),
     };
     createBackgroundRuntimeHostMock.mockReturnValue(runtimeHost);
+
+    const bridge = {
+      attachPort: vi.fn(),
+      broadcastEvent: vi.fn(),
+      teardown: vi.fn(),
+    };
+    createUiBridgeMock.mockReturnValue(bridge);
 
     const { createBackgroundRoot } = await import("./backgroundRoot");
     const root = createBackgroundRoot();
 
-    const initializePromise = root.initialize();
-    await root.shutdown();
+    await root.initialize();
+    expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(0);
 
-    await expect(initializePromise).rejects.toThrow("Background root is shut down");
-    await expect(root.initialize()).rejects.toThrow("Background root is shut down");
-    expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
-    expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    const readOnConnectListener = () => {
+      const listener = onConnectAddListenerMock.mock.calls.at(-1)?.[0] as
+        | ((port: Runtime.Port) => void)
+        | undefined;
+      if (!listener) {
+        throw new Error("onConnect listener was not registered");
+      }
+      return listener;
+    };
+
+    const firstUiPort = { name: UI_CHANNEL } as unknown as Runtime.Port;
+    readOnConnectListener()(firstUiPort);
+
+    await vi.waitFor(() => expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(createUiBridgeMock).toHaveBeenCalledTimes(0);
+    expect(bridge.attachPort).not.toHaveBeenCalled();
+
+    const secondUiPort = { name: UI_CHANNEL } as unknown as Runtime.Port;
+    readOnConnectListener()(secondUiPort);
+
+    await vi.waitFor(() => expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(2));
+    expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(bridge.attachPort).toHaveBeenCalledTimes(1));
+    expect(bridge.attachPort).toHaveBeenCalledWith(secondUiPort);
   });
 });

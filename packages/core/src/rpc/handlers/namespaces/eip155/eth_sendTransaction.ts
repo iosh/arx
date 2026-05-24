@@ -23,7 +23,10 @@ const isRejectedBeforeBroadcast = (params: {
 
 const isTransportDisconnectedBeforeCompletion = (
   error: { code?: number | undefined; name?: string | undefined } | null,
-) => error?.code === 4900 || error?.name === "TransportDisconnectedError";
+) =>
+  error?.code === 4900 ||
+  error?.name === "TransportDisconnectedError" ||
+  error?.name === "TransactionCallerDisconnectedError";
 
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
   requestKind: RpcRequestKinds.TransactionSubmission,

@@ -4,12 +4,7 @@ import type { TransactionProposalRuntime } from "../proposal/TransactionProposal
 import type { TransactionRecordRuntime } from "../record/TransactionRecordRuntime.js";
 import { canStartProposalExecution } from "../status.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "../topics.js";
-import {
-  buildPrepareContext,
-  buildSignContext,
-  createMissingNamespaceTransactionError,
-  createReceiptTrackingUnsupportedError,
-} from "../utils.js";
+import { buildPrepareContext, buildSignContext, createMissingNamespaceTransactionError } from "../utils.js";
 import type { TransactionExecutionAttemptPhase } from "./TransactionExecutionPipeline.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 
@@ -60,10 +55,6 @@ export class TransactionExecutionRunner {
     if (!namespaceTransaction) {
       setAttemptPhase("processing");
       throw createMissingNamespaceTransactionError(meta.namespace);
-    }
-    if (!namespaceTransaction.tracking) {
-      setAttemptPhase("processing");
-      throw createReceiptTrackingUnsupportedError(meta.namespace);
     }
 
     setAttemptPhase("processing");

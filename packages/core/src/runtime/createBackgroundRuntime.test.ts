@@ -624,7 +624,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("derives selected-chain UI capabilities from receipt-tracked transaction support", async () => {
+  it("derives selected-chain UI capabilities from transaction submission support", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       customChainsPort: new MemoryCustomChainsPort(),
@@ -661,14 +661,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
       chainCapabilities: {
         nativeBalance: true,
-        sendTransaction: false,
+        sendTransaction: true,
       },
     });
 
     runtime.lifecycle.shutdown();
   });
 
-  it("fails closed when ui.transactions.requestSendTransactionApproval lacks receipt-tracked transaction support", async () => {
+  it("creates send transaction approvals when receipt tracking is unsupported", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       customChainsPort: new MemoryCustomChainsPort(),
@@ -699,6 +699,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
+    await createActiveAccount(runtime);
 
     const handlers = createHandlersForRuntime(runtime);
 
@@ -708,16 +709,16 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         valueEther: "0.01",
         chainRef: MAINNET_CHAIN.chainRef,
       }),
-    ).rejects.toMatchObject({
-      reason: "ChainNotSupported",
+    ).resolves.toMatchObject({
+      approvalId: expect.any(String),
     });
 
-    expect(runtime.controllers.approvals.getState().pending).toEqual([]);
+    expect(runtime.controllers.approvals.getState().pending).toHaveLength(1);
 
     runtime.lifecycle.shutdown();
   });
 
-  it("projects transaction capability from overridden namespace transactions", async () => {
+  it("projects transaction submission capability from overridden namespace transactions", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       customChainsPort: new MemoryCustomChainsPort(),
@@ -763,7 +764,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
       chainCapabilities: {
         nativeBalance: true,
-        sendTransaction: false,
+        sendTransaction: true,
       },
     });
 

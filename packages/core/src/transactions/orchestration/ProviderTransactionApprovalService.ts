@@ -9,10 +9,9 @@ import type {
 import type { TransactionError } from "../types.js";
 import type { TransactionApprovalExecutor, TransactionSubmissionTracker } from "./types.js";
 
-const createTransactionTransportDisconnectedError = (): TransactionError => ({
-  name: "TransportDisconnectedError",
-  message: "Transport disconnected.",
-  code: 4900,
+const createTransactionCallerDisconnectedError = (): TransactionError => ({
+  name: "TransactionCallerDisconnectedError",
+  message: "Transaction caller disconnected before broadcast.",
 });
 
 type ProviderTransactionApprovalServiceOptions = {
@@ -50,7 +49,7 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     const cancelBeforeBroadcast = () => {
       void this.#execution.rejectTransaction({
         id: submission.transactionId,
-        reason: createTransactionTransportDisconnectedError(),
+        reason: createTransactionCallerDisconnectedError(),
         terminationReason: "approval_cancelled",
       });
     };

@@ -641,7 +641,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }
   });
 
-  it("rejects new transaction approvals before broadcast when receipt tracking is unsupported by the adapter", async () => {
+  it("persists a broadcast record when receipt tracking is unsupported by the adapter", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -676,33 +676,41 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
+    const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      let unsupportedTrackingError: unknown;
-      try {
-        context.runtime.transactions.provider.beginTransactionApproval(
-          buildProviderIntent({
-            chainRef: chain.chainRef,
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            accountCodecs: context.runtime.services.accountCodecs,
-          }),
-          makeRequestContext("https://dapp.example"),
-          {},
-        );
-      } catch (error) {
-        unsupportedTrackingError = error;
-      }
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
+        buildProviderIntent({
+          chainRef: chain.chainRef,
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
+        makeRequestContext("https://dapp.example"),
+        {},
+      );
+      await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
+      await flushAsync();
 
-      expect(unsupportedTrackingError).toMatchObject({
-        reason: "ChainNotSupported",
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+
+      const broadcastView = context.runtime.transactions.records.getRecordView(handoff.transactionId);
+      expect(broadcastView).toMatchObject({
+        status: "broadcast",
+        receipt: null,
       });
 
-      expect(prepareTransaction).toHaveBeenCalledTimes(0);
-      expect(signTransaction).toHaveBeenCalledTimes(0);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-      await expect(context.transactionsPort.list()).resolves.toEqual([]);
+      const stored = await context.transactionsPort.get(handoff.transactionId);
+      expect(stored).toMatchObject({
+        id: handoff.transactionId,
+        status: "broadcast",
+        receipt: null,
+      });
     } finally {
+      unsubscribeAutoApproval();
       context.destroy();
     }
   });

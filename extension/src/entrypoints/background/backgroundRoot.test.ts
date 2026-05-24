@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UI_CHANNEL } from "@arx/core/ui";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 
 const {
@@ -238,9 +238,7 @@ describe("backgroundRoot", () => {
     expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(0);
 
     const readOnConnectListener = () => {
-      const listener = onConnectAddListenerMock.mock.calls.at(-1)?.[0] as
-        | ((port: Runtime.Port) => void)
-        | undefined;
+      const listener = onConnectAddListenerMock.mock.calls.at(-1)?.[0] as ((port: Runtime.Port) => void) | undefined;
       if (!listener) {
         throw new Error("onConnect listener was not registered");
       }

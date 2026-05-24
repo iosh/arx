@@ -14,11 +14,7 @@ import type {
   TransactionApprovalRequestRef,
 } from "../provider/types.js";
 import type { TransactionCaller, TransactionRequest } from "../types.js";
-import {
-  coerceTransactionError,
-  createMissingNamespaceTransactionError,
-  createTransactionSubmissionUnavailableError,
-} from "../utils.js";
+import { coerceTransactionError, createMissingNamespaceTransactionError } from "../utils.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 
@@ -88,9 +84,6 @@ export class TransactionProposalBeginService {
     const namespaceTransaction = this.#namespaces.get(derived.namespace);
     if (!namespaceTransaction) {
       throw createMissingNamespaceTransactionError(derived.namespace);
-    }
-    if (!namespaceTransaction.tracking) {
-      throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef: request.chainRef });
     }
 
     const derivedAccountKey = this.#accountCodecs.toAccountKeyFromAddress({

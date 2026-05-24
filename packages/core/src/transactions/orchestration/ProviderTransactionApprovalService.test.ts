@@ -74,8 +74,7 @@ describe("ProviderTransactionApprovalService", () => {
     expect(rejectTransaction).toHaveBeenCalledWith({
       id: TRANSACTION_ID,
       reason: expect.objectContaining({
-        name: "TransportDisconnectedError",
-        code: 4900,
+        name: "TransactionCallerDisconnectedError",
       }),
       terminationReason: "approval_cancelled",
     });

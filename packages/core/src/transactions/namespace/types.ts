@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { NamespaceTransactionReview } from "../review.js";
+import type { TransactionReviewDetails } from "../review.js";
 import type {
   NamespaceTransactionDraftEdit,
   TransactionPrepared,
@@ -58,7 +58,7 @@ export type TransactionProposalStateContext<TNamespace extends string = string> 
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
+  from: AccountAddress;
   request: TransactionRequest<TNamespace>;
 };
 
@@ -93,7 +93,7 @@ export type TransactionApprovalReviewContext<TNamespace extends string = string>
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
+  from: AccountAddress;
   request: TransactionRequest<TNamespace>;
   reviewPreparedSnapshot: TransactionPrepared<TNamespace> | null;
 };
@@ -118,7 +118,7 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   prepare(
     context: TransactionPrepareContext<TNamespace>,
   ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>>>;
-  buildReview?(context: TransactionApprovalReviewContext<TNamespace>): NamespaceTransactionReview | null;
+  buildReview?(context: TransactionApprovalReviewContext<TNamespace>): TransactionReviewDetails | null;
   applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
 };
 
@@ -145,6 +145,7 @@ export type NamespaceTransactionTracking<TNamespace extends string = string> = {
 
 export type NamespaceTransactionRecord<TNamespace extends string = string> = {
   parseSubmitted(submitted: TransactionSubmitted<TNamespace>): TransactionSubmitted<TNamespace>;
+  parseReceipt(receipt: TransactionReceipt<TNamespace>): TransactionReceipt<TNamespace>;
 };
 
 export type NamespaceTransaction<TNamespace extends string = string> = {

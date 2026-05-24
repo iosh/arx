@@ -565,11 +565,13 @@ describe("TransactionExecutionService", () => {
 
   it("records submission persistence failure without keeping the proposal alive after broadcast", async () => {
     const { execution, proposalRuntime, submissionService } = createExecutionService({
-      service: createTransactionsServiceStub({
-        createBroadcastRecord: vi.fn(async () => {
-          throw new Error("Local transaction store unavailable");
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          parseSubmitted: vi.fn(() => {
+            throw new Error("Submitted payload is not durable");
+          }) as never,
         }),
-      }),
+      ),
     });
     createApprovedTransactionProposal(proposalRuntime);
 
@@ -586,7 +588,7 @@ describe("TransactionExecutionService", () => {
           data: {
             cause: {
               name: "Error",
-              message: "Local transaction store unavailable",
+              message: "Submitted payload is not durable",
             },
             transactionId: REQUEST_ID,
             submitted: DEFAULT_SUBMITTED,

@@ -67,7 +67,10 @@ export type {
   TransactionRecordStatus,
   TransactionRecordView,
 } from "./record/index.js";
-export type { Eip155TransactionReview, NamespaceTransactionReview } from "./review.js";
+export type {
+  Eip155TransactionReviewDetails,
+  TransactionReviewDetails,
+} from "./review.js";
 export type {
   Eip155PreparedTransaction,
   Eip155SubmittedTransaction,

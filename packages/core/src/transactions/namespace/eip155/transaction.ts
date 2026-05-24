@@ -1,6 +1,12 @@
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155PreparedTransaction, Eip155SubmittedTransaction, Eip155TransactionRequest } from "../../types.js";
+import { Eip155SubmittedTransactionSchema, Eip155TransactionReceiptSchema } from "../../../storage/schemas.js";
+import type {
+  Eip155PreparedTransaction,
+  Eip155SubmittedTransaction,
+  Eip155TransactionReceipt,
+  Eip155TransactionRequest,
+} from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
 import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
@@ -126,7 +132,10 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
     },
     record: {
       parseSubmitted(submitted: Eip155SubmittedTransaction) {
-        return submitted;
+        return Eip155SubmittedTransactionSchema.parse(submitted) as Eip155SubmittedTransaction;
+      },
+      parseReceipt(receipt: Eip155TransactionReceipt) {
+        return Eip155TransactionReceiptSchema.parse(receipt) as Eip155TransactionReceipt;
       },
     },
   };

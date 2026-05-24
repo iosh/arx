@@ -1,11 +1,12 @@
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
+import { TransactionReceiptSchema } from "../../storage/schemas.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionReplacementKey } from "../namespace/types.js";
 import { isTransactionRecordTerminal } from "../status.js";
 import type { ReceiptTracker } from "../tracker/ReceiptTracker.js";
 import { createReceiptTracker } from "../tracker/ReceiptTracker.js";
-import type { TransactionError } from "../types.js";
+import type { TransactionError, TransactionReceipt } from "../types.js";
 import { buildTrackingContext, coerceTransactionError, isUserRejectedError } from "../utils.js";
 import type { TransactionRecordStatus, TransactionRecordView } from "./index.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
@@ -25,6 +26,19 @@ const toDurableReplacementKey = (
     scope: replacementKey.scope,
     value: replacementKey.value,
   };
+};
+
+const parseDurableReceipt = (params: {
+  receipt: TransactionReceipt;
+  namespaceTransaction: ReturnType<NamespaceTransactions["get"]>;
+}): TransactionRecord["receipt"] => {
+  const parsedReceipt = params.namespaceTransaction?.record?.parseReceipt(structuredClone(params.receipt));
+  return TransactionReceiptSchema.parse(parsedReceipt ?? params.receipt);
+};
+
+const readFallbackReceiptPatch = (receipt: TransactionReceipt): Partial<Pick<TransactionRecord, "receipt">> => {
+  const parsed = TransactionReceiptSchema.safeParse(receipt);
+  return parsed.success ? { receipt: parsed.data } : {};
 };
 
 export class TransactionTrackingRuntime {
@@ -134,12 +148,29 @@ export class TransactionTrackingRuntime {
     const record = await this.#loadBroadcastRecord(id);
     if (!record) return;
 
+    const namespaceTransaction = this.#namespaces.get(record.namespace);
+    let receipt: TransactionRecord["receipt"];
+    try {
+      receipt = parseDurableReceipt({
+        receipt: resolution.receipt,
+        namespaceTransaction,
+      });
+    } catch {
+      await this.#transitionRecord({
+        id,
+        fromStatus: "broadcast",
+        toStatus: "failed",
+        patch: readFallbackReceiptPatch(resolution.receipt),
+      });
+      return;
+    }
+
     if (resolution.status === "success") {
       const confirmed = await this.#transitionRecord({
         id,
         fromStatus: "broadcast",
         toStatus: "confirmed",
-        patch: { receipt: resolution.receipt },
+        patch: { receipt },
       });
       if (confirmed) {
         await this.#linkConfirmedReplacement(confirmed);
@@ -151,7 +182,7 @@ export class TransactionTrackingRuntime {
       id,
       fromStatus: "broadcast",
       toStatus: "failed",
-      patch: { receipt: resolution.receipt },
+      patch: { receipt },
     });
   }
 

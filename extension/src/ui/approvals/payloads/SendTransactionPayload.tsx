@@ -4,26 +4,30 @@ import { Card, Paragraph, XStack, YStack } from "tamagui";
 type SendTransactionApproval = Extract<ApprovalDetail, { kind: "sendTransaction" }>;
 
 export function SendTransactionPayload({ approval }: { approval: SendTransactionApproval }) {
-  const review = approval.review.namespaceReview;
+  const details = approval.review.details;
   const prepare = approval.review.prepare;
-  const summary = review?.namespace === "eip155" ? review.summary : null;
-  const execution = review?.namespace === "eip155" ? review.execution : null;
+  const toLabel = details ? (details.kind === "contract_deployment" ? "Contract Creation" : (details.to ?? "")) : "";
 
   return (
     <Card padded bordered gap="$2">
       <Paragraph fontWeight="600">Send Transaction</Paragraph>
       <YStack gap="$1">
-        <DetailRow label="From" value={summary?.from ?? ""} mono />
-        <DetailRow label="To" value={summary?.to ?? "Contract Creation"} mono />
-        {summary?.value && <DetailRow label="Value" value={summary.value} />}
-        {execution?.gas && <DetailRow label="Gas Limit" value={execution.gas} />}
-        {summary?.data && (
+        <DetailRow label="From" value={details?.from ?? ""} mono />
+        <DetailRow label="To" value={toLabel} mono />
+        {details ? <DetailRow label="Value" value={details.value} /> : null}
+        {details?.gasLimit ? <DetailRow label="Gas Limit" value={details.gasLimit} /> : null}
+        {details?.fees.gasPrice ? <DetailRow label="Gas Price" value={details.fees.gasPrice} /> : null}
+        {details?.fees.maxFeePerGas ? <DetailRow label="Max Fee" value={details.fees.maxFeePerGas} /> : null}
+        {details?.fees.maxPriorityFeePerGas ? (
+          <DetailRow label="Priority Fee" value={details.fees.maxPriorityFeePerGas} />
+        ) : null}
+        {details?.data && (
           <YStack marginTop="$2">
             <Paragraph fontSize="$2" color="$color10">
               Data:
             </Paragraph>
             <Paragraph fontFamily="$mono" fontSize="$1" numberOfLines={3}>
-              {summary.data}
+              {details.data}
             </Paragraph>
           </YStack>
         )}

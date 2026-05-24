@@ -43,7 +43,7 @@ const createInternalTransactionCaller = (): TransactionCaller => ({
 
 const mapPreview = (input: SendTransactionApprovalReview): TransactionApprovalPreview => ({
   updatedAt: input.updatedAt,
-  namespaceReview: input.namespaceReview,
+  details: input.details,
   prepare:
     input.prepare.state === "blocked"
       ? { state: "blocked", blocker: input.prepare.blocker }

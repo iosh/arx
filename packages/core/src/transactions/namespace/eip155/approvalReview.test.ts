@@ -4,7 +4,7 @@ import { buildEip155ApprovalReview } from "./approvalReview.js";
 import type { Eip155ApprovalReviewContext } from "./types.js";
 
 describe("buildEip155ApprovalReview", () => {
-  it("builds review from the proposal-review context only", () => {
+  it("builds review details from request and prepared review snapshot", () => {
     const context: Eip155ApprovalReviewContext = {
       transactionId: "proposal-1",
       namespace: "eip155",
@@ -18,10 +18,14 @@ describe("buildEip155ApprovalReview", () => {
           from: TEST_ADDRESSES.FROM_A,
           to: TEST_ADDRESSES.TO_B,
           value: TEST_VALUES.ZERO,
+          data: "0xabcdef",
+          gasPrice: TEST_VALUES.GAS_PRICE_1GWEI,
         },
       },
       reviewPreparedSnapshot: {
         gas: TEST_VALUES.STANDARD_GAS_LIMIT,
+        maxFeePerGas: TEST_VALUES.MAX_FEE_1_5GWEI,
+        maxPriorityFeePerGas: TEST_VALUES.PRIORITY_FEE_1GWEI,
       },
     };
 
@@ -29,17 +33,16 @@ describe("buildEip155ApprovalReview", () => {
 
     expect(review).toEqual({
       namespace: "eip155",
-      summary: {
-        from: TEST_ADDRESSES.FROM_A,
-        to: TEST_ADDRESSES.TO_B,
-        value: TEST_VALUES.ZERO,
-        data: undefined,
-      },
-      execution: {
-        gas: TEST_VALUES.STANDARD_GAS_LIMIT,
-        gasPrice: undefined,
-        maxFeePerGas: undefined,
-        maxPriorityFeePerGas: undefined,
+      kind: "contract_interaction",
+      from: TEST_ADDRESSES.FROM_A,
+      to: TEST_ADDRESSES.TO_B,
+      value: TEST_VALUES.ZERO,
+      data: "0xabcdef",
+      gasLimit: TEST_VALUES.STANDARD_GAS_LIMIT,
+      fees: {
+        gasPrice: TEST_VALUES.GAS_PRICE_1GWEI,
+        maxFeePerGas: TEST_VALUES.MAX_FEE_1_5GWEI,
+        maxPriorityFeePerGas: TEST_VALUES.PRIORITY_FEE_1GWEI,
       },
     });
   });

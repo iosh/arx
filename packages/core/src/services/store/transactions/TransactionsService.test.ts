@@ -116,22 +116,25 @@ describe("TransactionsService", () => {
     expect(changed).toBe(1);
   });
 
-  it("createBroadcastRecord() rejects submitted payloads that do not match the active namespace schema", async () => {
+  it("createBroadcastRecord() stores namespace-owned submitted payload shapes", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
-    await expect(
-      service.createBroadcastRecord({
-        id: "22222222-2222-4222-8222-222222222222",
-        chainRef: "eip155:1",
-        origin: "https://dapp.example",
-        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        submitted: {
-          txHash: "request-1",
-          memo: "delegate",
-        } as never,
-      }),
-    ).rejects.toThrow(/submitted/i);
+    const created = await service.createBroadcastRecord({
+      id: "22222222-2222-4222-8222-222222222222",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      submitted: {
+        txHash: "request-1",
+        memo: "delegate",
+      },
+    });
+
+    expect(created.submitted).toEqual({
+      txHash: "request-1",
+      memo: "delegate",
+    });
   });
 
   it("createBroadcastRecord() returns the existing record for repeated submissions with the same id and submitted payload", async () => {

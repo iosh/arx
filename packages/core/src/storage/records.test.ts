@@ -112,17 +112,21 @@ describe("TransactionRecordSchema", () => {
     ).toThrow(/submitted/i);
   });
 
-  it("rejects transaction records whose submitted payloads drift from eip155 schema", () => {
-    expect(() =>
-      TransactionRecordSchema.parse(
-        createTransactionRecord({
-          id: "44444444-4444-4444-8444-444444444444",
-          submitted: {
-            txHash: "request-1",
-          } as never,
-        }),
-      ),
-    ).toThrow(/submitted/i);
+  it("accepts namespace-owned submitted payload shapes", () => {
+    const parsed = TransactionRecordSchema.parse(
+      createTransactionRecord({
+        id: "44444444-4444-4444-8444-444444444444",
+        submitted: {
+          txHash: "request-1",
+          memo: "delegate",
+        },
+      }),
+    );
+
+    expect(parsed.submitted).toEqual({
+      txHash: "request-1",
+      memo: "delegate",
+    });
   });
 
   it("accepts records with a durable replacement key", () => {

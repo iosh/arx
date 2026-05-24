@@ -583,9 +583,8 @@ const createControllers = () => {
   const transactionReview = {
     getTransactionApprovalReview: vi.fn(() => ({
       updatedAt: 0,
-      review: null,
-      hasPrepared: false,
-      namespaceReview: null,
+      details: null,
+      prepare: { state: "preparing" as const },
     })),
   };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };

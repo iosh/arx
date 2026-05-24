@@ -75,6 +75,12 @@ export type LinkRecordParams = {
   patch: Partial<Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>;
 };
 
+/**
+ * Internal transaction store service.
+ *
+ * `submitted` and `receipt` payloads are namespace-owned; writes must go through
+ * transaction runtime adapters before reaching this service.
+ */
 export type TransactionsService = {
   subscribeChanged(handler: (payload: TransactionsChangedPayload) => void): Unsubscribe;
 

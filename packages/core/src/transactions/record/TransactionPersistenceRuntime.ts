@@ -78,13 +78,13 @@ export class TransactionPersistenceRuntime {
   }
 
   async persistBroadcastRecord(meta: TransactionProposalMeta, submitted: TransactionSubmitted): Promise<void> {
-    const namespaceTransaction = this.#namespaces.get(meta.namespace);
-    const durableSubmitted = parseDurableSubmitted({
-      submitted,
-      namespaceTransaction,
-    });
-
     try {
+      const namespaceTransaction = this.#namespaces.get(meta.namespace);
+      const durableSubmitted = parseDurableSubmitted({
+        submitted,
+        namespaceTransaction,
+      });
+
       if (!meta.from) {
         throw new Error(`Transaction ${meta.id} is missing a from address.`);
       }

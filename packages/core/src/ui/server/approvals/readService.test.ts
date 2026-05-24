@@ -65,17 +65,18 @@ const ACCOUNTS = {
 
 const SEND_TRANSACTION_REVIEW_READY = {
   updatedAt: 3,
-  namespaceReview: {
+  details: {
     namespace: "eip155" as const,
-    summary: {
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      value: "0x1",
-      data: "0x",
-    },
-    execution: {
-      gas: "0x5208",
+    kind: "native_transfer" as const,
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    value: "0x1",
+    data: null,
+    gasLimit: "0x5208",
+    fees: {
       gasPrice: "0x3b9aca00",
+      maxFeePerGas: null,
+      maxPriorityFeePerGas: null,
     },
   },
   prepare: { state: "ready" },
@@ -83,7 +84,7 @@ const SEND_TRANSACTION_REVIEW_READY = {
 
 const SEND_TRANSACTION_REVIEW_BLOCKED = {
   updatedAt: 4,
-  namespaceReview: null,
+  details: null,
   prepare: {
     state: "blocked",
     blocker: {

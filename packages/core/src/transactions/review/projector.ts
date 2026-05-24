@@ -1,16 +1,16 @@
 import type { TransactionProposalReviewState } from "../proposal/types.js";
-import type { NamespaceTransactionReview } from "../review.js";
+import type { TransactionReviewDetails } from "../review.js";
 import type { SendTransactionApprovalReview } from "./types.js";
 
 export const buildSendTransactionApprovalReview = (args: {
   updatedAt: number;
   review: TransactionProposalReviewState | null;
-  namespaceReview: NamespaceTransactionReview | null;
+  details: TransactionReviewDetails | null;
 }): SendTransactionApprovalReview => {
   if (args.review?.status === "ready") {
     return {
       updatedAt: args.updatedAt,
-      namespaceReview: args.namespaceReview,
+      details: args.details,
       prepare: { state: "ready" },
     };
   }
@@ -18,7 +18,7 @@ export const buildSendTransactionApprovalReview = (args: {
   if (args.review?.status === "blocked" && args.review.blocker) {
     return {
       updatedAt: args.updatedAt,
-      namespaceReview: args.namespaceReview,
+      details: args.details,
       prepare: { state: "blocked", blocker: args.review.blocker },
     };
   }
@@ -26,14 +26,14 @@ export const buildSendTransactionApprovalReview = (args: {
   if ((args.review?.status === "failed" || args.review?.status === "invalidated") && args.review.error) {
     return {
       updatedAt: args.updatedAt,
-      namespaceReview: args.namespaceReview,
+      details: args.details,
       prepare: { state: "failed", error: args.review.error },
     };
   }
 
   return {
     updatedAt: args.updatedAt,
-    namespaceReview: args.namespaceReview,
+    details: args.details,
     prepare: { state: "preparing" },
   };
 };

@@ -32,7 +32,7 @@ export const createTransactionApprovalReviewReader = (
       return buildSendTransactionApprovalReview({
         updatedAt: reviewState.updatedAt,
         review: reviewState,
-        namespaceReview:
+        details:
           namespaceTransaction.proposal?.buildReview?.({
             ...buildProposalStateContext(proposalMeta),
             reviewPreparedSnapshot: reviewState.reviewPreparedSnapshot,

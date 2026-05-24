@@ -298,12 +298,13 @@ describe("ReceiptTracker", () => {
     const onReceipt = vi.fn();
     const onTimeout = vi.fn();
     const onTransientError = vi.fn();
+    const onReplacement = vi.fn();
 
     const tracker = createReceiptTracker(
       {
         getTransaction: () => adapter,
         onReceipt,
-        onReplacement: vi.fn(),
+        onReplacement,
         onTimeout,
         onUnsupported: vi.fn(),
         onTransientError,
@@ -320,6 +321,7 @@ describe("ReceiptTracker", () => {
     expect(onTimeout).not.toHaveBeenCalled();
     expect(onReceipt).toHaveBeenCalledWith("tx-1", receiptResolution);
     expect(tracker.pending()).toBe(0);
+    expect(onReplacement).not.toHaveBeenCalled();
   });
 
   it("returns the number of active tracking tasks via pending()", () => {

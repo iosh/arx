@@ -79,8 +79,8 @@ export const Eip155SubmittedTransactionSchema = z.strictObject({
 });
 
 export const TransactionPreparedSchema = Eip155PreparedTransactionSchema;
-export const TransactionReceiptSchema = Eip155TransactionReceiptSchema;
-export const TransactionSubmittedSchema = Eip155SubmittedTransactionSchema;
+export const TransactionReceiptSchema = z.record(z.string(), z.unknown());
+export const TransactionSubmittedSchema = z.record(z.string(), z.unknown());
 export const TransactionReplacementRelationSchema = z.strictObject({
   transactionId: z.uuid(),
 });

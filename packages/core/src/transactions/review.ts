@@ -1,22 +1,21 @@
 import { z } from "zod";
 
-export const Eip155TransactionReviewSchema = z.strictObject({
+export const Eip155TransactionReviewDetailsSchema = z.strictObject({
   namespace: z.literal("eip155"),
-  summary: z.strictObject({
-    from: z.string().min(1),
-    to: z.string().nullable(),
-    value: z.string().optional(),
-    data: z.string().optional(),
-  }),
-  execution: z.strictObject({
-    gas: z.string().optional(),
-    gasPrice: z.string().optional(),
-    maxFeePerGas: z.string().optional(),
-    maxPriorityFeePerGas: z.string().optional(),
+  kind: z.enum(["native_transfer", "contract_interaction", "contract_deployment"]),
+  from: z.string().min(1),
+  to: z.string().nullable(),
+  value: z.string().min(1),
+  data: z.string().nullable(),
+  gasLimit: z.string().nullable(),
+  fees: z.strictObject({
+    gasPrice: z.string().nullable(),
+    maxFeePerGas: z.string().nullable(),
+    maxPriorityFeePerGas: z.string().nullable(),
   }),
 });
 
-export const NamespaceTransactionReviewSchema = z.discriminatedUnion("namespace", [Eip155TransactionReviewSchema]);
+export const TransactionReviewDetailsSchema = Eip155TransactionReviewDetailsSchema;
 
-export type Eip155TransactionReview = z.infer<typeof Eip155TransactionReviewSchema>;
-export type NamespaceTransactionReview = z.infer<typeof NamespaceTransactionReviewSchema>;
+export type Eip155TransactionReviewDetails = z.infer<typeof Eip155TransactionReviewDetailsSchema>;
+export type TransactionReviewDetails = z.infer<typeof TransactionReviewDetailsSchema>;

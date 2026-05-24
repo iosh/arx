@@ -2,13 +2,7 @@ import { z } from "zod";
 import { getChainRefNamespace } from "../chains/caip.js";
 import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
-import {
-  Eip155SubmittedTransactionSchema,
-  Eip155TransactionReceiptSchema,
-  RpcStrategySchema,
-  TransactionReceiptSchema,
-  TransactionSubmittedSchema,
-} from "./schemas.js";
+import { RpcStrategySchema, TransactionReceiptSchema, TransactionSubmittedSchema } from "./schemas.js";
 import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
 
 // Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
@@ -297,12 +291,6 @@ const TransactionRecordBaseSchema = z.strictObject({
   updatedAt: epochMillisecondsSchema,
 });
 
-const Eip155TransactionRecordSchema = TransactionRecordBaseSchema.extend({
-  chainRef: z.string().regex(/^eip155:/),
-  submitted: Eip155SubmittedTransactionSchema,
-  receipt: Eip155TransactionReceiptSchema.nullable(),
-});
-
 const TransactionRecordEnvelopeSchema = TransactionRecordBaseSchema.extend({
   submitted: TransactionSubmittedSchema,
   receipt: TransactionReceiptSchema.nullable(),
@@ -325,19 +313,6 @@ export const TransactionRecordSchema = TransactionRecordEnvelopeSchema.superRefi
       message: "accountKey must belong to the same namespace as chainRef",
       path: ["accountKey"],
     });
-  }
-
-  if (chainNamespace === "eip155") {
-    const parsed = Eip155TransactionRecordSchema.safeParse(value);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) {
-        ctx.addIssue({
-          code: "custom",
-          message: issue.message,
-          path: issue.path,
-        });
-      }
-    }
   }
 });
 export type TransactionRecord = z.infer<typeof TransactionRecordSchema>;

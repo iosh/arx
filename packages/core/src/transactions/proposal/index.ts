@@ -1,5 +1,5 @@
 import type { TransactionIntent } from "../intent/index.js";
-import type { NamespaceTransactionReview } from "../review.js";
+import type { TransactionReviewDetails } from "../review.js";
 import type { TransactionError, TransactionPrepared } from "../types.js";
 
 export type TransactionReviewBlocker = {
@@ -47,7 +47,7 @@ export type TransactionProposalPrepare = {
 /** Approval-facing projection derived from proposal state. */
 export type TransactionApprovalPreview = {
   updatedAt: number;
-  namespaceReview: NamespaceTransactionReview | null;
+  details: TransactionReviewDetails | null;
   prepare: {
     state: "preparing" | "ready" | "blocked" | "failed";
     blocker?: TransactionReviewBlocker;

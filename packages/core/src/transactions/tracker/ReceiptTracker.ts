@@ -119,8 +119,8 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
       }
 
       if (receiptResult) {
-        stop(state.id);
         await deps.onReceipt(state.id, receiptResult);
+        stop(state.id);
         return;
       }
 
@@ -133,8 +133,8 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
         }
 
         if (replacement) {
-          stop(state.id);
           await deps.onReplacement(state.id, replacement);
+          stop(state.id);
           return;
         }
       }

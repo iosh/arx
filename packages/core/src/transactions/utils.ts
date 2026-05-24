@@ -1,4 +1,4 @@
-import { ArxReasons, isArxError } from "@arx/errors";
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type {
   TransactionPrepareContext,
   TransactionProposalStateContext,

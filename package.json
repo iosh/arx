@@ -2,7 +2,7 @@
   "name": "arx",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@10.26.1",
+  "packageManager": "pnpm@11.3.0",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.0.0"
@@ -21,8 +21,8 @@
     "test": "turbo test"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.10",
-    "turbo": "2.9.5",
+    "@biomejs/biome": "2.4.15",
+    "turbo": "2.9.14",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

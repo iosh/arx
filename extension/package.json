@@ -25,7 +25,7 @@
     "@tamagui/animations-css": "1.141.5",
     "@tamagui/config": "1.141.5",
     "@tanstack/react-query": "^5.90.9",
-    "@tanstack/react-router": "^1.136.5",
+    "@tanstack/react-router": "1.168.18",
     "events": "3.3.0",
     "lucide-react": "^0.562.0",
     "ox": "catalog:",
@@ -46,6 +46,6 @@
     "@wxt-dev/module-react": "1.2.2",
     "jsdom": "27.2.0",
     "typescript": "catalog:",
-    "wxt": "0.20.20"
+    "wxt": "0.20.26"
   }
 }

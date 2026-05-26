@@ -297,16 +297,7 @@ describe("InMemoryApprovalController", () => {
         request: {
           chainRef: "eip155:1",
           origin: ORIGIN,
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            chainRef: "eip155:1",
-            payload: {
-              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            },
-          },
+          transactionId: "tx-1",
         },
       },
       requester,

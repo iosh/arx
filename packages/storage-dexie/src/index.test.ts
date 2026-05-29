@@ -4,12 +4,18 @@ import { NetworkSelectionRecordSchema, VAULT_META_SNAPSHOT_VERSION, VaultMetaSna
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieStorage } from "./createDexieStorage.js";
-import { __closeSharedDatabaseForTests } from "./sharedDb.js";
 
 const DB_NAME = "arx-storage-index-test";
+const storages: Array<ReturnType<typeof createDexieStorage>> = [];
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
+
+const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
+  const storage = createDexieStorage({ databaseName: DB_NAME });
+  storages.push(storage);
+  return storage;
+};
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
@@ -20,14 +26,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  __closeSharedDatabaseForTests(DB_NAME);
+  for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
 
 describe("@arx/storage-dexie", () => {
   it("NetworkSelectionPort roundtrips", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.networkSelection;
 
     const record = NetworkSelectionRecordSchema.parse({
@@ -42,7 +48,7 @@ describe("@arx/storage-dexie", () => {
   });
 
   it("VaultMetaPort drops invalid vault meta on load", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.vaultMeta;
 
     await storage.__debug.ctx.ready;
@@ -57,7 +63,7 @@ describe("@arx/storage-dexie", () => {
   });
 
   it("VaultMetaPort roundtrips", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.vaultMeta;
 
     const snapshot = VaultMetaSnapshotSchema.parse({

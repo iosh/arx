@@ -4,12 +4,18 @@ import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/stora
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieStorage } from "../createDexieStorage.js";
-import { __closeSharedDatabaseForTests } from "../sharedDb.js";
 
 const DB_NAME = "arx-transactions-port-test";
+const storages: Array<ReturnType<typeof createDexieStorage>> = [];
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
+
+const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
+  const storage = createDexieStorage({ databaseName: DB_NAME });
+  storages.push(storage);
+  return storage;
+};
 
 const createRecord = (overrides: Partial<TransactionRecord> & { id: string }) =>
   TransactionRecordSchema.parse({
@@ -42,14 +48,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  __closeSharedDatabaseForTests(DB_NAME);
+  for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
 
 describe("DexieTransactionsPort", () => {
   it("create() + get() roundtrip", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
 
     const record = createRecord({
@@ -69,7 +75,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("list() returns newest-first and respects filters + before cursor", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
 
     const r1 = createRecord({
@@ -129,7 +135,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("list() paginates stably across rows that share createdAt", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
 
     const r1 = createRecord({
@@ -184,7 +190,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("findByReplacementKey() uses the durable replacement identity relation", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
     const replacementKey = {
       scope: "eip155.nonce",
@@ -227,7 +233,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("allows multiple rows with the same submitted hash", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
 
     const first = createRecord({
@@ -254,7 +260,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("updateIfStatus() updates only when expectedStatus matches", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.transactions;
 
     const record = createRecord({
@@ -289,7 +295,7 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     await storage.__debug.ctx.ready;
 
     await storage.__debug.db.table("transactions").put({

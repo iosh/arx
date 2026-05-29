@@ -5,12 +5,18 @@ import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createDexieStorage } from "../createDexieStorage.js";
-import { __closeSharedDatabaseForTests } from "../sharedDb.js";
 
 const DB_NAME = "arx-permissions-port-test";
+const storages: Array<ReturnType<typeof createDexieStorage>> = [];
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
+
+const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
+  const storage = createDexieStorage({ databaseName: DB_NAME });
+  storages.push(storage);
+  return storage;
+};
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
@@ -21,7 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  __closeSharedDatabaseForTests(DB_NAME);
+  for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
@@ -35,7 +41,7 @@ describe("DexiePermissionsPort", () => {
     });
 
   it("upsert() + get() roundtrip", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.permissions;
 
     const record = createRecord({
@@ -47,7 +53,7 @@ describe("DexiePermissionsPort", () => {
   });
 
   it("get() returns the matching record (origin+namespace)", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.permissions;
 
     const record = createRecord({
@@ -75,7 +81,7 @@ describe("DexiePermissionsPort", () => {
   });
 
   it("listByOrigin() returns only records for that origin", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
@@ -95,7 +101,7 @@ describe("DexiePermissionsPort", () => {
   });
 
   it("clearOrigin() deletes only that origin", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
@@ -117,7 +123,7 @@ describe("DexiePermissionsPort", () => {
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const storage = createTestStorage();
     await storage.__debug.ctx.ready;
 
     await storage.__debug.db.table("permissions").put({

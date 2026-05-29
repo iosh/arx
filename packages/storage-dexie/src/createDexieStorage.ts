@@ -9,6 +9,7 @@ import type {
   TransactionsPort,
 } from "@arx/core/services";
 import type { VaultMetaPort } from "@arx/core/storage";
+import type { TransactionsStoragePort } from "@arx/core/transactions/storage";
 
 import { ArxStorageDatabase } from "./db.js";
 import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
@@ -19,9 +20,11 @@ import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
 import { DexieNetworkSelectionPort } from "./ports/networkSelectionPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
 import { DexieSettingsPort } from "./ports/settingsPort.js";
+import { DexieTransactionAggregatesPort } from "./ports/transactionAggregatesPort.js";
 import { DexieTransactionsPort } from "./ports/transactionsPort.js";
 import { DexieVaultMetaPort } from "./ports/vaultMetaPort.js";
-import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
+
+export const DEFAULT_DEXIE_DATABASE_NAME = "arx-storage";
 
 export type DexieStoragePorts = {
   settings: SettingsPort;
@@ -34,13 +37,15 @@ export type DexieStoragePorts = {
   permissions: PermissionsPort;
   keyringMetas: KeyringMetasPort;
   transactions: TransactionsPort;
+  transactionAggregates: TransactionsStoragePort;
 };
 
 export type DexieStorage = {
   ports: DexieStoragePorts;
+  close(): void;
   /**
    * Internal escape hatch for tests and debugging.
-   * Avoid using this in app code; the underlying Dexie instance is shared per databaseName.
+   * Avoid using this in app code.
    */
   __debug: {
     db: ArxStorageDatabase;
@@ -54,8 +59,8 @@ export type CreateDexieStorageOptions = {
 };
 
 export const createDexieStorage = (options: CreateDexieStorageOptions = {}): DexieStorage => {
-  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
+  const dbName = options.databaseName ?? DEFAULT_DEXIE_DATABASE_NAME;
+  const db = new ArxStorageDatabase(dbName);
 
   const logger: StorageDexieLogger = options.logger ?? { warn: console.warn.bind(console) };
   const ctx = createDexieCtx(db, logger);
@@ -72,7 +77,9 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
       permissions: new DexiePermissionsPort(ctx),
       keyringMetas: new DexieKeyringMetasPort(ctx),
       transactions: new DexieTransactionsPort(ctx),
+      transactionAggregates: new DexieTransactionAggregatesPort(ctx),
     },
+    close: () => db.close(),
     __debug: { db, ctx },
   };
 };

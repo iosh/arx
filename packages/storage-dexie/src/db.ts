@@ -8,6 +8,11 @@ import type {
   SettingsRecord,
   TransactionRecord,
 } from "@arx/core/storage";
+import type {
+  TransactionRecord as AggregateTransactionRecord,
+  TransactionSubmission,
+  TransactionSubmissionArtifact,
+} from "@arx/core/transactions/storage";
 import { Dexie, type Table } from "dexie";
 import type { VaultMetaEntity } from "./types.js";
 
@@ -15,6 +20,12 @@ export const DB_SCHEMA_VERSION = 1;
 
 const TRANSACTIONS_SCHEMA =
   "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [replacementKey.scope+replacementKey.value]";
+const TRANSACTION_RECORDS_SCHEMA =
+  "&id, namespace, chainRef, accountKey, status, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt+id], [accountKey+createdAt+id], [status+createdAt+id], [namespace+chainRef+accountKey+createdAt+id], [conflictKey.kind+conflictKey.value]";
+const TRANSACTION_SUBMISSIONS_SCHEMA =
+  "&id, transactionId, status, updatedAt, [transactionId+id], [transactionId+status], [status+updatedAt]";
+const TRANSACTION_SUBMISSION_ARTIFACTS_SCHEMA =
+  "&id, transactionId, submissionId, namespace, chainRef, retention, expiresAt, [transactionId+id], [submissionId+id], [retention+expiresAt]";
 
 type CustomChainRow = CustomChainRecord;
 type CustomRpcRow = CustomRpcRecord;
@@ -28,6 +39,9 @@ export class ArxStorageDatabase extends Dexie {
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, [string, string]>;
   transactions!: Table<TransactionRecord, string>;
+  transactionRecords!: Table<AggregateTransactionRecord, string>;
+  transactionSubmissions!: Table<TransactionSubmission, string>;
+  transactionSubmissionArtifacts!: Table<TransactionSubmissionArtifact, string>;
 
   vaultMeta!: Table<VaultMetaEntity, string>;
 
@@ -43,6 +57,9 @@ export class ArxStorageDatabase extends Dexie {
       accounts: "&accountKey, namespace, keyringId",
       permissions: "[origin+namespace], origin",
       transactions: TRANSACTIONS_SCHEMA,
+      transactionRecords: TRANSACTION_RECORDS_SCHEMA,
+      transactionSubmissions: TRANSACTION_SUBMISSIONS_SCHEMA,
+      transactionSubmissionArtifacts: TRANSACTION_SUBMISSION_ARTIFACTS_SCHEMA,
 
       vaultMeta: "&id",
 

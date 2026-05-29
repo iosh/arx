@@ -14,6 +14,12 @@ export {
   isTransactionSubmissionStatusTerminal,
   TransactionStatusTransitionError,
 } from "./stateMachine.js";
+export type {
+  ListRecoverableTransactionAggregatesQuery,
+  ListTransactionHistoryCursor,
+  ListTransactionHistoryQuery,
+  TransactionsStoragePort,
+} from "./storagePort.js";
 export { TransactionAggregateService } from "./TransactionAggregateService.js";
 export type {
   BuildTransactionTerminalReasonInput,

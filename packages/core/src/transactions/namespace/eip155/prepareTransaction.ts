@@ -160,8 +160,9 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
       prepared: buildPreparedTransaction({
         ...coreFields,
         maxFeePerGas: prepared.maxFeePerGas as NonNullable<Eip155UnsignedTransactionDraft["maxFeePerGas"]>,
-        maxPriorityFeePerGas:
-          prepared.maxPriorityFeePerGas as NonNullable<Eip155UnsignedTransactionDraft["maxPriorityFeePerGas"]>,
+        maxPriorityFeePerGas: prepared.maxPriorityFeePerGas as NonNullable<
+          Eip155UnsignedTransactionDraft["maxPriorityFeePerGas"]
+        >,
       }),
     };
   };

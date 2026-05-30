@@ -8,7 +8,7 @@ import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
 import { eip155Codec } from "../../../accounts/addressing/codec.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
-import type { Eip155SignContext, Eip155SignerContract } from "./types.js";
+import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const textEncoder = new TextEncoder();
@@ -61,7 +61,7 @@ const readHexQuantity = (value: HexType, label: string): bigint => {
       message: `Transaction ${label} is not a valid hex quantity.`,
     });
   }
-}
+};
 
 /** Reads the numeric chainId from the approved transaction. */
 const readChainId = (transaction: Eip155UnsignedTransaction): number => {

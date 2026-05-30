@@ -1,5 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
+import type { TransactionConflictKey } from "../aggregate/types.js";
 import type { TransactionReviewDetails } from "../review.js";
 import type {
   NamespaceTransactionDraftEdit,
@@ -112,6 +113,17 @@ export type TransactionDraftEditContext<TNamespace extends string = string> = {
   mode?: string;
 };
 
+export type TransactionProposalConflictContext<TNamespace extends string = string> = {
+  transactionId: string;
+  namespace: TNamespace;
+  chainRef: ChainRef;
+  origin: string;
+  accountKey: string;
+  from: AccountAddress;
+  request: TransactionRequest<TNamespace>;
+  approvedPayload: TransactionPrepared<TNamespace>;
+};
+
 export type NamespaceTransactionRequest<TNamespace extends string = string> = {
   deriveForChain?(request: TransactionRequest<TNamespace>, chainRef: ChainRef): TransactionRequest<TNamespace>;
   validateRequest?(context: TransactionValidationContext<TNamespace>): void;
@@ -123,6 +135,7 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>, TransactionReviewSnapshot<TNamespace>>>;
   buildReview?(context: TransactionApprovalReviewContext<TNamespace>): TransactionReviewDetails | null;
   applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
+  deriveConflictKey?(context: TransactionProposalConflictContext<TNamespace>): TransactionConflictKey | null;
 };
 
 export type NamespaceTransactionExecution<TNamespace extends string = string> = {

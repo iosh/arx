@@ -65,6 +65,7 @@ export const createNamespaceTransactionStub = (
     prepare: (...args: never[]) => unknown;
     buildReview: (...args: never[]) => unknown;
     applyDraftEdit: (...args: never[]) => unknown;
+    deriveConflictKey: (...args: never[]) => unknown;
     sign: (...args: never[]) => unknown;
     broadcast: (...args: never[]) => unknown;
     parseSubmitted: (...args: never[]) => unknown;
@@ -82,6 +83,7 @@ export const createNamespaceTransactionStub = (
       vi.fn(async () => ({ status: "ready", prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION) })),
     buildReview: (overrides?.buildReview as never) ?? buildEip155ApprovalReview,
     ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit as never } : {}),
+    ...(overrides?.deriveConflictKey ? { deriveConflictKey: overrides.deriveConflictKey as never } : {}),
   },
   execution: {
     sign: (overrides?.sign as never) ?? vi.fn(async () => ({ raw: "0x" })),

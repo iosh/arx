@@ -1,5 +1,4 @@
 export {
-  TransactionAggregateConflictError,
   TransactionAggregateInvariantError,
   TransactionAggregateNotFoundError,
   TransactionSubmissionArtifactConflictError,
@@ -21,6 +20,7 @@ export type {
   TransactionsStoragePort,
 } from "./storagePort.js";
 export { TransactionAggregateService } from "./TransactionAggregateService.js";
+export { TransactionAggregateStore } from "./TransactionAggregateStore.js";
 export type {
   BuildTransactionTerminalReasonInput,
   TransactionTerminalReason,

@@ -16,6 +16,27 @@ export type {
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,
 } from "./access.js";
+export { TransactionAggregateStore } from "./aggregate/index.js";
+export type {
+  ApproveTransactionApprovalSessionInput,
+  EditTransactionApprovalSessionInput,
+  OpenTransactionApprovalSessionInput,
+  PrepareTransactionApprovalSessionInput,
+  ResolveTransactionApprovalSessionInput,
+  TransactionApprovalBlockedState,
+  TransactionApprovalDraft,
+  TransactionApprovalFailedState,
+  TransactionApprovalPrepareState,
+  TransactionApprovalPreparingState,
+  TransactionApprovalReadyState,
+  TransactionApprovalSession,
+} from "./approval/index.js";
+export {
+  TransactionApprovalSessionConflictError,
+  TransactionApprovalSessionInvariantError,
+  TransactionApprovalSessionNotFoundError,
+  TransactionApprovalSessionService,
+} from "./approval/index.js";
 export { createTransactionAccess } from "./createTransactionAccess.js";
 export type {
   TransactionIntent,

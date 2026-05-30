@@ -130,7 +130,6 @@ export type CreateTransactionReplacementInput = {
 
 /** Data captured when a dApp request or wallet intent becomes a transaction. */
 export type CreateTransactionInput = {
-  id?: string;
   namespace: string;
   chainRef: string;
   origin: string;

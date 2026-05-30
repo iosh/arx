@@ -18,7 +18,7 @@ import type {
   Eip155SignContext,
   Eip155TrackingContext,
 } from "./types.js";
-import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
+import { buildEip155TransactionConflictKey, type Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
@@ -92,6 +92,13 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       prepare: (context: Eip155PrepareContext) => prepareTransaction(context),
       buildReview: (context: Eip155ApprovalReviewContext) => buildEip155ApprovalReview(context),
       applyDraftEdit: (context: Eip155DraftEditContext) => applyEip155TransactionDraftEdit(context),
+      deriveConflictKey(context) {
+        return buildEip155TransactionConflictKey({
+          chainRef: context.chainRef,
+          accountKey: context.accountKey,
+          nonce: context.approvedPayload.nonce,
+        });
+      },
     },
     execution: {
       sign: (context: Eip155SignContext, prepared, options) => deps.signer.signTransaction(context, prepared, options),

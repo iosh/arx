@@ -256,7 +256,6 @@ describe("prepareTransaction - RPC interaction", () => {
       expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
       expect(prepared.gas).toBeUndefined();
     });
-
   });
 
   describe("gas estimation", () => {

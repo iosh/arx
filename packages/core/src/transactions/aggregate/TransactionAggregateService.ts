@@ -1,7 +1,5 @@
 import {
-  TransactionAggregateConflictError,
   TransactionAggregateInvariantError,
-  TransactionAggregateNotFoundError,
   TransactionSubmissionArtifactConflictError,
 } from "./errors.js";
 import { cloneJsonValue } from "./json.js";
@@ -40,21 +38,17 @@ import type {
 
 type PreSubmittedTerminalStatus = Extract<TransactionSubmissionStatus, "failed" | "cancelled" | "expired">;
 
-type ActiveSubmissionCommand = {
-  transactionId: string;
-  submissionId: string;
-};
+type LoadedAggregateInput<T extends { transactionId: string }> = Omit<T, "transactionId">;
 
 const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate => structuredClone(aggregate);
 
 /**
- * Owns the transaction aggregate state machine.
+ * Owns the state transitions for one transaction aggregate.
  *
- * This implementation is in-memory. Storage and runtime adapters should still
- * use these commands instead of patching records directly.
+ * Storage and runtime code should load the current aggregate, pass it through a
+ * named command here, then persist the returned next aggregate.
  */
 export class TransactionAggregateService {
-  #aggregates = new Map<string, TransactionAggregate>();
   #now: () => number;
   #createId: () => string;
 
@@ -63,53 +57,40 @@ export class TransactionAggregateService {
     this.#createId = options.createId ?? crypto.randomUUID;
   }
 
-  /** Returns a cloned snapshot by transaction id. */
-  getTransactionAggregate(transactionId: string): TransactionAggregate | null {
-    const aggregate = this.#aggregates.get(transactionId);
-    return aggregate ? cloneAggregate(aggregate) : null;
-  }
-
   /** Creates the record before approval or broadcast. */
   createTransaction(input: CreateTransactionInput): TransactionAggregate {
-    const id = input.id ?? this.#createId();
-    if (this.#aggregates.has(id)) {
-      throw new TransactionAggregateConflictError(id);
-    }
-
+    const id = this.#createId();
     const at = this.#now();
-    const record: TransactionRecord = {
-      id,
-      namespace: input.namespace,
-      chainRef: input.chainRef,
-      origin: input.origin,
-      source: input.source,
-      requestId: input.requestId ?? null,
-      accountKey: input.accountKey,
-      status: "awaiting_approval",
-      request: {
-        kind: input.request.kind,
-        payload: cloneJsonValue(input.request.payload),
-      },
-      approvedRequest: null,
-      activeSubmissionId: null,
-      submitted: null,
-      receipt: null,
-      conflictKey: null,
-      replacesTransactionId: input.replacement?.transactionId ?? null,
-      replacementType: input.replacement?.type ?? null,
-      replacedByTransactionId: null,
-      terminalReason: null,
-      createdAt: at,
-      updatedAt: at,
-    };
 
-    const aggregate: TransactionAggregate = {
-      record,
+    return {
+      record: {
+        id,
+        namespace: input.namespace,
+        chainRef: input.chainRef,
+        origin: input.origin,
+        source: input.source,
+        requestId: input.requestId ?? null,
+        accountKey: input.accountKey,
+        status: "awaiting_approval",
+        request: {
+          kind: input.request.kind,
+          payload: cloneJsonValue(input.request.payload),
+        },
+        approvedRequest: null,
+        activeSubmissionId: null,
+        submitted: null,
+        receipt: null,
+        conflictKey: null,
+        replacesTransactionId: input.replacement?.transactionId ?? null,
+        replacementType: input.replacement?.type ?? null,
+        replacedByTransactionId: null,
+        terminalReason: null,
+        createdAt: at,
+        updatedAt: at,
+      },
       submissions: [],
       submissionArtifacts: [],
     };
-    this.#aggregates.set(id, aggregate);
-    return cloneAggregate(aggregate);
   }
 
   /**
@@ -117,8 +98,11 @@ export class TransactionAggregateService {
    *
    * Prepare, signing, and broadcast happen in later commands.
    */
-  approveTransaction(input: ApproveTransactionInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate, at) => {
+  approveTransaction(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<ApproveTransactionInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate, at) => {
       const { record } = aggregate;
       assertTransactionStatusTransition(record.status, "submitting");
 
@@ -144,9 +128,12 @@ export class TransactionAggregateService {
   }
 
   /** Records explicit user rejection. */
-  rejectTransaction(input: TerminalTransactionInput): TransactionAggregate {
+  rejectTransaction(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalTransactionInput>,
+  ): TransactionAggregate {
     return this.#finalizeAwaitingApprovalTransaction(
-      input.transactionId,
+      current,
       "rejected",
       input.reason ??
         buildTransactionTerminalReason({
@@ -156,9 +143,12 @@ export class TransactionAggregateService {
   }
 
   /** Cancels before network acceptance. */
-  cancelTransaction(input: TerminalTransactionInput): TransactionAggregate {
+  cancelTransaction(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalTransactionInput>,
+  ): TransactionAggregate {
     return this.#finalizeBeforeNetworkAcceptance(
-      input.transactionId,
+      current,
       "cancelled",
       input.reason ??
         buildTransactionTerminalReason({
@@ -168,9 +158,12 @@ export class TransactionAggregateService {
   }
 
   /** Expires an approval or submission window before network acceptance. */
-  expireTransaction(input: TerminalTransactionInput): TransactionAggregate {
+  expireTransaction(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalTransactionInput>,
+  ): TransactionAggregate {
     return this.#finalizeBeforeNetworkAcceptance(
-      input.transactionId,
+      current,
       "expired",
       input.reason ??
         buildTransactionTerminalReason({
@@ -180,18 +173,27 @@ export class TransactionAggregateService {
   }
 
   /** Fails before network acceptance. */
-  failTransaction(input: FailTransactionInput): TransactionAggregate {
-    return this.#finalizeBeforeNetworkAcceptance(input.transactionId, "failed", input.reason);
+  failTransaction(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<FailTransactionInput>,
+  ): TransactionAggregate {
+    return this.#finalizeBeforeNetworkAcceptance(current, "failed", input.reason);
   }
 
   /** Starts signing the active submission. */
-  beginSubmissionSigning(input: BeginSubmissionSigningInput): TransactionAggregate {
-    return this.#transitionActiveSubmission(input, "signing");
+  beginSubmissionSigning(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<BeginSubmissionSigningInput>,
+  ): TransactionAggregate {
+    return this.#transitionActiveSubmission(current, input, "signing");
   }
 
   /** Stores the sealed artifact outside TransactionRecord. */
-  completeSubmissionSigning(input: CompleteSubmissionSigningInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate, at) => {
+  completeSubmissionSigning(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<CompleteSubmissionSigningInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate, at) => {
       this.#requireSubmittingRecord(aggregate.record);
       const submission = this.#requireActiveSubmission(aggregate, input.submissionId);
       assertTransactionSubmissionStatusTransition(submission.status, "signed");
@@ -224,13 +226,19 @@ export class TransactionAggregateService {
    *
    * The caller may broadcast only after this command succeeds.
    */
-  queueSubmissionBroadcast(input: QueueSubmissionBroadcastInput): TransactionAggregate {
-    return this.#transitionActiveSubmission(input, "broadcasting");
+  queueSubmissionBroadcast(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<QueueSubmissionBroadcastInput>,
+  ): TransactionAggregate {
+    return this.#transitionActiveSubmission(current, input, "broadcasting");
   }
 
   /** Marks the submission accepted and the transaction submitted. */
-  recordBroadcastAcceptance(input: RecordBroadcastAcceptanceInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate, at) => {
+  recordBroadcastAcceptance(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordBroadcastAcceptanceInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate, at) => {
       assertTransactionStatusTransition(aggregate.record.status, "submitted");
 
       const submission = this.#requireActiveSubmission(aggregate, input.submissionId);
@@ -245,23 +253,35 @@ export class TransactionAggregateService {
   }
 
   /** Fails the active submission and parent transaction. */
-  failSubmission(input: TerminalSubmissionInput): TransactionAggregate {
-    return this.#finalizeActiveSubmission(input, "failed");
+  failSubmission(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalSubmissionInput>,
+  ): TransactionAggregate {
+    return this.#finalizeActiveSubmission(current, input, "failed");
   }
 
   /** Cancels the active submission and parent transaction. */
-  cancelSubmission(input: TerminalSubmissionInput): TransactionAggregate {
-    return this.#finalizeActiveSubmission(input, "cancelled");
+  cancelSubmission(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalSubmissionInput>,
+  ): TransactionAggregate {
+    return this.#finalizeActiveSubmission(current, input, "cancelled");
   }
 
   /** Expires the active submission and parent transaction. */
-  expireSubmission(input: TerminalSubmissionInput): TransactionAggregate {
-    return this.#finalizeActiveSubmission(input, "expired");
+  expireSubmission(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalSubmissionInput>,
+  ): TransactionAggregate {
+    return this.#finalizeActiveSubmission(current, input, "expired");
   }
 
   /** Records successful chain confirmation. */
-  recordTransactionConfirmed(input: RecordTransactionReceiptInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate) => {
+  recordTransactionConfirmed(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordTransactionReceiptInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, "confirmed");
       aggregate.record.status = "confirmed";
       aggregate.record.receipt = cloneJsonValue(input.receipt);
@@ -269,8 +289,11 @@ export class TransactionAggregateService {
   }
 
   /** Records chain execution failure. */
-  recordTransactionFailedOnChain(input: RecordTransactionFailedOnChainInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate) => {
+  recordTransactionFailedOnChain(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordTransactionFailedOnChainInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, "failed");
       aggregate.record.status = "failed";
       aggregate.record.receipt = cloneJsonValue(input.receipt);
@@ -279,8 +302,11 @@ export class TransactionAggregateService {
   }
 
   /** Records replacement by another known local transaction. */
-  recordTransactionReplaced(input: RecordTransactionReplacedInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate) => {
+  recordTransactionReplaced(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordTransactionReplacedInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, "replaced");
       aggregate.record.status = "replaced";
       aggregate.record.replacedByTransactionId = input.replacedByTransactionId;
@@ -289,8 +315,11 @@ export class TransactionAggregateService {
   }
 
   /** Records that tracking no longer expects confirmation. */
-  recordTransactionDropped(input: RecordTransactionDroppedInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate) => {
+  recordTransactionDropped(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordTransactionDroppedInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, "dropped");
       aggregate.record.status = "dropped";
       aggregate.record.terminalReason = cloneTransactionTerminalReason(input.reason);
@@ -298,8 +327,11 @@ export class TransactionAggregateService {
   }
 
   /** Records that tracking found a known expiry condition. */
-  recordTransactionExpired(input: RecordTransactionExpiredInput): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate) => {
+  recordTransactionExpired(
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<RecordTransactionExpiredInput>,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, "expired");
       aggregate.record.status = "expired";
       aggregate.record.terminalReason = cloneTransactionTerminalReason(input.reason);
@@ -307,11 +339,11 @@ export class TransactionAggregateService {
   }
 
   #finalizeAwaitingApprovalTransaction(
-    transactionId: string,
+    current: TransactionAggregate,
     status: "rejected" | "expired" | "cancelled" | "failed",
     reason: TransactionTerminalReason,
   ): TransactionAggregate {
-    return this.#updateAggregate(transactionId, (aggregate) => {
+    return this.#updateAggregate(current, (aggregate) => {
       assertTransactionStatusTransition(aggregate.record.status, status);
       aggregate.record.status = status;
       aggregate.record.terminalReason = cloneTransactionTerminalReason(reason);
@@ -319,11 +351,11 @@ export class TransactionAggregateService {
   }
 
   #finalizeBeforeNetworkAcceptance(
-    transactionId: string,
+    current: TransactionAggregate,
     status: PreSubmittedTerminalStatus,
     reason: TransactionTerminalReason,
   ): TransactionAggregate {
-    return this.#updateAggregate(transactionId, (aggregate, at) => {
+    return this.#updateAggregate(current, (aggregate, at) => {
       if (aggregate.record.status !== "submitting") {
         assertTransactionStatusTransition(aggregate.record.status, status);
         aggregate.record.status = status;
@@ -342,10 +374,11 @@ export class TransactionAggregateService {
   }
 
   #transitionActiveSubmission(
-    input: ActiveSubmissionCommand,
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<BeginSubmissionSigningInput>,
     status: "signing" | "broadcasting",
   ): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate, at) => {
+    return this.#updateAggregate(current, (aggregate, at) => {
       this.#requireSubmittingRecord(aggregate.record);
       const submission = this.#requireActiveSubmission(aggregate, input.submissionId);
       assertTransactionSubmissionStatusTransition(submission.status, status);
@@ -355,10 +388,11 @@ export class TransactionAggregateService {
   }
 
   #finalizeActiveSubmission(
-    input: TerminalSubmissionInput,
+    current: TransactionAggregate,
+    input: LoadedAggregateInput<TerminalSubmissionInput>,
     status: "failed" | "cancelled" | "expired",
   ): TransactionAggregate {
-    return this.#updateAggregate(input.transactionId, (aggregate, at) => {
+    return this.#updateAggregate(current, (aggregate, at) => {
       this.#requireSubmittingRecord(aggregate.record);
       const submission = this.#requireActiveSubmission(aggregate, input.submissionId);
       this.#assertPreSubmittedTerminalAllowed(aggregate.record.id, submission, status);
@@ -396,18 +430,14 @@ export class TransactionAggregateService {
   }
 
   #updateAggregate(
-    transactionId: string,
+    current: TransactionAggregate,
     mutate: (aggregate: TransactionAggregate, updatedAt: number) => void,
   ): TransactionAggregate {
-    const current = this.#aggregates.get(transactionId);
-    if (!current) {
-      throw new TransactionAggregateNotFoundError(transactionId);
-    }
     // Terminal records are closed. Later corrections need a named command.
     if (isTransactionStatusTerminal(current.record.status)) {
       throw new TransactionAggregateInvariantError(
-        transactionId,
-        `Terminal transaction "${transactionId}" cannot continue from status "${current.record.status}".`,
+        current.record.id,
+        `Terminal transaction "${current.record.id}" cannot continue from status "${current.record.status}".`,
       );
     }
 
@@ -415,8 +445,7 @@ export class TransactionAggregateService {
     const updatedAt = this.#now();
     mutate(next, updatedAt);
     next.record.updatedAt = updatedAt;
-    this.#aggregates.set(transactionId, next);
-    return cloneAggregate(next);
+    return next;
   }
 
   #requireSubmittingRecord(record: TransactionRecord): void {

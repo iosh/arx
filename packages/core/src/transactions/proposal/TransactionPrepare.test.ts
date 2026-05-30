@@ -151,7 +151,7 @@ describe("TransactionPrepare", () => {
 
     expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "ready",
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
     expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toEqual({
       gas: "0x5208",

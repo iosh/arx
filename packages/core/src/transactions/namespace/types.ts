@@ -6,6 +6,7 @@ import type {
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
+  TransactionReviewSnapshot,
   TransactionSubmitted,
 } from "../types.js";
 
@@ -23,10 +24,11 @@ export type TransactionProposalError = {
   data?: unknown;
 };
 
-export type TransactionPrepareResult<TPrepared = TransactionPrepared> =
+/** Result of one namespace prepare pass. */
+export type TransactionPrepareResult<TPrepared = TransactionPrepared, TReviewSnapshot = TPrepared> =
   | { status: "ready"; prepared: TPrepared }
-  | { status: "blocked"; blocker: TransactionProposalBlocker; prepared?: TPrepared | null }
-  | { status: "failed"; error: TransactionProposalError; prepared?: TPrepared | null };
+  | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot?: TReviewSnapshot | null }
+  | { status: "failed"; error: TransactionProposalError; reviewSnapshot?: TReviewSnapshot | null };
 
 export type SignedTransactionPayload = {
   raw: string;
@@ -95,7 +97,8 @@ export type TransactionApprovalReviewContext<TNamespace extends string = string>
   origin: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
-  reviewPreparedSnapshot: TransactionPrepared<TNamespace> | null;
+  /** Latest prepared snapshot available to the review builder. */
+  reviewSnapshot: TransactionReviewSnapshot<TNamespace> | null;
 };
 
 export type TransactionDraftEditContext<TNamespace extends string = string> = {
@@ -117,7 +120,7 @@ export type NamespaceTransactionRequest<TNamespace extends string = string> = {
 export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   prepare(
     context: TransactionPrepareContext<TNamespace>,
-  ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>>>;
+  ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>, TransactionReviewSnapshot<TNamespace>>>;
   buildReview?(context: TransactionApprovalReviewContext<TNamespace>): TransactionReviewDetails | null;
   applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
 };

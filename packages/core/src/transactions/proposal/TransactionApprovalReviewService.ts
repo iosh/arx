@@ -35,7 +35,7 @@ export const createTransactionApprovalReviewReader = (
         details:
           namespaceTransaction.proposal?.buildReview?.({
             ...buildProposalStateContext(proposalMeta),
-            reviewPreparedSnapshot: reviewState.reviewPreparedSnapshot,
+            reviewSnapshot: reviewState.reviewSnapshot,
           }) ?? null,
       });
     },

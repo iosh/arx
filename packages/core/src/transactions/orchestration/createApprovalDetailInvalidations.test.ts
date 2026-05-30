@@ -55,7 +55,7 @@ describe("createApprovalDetailInvalidations", () => {
       sessionToken: review.review.sessionToken,
       updatedAt: 2,
       executionPrepared: { gas: "0x5208" },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
 
     createApprovalDetailInvalidations({

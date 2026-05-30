@@ -130,7 +130,7 @@ export class TransactionAggregateService {
         approvedAt: input.approvedAt ?? at,
       };
       record.activeSubmissionId = submissionId;
-      record.conflictKey = input.conflictKey ?? null;
+      record.conflictKey = input.conflictKey;
       aggregate.submissions.push({
         id: submissionId,
         transactionId: record.id,

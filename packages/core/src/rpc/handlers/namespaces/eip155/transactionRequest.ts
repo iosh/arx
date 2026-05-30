@@ -3,8 +3,8 @@ import type { ChainRef } from "../../../../chains/ids.js";
 import type {
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
-  TransactionRequest,
-} from "../../../../transactions/types.js";
+} from "../../../../transactions/namespace/eip155/transactionTypes.js";
+import type { TransactionRequest } from "../../../../transactions/types.js";
 
 const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 

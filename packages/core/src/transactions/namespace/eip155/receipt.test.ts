@@ -13,6 +13,10 @@ const BASE_CONTEXT: Eip155TrackingContext = {
     hash: TEST_TX_HASH,
     chainId: "0x1",
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    value: "0x0",
+    data: "0x",
+    gas: "0x5208",
     nonce: "0x3",
   },
 };

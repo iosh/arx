@@ -49,18 +49,17 @@ const approveTransaction = (service: TransactionAggregateService, transactionId 
     transactionId,
     approvalId: "approval-1",
     submissionId: "submission-1",
+    approvedAt: null,
     approvedRequestPayload: {
       chainId: "0x1",
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       value: "0x1",
       data: "0x",
-      gasLimit: "0x5208",
+      gas: "0x5208",
       nonce: "0x7",
-      fee: {
-        kind: "legacy",
-        gasPrice: "0x3b9aca00",
-      },
+      type: "legacy",
+      gasPrice: "0x3b9aca00",
     },
     conflictKey: {
       kind: "eip155.nonce",
@@ -134,7 +133,7 @@ describe("TransactionAggregateService", () => {
       approvedAt: 2_000,
       payload: {
         nonce: "0x7",
-        gasLimit: "0x5208",
+        gas: "0x5208",
       },
     });
     expect(aggregate.record.activeSubmissionId).toBe("submission-1");
@@ -159,7 +158,7 @@ describe("TransactionAggregateService", () => {
     const { service } = createService();
     createTransaction(service);
 
-    const aggregate = service.rejectTransaction({ transactionId: "tx-1" });
+    const aggregate = service.rejectTransaction({ transactionId: "tx-1", reason: null });
 
     expect(aggregate.record.status).toBe("rejected");
     expect(aggregate.record.terminalReason).toMatchObject({
@@ -172,7 +171,7 @@ describe("TransactionAggregateService", () => {
     const { service } = createService();
     createTransaction(service);
 
-    const aggregate = service.cancelTransaction({ transactionId: "tx-1" });
+    const aggregate = service.cancelTransaction({ transactionId: "tx-1", reason: null });
 
     expect(aggregate.record.status).toBe("cancelled");
     expect(aggregate.record.terminalReason).toMatchObject({
@@ -184,7 +183,7 @@ describe("TransactionAggregateService", () => {
     const { service } = createService();
     createTransaction(service);
 
-    const aggregate = service.expireTransaction({ transactionId: "tx-1" });
+    const aggregate = service.expireTransaction({ transactionId: "tx-1", reason: null });
 
     expect(aggregate.record.status).toBe("expired");
     expect(aggregate.record.terminalReason).toMatchObject({
@@ -217,13 +216,16 @@ describe("TransactionAggregateService", () => {
   it("prevents terminal transactions from continuing", () => {
     const { service } = createService();
     createTransaction(service);
-    service.rejectTransaction({ transactionId: "tx-1" });
+    service.rejectTransaction({ transactionId: "tx-1", reason: null });
 
     expect(() =>
       service.approveTransaction({
         transactionId: "tx-1",
         approvalId: "approval-1",
         approvedRequestPayload: { ok: true },
+        submissionId: null,
+        approvedAt: null,
+        conflictKey: null,
       }),
     ).toThrow(TransactionAggregateInvariantError);
   });
@@ -334,7 +336,9 @@ describe("TransactionAggregateService", () => {
       submitted: { hash: "0x1111" },
     });
 
-    expect(() => service.cancelTransaction({ transactionId: "tx-1" })).toThrow(TransactionStatusTransitionError);
+    expect(() => service.cancelTransaction({ transactionId: "tx-1", reason: null })).toThrow(
+      TransactionStatusTransitionError,
+    );
   });
 
   it("prevents local cancellation after broadcast starts", () => {
@@ -350,7 +354,9 @@ describe("TransactionAggregateService", () => {
     });
     service.queueSubmissionBroadcast({ transactionId: "tx-1", submissionId: "submission-1" });
 
-    expect(() => service.cancelTransaction({ transactionId: "tx-1" })).toThrow(TransactionAggregateInvariantError);
+    expect(() => service.cancelTransaction({ transactionId: "tx-1", reason: null })).toThrow(
+      TransactionAggregateInvariantError,
+    );
   });
 
   it("records submitted transaction outcomes", () => {

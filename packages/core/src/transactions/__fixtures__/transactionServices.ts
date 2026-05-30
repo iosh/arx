@@ -6,6 +6,7 @@ import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionStatus as StorageTransactionStatus, TransactionRecord } from "../../storage/records.js";
 import { buildEip155ApprovalReview } from "../namespace/eip155/approvalReview.js";
+import type { Eip155UnsignedTransaction } from "../namespace/eip155/unsignedTransaction.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../namespace/types.js";
 import type { TransactionProposalTerminationReason } from "../proposal/index.js";
@@ -14,6 +15,7 @@ import type { TransactionProposalMeta } from "../proposal/types.js";
 import type { TransactionRecordView } from "../record/index.js";
 import type { TransactionRecordViewStore } from "../record/TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
+import type { TransactionReviewSnapshot } from "../types.js";
 
 export const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 export const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
@@ -31,7 +33,23 @@ export const DEFAULT_SUBMITTED = {
   hash: "0xdeadbeef",
   chainId: "0xa",
   from: DEFAULT_FROM,
+  to: DEFAULT_TO,
+  value: "0x0",
+  data: "0x",
+  gas: "0x5208",
   nonce: "0x7",
+};
+
+export const DEFAULT_UNSIGNED_TRANSACTION: Eip155UnsignedTransaction = {
+  type: "legacy",
+  chainId: "0xa",
+  from: DEFAULT_FROM,
+  to: DEFAULT_TO,
+  value: "0x0",
+  data: "0x",
+  gas: "0x5208",
+  nonce: "0x7",
+  gasPrice: "0x3b9aca00",
 };
 
 export const accountCodecs = createAccountCodecRegistry([eip155Codec]);
@@ -59,7 +77,9 @@ export const createNamespaceTransactionStub = (
     ...(overrides?.validateRequest ? { validateRequest: overrides.validateRequest as never } : {}),
   },
   proposal: {
-    prepare: (overrides?.prepare as never) ?? vi.fn(async () => ({ status: "ready", prepared: {} })),
+    prepare:
+      (overrides?.prepare as never) ??
+      vi.fn(async () => ({ status: "ready", prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION) })),
     buildReview: (overrides?.buildReview as never) ?? buildEip155ApprovalReview,
     ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit as never } : {}),
   },
@@ -92,7 +112,7 @@ const makeProposalReadyForApproval = (
   input?: {
     updatedAt?: number;
     executionPrepared?: NonNullable<TransactionProposalMeta["prepared"]>;
-    reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
+    reviewSnapshot?: TransactionReviewSnapshot;
   },
 ) => {
   const updatedAt = input?.updatedAt ?? 1;
@@ -110,14 +130,14 @@ const makeProposalReadyForApproval = (
     throw new Error(`Proposal ${transactionId} could not start prepare session`);
   }
 
-  const executionPrepared = input?.executionPrepared ?? {};
+  const executionPrepared = input?.executionPrepared ?? structuredClone(DEFAULT_UNSIGNED_TRANSACTION);
   const settled = proposalRuntime.settlePrepareReady({
     id: transactionId,
     expectedRequestRevision: current.prepare.requestRevision,
     sessionToken: session.review.sessionToken,
     updatedAt,
     executionPrepared,
-    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
+    reviewSnapshot: input?.reviewSnapshot ?? executionPrepared,
   });
   if (settled.status !== "settled") {
     throw new Error(`Proposal ${transactionId} could not settle ready review`);
@@ -193,8 +213,8 @@ export const createTransactionProposal = (
   if (requestedStatus === "approved") {
     makeProposalReadyForApproval(proposalRuntime, id, {
       updatedAt,
-      executionPrepared: input?.prepared ?? {},
-      reviewPreparedSnapshot: input?.prepared ?? {},
+      executionPrepared: input?.prepared ?? structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      reviewSnapshot: input?.prepared ?? structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
     });
     const approved = proposalRuntime.approvePendingProposal({ id, updatedAt });
     if (approved.status !== "approved") {
@@ -353,7 +373,7 @@ export const markReviewReady = (
   input?: {
     updatedAt?: number;
     executionPrepared?: NonNullable<TransactionProposalMeta["prepared"]>;
-    reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
+    reviewSnapshot?: TransactionReviewSnapshot;
   },
 ) => {
   makeProposalReadyForApproval(proposalRuntime, transactionId, input);

@@ -1,6 +1,16 @@
-import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../chains/ids.js";
-import type { AccountAddress } from "../controllers/account/types.js";
+import type {
+  Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
+  Eip155TransactionDraftEdit,
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  Eip155TransactionReceipt,
+} from "./namespace/eip155/transactionTypes.js";
+import type {
+  Eip155UnsignedTransaction,
+  Eip155UnsignedTransactionDraft,
+} from "./namespace/eip155/unsignedTransaction.js";
 
 export type TransactionError = {
   name: string;
@@ -15,77 +25,12 @@ export type TransactionCaller = {
 
 export type TransactionPayload = Record<string, unknown>;
 
-export type Eip155TransactionAccessListEntry = {
-  address: AccountAddress;
-  storageKeys: Hex[];
-};
-
-export type Eip155TransactionPayload = {
-  chainId?: Hex;
-  from?: AccountAddress;
-  to?: AccountAddress | null;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  gasPrice?: Hex;
-  maxFeePerGas?: Hex;
-  maxPriorityFeePerGas?: Hex;
-  nonce?: Hex;
-};
-
-export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
-
-export type Eip155PreparedTransaction = {
-  from?: Hex;
-  to?: Hex | null;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  nonce?: Hex;
-  chainId?: Hex;
-  gasPrice?: Hex;
-  maxFeePerGas?: Hex;
-  maxPriorityFeePerGas?: Hex;
-};
-
-export type Eip155TransactionDraftChange = {
-  field: "gas" | "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas" | "nonce";
-  value: string | null;
-};
-
-export type Eip155TransactionReceipt = {
-  status?: Hex;
-  transactionHash?: Hex;
-  blockNumber?: Hex;
-  [key: string]: unknown;
-};
-
-export type Eip155SubmittedTransaction = {
-  hash: Hex;
-  chainId: Hex;
-  from: AccountAddress;
-  to?: AccountAddress | null;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  nonce: Hex;
-  type?: Hex | null;
-  gasPrice?: Hex | null;
-  maxFeePerGas?: Hex | null;
-  maxPriorityFeePerGas?: Hex | null;
-  accessList?: Eip155TransactionAccessListEntry[];
-};
-
-export type Eip155TransactionDraftEdit = {
-  namespace: "eip155";
-  changes: readonly Eip155TransactionDraftChange[];
-};
-
 export type NamespaceTransactionShapeMap = {
   eip155: {
     payload: Eip155TransactionPayload;
     draftEdit: Eip155TransactionDraftEdit;
-    prepared: Eip155PreparedTransaction;
+    prepared: Eip155UnsignedTransaction;
+    reviewSnapshot: Eip155UnsignedTransactionDraft;
     submitted: Eip155SubmittedTransaction;
     receipt: Eip155TransactionReceipt;
   };
@@ -119,6 +64,12 @@ export type TransactionPrepared<TNamespace extends string = string> = NamespaceS
   Record<string, unknown>
 >;
 
+export type TransactionReviewSnapshot<TNamespace extends string = string> = NamespaceShape<
+  TNamespace,
+  "reviewSnapshot",
+  Record<string, unknown>
+>;
+
 export type TransactionSubmitted<TNamespace extends string = string> = NamespaceShape<
   TNamespace,
   "submitted",
@@ -136,3 +87,12 @@ export type NamespaceTransactionDraftEdit<TNamespace extends string = string> = 
   "draftEdit",
   AnyNamespaceTransactionDraftEdit
 >;
+
+export type {
+  Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
+  Eip155TransactionDraftEdit,
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  Eip155TransactionReceipt,
+};

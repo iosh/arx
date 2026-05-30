@@ -6,9 +6,15 @@ import { toAccountKeyFromAddress } from "../../../accounts/addressing/accountKey
 import { createAccountCodecRegistry, eip155Codec } from "../../../accounts/addressing/codec.js";
 import type { TransactionSignContext } from "../types.js";
 import { createEip155Signer } from "./signer.js";
+import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const toQuantity = (value: bigint) => `0x${value === 0n ? "0" : value.toString(16)}` as const;
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
+
+const buildPreparedTransaction = (transaction: Omit<Eip155UnsignedTransaction, "data">): Eip155UnsignedTransaction => ({
+  data: "0x",
+  ...transaction,
+});
 
 describe("eip155 signer (vectors)", () => {
   it("signPersonalMessage vector (raw bytes)", async () => {
@@ -126,15 +132,20 @@ describe("eip155 signer (vectors)", () => {
         payload: { from: address },
       } as TransactionSignContext["request"],
     };
-    const signed = await signer.signTransaction(context, {
-      chainId: toQuantity(1n),
-      nonce: toQuantity(0n),
-      gas: toQuantity(21_000n),
-      maxFeePerGas: toQuantity(1_000_000_000n),
-      maxPriorityFeePerGas: toQuantity(1_000_000_000n),
-      to,
-      value: toQuantity(1_000_000_000_000_000_000n),
-    });
+    const signed = await signer.signTransaction(
+      context,
+      buildPreparedTransaction({
+        chainId: toQuantity(1n),
+        from: address,
+        nonce: toQuantity(0n),
+        gas: toQuantity(21_000n),
+        type: "eip1559",
+        maxFeePerGas: toQuantity(1_000_000_000n),
+        maxPriorityFeePerGas: toQuantity(1_000_000_000n),
+        to,
+        value: toQuantity(1_000_000_000_000_000_000n),
+      }),
+    );
 
     // Precomputed with viem@2.39.0 (privateKeyToAccount(privateKey).signTransaction(...))
     expect(signed.raw.toLowerCase()).toBe(
@@ -177,14 +188,19 @@ describe("eip155 signer (vectors)", () => {
         payload: { from: address },
       } as TransactionSignContext["request"],
     };
-    const signed = await signer.signTransaction(context, {
-      chainId: toQuantity(1n),
-      nonce: toQuantity(0n),
-      gas: toQuantity(21_000n),
-      gasPrice: toQuantity(1_000_000_000n),
-      to,
-      value: toQuantity(123n),
-    });
+    const signed = await signer.signTransaction(
+      context,
+      buildPreparedTransaction({
+        chainId: toQuantity(1n),
+        from: address,
+        nonce: toQuantity(0n),
+        gas: toQuantity(21_000n),
+        type: "legacy",
+        gasPrice: toQuantity(1_000_000_000n),
+        to,
+        value: toQuantity(123n),
+      }),
+    );
 
     // Precomputed with viem@2.39.0 (privateKeyToAccount(privateKey).signTransaction(...))
     expect(signed.raw.toLowerCase()).toBe(

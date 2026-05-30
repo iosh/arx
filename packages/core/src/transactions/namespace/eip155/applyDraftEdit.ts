@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { Eip155TransactionDraftChange, Eip155TransactionRequest } from "../../types.js";
+import type { Eip155TransactionRequest } from "../../types.js";
+import type { Eip155TransactionDraftChange } from "./transactionTypes.js";
 import type { Eip155DraftEditContext } from "./types.js";
 import { Eip155FieldParseError, parseOptionalHexQuantity } from "./utils/validation.js";
 

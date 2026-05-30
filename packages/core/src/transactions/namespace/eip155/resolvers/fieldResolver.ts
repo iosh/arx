@@ -1,5 +1,6 @@
-import type { Eip155TransactionPayload } from "../../../types.js";
+import type { Hex } from "ox/Hex";
 import type { TransactionPrepareContext } from "../../types.js";
+import type { Eip155TransactionPayload } from "../transactionTypes.js";
 import type { Eip155PrepareStepResult, FieldResolutionResult } from "../types.js";
 import { deriveExpectedChainId } from "../utils/chainHelpers.js";
 import { Eip155FieldParseError, parseOptionalHexData, parseOptionalHexQuantity } from "../utils/validation.js";
@@ -17,19 +18,34 @@ export const deriveFields = (
     if (payload.chainId) {
       const chainId = parseOptionalHexQuantity(payload.chainId, "chainId");
       if (chainId) {
-        prepared.chainId = expectedChainId && chainId !== expectedChainId ? expectedChainId : chainId;
+        if (expectedChainId && chainId !== expectedChainId) {
+          return {
+            status: "failed",
+            error: {
+              reason: "transaction.prepare.chain_id_mismatch",
+              message: "Transaction chainId does not match the active chain.",
+              data: {
+                chainId,
+                expectedChainId,
+              },
+            },
+            patch: {
+              prepared,
+              payloadValues,
+            },
+          };
+        }
+        prepared.chainId = chainId;
       }
+    } else if (expectedChainId) {
+      prepared.chainId = expectedChainId;
     }
 
     const valueHex = parseOptionalHexQuantity(payload.value, "value");
-    if (valueHex) {
-      prepared.value = valueHex;
-    }
+    prepared.value = valueHex ?? ("0x0" as Hex);
 
     const dataHex = parseOptionalHexData(payload.data);
-    if (dataHex) {
-      prepared.data = dataHex;
-    }
+    prepared.data = dataHex ?? ("0x" as Hex);
 
     const gasHex = parseOptionalHexQuantity(payload.gas, "gas");
     if (gasHex) {
@@ -39,19 +55,16 @@ export const deriveFields = (
 
     const gasPriceHex = parseOptionalHexQuantity(payload.gasPrice, "gasPrice");
     if (gasPriceHex) {
-      prepared.gasPrice = gasPriceHex;
       payloadValues.gasPrice = gasPriceHex;
     }
 
     const maxFeeHex = parseOptionalHexQuantity(payload.maxFeePerGas, "maxFeePerGas");
     if (maxFeeHex) {
-      prepared.maxFeePerGas = maxFeeHex;
       payloadValues.maxFeePerGas = maxFeeHex;
     }
 
     const priorityFeeHex = parseOptionalHexQuantity(payload.maxPriorityFeePerGas, "maxPriorityFeePerGas");
     if (priorityFeeHex) {
-      prepared.maxPriorityFeePerGas = priorityFeeHex;
       payloadValues.maxPriorityFeePerGas = priorityFeeHex;
     }
 

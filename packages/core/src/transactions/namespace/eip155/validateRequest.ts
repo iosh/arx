@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
-import type { Eip155TransactionPayload } from "../../types.js";
 import type { TransactionValidationContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
+import type { Eip155TransactionPayload } from "./transactionTypes.js";
 import { deriveExpectedChainId } from "./utils/chainHelpers.js";
 import { Eip155FieldParseError, parseOptionalHexData, parseOptionalHexQuantity } from "./utils/validation.js";
 

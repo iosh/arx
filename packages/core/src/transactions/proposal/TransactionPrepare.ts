@@ -69,19 +69,19 @@ type PrepareOutcome =
       status: "ready";
       updatedAt: number;
       prepared: NonNullable<NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
+      reviewSnapshot: Parameters<TransactionProposalRuntime["settlePrepareReady"]>[0]["reviewSnapshot"];
     }
   | {
       status: "blocked";
       updatedAt: number;
       blocker: NonNullable<Parameters<TransactionProposalRuntime["settlePrepareBlocked"]>[0]["blocker"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
+      reviewSnapshot: Parameters<TransactionProposalRuntime["settlePrepareBlocked"]>[0]["reviewSnapshot"];
     }
   | {
       status: "failed";
       updatedAt: number;
       error: NonNullable<Parameters<TransactionProposalRuntime["settlePrepareFailed"]>[0]["error"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
+      reviewSnapshot: Parameters<TransactionProposalRuntime["settlePrepareFailed"]>[0]["reviewSnapshot"];
     };
 
 export class TransactionPrepare {
@@ -243,7 +243,7 @@ export class TransactionPrepare {
           message: `No namespace transaction registered for namespace ${attempt.meta.namespace}`,
           data: { namespace: attempt.meta.namespace },
         },
-        reviewPreparedSnapshot: null,
+        reviewSnapshot: null,
       };
     }
 
@@ -256,14 +256,14 @@ export class TransactionPrepare {
       });
       const result = await this.#withTimeout(prepare(context), this.#namespaceProposalPrepareTimeoutMs);
       const updatedAt = this.#now();
-      const reviewPreparedSnapshot = result.prepared ?? null;
+      const reviewSnapshot = result.status === "ready" ? result.prepared : (result.reviewSnapshot ?? null);
 
       if (result.status === "ready") {
         return {
           status: "ready",
           updatedAt,
           prepared: result.prepared,
-          reviewPreparedSnapshot,
+          reviewSnapshot,
         };
       }
 
@@ -272,7 +272,7 @@ export class TransactionPrepare {
           status: "blocked",
           updatedAt,
           blocker: result.blocker,
-          reviewPreparedSnapshot,
+          reviewSnapshot,
         };
       }
 
@@ -280,14 +280,14 @@ export class TransactionPrepare {
         status: "failed",
         updatedAt,
         error: result.error,
-        reviewPreparedSnapshot,
+        reviewSnapshot,
       };
     } catch (error) {
       return {
         status: "failed",
         updatedAt: this.#now(),
         error: toPrepareReviewError(error),
-        reviewPreparedSnapshot: null,
+        reviewSnapshot: null,
       };
     }
   }
@@ -310,7 +310,7 @@ export class TransactionPrepare {
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           executionPrepared: outcome.prepared,
-          reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
+          reviewSnapshot: outcome.reviewSnapshot,
         });
         if (settled.status === "settled") {
           return;
@@ -324,7 +324,7 @@ export class TransactionPrepare {
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           blocker: outcome.blocker,
-          reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
+          reviewSnapshot: outcome.reviewSnapshot,
         });
         if (settled.status === "settled") {
           return;
@@ -338,7 +338,7 @@ export class TransactionPrepare {
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           error: outcome.error,
-          reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
+          reviewSnapshot: outcome.reviewSnapshot,
         });
         if (settled.status === "settled") {
           return;

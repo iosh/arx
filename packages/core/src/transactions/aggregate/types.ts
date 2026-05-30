@@ -146,15 +146,18 @@ export type ApproveTransactionInput = {
   transactionId: string;
   approvalId: string;
   approvedRequestPayload: JsonValue;
-  submissionId?: string;
-  approvedAt?: number;
-  conflictKey?: TransactionConflictKey | null;
+  /** Null lets the aggregate allocate the first submission id. */
+  submissionId: string | null;
+  /** Null uses the aggregate clock as the approval time. */
+  approvedAt: number | null;
+  conflictKey: TransactionConflictKey | null;
 };
 
 /** Terminal command for a transaction not yet accepted by the network. */
 export type TerminalTransactionInput = {
   transactionId: string;
-  reason?: TransactionTerminalReason;
+  /** Null uses the lifecycle default reason for this terminal status. */
+  reason: TransactionTerminalReason | null;
 };
 
 /** Local failure before network acceptance. */

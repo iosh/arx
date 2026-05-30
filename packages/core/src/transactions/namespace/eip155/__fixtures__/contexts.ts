@@ -1,4 +1,4 @@
-import type { Eip155TransactionPayload } from "../../../types.js";
+import type { Eip155TransactionPayload } from "../transactionTypes.js";
 import type { Eip155PrepareContext, Eip155TrackingContext } from "../types.js";
 
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./constants.js";
@@ -69,6 +69,10 @@ export const createReceiptContext = (overrides: Partial<Eip155TrackingContext> =
     hash: TEST_TX_HASH,
     chainId: TEST_CHAINS.MAINNET_CHAIN_ID,
     from: TEST_ADDRESSES.ACCOUNT_AA,
+    to: TEST_ADDRESSES.TO_B,
+    value: "0x0",
+    data: TEST_VALUES.EMPTY_DATA,
+    gas: "0x5208",
     nonce: "0x3",
   },
   ...overrides,

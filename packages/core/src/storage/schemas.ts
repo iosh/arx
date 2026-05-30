@@ -14,11 +14,14 @@ export {
   RpcStrategySchema,
 } from "./schemas/rpc.js";
 export {
-  Eip155PreparedTransactionSchema,
   Eip155SubmittedTransactionSchema,
   Eip155TransactionPayloadSchema,
   Eip155TransactionReceiptSchema,
   Eip155TransactionRequestSchema,
+  Eip155UnsignedEip1559TransactionSchema,
+  Eip155UnsignedLegacyTransactionSchema,
+  Eip155UnsignedTransactionDraftSchema,
+  Eip155UnsignedTransactionSchema,
   TransactionErrorSchema,
   TransactionPayloadSchema,
   TransactionPreparedSchema,

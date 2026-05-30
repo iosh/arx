@@ -16,7 +16,7 @@ import type {
 import type { TransactionReviewBlocker, TransactionReviewError } from "../review/types.js";
 import { canPrepareProposal } from "../status.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "../topics.js";
-import type { TransactionError, TransactionPrepared, TransactionRequest } from "../types.js";
+import type { TransactionError, TransactionPrepared, TransactionRequest, TransactionReviewSnapshot } from "../types.js";
 
 type TransactionProposalPrepareSession = {
   requestRevision: number;
@@ -32,21 +32,21 @@ type TransactionProposalPreparingState = TransactionProposalPrepareSession & {
 type TransactionProposalReadyState = TransactionProposalPrepareSession & {
   status: "ready";
   prepared: TransactionPrepared;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
 };
 
 type TransactionProposalBlockedState = TransactionProposalPrepareSession & {
   status: "blocked";
   prepared: null;
   blocker: TransactionReviewBlocker;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
 };
 
 type TransactionProposalFailedPrepareState = TransactionProposalPrepareSession & {
   status: "failed";
   prepared: null;
   error: TransactionReviewError;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
 };
 
 type TransactionProposalInvalidatedState = TransactionProposalPrepareSession & {
@@ -278,12 +278,12 @@ const buildReadyState = (input: {
   requestRevision: number;
   updatedAt: number;
   prepared: TransactionPrepared;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
 }): TransactionProposalReadyState => ({
   ...createPrepareSession({ requestRevision: input.requestRevision, updatedAt: input.updatedAt }),
   status: "ready",
   prepared: structuredClone(input.prepared),
-  reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
+  reviewSnapshot: structuredClone(input.reviewSnapshot),
 });
 
 const toPublicReviewState = (session: TransactionProposalPrepareState): TransactionProposalReviewState => {
@@ -293,7 +293,7 @@ const toPublicReviewState = (session: TransactionProposalPrepareState): Transact
         sessionToken: session.sessionToken,
         status: "preparing",
         updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: null,
+        reviewSnapshot: null,
         blocker: null,
         error: null,
       };
@@ -302,7 +302,7 @@ const toPublicReviewState = (session: TransactionProposalPrepareState): Transact
         sessionToken: session.sessionToken,
         status: "ready",
         updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
+        reviewSnapshot: structuredClone(session.reviewSnapshot),
         blocker: null,
         error: null,
       };
@@ -311,7 +311,7 @@ const toPublicReviewState = (session: TransactionProposalPrepareState): Transact
         sessionToken: session.sessionToken,
         status: "blocked",
         updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
+        reviewSnapshot: structuredClone(session.reviewSnapshot),
         blocker: structuredClone(session.blocker),
         error: null,
       };
@@ -320,7 +320,7 @@ const toPublicReviewState = (session: TransactionProposalPrepareState): Transact
         sessionToken: session.sessionToken,
         status: "failed",
         updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
+        reviewSnapshot: structuredClone(session.reviewSnapshot),
         blocker: null,
         error: structuredClone(session.error),
       };
@@ -329,7 +329,7 @@ const toPublicReviewState = (session: TransactionProposalPrepareState): Transact
         sessionToken: session.sessionToken,
         status: "invalidated",
         updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: null,
+        reviewSnapshot: null,
         blocker: null,
         error: structuredClone(session.error),
         invalidatedBy: session.invalidatedBy,
@@ -343,7 +343,7 @@ const isUserRejectedTermination = (reason: TransactionProposalTerminationReason)
 
 const buildTransactionProposalState = (input: TransactionProposalInit): TransactionProposalState => {
   const requestRevision = input.requestRevision ?? 0;
-  const reviewPreparedSnapshot = structuredClone(input.prepared ?? null);
+  const reviewSnapshot = structuredClone(input.prepared ?? null);
 
   return {
     id: input.id,
@@ -359,13 +359,13 @@ const buildTransactionProposalState = (input: TransactionProposalInit): Transact
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     prepare:
-      reviewPreparedSnapshot === null
+      reviewSnapshot === null
         ? buildPreparingState(requestRevision, input.updatedAt)
         : buildReadyState({
             requestRevision,
             updatedAt: input.updatedAt,
-            prepared: reviewPreparedSnapshot,
-            reviewPreparedSnapshot,
+            prepared: reviewSnapshot,
+            reviewSnapshot,
           }),
   };
 };
@@ -491,7 +491,7 @@ export class TransactionProposalRuntime {
               requestRevision: current.prepare.requestRevision,
               updatedAt: input.updatedAt,
               prepared: input.prepared,
-              reviewPreparedSnapshot: input.prepared,
+              reviewSnapshot: input.prepared,
             }),
     });
     this.#records.set(input.id, next);
@@ -588,7 +588,7 @@ export class TransactionProposalRuntime {
   settlePrepareReady(
     input: SettlePrepareInput & {
       executionPrepared: TransactionPrepared;
-      reviewPreparedSnapshot: TransactionPrepared | null;
+      reviewSnapshot: TransactionReviewSnapshot | null;
     },
   ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
@@ -602,7 +602,7 @@ export class TransactionProposalRuntime {
       updatedAt: input.updatedAt,
       status: "ready",
       prepared: structuredClone(input.executionPrepared),
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
+      reviewSnapshot: structuredClone(input.reviewSnapshot),
     };
 
     const next = applyTransactionProposalUpdate(current.proposal, {
@@ -621,7 +621,7 @@ export class TransactionProposalRuntime {
   settlePrepareBlocked(
     input: SettlePrepareInput & {
       blocker: TransactionReviewBlocker;
-      reviewPreparedSnapshot: TransactionPrepared | null;
+      reviewSnapshot: TransactionReviewSnapshot | null;
     },
   ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
@@ -636,7 +636,7 @@ export class TransactionProposalRuntime {
       status: "blocked",
       prepared: null,
       blocker: structuredClone(input.blocker),
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
+      reviewSnapshot: structuredClone(input.reviewSnapshot),
     };
 
     const next = applyTransactionProposalUpdate(current.proposal, {
@@ -655,7 +655,7 @@ export class TransactionProposalRuntime {
   settlePrepareFailed(
     input: SettlePrepareInput & {
       error: TransactionReviewError;
-      reviewPreparedSnapshot: TransactionPrepared | null;
+      reviewSnapshot: TransactionReviewSnapshot | null;
     },
   ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
@@ -670,7 +670,7 @@ export class TransactionProposalRuntime {
       status: "failed",
       prepared: null,
       error: structuredClone(input.error),
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
+      reviewSnapshot: structuredClone(input.reviewSnapshot),
     };
 
     const next = applyTransactionProposalUpdate(current.proposal, {
@@ -890,7 +890,7 @@ export class TransactionProposalRuntime {
           sessionToken: state.prepare.sessionToken,
           status: "ready",
           prepared,
-          reviewSnapshot: structuredClone(state.prepare.reviewPreparedSnapshot),
+          reviewSnapshot: structuredClone(state.prepare.reviewSnapshot),
         };
       case "blocked":
         return {
@@ -898,7 +898,7 @@ export class TransactionProposalRuntime {
           sessionToken: state.prepare.sessionToken,
           status: "blocked",
           prepared,
-          reviewSnapshot: structuredClone(state.prepare.reviewPreparedSnapshot),
+          reviewSnapshot: structuredClone(state.prepare.reviewSnapshot),
           blocker: structuredClone(state.prepare.blocker),
         };
       case "failed":
@@ -907,7 +907,7 @@ export class TransactionProposalRuntime {
           sessionToken: state.prepare.sessionToken,
           status: "failed",
           prepared,
-          reviewSnapshot: structuredClone(state.prepare.reviewPreparedSnapshot),
+          reviewSnapshot: structuredClone(state.prepare.reviewSnapshot),
           error: structuredClone(state.prepare.error),
         };
       case "invalidated":

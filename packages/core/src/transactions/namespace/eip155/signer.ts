@@ -7,10 +7,9 @@ import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
 import { eip155Codec } from "../../../accounts/addressing/codec.js";
-import { parseChainRef } from "../../../chains/caip.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
-import type { Eip155PreparedTransaction } from "../../types.js";
 import type { Eip155SignContext, Eip155SignerContract } from "./types.js";
+import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const textEncoder = new TextEncoder();
 
@@ -53,17 +52,8 @@ const throwIfSignAborted = (signal?: AbortSignal) => {
   throw new Error("Transaction signing aborted.");
 };
 
-function toBigInt(value: HexType | null | undefined, label: string, required: true): bigint;
-function toBigInt(value: HexType | null | undefined, label: string, required?: false): bigint | undefined;
-function toBigInt(value: HexType | null | undefined, label: string, required = false): bigint | undefined {
-  if (value == null) {
-    if (required) {
-      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Transaction ${label} is required.` });
-    }
-    return undefined;
-  }
+const readHexQuantity = (value: HexType, label: string): bigint => {
   try {
-    Hex.assert(value, { strict: false });
     return Hex.toBigInt(value);
   } catch {
     throw arxError({
@@ -73,80 +63,51 @@ function toBigInt(value: HexType | null | undefined, label: string, required = f
   }
 }
 
-/**
- * Extract numeric chainId from transaction or context.
- * Validates chainId is a positive 53-bit safe integer.
- */
-const deriveChainId = (context: Eip155SignContext, prepared: Eip155PreparedTransaction): number => {
-  if (prepared.chainId) {
-    const numeric = Number(Hex.toBigInt(prepared.chainId));
-    if (!Number.isSafeInteger(numeric) || numeric <= 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "Transaction chainId must be a positive 53-bit integer.",
-      });
-    }
-    return numeric;
-  }
-
-  const { namespace, reference } = parseChainRef(context.chainRef);
-  if (namespace !== "eip155") {
+/** Reads the numeric chainId from the approved transaction. */
+const readChainId = (transaction: Eip155UnsignedTransaction): number => {
+  const numeric = Number(readHexQuantity(transaction.chainId, "chainId"));
+  if (!Number.isSafeInteger(numeric) || numeric <= 0) {
     throw arxError({
       reason: ArxReasons.RpcInvalidRequest,
-      message: `Namespace "${namespace}" does not support Ethereum signing.`,
+      message: "Transaction chainId must be a positive 53-bit integer.",
     });
   }
-
-  const fallback = Number.parseInt(reference, 10);
-  if (!Number.isSafeInteger(fallback) || fallback <= 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
-      message: `Active chainRef "${context.chainRef}" cannot provide a numeric chainId.`,
-    });
-  }
-  return fallback;
+  return numeric;
 };
 
 const buildEnvelope = (
-  prepared: Eip155PreparedTransaction,
+  transaction: Eip155UnsignedTransaction,
   chainId: number,
 ):
   | { type: "eip1559"; value: TransactionEnvelopeEip1559.TransactionEnvelopeEip1559 }
   | { type: "legacy"; value: TransactionEnvelopeLegacy.TransactionEnvelopeLegacy } => {
   const base = {
     chainId,
-    nonce: toBigInt(prepared.nonce, "nonce"),
-    to: prepared.to ?? undefined,
-    data: prepared.data ?? undefined,
-    value: toBigInt(prepared.value, "value"),
-    gas: toBigInt(prepared.gas, "gas"),
+    nonce: readHexQuantity(transaction.nonce, "nonce"),
+    to: transaction.to ?? undefined,
+    data: transaction.data,
+    value: readHexQuantity(transaction.value, "value"),
+    gas: readHexQuantity(transaction.gas, "gas"),
   };
 
-  const has1559Fees = prepared.maxFeePerGas != null || prepared.maxPriorityFeePerGas != null;
-
-  if (has1559Fees) {
-    const maxFeePerGas = toBigInt(prepared.maxFeePerGas, "maxFeePerGas", true);
-    const maxPriorityFeePerGas = toBigInt(prepared.maxPriorityFeePerGas, "maxPriorityFeePerGas", true);
-
+  if (transaction.type === "eip1559") {
     return {
       type: "eip1559",
       value: TransactionEnvelopeEip1559.from({
         ...base,
         type: "eip1559",
-        maxFeePerGas,
-        maxPriorityFeePerGas,
+        maxFeePerGas: readHexQuantity(transaction.maxFeePerGas, "maxFeePerGas"),
+        maxPriorityFeePerGas: readHexQuantity(transaction.maxPriorityFeePerGas, "maxPriorityFeePerGas"),
       }),
     };
   }
-
-  const gasPrice = toBigInt(prepared.gasPrice, "gasPrice", true);
 
   return {
     type: "legacy",
     value: TransactionEnvelopeLegacy.from({
       ...base,
       type: "legacy",
-      gasPrice,
+      gasPrice: readHexQuantity(transaction.gasPrice, "gasPrice"),
     }),
   };
 };
@@ -213,26 +174,22 @@ const parseTypedDataPayload = (raw: string) => {
 };
 
 export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer => {
-  const signTransaction: Eip155Signer["signTransaction"] = async (context, preparedInput, options) => {
+  const signTransaction: Eip155Signer["signTransaction"] = async (context, transaction, options) => {
     throwIfSignAborted(options?.signal);
 
-    const requestPayload = context.request.payload;
-    const payloadFrom =
-      requestPayload && typeof requestPayload === "object" ? (requestPayload as { from?: unknown }).from : undefined;
-    if (typeof payloadFrom === "string" && payloadFrom.toLowerCase() !== context.from.toLowerCase()) {
+    if (transaction.from.toLowerCase() !== context.from.toLowerCase()) {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: "Transaction from address does not match approved account.",
-        data: { payloadFrom, approvedFrom: context.from },
+        data: { transactionFrom: transaction.from, approvedFrom: context.from },
       });
     }
 
     const fromAccountKey = toEip155AccountKey({ chainRef: context.chainRef, address: context.from });
     await accountSigning.assertAccountUnlocked(fromAccountKey);
     throwIfSignAborted(options?.signal);
-    const prepared = preparedInput;
-    const chainId = deriveChainId(context, prepared);
-    const envelope = buildEnvelope(prepared, chainId);
+    const chainId = readChainId(transaction);
+    const envelope = buildEnvelope(transaction, chainId);
 
     if (envelope.type === "eip1559") {
       const txSignPayload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);

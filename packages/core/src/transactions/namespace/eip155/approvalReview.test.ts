@@ -22,7 +22,7 @@ describe("buildEip155ApprovalReview", () => {
           gasPrice: TEST_VALUES.GAS_PRICE_1GWEI,
         },
       },
-      reviewPreparedSnapshot: {
+      reviewSnapshot: {
         gas: TEST_VALUES.STANDARD_GAS_LIMIT,
         maxFeePerGas: TEST_VALUES.MAX_FEE_1_5GWEI,
         maxPriorityFeePerGas: TEST_VALUES.PRIORITY_FEE_1GWEI,

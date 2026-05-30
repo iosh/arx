@@ -1,6 +1,6 @@
 import type { TransactionIntent } from "../intent/index.js";
 import type { TransactionReviewDetails } from "../review.js";
-import type { TransactionError, TransactionPrepared } from "../types.js";
+import type { TransactionError, TransactionPrepared, TransactionReviewSnapshot } from "../types.js";
 
 export type TransactionReviewBlocker = {
   reason: string;
@@ -38,7 +38,7 @@ export type TransactionProposalPrepare = {
   status: TransactionProposalPrepareStatus;
   prepared: TransactionPrepared | null;
   /** Prepared snapshot used by approval preview projection. */
-  reviewSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
   blocker?: TransactionReviewBlocker;
   error?: TransactionReviewError;
   invalidatedBy?: string;

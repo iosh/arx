@@ -3,7 +3,8 @@ import { eip155AddressCodec } from "../../../../chains/eip155/addressCodec.js";
 import { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import type { Eip155FeeOracle, Eip155FeeSuggestion } from "../feeOracle.js";
 import { createEip155PrepareTransaction } from "../prepareTransaction.js";
-import type { Eip155PreparedTransaction, Eip155PrepareResult } from "../types.js";
+import type { Eip155PrepareResult } from "../types.js";
+import type { Eip155UnsignedTransaction, Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
 
 /**
  * Creates a test-ready transaction preparer with sensible defaults.
@@ -37,13 +38,13 @@ export const createTestPrepareTransaction = (
   });
 };
 
-export const requireReadyPrepared = (result: Eip155PrepareResult): Eip155PreparedTransaction => {
+export const requireReadyPrepared = (result: Eip155PrepareResult): Eip155UnsignedTransaction => {
   if (result.status !== "ready") {
     throw new Error(`Expected ready prepare result, received ${result.status}`);
   }
   return result.prepared;
 };
 
-export const requirePartialPrepared = (result: Eip155PrepareResult): Partial<Eip155PreparedTransaction> => {
-  return result.prepared ?? {};
+export const requirePartialPrepared = (result: Eip155PrepareResult): Eip155UnsignedTransactionDraft => {
+  return result.status === "ready" ? result.prepared : (result.reviewSnapshot ?? {});
 };

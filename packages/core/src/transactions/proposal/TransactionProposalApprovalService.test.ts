@@ -48,7 +48,7 @@ describe("TransactionProposalApprovalService", () => {
       sessionToken: session.review.sessionToken,
       updatedAt: 1,
       executionPrepared: { gas: "0x5208" },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
 
     expect(service.approvePendingProposal(REQUEST_ID)).toEqual({
@@ -116,7 +116,7 @@ describe("TransactionProposalApprovalService", () => {
         sessionToken: session.sessionToken,
         updatedAt: 3,
         executionPrepared: { gas: "0x5208" },
-        reviewPreparedSnapshot: { gas: "0x5208" },
+        reviewSnapshot: { gas: "0x5208" },
       }),
     ).toEqual({
       status: "stale",
@@ -157,7 +157,7 @@ describe("TransactionProposalApprovalService", () => {
         reason: "transaction.prepare.insufficient_funds",
         message: "Insufficient funds.",
       },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
 
     expect(blocked.service.approvePendingProposal("tx-blocked")).toMatchObject({
@@ -186,7 +186,7 @@ describe("TransactionProposalApprovalService", () => {
         reason: "transaction.prepare_failed",
         message: "RPC unavailable",
       },
-      reviewPreparedSnapshot: null,
+      reviewSnapshot: null,
     });
 
     expect(failed.service.approvePendingProposal("tx-failed")).toMatchObject({

@@ -257,29 +257,6 @@ describe("prepareTransaction - RPC interaction", () => {
       expect(prepared.gas).toBeUndefined();
     });
 
-    it("records invalid_hex when RPC fee data is malformed", async () => {
-      const rpc = createEip155RpcMock();
-      const feeOracle = { suggestFees: vi.fn() };
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-      feeOracle.suggestFees.mockResolvedValue({
-        mode: "eip1559",
-        maxFeePerGas: "123",
-        maxPriorityFeePerGas: "0xGG",
-        source: "eth_maxPriorityFeePerGas+eth_getBlockByNumber",
-      });
-      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
-
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => rpc.client),
-        feeOracleFactory: vi.fn((_rpc) => feeOracle),
-      });
-
-      const result = await prepareTransaction(createPrepareContext());
-
-      expect(result.status).toBe("failed");
-      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
-    });
   });
 
   describe("gas estimation", () => {

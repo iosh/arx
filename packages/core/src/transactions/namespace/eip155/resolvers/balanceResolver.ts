@@ -1,7 +1,7 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
-import type { Eip155PreparedTransaction } from "../../../types.js";
 import type { Eip155PrepareStepResult } from "../types.js";
+import type { Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
 import {
   Eip155FieldParseError,
   parseHexQuantityToBigInt,
@@ -20,7 +20,7 @@ const toBigIntOrNull = (value: string | undefined): bigint | null => {
 
 type BalanceResolverParams = {
   rpc: Eip155RpcCapabilities | null;
-  prepared: Pick<Eip155PreparedTransaction, "from" | "gas" | "value" | "gasPrice" | "maxFeePerGas">;
+  prepared: Pick<Eip155UnsignedTransactionDraft, "from" | "gas" | "value" | "gasPrice" | "maxFeePerGas">;
   additionalFeeWei?: bigint;
 };
 
@@ -28,7 +28,7 @@ export const checkBalanceForMaxCost = async ({
   rpc,
   prepared,
   additionalFeeWei = 0n,
-}: BalanceResolverParams): Promise<Eip155PrepareStepResult<Partial<Eip155PreparedTransaction>>> => {
+}: BalanceResolverParams): Promise<Eip155PrepareStepResult<Partial<Eip155UnsignedTransactionDraft>>> => {
   if (!rpc) return { status: "ok", patch: {} };
   if (!prepared.from) return { status: "ok", patch: {} };
 

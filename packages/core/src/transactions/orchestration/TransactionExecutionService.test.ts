@@ -166,7 +166,7 @@ describe("TransactionExecutionService", () => {
     });
     markReviewReady(proposalRuntime, REQUEST_ID, {
       executionPrepared: { gas: "0x5208" },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
     const { execution } = createExecutionService({
       proposalRuntime,
@@ -255,7 +255,7 @@ describe("TransactionExecutionService", () => {
     });
     markReviewReady(proposalRuntime, REQUEST_ID, {
       executionPrepared: { gas: "0x5208" },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
     const { execution } = createExecutionService({
       proposalRuntime,

@@ -36,7 +36,7 @@ export type BuildTransactionTerminalReasonInput = {
   message?: string;
   namespace?: string | null;
   code?: string;
-  details?: JsonValue | null;
+  details?: JsonValue;
   retryable?: boolean;
 };
 
@@ -64,7 +64,7 @@ export const buildTransactionTerminalReason = (
   message: input.message ?? DEFAULT_TERMINAL_REASON_MESSAGES[input.kind],
   namespace: input.namespace ?? null,
   code: input.code ?? input.kind,
-  details: input.details === undefined || input.details === null ? null : cloneJsonValue(input.details),
+  details: input.details === undefined ? null : cloneJsonValue(input.details),
   retryable: input.retryable ?? false,
 });
 

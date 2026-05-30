@@ -1,12 +1,7 @@
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { Eip155SubmittedTransactionSchema, Eip155TransactionReceiptSchema } from "../../../storage/schemas.js";
-import type {
-  Eip155PreparedTransaction,
-  Eip155SubmittedTransaction,
-  Eip155TransactionReceipt,
-  Eip155TransactionRequest,
-} from "../../types.js";
+import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
 import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
@@ -15,6 +10,7 @@ import { createEip155PrepareTransaction } from "./prepareTransaction.js";
 import { createEip155ReceiptService } from "./receipt.js";
 import { deriveEip155TransactionRequestForChain } from "./request.js";
 import type { Eip155Signer } from "./signer.js";
+import type { Eip155SubmittedTransaction, Eip155TransactionReceipt } from "./transactionTypes.js";
 import type {
   Eip155ApprovalReviewContext,
   Eip155DraftEditContext,
@@ -22,6 +18,7 @@ import type {
   Eip155SignContext,
   Eip155TrackingContext,
 } from "./types.js";
+import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
@@ -49,33 +46,24 @@ const requireEip155Request = (request: {
   };
 };
 
-const requirePreparedHex = (value: `0x${string}` | undefined, label: string): `0x${string}` => {
-  if (typeof value !== "string") {
-    throw new Error(`EIP-155 broadcast requires ${label}`);
-  }
-  return value;
-};
-
 const buildEip155SubmittedTransaction = (params: {
   hash: `0x${string}`;
-  prepared: Eip155PreparedTransaction;
-  fallbackFrom: `0x${string}` | string | null;
+  transaction: Eip155UnsignedTransaction;
 }): Eip155SubmittedTransaction => {
-  const fallbackFrom = typeof params.fallbackFrom === "string" ? (params.fallbackFrom as `0x${string}`) : null;
-  const from = params.prepared.from ?? fallbackFrom;
-  if (from == null) {
-    throw new Error("EIP-155 broadcast requires from address");
-  }
+  const { type: _type, ...submittedFields } = params.transaction;
 
-  const submitted: Eip155SubmittedTransaction = {
-    ...params.prepared,
-    hash: params.hash,
-    chainId: requirePreparedHex(params.prepared.chainId, "prepared.chainId"),
-    from,
-    nonce: requirePreparedHex(params.prepared.nonce, "prepared.nonce"),
-  };
-
-  return submitted;
+  return params.transaction.type === "legacy"
+    ? {
+        hash: params.hash,
+        ...submittedFields,
+        gasPrice: params.transaction.gasPrice,
+      }
+    : {
+        hash: params.hash,
+        ...submittedFields,
+        maxFeePerGas: params.transaction.maxFeePerGas,
+        maxPriorityFeePerGas: params.transaction.maxPriorityFeePerGas,
+      };
 };
 
 const deriveEip155ReplacementKey = (params: { chainRef: string; submitted: Eip155SubmittedTransaction }) => {
@@ -107,13 +95,12 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
     },
     execution: {
       sign: (context: Eip155SignContext, prepared, options) => deps.signer.signTransaction(context, prepared, options),
-      async broadcast(context: Eip155PrepareContext, signed, prepared: Eip155PreparedTransaction) {
+      async broadcast(context: Eip155PrepareContext, signed, prepared: Eip155UnsignedTransaction) {
         const broadcast = await deps.broadcaster.broadcast(context, signed);
         const txHash = broadcast.hash as `0x${string}`;
         const submitted = buildEip155SubmittedTransaction({
           hash: txHash,
-          prepared,
-          fallbackFrom: context.from,
+          transaction: prepared,
         });
         return {
           submitted,

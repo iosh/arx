@@ -13,6 +13,7 @@ import type {
   TransactionCaller,
   TransactionPrepared,
   TransactionRequest,
+  TransactionReviewSnapshot,
 } from "../types.js";
 import type { TransactionProposal, TransactionProposalStatus, TransactionProposalTermination } from "./index.js";
 
@@ -43,7 +44,7 @@ export type TransactionProposalPrepareSnapshot = {
   sessionToken: string;
   status: TransactionProposal["prepare"]["status"];
   prepared: TransactionPrepared | null;
-  reviewSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
   blocker?: TransactionProposal["prepare"]["blocker"];
   error?: TransactionProposal["prepare"]["error"];
   invalidatedBy?: string | undefined;
@@ -72,7 +73,7 @@ export type TransactionProposalReviewState = {
   sessionToken: string;
   status: TransactionReviewRuntimeStatus;
   updatedAt: number;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  reviewSnapshot: TransactionReviewSnapshot | null;
   error: TransactionProposal["prepare"]["error"] | null;
   blocker: TransactionProposal["prepare"]["blocker"] | null;
   invalidatedBy?: string | undefined;

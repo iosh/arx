@@ -5,3 +5,18 @@ export { createEip155PrepareTransaction } from "./prepareTransaction.js";
 export type { Eip155Signer } from "./signer.js";
 export { createEip155Signer } from "./signer.js";
 export { createEip155Transaction } from "./transaction.js";
+export type {
+  Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
+  Eip155TransactionDraftEdit,
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  Eip155TransactionReceipt,
+} from "./transactionTypes.js";
+export type {
+  Eip155UnsignedEip1559Transaction,
+  Eip155UnsignedLegacyTransaction,
+  Eip155UnsignedTransaction,
+  Eip155UnsignedTransactionDraft,
+} from "./unsignedTransaction.js";
+export { buildEip155TransactionConflictKey } from "./unsignedTransaction.js";

@@ -179,7 +179,7 @@ describe("TransactionProposalRuntime", () => {
       sessionToken: approvedReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
-      reviewPreparedSnapshot: {},
+      reviewSnapshot: {},
     });
     expect(store.approvePendingProposal({ id: "approved-proposal", updatedAt: 1 })).toMatchObject({
       status: "approved",
@@ -348,7 +348,7 @@ describe("TransactionProposalRuntime", () => {
       sessionToken: readyReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
-      reviewPreparedSnapshot: {},
+      reviewSnapshot: {},
     });
     expect(store.approvePendingProposal({ id: "55555555-5555-4555-8555-555555555555", updatedAt: 1 })).toMatchObject({
       status: "approved",
@@ -475,7 +475,7 @@ describe("TransactionProposalRuntime", () => {
         reason: "transaction.prepare.insufficient_funds",
         message: "Insufficient funds.",
       },
-      reviewPreparedSnapshot: { gas: "0x5208" },
+      reviewSnapshot: { gas: "0x5208" },
     });
     expect(store.approvePendingProposal({ id: blockedId, updatedAt: 3 })).toEqual({
       status: "prepare_blocked",
@@ -517,7 +517,7 @@ describe("TransactionProposalRuntime", () => {
         reason: "transaction.prepare_failed",
         message: "RPC unavailable",
       },
-      reviewPreparedSnapshot: null,
+      reviewSnapshot: null,
     });
     expect(store.approvePendingProposal({ id: failedId, updatedAt: 3 })).toEqual({
       status: "prepare_failed",
@@ -567,7 +567,7 @@ describe("TransactionProposalRuntime", () => {
       sessionToken: readyReview.review.sessionToken,
       updatedAt: 2,
       executionPrepared: {},
-      reviewPreparedSnapshot: {},
+      reviewSnapshot: {},
     });
     expect(store.approvePendingProposal({ id, updatedAt: 2 })).toMatchObject({
       status: "approved",
@@ -671,7 +671,7 @@ describe("TransactionProposalRuntime", () => {
           reason: "transaction.prepare.insufficient_funds",
           message: "Insufficient funds.",
         },
-        reviewPreparedSnapshot: { gas: "0x5208" },
+        reviewSnapshot: { gas: "0x5208" },
       }),
     ).toMatchObject({
       status: "settled",
@@ -680,7 +680,7 @@ describe("TransactionProposalRuntime", () => {
         blocker: {
           reason: "transaction.prepare.insufficient_funds",
         },
-        reviewPreparedSnapshot: { gas: "0x5208" },
+        reviewSnapshot: { gas: "0x5208" },
       },
     });
     expect(store.getPreparedForExecution(id)).toBeNull();
@@ -701,13 +701,13 @@ describe("TransactionProposalRuntime", () => {
         sessionToken: restarted.review.sessionToken,
         updatedAt: 4,
         executionPrepared: { gas: "0x5300" },
-        reviewPreparedSnapshot: { gas: "0x5300" },
+        reviewSnapshot: { gas: "0x5300" },
       }),
     ).toMatchObject({
       status: "settled",
       review: {
         status: "ready",
-        reviewPreparedSnapshot: { gas: "0x5300" },
+        reviewSnapshot: { gas: "0x5300" },
       },
     });
     expect(store.getPreparedForExecution(id)).toEqual({ gas: "0x5300" });
@@ -758,7 +758,7 @@ describe("TransactionProposalRuntime", () => {
         sessionToken: initial.review.sessionToken,
         updatedAt: 3,
         executionPrepared: { gas: "0x5208" },
-        reviewPreparedSnapshot: { gas: "0x5208" },
+        reviewSnapshot: { gas: "0x5208" },
       }),
     ).toEqual({
       status: "stale",
@@ -799,7 +799,7 @@ describe("TransactionProposalRuntime", () => {
           reason: "transaction.prepare_failed",
           message: "stale",
         },
-        reviewPreparedSnapshot: null,
+        reviewSnapshot: null,
       }),
     ).toEqual({
       status: "invalidated",

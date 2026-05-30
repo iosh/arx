@@ -12,7 +12,7 @@ const getEip155TransactionKind = (payload: Eip155ApprovalReviewContext["request"
 
 export const buildEip155ApprovalReview = (context: Eip155ApprovalReviewContext): Eip155TransactionReviewDetails => {
   const requestPayload = context.request.payload;
-  const prepared = context.reviewPreparedSnapshot;
+  const reviewSnapshot = context.reviewSnapshot;
   const data = isNonEmptyEip155CallData(requestPayload.data) ? requestPayload.data : null;
 
   return {
@@ -22,11 +22,11 @@ export const buildEip155ApprovalReview = (context: Eip155ApprovalReviewContext):
     to: requestPayload.to ?? null,
     value: requestPayload.value ?? "0x0",
     data,
-    gasLimit: prepared?.gas ?? requestPayload.gas ?? null,
+    gasLimit: reviewSnapshot?.gas ?? requestPayload.gas ?? null,
     fees: {
-      gasPrice: prepared?.gasPrice ?? requestPayload.gasPrice ?? null,
-      maxFeePerGas: prepared?.maxFeePerGas ?? requestPayload.maxFeePerGas ?? null,
-      maxPriorityFeePerGas: prepared?.maxPriorityFeePerGas ?? requestPayload.maxPriorityFeePerGas ?? null,
+      gasPrice: reviewSnapshot?.gasPrice ?? requestPayload.gasPrice ?? null,
+      maxFeePerGas: reviewSnapshot?.maxFeePerGas ?? requestPayload.maxFeePerGas ?? null,
+      maxPriorityFeePerGas: reviewSnapshot?.maxPriorityFeePerGas ?? requestPayload.maxPriorityFeePerGas ?? null,
     },
   };
 };

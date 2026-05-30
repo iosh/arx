@@ -28,6 +28,21 @@ export { createEip155PrepareTransaction } from "./namespace/eip155/prepareTransa
 export type { Eip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Transaction } from "./namespace/eip155/transaction.js";
+export type {
+  Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
+  Eip155TransactionDraftEdit,
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  Eip155TransactionReceipt,
+} from "./namespace/eip155/transactionTypes.js";
+export type {
+  Eip155UnsignedEip1559Transaction,
+  Eip155UnsignedLegacyTransaction,
+  Eip155UnsignedTransaction,
+  Eip155UnsignedTransactionDraft,
+} from "./namespace/eip155/unsignedTransaction.js";
+export { buildEip155TransactionConflictKey } from "./namespace/eip155/unsignedTransaction.js";
 export { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 export type {
   NamespaceTransaction,
@@ -72,14 +87,10 @@ export type {
   TransactionReviewDetails,
 } from "./review.js";
 export type {
-  Eip155PreparedTransaction,
-  Eip155SubmittedTransaction,
-  Eip155TransactionDraftChange,
-  Eip155TransactionPayload,
-  Eip155TransactionPayloadWithFrom,
-  Eip155TransactionReceipt,
   Eip155TransactionRequest,
   NamespaceTransactionDraftEdit,
   TransactionCaller,
+  TransactionPrepared,
   TransactionRequest,
+  TransactionReviewSnapshot,
 } from "./types.js";

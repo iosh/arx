@@ -56,6 +56,7 @@ export const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 export const createReceiptTrackingStub = () => ({
   fetchReceipt: vi.fn(async () => null),
+  inspectSubmittedTransaction: vi.fn(async () => ({ chainStatus: "pending", evidence: null })),
 });
 
 export const createNamespaceTransactionStub = (
@@ -68,6 +69,9 @@ export const createNamespaceTransactionStub = (
     deriveConflictKey: (...args: never[]) => unknown;
     sign: (...args: never[]) => unknown;
     broadcast: (...args: never[]) => unknown;
+    createBroadcastInput: (...args: never[]) => unknown;
+    submitBroadcastInput: (...args: never[]) => unknown;
+    inspectSubmittedTransaction: (...args: never[]) => unknown;
     parseSubmitted: (...args: never[]) => unknown;
     parseReceipt: (...args: never[]) => unknown;
     tracking: unknown;
@@ -93,13 +97,35 @@ export const createNamespaceTransactionStub = (
         submitted: DEFAULT_SUBMITTED,
       })),
   },
+  submission: {
+    createBroadcastInput:
+      (overrides?.createBroadcastInput as never) ??
+      vi.fn(async () => ({
+        kind: "eip155.raw_transaction",
+        payload: { raw: "0x" },
+      })),
+    broadcast:
+      (overrides?.submitBroadcastInput as never) ??
+      vi.fn(async () => ({
+        broadcastIdentity: { hash: DEFAULT_SUBMITTED.hash },
+        submitted: DEFAULT_SUBMITTED,
+        conflictKey: null,
+      })),
+  },
   record: {
     parseSubmitted: (overrides?.parseSubmitted as never) ?? vi.fn((submitted) => submitted),
     parseReceipt: (overrides?.parseReceipt as never) ?? vi.fn((receipt) => receipt),
   },
   ...(overrides?.tracking !== undefined
     ? { tracking: overrides.tracking as never }
-    : { tracking: createReceiptTrackingStub() }),
+    : {
+        tracking: {
+          ...createReceiptTrackingStub(),
+          ...(overrides?.inspectSubmittedTransaction
+            ? { inspectSubmittedTransaction: overrides.inspectSubmittedTransaction as never }
+            : {}),
+        },
+      }),
 });
 
 export const createProposalRuntime = () =>

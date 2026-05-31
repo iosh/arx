@@ -43,14 +43,13 @@ const TRANSACTION_STATUS_TRANSITIONS = {
 /**
  * Submission:
  *
- * queued -> signing -> signed -> broadcasting -> accepted
- *   |        |          |             |
- *   +--------+----------+-------------+-> failed | cancelled | expired
+ * queued -> signing -> broadcasting -> accepted
+ *   |        |             |
+ *   +--------+-------------+-> failed | cancelled | expired
  */
 const TRANSACTION_SUBMISSION_STATUS_TRANSITIONS = {
   queued: ["signing", "cancelled", "expired", "failed"],
-  signing: ["signed", "cancelled", "failed"],
-  signed: ["broadcasting", "expired", "failed", "cancelled"],
+  signing: ["broadcasting", "cancelled", "expired", "failed"],
   broadcasting: ["accepted", "expired", "failed"],
   accepted: [],
   failed: [],

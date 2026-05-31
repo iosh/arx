@@ -11,7 +11,6 @@ import type {
 import type {
   TransactionRecord as AggregateTransactionRecord,
   TransactionSubmission,
-  TransactionSubmissionArtifact,
 } from "@arx/core/transactions/storage";
 import { Dexie, type Table } from "dexie";
 import type { VaultMetaEntity } from "./types.js";
@@ -23,9 +22,7 @@ const TRANSACTIONS_SCHEMA =
 const TRANSACTION_RECORDS_SCHEMA =
   "&id, namespace, chainRef, accountKey, status, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt+id], [accountKey+createdAt+id], [status+createdAt+id], [namespace+chainRef+accountKey+createdAt+id], [conflictKey.kind+conflictKey.value]";
 const TRANSACTION_SUBMISSIONS_SCHEMA =
-  "&id, transactionId, status, updatedAt, [transactionId+id], [transactionId+status], [status+updatedAt]";
-const TRANSACTION_SUBMISSION_ARTIFACTS_SCHEMA =
-  "&id, transactionId, submissionId, namespace, chainRef, retention, expiresAt, [transactionId+id], [submissionId+id], [retention+expiresAt]";
+  "&id, transactionId, status, createdAt, updatedAt, [transactionId+id], [transactionId+createdAt], [transactionId+status], [status+updatedAt]";
 
 type CustomChainRow = CustomChainRecord;
 type CustomRpcRow = CustomRpcRecord;
@@ -41,7 +38,6 @@ export class ArxStorageDatabase extends Dexie {
   transactions!: Table<TransactionRecord, string>;
   transactionRecords!: Table<AggregateTransactionRecord, string>;
   transactionSubmissions!: Table<TransactionSubmission, string>;
-  transactionSubmissionArtifacts!: Table<TransactionSubmissionArtifact, string>;
 
   vaultMeta!: Table<VaultMetaEntity, string>;
 
@@ -59,7 +55,6 @@ export class ArxStorageDatabase extends Dexie {
       transactions: TRANSACTIONS_SCHEMA,
       transactionRecords: TRANSACTION_RECORDS_SCHEMA,
       transactionSubmissions: TRANSACTION_SUBMISSIONS_SCHEMA,
-      transactionSubmissionArtifacts: TRANSACTION_SUBMISSION_ARTIFACTS_SCHEMA,
 
       vaultMeta: "&id",
 

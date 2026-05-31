@@ -12,6 +12,14 @@ const dummy = (): NamespaceTransaction => ({
       submitted: { hash: "0xhash" },
     }),
   },
+  submission: {
+    createBroadcastInput: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
+    broadcast: async () => ({
+      broadcastIdentity: { hash: "0xhash" },
+      submitted: { hash: "0xhash" },
+      conflictKey: null,
+    }),
+  },
 });
 
 describe("NamespaceTransactions", () => {

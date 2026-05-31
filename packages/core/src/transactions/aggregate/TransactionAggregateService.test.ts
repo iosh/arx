@@ -81,7 +81,6 @@ describe("TransactionAggregateService", () => {
       updatedAt: 1_000,
     });
     expect(aggregate.submissions).toEqual([]);
-    expect(aggregate.submissionArtifacts).toEqual([]);
   });
 
   it("stores replacement intent as one input object", () => {
@@ -134,7 +133,6 @@ describe("TransactionAggregateService", () => {
         id: "submission-1",
         transactionId: "tx-1",
         status: "queued",
-        artifactId: null,
         terminalReason: null,
         createdAt: 2_000,
         updatedAt: 2_000,
@@ -216,7 +214,7 @@ describe("TransactionAggregateService", () => {
     ).toThrow(TransactionAggregateInvariantError);
   });
 
-  it("advances signing, stores sealed artifact separately, and does not place it on the record", () => {
+  it("advances signing and keeps signed broadcast input out of durable state", () => {
     const { service, tick } = createService();
     let aggregate = createTransaction(service);
     aggregate = approveTransaction(service, aggregate);
@@ -225,40 +223,13 @@ describe("TransactionAggregateService", () => {
     const signing = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
-    expect(signing.submissions[0]?.status).toBe("signing");
 
-    tick(4_000);
-    const signed = service.completeSubmissionSigning(signing, {
-      submissionId: "submission-1",
-      artifactId: "artifact-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: {
-        envelope: "test-only-sealed-payload",
-      },
+    expect(signing.record.submitted).toBeNull();
+    expect(signing.submissions[0]).toMatchObject({
+      status: "signing",
+      terminalReason: null,
+      updatedAt: 3_000,
     });
-
-    expect(signed.record).not.toHaveProperty("sealedPayload");
-    expect(signed.record.submitted).toBeNull();
-    expect(signed.submissions[0]).toMatchObject({
-      status: "signed",
-      artifactId: "artifact-1",
-    });
-    expect(signed.submissionArtifacts).toEqual([
-      {
-        id: "artifact-1",
-        transactionId: "tx-1",
-        submissionId: "submission-1",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        kind: "eip155.raw_transaction",
-        sealedPayload: {
-          envelope: "test-only-sealed-payload",
-        },
-        retention: "until_submitted",
-        expiresAt: null,
-        createdAt: 4_000,
-      },
-    ]);
   });
 
   it("rejects submission commands for non-active submission ids", () => {
@@ -279,11 +250,6 @@ describe("TransactionAggregateService", () => {
     aggregate = approveTransaction(service, aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
-    });
-    aggregate = service.completeSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: { envelope: "test-only-sealed-payload" },
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
       submissionId: "submission-1",
@@ -313,11 +279,6 @@ describe("TransactionAggregateService", () => {
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
-    aggregate = service.completeSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: { envelope: "test-only-sealed-payload" },
-    });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
       submissionId: "submission-1",
     });
@@ -326,9 +287,7 @@ describe("TransactionAggregateService", () => {
       submitted: { hash: "0x1111" },
     });
 
-    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(
-      TransactionStatusTransitionError,
-    );
+    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(TransactionStatusTransitionError);
   });
 
   it("prevents local cancellation after broadcast starts", () => {
@@ -338,18 +297,11 @@ describe("TransactionAggregateService", () => {
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
-    aggregate = service.completeSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: { envelope: "test-only-sealed-payload" },
-    });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
       submissionId: "submission-1",
     });
 
-    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(
-      TransactionAggregateInvariantError,
-    );
+    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(TransactionAggregateInvariantError);
   });
 
   it("records submitted transaction outcomes", () => {
@@ -358,11 +310,6 @@ describe("TransactionAggregateService", () => {
     aggregate = approveTransaction(service, aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
-    });
-    aggregate = service.completeSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: { envelope: "test-only-sealed-payload" },
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
       submissionId: "submission-1",
@@ -393,11 +340,6 @@ describe("TransactionAggregateService", () => {
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
-    aggregate = service.completeSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
-      artifactKind: "eip155.raw_transaction",
-      sealedPayload: { envelope: "test-only-sealed-payload" },
-    });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
       submissionId: "submission-1",
     });
@@ -420,6 +362,47 @@ describe("TransactionAggregateService", () => {
       code: "solana.blockhash_expired",
       details: { lastValidBlockHeight: 123 },
     });
+  });
+
+  it("lists restart actions for abandoned approval, incomplete submission, and submitted tracking", () => {
+    const { service } = createService();
+    const awaiting = createTransaction(service);
+    let submitting = approveTransaction(service, createTransaction(service));
+    submitting = service.beginSubmissionSigning(submitting, {
+      submissionId: "submission-1",
+    });
+    let submitted = approveTransaction(service, createTransaction(service));
+    submitted = service.beginSubmissionSigning(submitted, {
+      submissionId: "submission-1",
+    });
+    submitted = service.queueSubmissionBroadcast(submitted, {
+      submissionId: "submission-1",
+    });
+    submitted = service.recordBroadcastAcceptance(submitted, {
+      submissionId: "submission-1",
+      submitted: { hash: "0x1234" },
+    });
+
+    expect(service.listRestartActions(awaiting)).toEqual([
+      expect.objectContaining({
+        kind: "finalize_incomplete_local",
+        transactionId: awaiting.record.id,
+        targetStatus: "cancelled",
+      }),
+    ]);
+    expect(service.listRestartActions(submitting)).toEqual([
+      expect.objectContaining({
+        kind: "finalize_incomplete_local",
+        transactionId: submitting.record.id,
+        targetStatus: "failed",
+      }),
+    ]);
+    expect(service.listRestartActions(submitted)).toEqual([
+      {
+        kind: "resume_tracking",
+        transactionId: submitted.record.id,
+      },
+    ]);
   });
 
   it("returns a next aggregate without mutating the current aggregate", () => {

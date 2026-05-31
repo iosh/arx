@@ -1,13 +1,28 @@
 import { TransactionAggregateNotFoundError } from "./errors.js";
-import type { ListTransactionHistoryQuery, TransactionsStoragePort } from "./storagePort.js";
+import type {
+  ListRecoverableTransactionAggregatesQuery,
+  ListTransactionHistoryQuery,
+  TransactionsStoragePort,
+} from "./storagePort.js";
 import { TransactionAggregateService } from "./TransactionAggregateService.js";
 import type {
   ApproveTransactionInput,
+  BeginSubmissionSigningInput,
   CreateTransactionInput,
+  FailTransactionInput,
+  QueueSubmissionBroadcastInput,
+  RecordBroadcastAcceptanceInput,
+  RecordTransactionDroppedInput,
+  RecordTransactionExpiredInput,
+  RecordTransactionFailedOnChainInput,
+  RecordTransactionReceiptInput,
+  RecordTransactionReplacedInput,
+  TerminalSubmissionInput,
   TerminalTransactionInput,
   TransactionAggregate,
   TransactionConflictKey,
   TransactionRecord,
+  TransactionRestartAction,
 } from "./types.js";
 
 type TransactionAggregateStoreDeps = {
@@ -65,6 +80,78 @@ export class TransactionAggregateStore {
     );
   }
 
+  async failTransaction(input: FailTransactionInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.failTransaction(aggregate, input),
+    );
+  }
+
+  async beginSubmissionSigning(input: BeginSubmissionSigningInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.beginSubmissionSigning(aggregate, input),
+    );
+  }
+
+  async queueSubmissionBroadcast(input: QueueSubmissionBroadcastInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.queueSubmissionBroadcast(aggregate, input),
+    );
+  }
+
+  async recordBroadcastAcceptance(input: RecordBroadcastAcceptanceInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordBroadcastAcceptance(aggregate, input),
+    );
+  }
+
+  async failSubmission(input: TerminalSubmissionInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.failSubmission(aggregate, input),
+    );
+  }
+
+  async cancelSubmission(input: TerminalSubmissionInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.cancelSubmission(aggregate, input),
+    );
+  }
+
+  async expireSubmission(input: TerminalSubmissionInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.expireSubmission(aggregate, input),
+    );
+  }
+
+  async recordTransactionConfirmed(input: RecordTransactionReceiptInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordTransactionConfirmed(aggregate, input),
+    );
+  }
+
+  async recordTransactionFailedOnChain(input: RecordTransactionFailedOnChainInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordTransactionFailedOnChain(aggregate, input),
+    );
+  }
+
+  async recordTransactionReplaced(input: RecordTransactionReplacedInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordTransactionReplaced(aggregate, input),
+    );
+  }
+
+  async recordTransactionDropped(input: RecordTransactionDroppedInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordTransactionDropped(aggregate, input),
+    );
+  }
+
+  async recordTransactionExpired(input: RecordTransactionExpiredInput): Promise<TransactionAggregate> {
+    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
+      this.#service.recordTransactionExpired(aggregate, input),
+    );
+  }
+
   async listTransactionHistory(query?: ListTransactionHistoryQuery): Promise<TransactionRecord[]> {
     const records = await this.#storage.listTransactionHistory(query);
     return structuredClone(records);
@@ -73,6 +160,18 @@ export class TransactionAggregateStore {
   async findTransactionRecordsByConflictKey(key: TransactionConflictKey): Promise<TransactionRecord[]> {
     const records = await this.#storage.findTransactionRecordsByConflictKey(key);
     return structuredClone(records);
+  }
+
+  async listRecoverableTransactionAggregates(
+    query?: ListRecoverableTransactionAggregatesQuery,
+  ): Promise<TransactionAggregate[]> {
+    const aggregates = await this.#storage.listRecoverableTransactionAggregates(query);
+    return structuredClone(aggregates);
+  }
+
+  async listRestartActions(query?: ListRecoverableTransactionAggregatesQuery): Promise<TransactionRestartAction[]> {
+    const aggregates = await this.#storage.listRecoverableTransactionAggregates(query);
+    return aggregates.flatMap((aggregate) => this.#service.listRestartActions(aggregate));
   }
 
   async #mutateExistingAggregate(

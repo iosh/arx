@@ -18,7 +18,6 @@ export type TransactionStatus =
 export type TransactionSubmissionStatus =
   | "queued"
   | "signing"
-  | "signed"
   | "broadcasting"
   | "accepted"
   | "failed"
@@ -42,7 +41,7 @@ export type TransactionRequestSnapshot = {
   payload: JsonValue;
 };
 
-/** Final payload approved by the user and used for signing. */
+/** Final payload approved by the user and used for submission. */
 export type TransactionApprovedRequest = {
   approvalId: string;
   payload: JsonValue;
@@ -52,8 +51,7 @@ export type TransactionApprovedRequest = {
 /**
  * Main record for one outgoing wallet transaction.
  *
- * History views can read this record alone. Signed payloads stay in submission
- * artifacts.
+ * History views can read this record alone.
  */
 export type TransactionRecord = {
   id: string;
@@ -83,38 +81,15 @@ export type TransactionSubmission = {
   id: string;
   transactionId: string;
   status: TransactionSubmissionStatus;
-  artifactId: string | null;
   terminalReason: TransactionTerminalReason | null;
   createdAt: number;
   updatedAt: number;
-};
-
-export type TransactionSubmissionArtifactRetention = "until_submitted" | "until_final";
-
-/**
- * Sealed signed payload produced by a namespace adapter.
- *
- * Kept outside TransactionRecord so normal history reads do not load
- * broadcastable material.
- */
-export type TransactionSubmissionArtifact = {
-  id: string;
-  transactionId: string;
-  submissionId: string;
-  namespace: string;
-  chainRef: string;
-  kind: string;
-  sealedPayload: JsonValue;
-  retention: TransactionSubmissionArtifactRetention;
-  expiresAt: number | null;
-  createdAt: number;
 };
 
 /** Consistency boundary for one wallet transaction. */
 export type TransactionAggregate = {
   record: TransactionRecord;
   submissions: TransactionSubmission[];
-  submissionArtifacts: TransactionSubmissionArtifact[];
 };
 
 export type TransactionAggregateServiceOptions = {
@@ -140,7 +115,7 @@ export type CreateTransactionInput = {
   replacement?: CreateTransactionReplacementInput | null;
 };
 
-/** Approval result that fixes the payload used for signing. */
+/** Approval result that fixes the payload used for submission. */
 export type ApproveTransactionInput = {
   transactionId: string;
   approvalId: string;
@@ -170,21 +145,10 @@ type ActiveSubmissionInput = {
   submissionId: string;
 };
 
-/** Active submission selected for signing. */
+/** Active submission selected for broadcast-input creation. */
 export type BeginSubmissionSigningInput = ActiveSubmissionInput;
 
-/** Signed artifact produced by the active submission. */
-export type CompleteSubmissionSigningInput = {
-  transactionId: string;
-  submissionId: string;
-  artifactId?: string;
-  artifactKind: string;
-  sealedPayload: JsonValue;
-  retention?: TransactionSubmissionArtifactRetention;
-  expiresAt?: number | null;
-};
-
-/** Active signed submission selected for broadcast. */
+/** Active submission selected for broadcast. */
 export type QueueSubmissionBroadcastInput = ActiveSubmissionInput;
 
 /** Provider or network acceptance returned after broadcast. */
@@ -192,6 +156,7 @@ export type RecordBroadcastAcceptanceInput = {
   transactionId: string;
   submissionId: string;
   submitted: JsonValue;
+  conflictKey?: TransactionConflictKey | null;
 };
 
 /** Terminal outcome for the active submission before network acceptance. */
@@ -228,3 +193,15 @@ export type RecordTransactionExpiredInput = {
   transactionId: string;
   reason: TransactionTerminalReason;
 };
+
+export type TransactionRestartAction =
+  | {
+      kind: "finalize_incomplete_local";
+      transactionId: string;
+      targetStatus: "cancelled" | "expired" | "failed";
+      reason: TransactionTerminalReason;
+    }
+  | {
+      kind: "resume_tracking";
+      transactionId: string;
+    };

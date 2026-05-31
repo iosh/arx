@@ -73,6 +73,21 @@ const deriveEip155ReplacementKey = (params: { chainRef: string; submitted: Eip15
   };
 };
 
+const toBroadcastInputPayload = (signed: { raw: string }) => ({
+  raw: signed.raw,
+});
+
+const readSignedTransactionPayload = (broadcastInput: { kind: string; payload: Record<string, unknown> }) => {
+  const raw = broadcastInput.payload.raw;
+  if (typeof raw !== "string" || !raw.startsWith("0x")) {
+    throw new Error(`EIP-155 broadcast input "${broadcastInput.kind}" is missing a raw transaction payload.`);
+  }
+
+  return {
+    raw,
+  };
+};
+
 export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction<"eip155"> => {
   const validateRequest = createEip155RequestValidator({ chains: deps.chains });
   const prepareTransaction = createEip155PrepareTransaction({
@@ -114,8 +129,57 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         };
       },
     },
+    submission: {
+      async createBroadcastInput(context, options) {
+        const signed = await deps.signer.signTransaction(
+          {
+            namespace: "eip155",
+            chainRef: context.chainRef,
+            origin: context.origin,
+            from: context.from,
+            request: context.request,
+          },
+          context.approvedPayload,
+          options,
+        );
+
+        return {
+          kind: "eip155.raw_transaction",
+          payload: toBroadcastInputPayload(signed),
+        };
+      },
+      async broadcast(context) {
+        const broadcast = await deps.broadcaster.broadcast(
+          {
+            namespace: "eip155",
+            chainRef: context.chainRef,
+            origin: context.origin,
+            from: context.from,
+            request: context.request,
+          },
+          readSignedTransactionPayload(context.broadcastInput),
+        );
+        const txHash = broadcast.hash as `0x${string}`;
+        const submitted = buildEip155SubmittedTransaction({
+          hash: txHash,
+          transaction: context.approvedPayload,
+        });
+
+        return {
+          broadcastIdentity: { hash: txHash },
+          submitted,
+          conflictKey: buildEip155TransactionConflictKey({
+            chainRef: context.chainRef,
+            accountKey: context.accountKey,
+            nonce: submitted.nonce,
+          }),
+        };
+      },
+    },
     tracking: {
       fetchReceipt: (context: Eip155TrackingContext) => receiptService.fetchReceipt(context),
+      inspectSubmittedTransaction: (context: Eip155TrackingContext) =>
+        receiptService.inspectSubmittedTransaction(context),
       detectReplacement: (context: Eip155TrackingContext) => receiptService.detectReplacement(context),
       deriveReplacementKey(context: Eip155TrackingContext) {
         return deriveEip155ReplacementKey({

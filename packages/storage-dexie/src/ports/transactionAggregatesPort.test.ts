@@ -59,7 +59,6 @@ const createAwaitingApprovalAggregate = (
     ...overrides,
   },
   submissions: [],
-  submissionArtifacts: [],
 });
 
 const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): TransactionAggregate => ({
@@ -88,7 +87,7 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         value: "0x1",
         data: "0x",
-        gasLimit: "0x5208",
+        gas: "0x5208",
         nonce: "0x7",
       },
       approvedAt: createdAt + 100,
@@ -111,27 +110,10 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
     {
       id: `${transactionId}:submission-1`,
       transactionId,
-      status: "signed",
-      artifactId: `${transactionId}:artifact-1`,
+      status: "signing",
       terminalReason: null,
       createdAt: createdAt + 100,
       updatedAt: createdAt + 200,
-    },
-  ],
-  submissionArtifacts: [
-    {
-      id: `${transactionId}:artifact-1`,
-      transactionId,
-      submissionId: `${transactionId}:submission-1`,
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      kind: "eip155.raw_transaction",
-      sealedPayload: {
-        envelope: "test-only-sealed-payload",
-      },
-      retention: "until_submitted",
-      expiresAt: null,
-      createdAt: createdAt + 200,
     },
   ],
 });
@@ -140,12 +122,6 @@ const getOnlySubmission = (aggregate: TransactionAggregate): TransactionAggregat
   const submission = aggregate.submissions[0];
   if (!submission) throw new Error(`Expected aggregate "${aggregate.record.id}" to contain a submission.`);
   return submission;
-};
-
-const getOnlyArtifact = (aggregate: TransactionAggregate): TransactionAggregate["submissionArtifacts"][number] => {
-  const artifact = aggregate.submissionArtifacts[0];
-  if (!artifact) throw new Error(`Expected aggregate "${aggregate.record.id}" to contain an artifact.`);
-  return artifact;
 };
 
 const createTerminalReason = (kind: TransactionTerminalReason["kind"]): TransactionTerminalReason => ({
@@ -168,7 +144,7 @@ describe("DexieTransactionAggregatesPort", () => {
     await expect(port.loadTransactionAggregate("tx-1")).resolves.toEqual(aggregate);
   });
 
-  it("saveTransactionAggregate() replaces submissions and artifacts in the same aggregate boundary", async () => {
+  it("saveTransactionAggregate() replaces submissions in the same aggregate boundary", async () => {
     const storage = createTestStorage();
     const port = storage.ports.transactionAggregates;
     const aggregate = createSubmittingAggregate("tx-1");
@@ -189,17 +165,14 @@ describe("DexieTransactionAggregatesPort", () => {
         {
           ...getOnlySubmission(aggregate),
           status: "accepted",
-          artifactId: null,
           updatedAt: 2_000,
         },
       ],
-      submissionArtifacts: [],
     };
 
     await port.saveTransactionAggregate(next);
 
     await expect(port.loadTransactionAggregate("tx-1")).resolves.toEqual(next);
-    await expect(storage.__debug.db.transactionSubmissionArtifacts.toArray()).resolves.toEqual([]);
   });
 
   it("saveTransactionAggregate() fails for missing records", async () => {
@@ -222,10 +195,6 @@ describe("DexieTransactionAggregatesPort", () => {
       ...getOnlySubmission(duplicateSubmissionId),
       id: firstSubmission.id,
     };
-    duplicateSubmissionId.submissionArtifacts[0] = {
-      ...getOnlyArtifact(duplicateSubmissionId),
-      submissionId: firstSubmission.id,
-    };
     const second = duplicateSubmissionId;
 
     await port.insertTransactionAggregate(first);
@@ -242,8 +211,8 @@ describe("DexieTransactionAggregatesPort", () => {
     const newer = createSubmittingAggregate("tx-newer", 2_000);
     await port.insertTransactionAggregate(older);
     await port.insertTransactionAggregate(newer);
-    const artifactWhere = vi.spyOn(storage.__debug.db.transactionSubmissionArtifacts, "where");
-    const artifactToArray = vi.spyOn(storage.__debug.db.transactionSubmissionArtifacts, "toArray");
+    const submissionsWhere = vi.spyOn(storage.__debug.db.transactionSubmissions, "where");
+    const submissionsToArray = vi.spyOn(storage.__debug.db.transactionSubmissions, "toArray");
 
     const firstPage = await port.listTransactionHistory({
       chainRef: "eip155:1",
@@ -260,8 +229,8 @@ describe("DexieTransactionAggregatesPort", () => {
       },
     });
     expect(secondPage.map((record) => record.id)).toEqual(["tx-older"]);
-    expect(artifactWhere).not.toHaveBeenCalled();
-    expect(artifactToArray).not.toHaveBeenCalled();
+    expect(submissionsWhere).not.toHaveBeenCalled();
+    expect(submissionsToArray).not.toHaveBeenCalled();
   });
 
   it("findTransactionRecordsByConflictKey() returns matching records newest first", async () => {
@@ -321,12 +290,13 @@ describe("DexieTransactionAggregatesPort", () => {
         {
           ...getOnlySubmission(submittedBase),
           status: "accepted",
+          terminalReason: null,
         },
       ],
     };
-    const failed = createAwaitingApprovalAggregate("tx-failed", {
-      status: "failed",
-      terminalReason: createTerminalReason("prepare_failed"),
+    const confirmed = createAwaitingApprovalAggregate("tx-confirmed", {
+      status: "confirmed",
+      terminalReason: createTerminalReason("on_chain_failed"),
       createdAt: 4_000,
       updatedAt: 4_000,
     });
@@ -334,9 +304,10 @@ describe("DexieTransactionAggregatesPort", () => {
     await port.insertTransactionAggregate(awaiting);
     await port.insertTransactionAggregate(submitting);
     await port.insertTransactionAggregate(submitted);
-    await port.insertTransactionAggregate(failed);
+    await port.insertTransactionAggregate(confirmed);
 
     const candidates = await port.listRecoverableTransactionAggregates();
+
     expect(candidates.map((aggregate) => aggregate.record.id)).toEqual([
       "tx-submitted",
       "tx-submitting",

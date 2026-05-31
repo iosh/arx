@@ -2,9 +2,15 @@ import type { Hex } from "ox/Hex";
 import type { AccountAddress } from "../../../controllers/account/types.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type {
+  BroadcastInput,
+  BroadcastResult,
   SignedTransactionPayload,
+  SubmittedTransactionInspection,
   TransactionApprovalReviewContext,
+  TransactionBroadcastContext,
+  TransactionBroadcastInputContext,
   TransactionDraftEditContext,
+  TransactionFailure,
   TransactionPrepareContext,
   TransactionPrepareResult,
   TransactionProposalBlocker,
@@ -28,6 +34,18 @@ export type Eip155PrepareResult = TransactionPrepareResult<Eip155UnsignedTransac
 
 export type Eip155PrepareContext = Omit<TransactionPrepareContext, "namespace" | "request"> & {
   namespace: "eip155";
+  request: Eip155TransactionRequest;
+};
+
+export type Eip155BroadcastInputContext = Omit<
+  TransactionBroadcastInputContext<"eip155">,
+  "approvedPayload" | "request"
+> & {
+  request: Eip155TransactionRequest;
+  approvedPayload: Eip155UnsignedTransaction;
+};
+
+export type Eip155BroadcastContext = Omit<TransactionBroadcastContext<"eip155">, "request"> & {
   request: Eip155TransactionRequest;
 };
 
@@ -71,6 +89,15 @@ export type Eip155SignerContract = {
 export type Eip155BroadcasterContract = {
   broadcast(context: Eip155PrepareContext, signed: SignedTransactionPayload): Promise<{ hash: `0x${string}` }>;
 };
+
+export type Eip155SubmissionContract = {
+  createBroadcastInput(context: Eip155BroadcastInputContext, options?: TransactionSignOptions): Promise<BroadcastInput>;
+  broadcast(context: Eip155BroadcastContext): Promise<BroadcastResult<"eip155">>;
+};
+
+export type Eip155TrackingInspection = SubmittedTransactionInspection<"eip155">;
+
+export type Eip155TransactionFailure = TransactionFailure;
 
 export type Eip155PrepareStepResult<TPatch> =
   | { status: "ok"; patch: TPatch }

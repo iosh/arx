@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { ReceiptResolution, ReplacementResolution } from "../types.js";
+import type { ReceiptResolution, ReplacementResolution, SubmittedTransactionInspection } from "../types.js";
 import type { Eip155TransactionReceipt } from "./transactionTypes.js";
 import type { Eip155TrackingContext } from "./types.js";
 
@@ -78,6 +78,7 @@ const toBigInt = (value: string): bigint | null => {
 export type Eip155ReceiptService = {
   fetchReceipt(context: Eip155TrackingContext): Promise<ReceiptResolution | null>;
   detectReplacement(context: Eip155TrackingContext): Promise<ReplacementResolution | null>;
+  inspectSubmittedTransaction(context: Eip155TrackingContext): Promise<SubmittedTransactionInspection<"eip155">>;
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {
@@ -143,6 +144,49 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       }
 
       return { status: "replaced" };
+    },
+
+    async inspectSubmittedTransaction(context) {
+      const receipt = await this.fetchReceipt(context);
+      if (receipt) {
+        if (receipt.status === "success") {
+          return {
+            chainStatus: "confirmed",
+            receipt: receipt.receipt,
+          };
+        }
+
+        return {
+          chainStatus: "failed",
+          receipt: receipt.receipt,
+          error: {
+            reason: "on_chain_failed",
+            message: "EIP-155 transaction failed on chain.",
+            data: {
+              hash: context.submitted.hash,
+              chainRef: context.chainRef,
+            },
+          },
+        };
+      }
+
+      const replacement = await this.detectReplacement(context);
+      if (replacement) {
+        return {
+          chainStatus: "dropped",
+          evidence: {
+            reason: replacement.status,
+            ...(replacement.replacedByRecordId !== undefined
+              ? { replacedByRecordId: replacement.replacedByRecordId }
+              : {}),
+          },
+        };
+      }
+
+      return {
+        chainStatus: "pending",
+        evidence: null,
+      };
     },
   };
 };

@@ -14,10 +14,9 @@ export type {
   TransactionRecord,
   TransactionReplacementType,
   TransactionRequestSnapshot,
+  TransactionRestartAction,
   TransactionSource,
   TransactionStatus,
   TransactionSubmission,
-  TransactionSubmissionArtifact,
-  TransactionSubmissionArtifactRetention,
   TransactionSubmissionStatus,
 } from "../aggregate/types.js";

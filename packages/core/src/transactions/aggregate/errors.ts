@@ -8,16 +8,6 @@ export class TransactionAggregateNotFoundError extends Error {
   }
 }
 
-export class TransactionSubmissionArtifactConflictError extends Error {
-  readonly artifactId: string;
-
-  constructor(artifactId: string) {
-    super(`Transaction submission artifact "${artifactId}" already exists.`);
-    this.name = "TransactionSubmissionArtifactConflictError";
-    this.artifactId = artifactId;
-  }
-}
-
 export class TransactionAggregateInvariantError extends Error {
   readonly transactionId: string;
 

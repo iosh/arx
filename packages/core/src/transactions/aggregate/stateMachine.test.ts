@@ -53,13 +53,10 @@ describe("transaction aggregate state machine", () => {
     expect(canTransitionTransactionSubmissionStatus("queued", "cancelled")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("queued", "expired")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("queued", "failed")).toBe(true);
-    expect(canTransitionTransactionSubmissionStatus("signing", "signed")).toBe(true);
+    expect(canTransitionTransactionSubmissionStatus("signing", "broadcasting")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("signing", "cancelled")).toBe(true);
+    expect(canTransitionTransactionSubmissionStatus("signing", "expired")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("signing", "failed")).toBe(true);
-    expect(canTransitionTransactionSubmissionStatus("signed", "broadcasting")).toBe(true);
-    expect(canTransitionTransactionSubmissionStatus("signed", "expired")).toBe(true);
-    expect(canTransitionTransactionSubmissionStatus("signed", "failed")).toBe(true);
-    expect(canTransitionTransactionSubmissionStatus("signed", "cancelled")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("broadcasting", "accepted")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("broadcasting", "expired")).toBe(true);
     expect(canTransitionTransactionSubmissionStatus("broadcasting", "failed")).toBe(true);
@@ -69,7 +66,7 @@ describe("transaction aggregate state machine", () => {
     expect(() => assertTransactionSubmissionStatusTransition("queued", "accepted")).toThrow(
       TransactionStatusTransitionError,
     );
-    expect(() => assertTransactionSubmissionStatusTransition("signing", "broadcasting")).toThrow(
+    expect(() => assertTransactionSubmissionStatusTransition("queued", "broadcasting")).toThrow(
       TransactionStatusTransitionError,
     );
     expect(() => assertTransactionSubmissionStatusTransition("accepted", "failed")).toThrow(
@@ -80,7 +77,6 @@ describe("transaction aggregate state machine", () => {
   it("treats accepted and all failed local submission outcomes as terminal", () => {
     expect(isTransactionSubmissionStatusTerminal("queued")).toBe(false);
     expect(isTransactionSubmissionStatusTerminal("signing")).toBe(false);
-    expect(isTransactionSubmissionStatusTerminal("signed")).toBe(false);
     expect(isTransactionSubmissionStatusTerminal("broadcasting")).toBe(false);
     expect(isTransactionSubmissionStatusTerminal("accepted")).toBe(true);
     expect(isTransactionSubmissionStatusTerminal("failed")).toBe(true);

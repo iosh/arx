@@ -6,7 +6,6 @@ import {
   type TransactionConflictKey,
   type TransactionRecord,
   type TransactionSubmission,
-  type TransactionSubmissionArtifact,
   type TransactionsStoragePort,
 } from "@arx/core/transactions/storage";
 import type { DexieCtx } from "../internal/ctx.js";
@@ -19,11 +18,6 @@ const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRe
 const compareSubmissionsOldestFirst = (left: TransactionSubmission, right: TransactionSubmission): number =>
   left.createdAt - right.createdAt || left.id.localeCompare(right.id);
 
-const compareArtifactsOldestFirst = (
-  left: TransactionSubmissionArtifact,
-  right: TransactionSubmissionArtifact,
-): number => left.createdAt - right.createdAt || left.id.localeCompare(right.id);
-
 export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
   constructor(private readonly ctx: DexieCtx) {}
 
@@ -35,13 +29,9 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     return this.ctx.db.transactionSubmissions;
   }
 
-  private get artifacts() {
-    return this.ctx.db.transactionSubmissionArtifacts;
-  }
-
   async loadTransactionAggregate(transactionId: TransactionRecord["id"]): Promise<TransactionAggregate | null> {
     await this.ctx.ready;
-    return await this.ctx.db.transaction("r", this.records, this.submissions, this.artifacts, async () => {
+    return await this.ctx.db.transaction("r", this.records, this.submissions, async () => {
       return await this.loadTransactionAggregateInOpenTransaction(transactionId);
     });
   }
@@ -49,13 +39,10 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
   async insertTransactionAggregate(aggregate: TransactionAggregate): Promise<void> {
     await this.ctx.ready;
 
-    await this.ctx.db.transaction("rw", this.records, this.submissions, this.artifacts, async () => {
+    await this.ctx.db.transaction("rw", this.records, this.submissions, async () => {
       await this.records.add(aggregate.record);
       if (aggregate.submissions.length > 0) {
         await this.submissions.bulkAdd(aggregate.submissions);
-      }
-      if (aggregate.submissionArtifacts.length > 0) {
-        await this.artifacts.bulkAdd(aggregate.submissionArtifacts);
       }
     });
   }
@@ -64,7 +51,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     await this.ctx.ready;
     const transactionId = aggregate.record.id;
 
-    await this.ctx.db.transaction("rw", this.records, this.submissions, this.artifacts, async () => {
+    await this.ctx.db.transaction("rw", this.records, this.submissions, async () => {
       const existing = await this.records.get(transactionId);
       if (!existing) {
         throw new TransactionAggregateNotFoundError(transactionId);
@@ -72,12 +59,8 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
 
       await this.records.put(aggregate.record);
       await this.submissions.where("transactionId").equals(transactionId).delete();
-      await this.artifacts.where("transactionId").equals(transactionId).delete();
       if (aggregate.submissions.length > 0) {
         await this.submissions.bulkAdd(aggregate.submissions);
-      }
-      if (aggregate.submissionArtifacts.length > 0) {
-        await this.artifacts.bulkAdd(aggregate.submissionArtifacts);
       }
     });
   }
@@ -111,7 +94,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     await this.ctx.ready;
     const limit = query.limit ?? 100;
 
-    return await this.ctx.db.transaction("r", this.records, this.submissions, this.artifacts, async () => {
+    return await this.ctx.db.transaction("r", this.records, this.submissions, async () => {
       const rows = await this.records.where("status").anyOf(RECOVERABLE_TRANSACTION_STATUSES).toArray();
       const records = rows.sort(compareRecordsNewestFirst);
       const aggregates: TransactionAggregate[] = [];
@@ -170,12 +153,10 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     if (recordRow === undefined) return null;
 
     const submissionRows = await this.submissions.where("transactionId").equals(transactionId).toArray();
-    const artifactRows = await this.artifacts.where("transactionId").equals(transactionId).toArray();
 
     return {
       record: recordRow,
       submissions: submissionRows.sort(compareSubmissionsOldestFirst),
-      submissionArtifacts: artifactRows.sort(compareArtifactsOldestFirst),
     };
   }
 }

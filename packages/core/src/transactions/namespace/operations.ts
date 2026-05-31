@@ -6,7 +6,10 @@ export type NamespaceTransactionOperation =
   | "proposal.applyDraftEdit"
   | "execution.sign"
   | "execution.broadcast"
+  | "submission.createBroadcastInput"
+  | "submission.broadcast"
   | "tracking.fetchReceipt"
+  | "tracking.inspectSubmittedTransaction"
   | "tracking.detectReplacement"
   | "tracking.deriveReplacementKey";
 

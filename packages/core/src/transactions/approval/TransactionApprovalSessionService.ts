@@ -1,8 +1,8 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { TransactionAggregate } from "../aggregate/index.js";
-import type { TransactionAggregateStore } from "../aggregate/TransactionAggregateStore.js";
 import { type JsonValue, TransactionAggregateNotFoundError } from "../aggregate/index.js";
 import { cloneJsonValue } from "../aggregate/json.js";
+import type { TransactionAggregateStore } from "../aggregate/TransactionAggregateStore.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransactionProposal,
@@ -460,5 +460,4 @@ export class TransactionApprovalSessionService {
     }
     return session;
   }
-
 }

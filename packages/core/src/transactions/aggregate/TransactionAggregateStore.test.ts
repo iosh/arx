@@ -219,4 +219,45 @@ describe("TransactionAggregateStore", () => {
       TransactionAggregateNotFoundError,
     );
   });
+
+  it("lists restart actions from recoverable aggregates only", async () => {
+    const { store, tick } = createService();
+
+    await store.createTransaction(createTransactionInput());
+    tick(2_000);
+    await store.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    await store.approveTransaction({
+      transactionId: "tx-2",
+      approvalId: "approval-2",
+      approvedAt: null,
+      submissionId: "submission-2",
+      approvedRequestPayload: {
+        chainId: "0xa",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        value: "0x1",
+        data: "0x",
+        gas: "0x5208",
+        nonce: "0x8",
+        type: "legacy",
+        gasPrice: "0x3b9aca00",
+      },
+      conflictKey: null,
+    });
+
+    const actions = await store.listRestartActions();
+
+    expect(actions).toEqual([
+      expect.objectContaining({
+        kind: "finalize_incomplete_local",
+        transactionId: "tx-2",
+        targetStatus: "failed",
+      }),
+      expect.objectContaining({
+        kind: "finalize_incomplete_local",
+        transactionId: "tx-1",
+        targetStatus: "cancelled",
+      }),
+    ]);
+  });
 });

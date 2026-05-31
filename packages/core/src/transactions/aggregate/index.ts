@@ -1,7 +1,6 @@
 export {
   TransactionAggregateInvariantError,
   TransactionAggregateNotFoundError,
-  TransactionSubmissionArtifactConflictError,
 } from "./errors.js";
 export type { JsonObject, JsonPrimitive, JsonValue } from "./json.js";
 export {
@@ -33,7 +32,6 @@ export {
 export type {
   ApproveTransactionInput,
   BeginSubmissionSigningInput,
-  CompleteSubmissionSigningInput,
   CreateTransactionInput,
   CreateTransactionReplacementInput,
   FailTransactionInput,
@@ -53,10 +51,9 @@ export type {
   TransactionRecord,
   TransactionReplacementType,
   TransactionRequestSnapshot,
+  TransactionRestartAction,
   TransactionSource,
   TransactionStatus,
   TransactionSubmission,
-  TransactionSubmissionArtifact,
-  TransactionSubmissionArtifactRetention,
   TransactionSubmissionStatus,
 } from "./types.js";

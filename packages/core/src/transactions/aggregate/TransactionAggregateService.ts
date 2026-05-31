@@ -1,7 +1,4 @@
-import {
-  TransactionAggregateInvariantError,
-  TransactionSubmissionArtifactConflictError,
-} from "./errors.js";
+import { TransactionAggregateInvariantError } from "./errors.js";
 import { cloneJsonValue } from "./json.js";
 import {
   assertTransactionStatusTransition,
@@ -17,7 +14,6 @@ import {
 import type {
   ApproveTransactionInput,
   BeginSubmissionSigningInput,
-  CompleteSubmissionSigningInput,
   CreateTransactionInput,
   FailTransactionInput,
   QueueSubmissionBroadcastInput,
@@ -32,6 +28,7 @@ import type {
   TransactionAggregate,
   TransactionAggregateServiceOptions,
   TransactionRecord,
+  TransactionRestartAction,
   TransactionSubmission,
   TransactionSubmissionStatus,
 } from "./types.js";
@@ -89,14 +86,13 @@ export class TransactionAggregateService {
         updatedAt: at,
       },
       submissions: [],
-      submissionArtifacts: [],
     };
   }
 
   /**
    * Commits approval and queues the first submission.
    *
-   * Prepare, signing, and broadcast happen in later commands.
+   * Broadcast-input creation, broadcast, and tracking happen in later commands.
    */
   approveTransaction(
     current: TransactionAggregate,
@@ -119,7 +115,6 @@ export class TransactionAggregateService {
         id: submissionId,
         transactionId: record.id,
         status: "queued",
-        artifactId: null,
         terminalReason: null,
         createdAt: at,
         updatedAt: at,
@@ -180,45 +175,12 @@ export class TransactionAggregateService {
     return this.#finalizeBeforeNetworkAcceptance(current, "failed", input.reason);
   }
 
-  /** Starts signing the active submission. */
+  /** Starts broadcast-input creation for the active submission. */
   beginSubmissionSigning(
     current: TransactionAggregate,
     input: LoadedAggregateInput<BeginSubmissionSigningInput>,
   ): TransactionAggregate {
     return this.#transitionActiveSubmission(current, input, "signing");
-  }
-
-  /** Stores the sealed artifact outside TransactionRecord. */
-  completeSubmissionSigning(
-    current: TransactionAggregate,
-    input: LoadedAggregateInput<CompleteSubmissionSigningInput>,
-  ): TransactionAggregate {
-    return this.#updateAggregate(current, (aggregate, at) => {
-      this.#requireSubmittingRecord(aggregate.record);
-      const submission = this.#requireActiveSubmission(aggregate, input.submissionId);
-      assertTransactionSubmissionStatusTransition(submission.status, "signed");
-
-      const artifactId = input.artifactId ?? this.#createId();
-      if (aggregate.submissionArtifacts.some((artifact) => artifact.id === artifactId)) {
-        throw new TransactionSubmissionArtifactConflictError(artifactId);
-      }
-
-      submission.status = "signed";
-      submission.artifactId = artifactId;
-      submission.updatedAt = at;
-      aggregate.submissionArtifacts.push({
-        id: artifactId,
-        transactionId: aggregate.record.id,
-        submissionId: submission.id,
-        namespace: aggregate.record.namespace,
-        chainRef: aggregate.record.chainRef,
-        kind: input.artifactKind,
-        sealedPayload: cloneJsonValue(input.sealedPayload),
-        retention: input.retention ?? "until_submitted",
-        expiresAt: input.expiresAt ?? null,
-        createdAt: at,
-      });
-    });
   }
 
   /**
@@ -249,6 +211,9 @@ export class TransactionAggregateService {
       aggregate.record.status = "submitted";
       aggregate.record.activeSubmissionId = null;
       aggregate.record.submitted = cloneJsonValue(input.submitted);
+      if (input.conflictKey !== undefined) {
+        aggregate.record.conflictKey = input.conflictKey;
+      }
     });
   }
 
@@ -336,6 +301,62 @@ export class TransactionAggregateService {
       aggregate.record.status = "expired";
       aggregate.record.terminalReason = cloneTransactionTerminalReason(input.reason);
     });
+  }
+
+  /**
+   * Recovery flowchart:
+   *
+   * awaiting_approval -> cancel local-only work
+   * submitting(queued|signing|broadcasting) -> fail incomplete local work
+   * submitted(accepted) -> resume tracking
+   * terminal -> no work
+   */
+  listRestartActions(aggregate: TransactionAggregate): TransactionRestartAction[] {
+    const { record } = aggregate;
+
+    if (record.status === "awaiting_approval") {
+      return [
+        {
+          kind: "finalize_incomplete_local",
+          transactionId: record.id,
+          targetStatus: "cancelled",
+          reason: buildTransactionTerminalReason({
+            kind: "approval_cancelled",
+            code: "recovery.awaiting_approval_abandoned",
+            message: "Transaction approval session was abandoned during restart.",
+          }),
+        },
+      ];
+    }
+
+    if (record.status === "submitting") {
+      return [
+        {
+          kind: "finalize_incomplete_local",
+          transactionId: record.id,
+          targetStatus: "failed",
+          reason: buildTransactionTerminalReason({
+            kind: "broadcast_outcome_unknown",
+            code: "incomplete_at_startup",
+            message: "Transaction submission was incomplete at startup.",
+          }),
+        },
+      ];
+    }
+
+    if (record.status === "submitted") {
+      const acceptedSubmission = aggregate.submissions.find((submission) => submission.status === "accepted");
+      if (acceptedSubmission) {
+        return [
+          {
+            kind: "resume_tracking",
+            transactionId: record.id,
+          },
+        ];
+      }
+    }
+
+    return [];
   }
 
   #finalizeAwaitingApprovalTransaction(

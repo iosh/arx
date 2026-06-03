@@ -22,6 +22,7 @@ export const buildEip155ApprovalReview = (context: Eip155ApprovalReviewContext):
     to: requestPayload.to ?? null,
     value: requestPayload.value ?? "0x0",
     data,
+    nonce: reviewSnapshot?.nonce ?? requestPayload.nonce ?? null,
     gasLimit: reviewSnapshot?.gas ?? requestPayload.gas ?? null,
     fees: {
       gasPrice: reviewSnapshot?.gasPrice ?? requestPayload.gasPrice ?? null,

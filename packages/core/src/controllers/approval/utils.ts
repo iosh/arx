@@ -8,6 +8,8 @@ import type {
   ApprovalTerminalReason,
 } from "./types.js";
 
+export { createDeferred, type Deferred } from "../../utils/deferred.js";
+
 export const cloneState = (state: ApprovalState): ApprovalState => ({
   pending: state.pending.map((item) => ({
     approvalId: item.approvalId,
@@ -70,24 +72,6 @@ export const cloneFinishEvent = <T>(event: ApprovalFinishedEvent<T>): ApprovalFi
   ...(event.value !== undefined ? { value: event.value } : {}),
   ...(event.error ? { error: { ...event.error } } : {}),
 });
-
-export type Deferred<T> = {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: Error) => void;
-};
-
-export const createDeferred = <T>(): Deferred<T> => {
-  let resolve!: (value: T) => void;
-  let reject!: (error: Error) => void;
-
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-};
 
 export const toSimpleError = (error: unknown): { name: string; message: string } => {
   const err = error instanceof Error ? error : new Error(String(error));

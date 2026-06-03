@@ -1,11 +1,14 @@
 import type { Hex } from "ox/Hex";
 import type { AccountAddress } from "../../../controllers/account/types.js";
+import type { TransactionConflictKey } from "../../aggregate/types.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type {
   BroadcastInput,
   BroadcastResult,
   SignedTransactionPayload,
   SubmittedTransactionInspection,
+  TransactionApprovalFinalizeContext,
+  TransactionApprovalFinalizeResult,
   TransactionApprovalReviewContext,
   TransactionBroadcastContext,
   TransactionBroadcastInputContext,
@@ -36,6 +39,22 @@ export type Eip155PrepareContext = Omit<TransactionPrepareContext, "namespace" |
   namespace: "eip155";
   request: Eip155TransactionRequest;
 };
+
+export type Eip155ApprovalFinalizeContext = Omit<
+  TransactionApprovalFinalizeContext<"eip155">,
+  "approvedPayload" | "request" | "localActiveTransactions"
+> & {
+  request: Eip155TransactionRequest;
+  approvedPayload: Eip155UnsignedTransaction;
+  localActiveTransactions: readonly {
+    transactionId: string;
+    status: "submitting" | "submitted";
+    approvedPayload: Eip155UnsignedTransaction;
+    conflictKey: TransactionConflictKey | null;
+  }[];
+};
+
+export type Eip155ApprovalFinalizeResult = TransactionApprovalFinalizeResult<"eip155">;
 
 export type Eip155BroadcastInputContext = Omit<
   TransactionBroadcastInputContext<"eip155">,

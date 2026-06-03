@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import {
   type TransactionAggregate,
   TransactionAggregateNotFoundError,
+  TransactionConflictKeyCollisionError,
   type TransactionTerminalReason,
 } from "@arx/core/transactions/storage";
 import { Dexie } from "dexie";
@@ -233,6 +234,22 @@ describe("DexieTransactionAggregatesPort", () => {
     expect(submissionsToArray).not.toHaveBeenCalled();
   });
 
+  it("listTransactionHistory() returns all matching records when limit is omitted", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.transactionAggregates;
+    const older = createSubmittingAggregate("tx-older", 1_000);
+    const newer = createSubmittingAggregate("tx-newer", 2_000);
+
+    await port.insertTransactionAggregate(older);
+    await port.insertTransactionAggregate(newer);
+
+    const records = await port.listTransactionHistory({
+      chainRef: "eip155:1",
+    });
+
+    expect(records.map((record) => record.id)).toEqual(["tx-newer", "tx-older"]);
+  });
+
   it("findTransactionRecordsByConflictKey() returns matching records newest first", async () => {
     const storage = createTestStorage();
     const port = storage.ports.transactionAggregates;
@@ -265,6 +282,86 @@ describe("DexieTransactionAggregatesPort", () => {
 
     const records = await port.findTransactionRecordsByConflictKey(conflictKey);
     expect(records.map((record) => record.id)).toEqual(["tx-newer", "tx-older"]);
+  });
+
+  it("commitApprovedTransactionAggregate() rejects conflicting active records atomically", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.transactionAggregates;
+
+    const first = createAwaitingApprovalAggregate("tx-1", {
+      status: "submitting",
+      approvedRequest: {
+        approvalId: "approval-1",
+        approvedAt: 1_100,
+        payload: {
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x1",
+          data: "0x",
+          gas: "0x5208",
+          nonce: "0x7",
+        },
+      },
+      activeSubmissionId: "submission-1",
+      conflictKey: {
+        kind: "eip155.nonce",
+        value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+      },
+    });
+    first.submissions.push({
+      id: "submission-1",
+      transactionId: "tx-1",
+      status: "queued",
+      terminalReason: null,
+      createdAt: 1_100,
+      updatedAt: 1_100,
+    });
+
+    const second = createAwaitingApprovalAggregate("tx-2");
+    await port.insertTransactionAggregate(first);
+    await port.insertTransactionAggregate(second);
+
+    const approvedSecond: TransactionAggregate = {
+      record: {
+        ...second.record,
+        status: "submitting",
+        approvedRequest: {
+          approvalId: "approval-2",
+          approvedAt: 2_000,
+          payload: {
+            chainId: "0x1",
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x1",
+            data: "0x",
+            gas: "0x5208",
+            nonce: "0x7",
+          },
+        },
+        activeSubmissionId: "submission-2",
+        conflictKey: {
+          kind: "eip155.nonce",
+          value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+        },
+        updatedAt: 2_000,
+      },
+      submissions: [
+        {
+          id: "submission-2",
+          transactionId: "tx-2",
+          status: "queued",
+          terminalReason: null,
+          createdAt: 2_000,
+          updatedAt: 2_000,
+        },
+      ],
+    };
+
+    await expect(port.commitApprovedTransactionAggregate({ aggregate: approvedSecond })).rejects.toBeInstanceOf(
+      TransactionConflictKeyCollisionError,
+    );
+    await expect(port.loadTransactionAggregate("tx-2")).resolves.toEqual(second);
   });
 
   it("listRecoverableTransactionAggregates() includes active candidates and excludes terminal records", async () => {

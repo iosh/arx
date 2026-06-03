@@ -17,7 +17,6 @@ const dummy = (): NamespaceTransaction => ({
     broadcast: async () => ({
       broadcastIdentity: { hash: "0xhash" },
       submitted: { hash: "0xhash" },
-      conflictKey: null,
     }),
   },
 });

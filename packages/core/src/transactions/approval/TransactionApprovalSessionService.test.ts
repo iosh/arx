@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import type { Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
+import { createDeferred } from "../../utils/deferred.js";
 import {
   accountCodecs,
   createDefaultAccountKey,
@@ -21,9 +22,12 @@ import type {
   TransactionRecord,
   TransactionsStoragePort,
 } from "../aggregate/index.js";
+import { TransactionConflictKeyCollisionError } from "../aggregate/index.js";
 import { TransactionAggregateStore } from "../aggregate/TransactionAggregateStore.js";
 import { createEip155Transaction } from "../namespace/eip155/transaction.js";
 import { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
+import { TransactionResourceLock } from "../TransactionResourceLock.js";
+import { TransactionApprovalSessionNotFoundError } from "./errors.js";
 import { TransactionApprovalSessionService } from "./TransactionApprovalSessionService.js";
 
 const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate => structuredClone(aggregate);
@@ -31,13 +35,62 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
 const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRecord): number =>
   right.createdAt - left.createdAt || right.id.localeCompare(left.id);
 
-const createTransactionInput = (
-  overrides: Partial<CreateTransactionInput> & {
-    request?: Partial<CreateTransactionInput["request"]> & {
-      payload?: JsonValue;
-    };
-  } = {},
-): CreateTransactionInput => ({
+const findConflictingActiveRecords = (
+  current: TransactionAggregate["record"],
+  records: TransactionRecord[],
+): TransactionRecord[] => {
+  const conflictKey = current.conflictKey;
+  if (!conflictKey) {
+    return [];
+  }
+
+  return records.filter((candidate) => {
+    if (candidate.id === current.id) {
+      return false;
+    }
+    if (candidate.conflictKey?.kind !== conflictKey.kind || candidate.conflictKey.value !== conflictKey.value) {
+      return false;
+    }
+    if (candidate.status !== "submitting" && candidate.status !== "submitted") {
+      return false;
+    }
+    if (
+      current.replacesTransactionId &&
+      current.replacesTransactionId === candidate.id &&
+      candidate.status === "submitted"
+    ) {
+      return false;
+    }
+    return true;
+  });
+};
+
+type CreateTransactionInputOverrides = Omit<Partial<CreateTransactionInput>, "request"> & {
+  request?: {
+    kind?: CreateTransactionInput["request"]["kind"];
+    payload?: JsonValue;
+  };
+};
+
+type RpcFeeHistory = Awaited<ReturnType<Eip155RpcClient["getFeeHistory"]>>;
+type RpcBlock = Awaited<ReturnType<Eip155RpcClient["getBlockByNumber"]>>;
+
+const DEFAULT_RPC_TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+
+const createRpcFeeHistory = (): RpcFeeHistory =>
+  ({
+    oldestBlock: "0x1",
+    baseFeePerGas: [],
+    gasUsedRatio: [],
+    reward: [],
+  }) as RpcFeeHistory;
+
+const createRpcBlock = (): RpcBlock =>
+  ({
+    baseFeePerGas: null,
+  }) as RpcBlock;
+
+const createTransactionInput = (overrides: CreateTransactionInputOverrides = {}): CreateTransactionInput => ({
   namespace: overrides.namespace ?? "eip155",
   chainRef: overrides.chainRef ?? DEFAULT_CHAIN_REF,
   origin: overrides.origin ?? "https://dapp.example",
@@ -93,6 +146,24 @@ const createInMemoryTransactionsStoragePort = (
       }
       store.set(transactionId, cloneAggregate(aggregate));
     },
+    async commitApprovedTransactionAggregate({ aggregate }) {
+      const conflicting = findConflictingActiveRecords(
+        aggregate.record,
+        [...store.values()].map((candidate) => structuredClone(candidate.record)),
+      );
+      if (conflicting.length > 0) {
+        const conflictKey = aggregate.record.conflictKey;
+        if (!conflictKey) {
+          throw new Error(`Expected aggregate "${aggregate.record.id}" to have a conflict key.`);
+        }
+        throw new TransactionConflictKeyCollisionError({
+          transactionId: aggregate.record.id,
+          conflictKey,
+          conflictingTransactionIds: conflicting.map((candidate) => candidate.id),
+        });
+      }
+      await port.saveTransactionAggregate(aggregate);
+    },
     async listTransactionHistory(query: ListTransactionHistoryQuery = {}) {
       const records = [...store.values()].map((aggregate) => structuredClone(aggregate.record));
       const filtered = records.filter((record) => {
@@ -136,27 +207,17 @@ const createInMemoryTransactionsStoragePort = (
   };
 };
 
-const createDeferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-};
-
 const createEip155RpcClientStub = (): Eip155RpcClient => ({
   request: vi.fn(),
-  estimateGas: vi.fn(async () => "0x5208"),
-  getBalance: vi.fn(async () => "0xde0b6b3a7640000"),
-  getTransactionCount: vi.fn(async () => "0x7"),
-  getGasPrice: vi.fn(async () => "0x3b9aca00"),
-  getMaxPriorityFeePerGas: vi.fn(async () => "0x3b9aca00"),
-  getFeeHistory: vi.fn(async () => ({ oldestBlock: "0x1", baseFeePerGas: [], gasUsedRatio: [], reward: [] })),
-  getBlockByNumber: vi.fn(async () => ({ baseFeePerGas: null })),
+  estimateGas: vi.fn(async () => "0x5208" as const),
+  getBalance: vi.fn(async () => "0xde0b6b3a7640000" as const),
+  getTransactionCount: vi.fn(async () => "0x7" as const),
+  getGasPrice: vi.fn(async () => "0x3b9aca00" as const),
+  getMaxPriorityFeePerGas: vi.fn(async () => "0x3b9aca00" as const),
+  getFeeHistory: vi.fn(async () => createRpcFeeHistory()),
+  getBlockByNumber: vi.fn(async () => createRpcBlock()),
   getTransactionReceipt: vi.fn(async () => null),
-  sendRawTransaction: vi.fn(async () => "0xhash"),
+  sendRawTransaction: vi.fn(async () => DEFAULT_RPC_TRANSACTION_HASH),
 });
 
 const createServices = (namespaces: NamespaceTransactions) => {
@@ -176,6 +237,7 @@ const createServices = (namespaces: NamespaceTransactions) => {
     transactions: transactionStore,
     namespaces,
     accountCodecs,
+    resourceLock: new TransactionResourceLock(),
     now: () => now,
     createId: () => {
       nextPrepareId += 1;
@@ -221,9 +283,10 @@ describe("TransactionApprovalSessionService", () => {
       gas: "0x5208",
       gasPrice: "0x3b9aca00",
     });
-    expect(opened.prepare.status === "ready" ? opened.prepare.review : null).toMatchObject({
+    expect(opened.review).toMatchObject({
       namespace: "eip155",
       kind: "native_transfer",
+      nonce: "0x7",
       gasLimit: "0x5208",
     });
 
@@ -242,15 +305,20 @@ describe("TransactionApprovalSessionService", () => {
       nonce: "0x8",
       gas: "0x5208",
     });
+    expect(edited.review).toMatchObject({
+      nonce: "0x8",
+    });
 
     tick(3_000);
     const approved = await sessions.approveTransaction({
       transactionId: "tx-1",
       approvalId: "approval-1",
+      expectedPrepareId: edited.prepare.prepareId,
     });
 
-    expect(approved.record.status).toBe("submitting");
-    expect(approved.record.approvedRequest).toMatchObject({
+    expect(approved.status).toBe("approved");
+    expect(approved.status === "approved" ? approved.aggregate.record.status : null).toBe("submitting");
+    expect(approved.status === "approved" ? approved.aggregate.record.approvedRequest : null).toMatchObject({
       approvalId: "approval-1",
       approvedAt: 3_000,
       payload: {
@@ -258,9 +326,12 @@ describe("TransactionApprovalSessionService", () => {
         gas: "0x5208",
       },
     });
-    expect(approved.record.conflictKey).toEqual({
+    expect(approved.status === "approved" ? approved.aggregate.record.conflictKey : null).toEqual({
       kind: "eip155.nonce",
-      value: `${approved.record.chainRef}:${approved.record.accountKey}:0x8`,
+      value:
+        approved.status === "approved"
+          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountKey}:0x8`
+          : "",
     });
     expect(sessions.getSession("tx-1")).toBeNull();
   });
@@ -281,7 +352,7 @@ describe("TransactionApprovalSessionService", () => {
     const { transactionStore, sessions } = createServices(namespaces);
 
     await transactionStore.createTransaction(createTransactionInput());
-    await sessions.openSession({
+    const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
     });
@@ -289,6 +360,7 @@ describe("TransactionApprovalSessionService", () => {
     const approved = await sessions.approveTransaction({
       transactionId: "tx-1",
       approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
     });
 
     expect(deriveConflictKey).toHaveBeenCalledWith({
@@ -310,21 +382,430 @@ describe("TransactionApprovalSessionService", () => {
       },
       approvedPayload: DEFAULT_UNSIGNED_TRANSACTION,
     });
-    expect(approved.record.conflictKey).toEqual({
+    expect(approved.status === "approved" ? approved.aggregate.record.conflictKey : null).toEqual({
       kind: "test.conflict",
       value: "tx-1",
     });
   });
 
+  it("finalizes wallet-managed nonce at approve time and writes the refreshed payload", async () => {
+    const rpc = createEip155RpcClientStub();
+    rpc.getTransactionCount = vi.fn().mockResolvedValueOnce("0x7").mockResolvedValueOnce("0x9");
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createEip155Transaction({
+          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          rpcClientFactory: () => rpc,
+          signer: { signTransaction: vi.fn() },
+          broadcaster: { broadcast: vi.fn() },
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions, tick } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+    expect(opened.prepare.status === "ready" ? opened.prepare.approvedPayload : null).toMatchObject({
+      nonce: "0x7",
+    });
+
+    tick(2_000);
+    const approved = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(approved.status === "approved" ? approved.aggregate.record.approvedRequest?.payload : null).toMatchObject({
+      nonce: "0x9",
+    });
+    expect(approved.status === "approved" ? approved.aggregate.record.conflictKey : null).toEqual({
+      kind: "eip155.nonce",
+      value:
+        approved.status === "approved"
+          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountKey}:0x9`
+          : "",
+    });
+  });
+
+  it("returns approval_stale for fixed nonce conflicts and refreshes the session review", async () => {
+    const rpc = createEip155RpcClientStub();
+    rpc.getTransactionCount = vi.fn().mockResolvedValue("0x8");
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createEip155Transaction({
+          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          rpcClientFactory: () => rpc,
+          signer: { signTransaction: vi.fn() },
+          broadcaster: { broadcast: vi.fn() },
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(
+      createTransactionInput({
+        request: {
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+            data: "0x",
+            nonce: "0x6",
+          },
+        },
+      }),
+    );
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    const stale = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(stale.status).toBe("approval_stale");
+    expect(stale.status === "approval_stale" ? stale.stale.reason : null).toBe("transaction.approval_stale");
+
+    const refreshed = sessions.getSession("tx-1");
+    expect(refreshed?.prepare.status).toBe("ready");
+    expect(refreshed?.prepare.status === "ready" ? refreshed.prepare.approvedPayload : null).toMatchObject({
+      nonce: "0x6",
+    });
+    expect(refreshed?.review).toMatchObject({
+      nonce: "0x6",
+    });
+  });
+
+  it("returns approval_stale for fixed nonce conflicts that only exist locally", async () => {
+    const rpc = createEip155RpcClientStub();
+    rpc.getTransactionCount = vi.fn().mockResolvedValue("0x7");
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createEip155Transaction({
+          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          rpcClientFactory: () => rpc,
+          signer: { signTransaction: vi.fn() },
+          broadcaster: { broadcast: vi.fn() },
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(
+      createTransactionInput({
+        requestId: "request-1",
+        request: {
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+            data: "0x",
+            nonce: "0x7",
+          },
+        },
+      }),
+    );
+    await transactionStore.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      approvedAt: null,
+      submissionId: "submission-1",
+      approvedRequestPayload: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      conflictKey: {
+        kind: "eip155.nonce",
+        value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountKey()}:0x7`,
+      },
+    });
+
+    await transactionStore.createTransaction(
+      createTransactionInput({
+        requestId: "request-2",
+        request: {
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+            data: "0x",
+            nonce: "0x7",
+          },
+        },
+      }),
+    );
+    const opened = await sessions.openSession({
+      transactionId: "tx-2",
+      approvalId: "approval-2",
+    });
+
+    const stale = await sessions.approveTransaction({
+      transactionId: "tx-2",
+      approvalId: "approval-2",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(stale.status).toBe("approval_stale");
+    expect(stale.status === "approval_stale" ? stale.session?.prepare.prepareId : null).not.toBe(
+      opened.prepare.prepareId,
+    );
+    expect(stale.status === "approval_stale" ? stale.session?.prepare.status : null).toBe("ready");
+    expect(stale.status === "approval_stale" ? stale.stale.data : null).toMatchObject({
+      currentNonce: "0x7",
+      conflictingTransactionIds: ["tx-1"],
+    });
+  });
+
+  it("allows fixed-nonce replacement when replacing a submitted local transaction", async () => {
+    const rpc = createEip155RpcClientStub();
+    rpc.getTransactionCount = vi.fn().mockResolvedValue("0x8");
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createEip155Transaction({
+          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          rpcClientFactory: () => rpc,
+          signer: { signTransaction: vi.fn() },
+          broadcaster: { broadcast: vi.fn() },
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+    const conflictKey = {
+      kind: "eip155.nonce",
+      value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountKey()}:0x7`,
+    } as const;
+
+    await transactionStore.createTransaction(
+      createTransactionInput({
+        requestId: "request-1",
+        request: {
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+            data: "0x",
+            nonce: "0x7",
+          },
+        },
+      }),
+    );
+    await transactionStore.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      approvedAt: null,
+      submissionId: "submission-1",
+      approvedRequestPayload: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      conflictKey,
+    });
+    await transactionStore.beginSubmissionSigning({
+      transactionId: "tx-1",
+      submissionId: "submission-1",
+    });
+    await transactionStore.queueSubmissionBroadcast({
+      transactionId: "tx-1",
+      submissionId: "submission-1",
+    });
+    await transactionStore.recordBroadcastAcceptance({
+      transactionId: "tx-1",
+      submissionId: "submission-1",
+      submitted: {
+        hash: DEFAULT_RPC_TRANSACTION_HASH,
+        chainId: "0xa",
+        from: DEFAULT_FROM,
+        nonce: "0x7",
+      },
+    });
+
+    await transactionStore.createTransaction(
+      createTransactionInput({
+        requestId: "request-2",
+        replacement: {
+          transactionId: "tx-1",
+          type: "speed_up",
+        },
+        request: {
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+            data: "0x",
+            nonce: "0x7",
+          },
+        },
+      }),
+    );
+    const opened = await sessions.openSession({
+      transactionId: "tx-2",
+      approvalId: "approval-2",
+    });
+
+    const approved = await sessions.approveTransaction({
+      transactionId: "tx-2",
+      approvalId: "approval-2",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(approved.status).toBe("approved");
+    expect(approved.status === "approved" ? approved.aggregate.record.conflictKey : null).toEqual(conflictKey);
+  });
+
+  it("allows approval sessions without a review builder", async () => {
+    const namespace = createNamespaceTransactionStub();
+    if (!namespace.proposal) {
+      throw new Error("Expected namespace proposal.");
+    }
+    delete namespace.proposal.buildReview;
+
+    const namespaces = new NamespaceTransactions([["eip155", namespace]]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    expect(opened.prepare.status).toBe("ready");
+    expect(opened.review).toBeNull();
+
+    const approved = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(approved.status).toBe("approved");
+  });
+
+  it("returns a failed approval result when finalize throws", async () => {
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createNamespaceTransactionStub({
+          finalizeApproval: vi.fn(async () => {
+            throw new Error("rpc down");
+          }) as never,
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    const failed = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(failed.status).toBe("failed");
+    expect(failed.status === "failed" ? failed.error : null).toMatchObject({
+      reason: "transaction.approval.finalize_failed",
+      message: "rpc down",
+    });
+    expect(failed.status === "failed" ? failed.session.prepare.status : null).toBe("failed");
+    expect(sessions.getSession("tx-1")?.prepare.status).toBe("failed");
+  });
+
+  it("does not let a concurrent draft edit replace the session while approval is finalizing", async () => {
+    const finalize = createDeferred<{
+      status: "approved";
+      approvedPayload: typeof DEFAULT_UNSIGNED_TRANSACTION;
+      conflictKey: null;
+      expiresAt: null;
+    }>();
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createNamespaceTransactionStub({
+          finalizeApproval: vi.fn(async () => await finalize.promise) as never,
+          applyDraftEdit: ((context: {
+            request: { payload: Record<string, unknown> };
+            edit: { changes: Array<{ value: string | null }> };
+          }) => ({
+            ...context.request,
+            payload: {
+              ...context.request.payload,
+              nonce: context.edit.changes[0]?.value ?? context.request.payload.nonce,
+            },
+          })) as never,
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    const approvePromise = sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    let editSettled = false;
+    const editPromise = sessions
+      .applyDraftEdit({
+        transactionId: "tx-1",
+        approvalId: "approval-1",
+        edit: {
+          namespace: "eip155",
+          changes: [{ field: "nonce", value: "0x8" }],
+        },
+      })
+      .finally(() => {
+        editSettled = true;
+      });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(editSettled).toBe(false);
+
+    finalize.resolve({
+      status: "approved",
+      approvedPayload: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      conflictKey: null,
+      expiresAt: null,
+    });
+
+    const approved = await approvePromise;
+    expect(approved.status).toBe("approved");
+    await expect(editPromise).rejects.toThrow(TransactionApprovalSessionNotFoundError);
+  });
+
   it("ignores stale prepare results after a newer draft edit starts another prepare", async () => {
-    const stalePrepare = createDeferred<{ status: "ready"; prepared: typeof DEFAULT_UNSIGNED_TRANSACTION }>();
-    const latestPrepare = createDeferred<{ status: "ready"; prepared: typeof DEFAULT_UNSIGNED_TRANSACTION }>();
+    const stalePrepare = createDeferred<{
+      status: "ready";
+      prepared: typeof DEFAULT_UNSIGNED_TRANSACTION;
+      reviewSnapshot: typeof DEFAULT_UNSIGNED_TRANSACTION;
+    }>();
+    const latestPrepare = createDeferred<{
+      status: "ready";
+      prepared: typeof DEFAULT_UNSIGNED_TRANSACTION;
+      reviewSnapshot: typeof DEFAULT_UNSIGNED_TRANSACTION;
+    }>();
 
     const prepare = vi
       .fn()
       .mockResolvedValueOnce({
         status: "ready" as const,
         prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+        reviewSnapshot: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
       })
       .mockImplementationOnce(async () => await stalePrepare.promise)
       .mockImplementationOnce(async () => await latestPrepare.promise);
@@ -369,6 +850,7 @@ describe("TransactionApprovalSessionService", () => {
     stalePrepare.resolve({
       status: "ready",
       prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      reviewSnapshot: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
     });
     const staleResult = await firstPrepare;
 
@@ -378,6 +860,10 @@ describe("TransactionApprovalSessionService", () => {
     latestPrepare.resolve({
       status: "ready",
       prepared: {
+        ...structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+        nonce: "0x8",
+      },
+      reviewSnapshot: {
         ...structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
         nonce: "0x8",
       },
@@ -395,6 +881,142 @@ describe("TransactionApprovalSessionService", () => {
       prepare: {
         status: "ready",
       },
+    });
+  });
+
+  it("returns approval_stale when approval uses an older prepare version", async () => {
+    const namespaces = new NamespaceTransactions([["eip155", createNamespaceTransactionStub()]]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+    const refreshed = await sessions.prepareSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    const stale = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(stale.status).toBe("approval_stale");
+    expect(stale.status === "approval_stale" ? stale.session?.prepare.prepareId : null).toBe(
+      refreshed.prepare.prepareId,
+    );
+  });
+
+  it("returns approval_stale when the same prepare is approved again after success", async () => {
+    const namespaces = new NamespaceTransactions([["eip155", createNamespaceTransactionStub()]]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    const approved = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+    expect(approved.status).toBe("approved");
+
+    const replay = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: opened.prepare.prepareId,
+    });
+
+    expect(replay.status).toBe("approval_stale");
+    expect(replay.status === "approval_stale" ? replay.session : undefined).toBeNull();
+  });
+
+  it("clears the previous review when a newer prepare run fails", async () => {
+    const prepare = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "ready" as const,
+        prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+        reviewSnapshot: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      })
+      .mockRejectedValueOnce(new Error("rpc down"));
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createNamespaceTransactionStub({
+          prepare: prepare as never,
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput());
+    const opened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+    expect(opened.review).not.toBeNull();
+
+    const failed = await sessions.prepareSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+
+    expect(failed.prepare.status).toBe("failed");
+    expect(failed.review).toBeNull();
+  });
+
+  it("uses the local active nonce floor for wallet-managed approvals", async () => {
+    const rpc = createEip155RpcClientStub();
+    rpc.getTransactionCount = vi.fn().mockResolvedValue("0x7");
+    const namespaces = new NamespaceTransactions([
+      [
+        "eip155",
+        createEip155Transaction({
+          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          rpcClientFactory: () => rpc,
+          signer: { signTransaction: vi.fn() },
+          broadcaster: { broadcast: vi.fn() },
+        }),
+      ],
+    ]);
+    const { transactionStore, sessions, tick } = createServices(namespaces);
+
+    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
+    const firstOpened = await sessions.openSession({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+    });
+    tick(2_000);
+    const firstApproved = await sessions.approveTransaction({
+      transactionId: "tx-1",
+      approvalId: "approval-1",
+      expectedPrepareId: firstOpened.prepare.prepareId,
+    });
+    expect(firstApproved.status).toBe("approved");
+
+    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    const secondOpened = await sessions.openSession({
+      transactionId: "tx-3",
+      approvalId: "approval-2",
+    });
+    tick(3_000);
+    const secondApproved = await sessions.approveTransaction({
+      transactionId: "tx-3",
+      approvalId: "approval-2",
+      expectedPrepareId: secondOpened.prepare.prepareId,
+    });
+
+    expect(
+      secondApproved.status === "approved" ? secondApproved.aggregate.record.approvedRequest?.payload : null,
+    ).toMatchObject({
+      nonce: "0x8",
     });
   });
 });

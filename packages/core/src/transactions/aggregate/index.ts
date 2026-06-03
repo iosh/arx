@@ -1,6 +1,7 @@
 export {
   TransactionAggregateInvariantError,
   TransactionAggregateNotFoundError,
+  TransactionConflictKeyCollisionError,
 } from "./errors.js";
 export type { JsonObject, JsonPrimitive, JsonValue } from "./json.js";
 export {
@@ -13,6 +14,7 @@ export {
   TransactionStatusTransitionError,
 } from "./stateMachine.js";
 export type {
+  CommitApprovedTransactionAggregateInput,
   ListRecoverableTransactionAggregatesQuery,
   ListTransactionHistoryCursor,
   ListTransactionHistoryQuery,

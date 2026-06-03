@@ -156,7 +156,6 @@ export type RecordBroadcastAcceptanceInput = {
   transactionId: string;
   submissionId: string;
   submitted: JsonValue;
-  conflictKey?: TransactionConflictKey | null;
 };
 
 /** Terminal outcome for the active submission before network acceptance. */

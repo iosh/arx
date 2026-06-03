@@ -18,12 +18,18 @@ export type ListRecoverableTransactionAggregatesQuery = {
   limit?: number;
 };
 
+export type CommitApprovedTransactionAggregateInput = {
+  aggregate: TransactionAggregate;
+};
+
 export interface TransactionsStoragePort {
   loadTransactionAggregate(transactionId: TransactionRecord["id"]): Promise<TransactionAggregate | null>;
 
   insertTransactionAggregate(aggregate: TransactionAggregate): Promise<void>;
 
   saveTransactionAggregate(aggregate: TransactionAggregate): Promise<void>;
+
+  commitApprovedTransactionAggregate(input: CommitApprovedTransactionAggregateInput): Promise<void>;
 
   listTransactionHistory(query?: ListTransactionHistoryQuery): Promise<TransactionRecord[]>;
 

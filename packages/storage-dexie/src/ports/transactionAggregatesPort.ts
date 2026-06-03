@@ -1,9 +1,11 @@
 import {
+  type CommitApprovedTransactionAggregateInput,
   type ListRecoverableTransactionAggregatesQuery,
   type ListTransactionHistoryQuery,
   type TransactionAggregate,
   TransactionAggregateNotFoundError,
   type TransactionConflictKey,
+  TransactionConflictKeyCollisionError,
   type TransactionRecord,
   type TransactionSubmission,
   type TransactionsStoragePort,
@@ -65,6 +67,57 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     });
   }
 
+  async commitApprovedTransactionAggregate(input: CommitApprovedTransactionAggregateInput): Promise<void> {
+    await this.ctx.ready;
+    const aggregate = input.aggregate;
+    const transactionId = aggregate.record.id;
+
+    await this.ctx.db.transaction("rw", this.records, this.submissions, async () => {
+      const existing = await this.records.get(transactionId);
+      if (!existing) {
+        throw new TransactionAggregateNotFoundError(transactionId);
+      }
+
+      const conflictKey = aggregate.record.conflictKey;
+      if (conflictKey) {
+        const candidates = await this.records
+          .where("[conflictKey.kind+conflictKey.value]")
+          .equals([conflictKey.kind, conflictKey.value])
+          .toArray();
+        const conflicting = candidates.filter((candidate) => {
+          if (candidate.id === transactionId) {
+            return false;
+          }
+          if (candidate.status !== "submitting" && candidate.status !== "submitted") {
+            return false;
+          }
+          if (
+            aggregate.record.replacesTransactionId &&
+            aggregate.record.replacesTransactionId === candidate.id &&
+            candidate.status === "submitted"
+          ) {
+            return false;
+          }
+          return true;
+        });
+
+        if (conflicting.length > 0) {
+          throw new TransactionConflictKeyCollisionError({
+            transactionId,
+            conflictKey,
+            conflictingTransactionIds: conflicting.map((candidate) => candidate.id),
+          });
+        }
+      }
+
+      await this.records.put(aggregate.record);
+      await this.submissions.where("transactionId").equals(transactionId).delete();
+      if (aggregate.submissions.length > 0) {
+        await this.submissions.bulkAdd(aggregate.submissions);
+      }
+    });
+  }
+
   async listTransactionHistory(query: ListTransactionHistoryQuery = {}): Promise<TransactionRecord[]> {
     await this.ctx.ready;
 
@@ -76,7 +129,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     }
 
     records.sort(compareRecordsNewestFirst);
-    return records.slice(0, query.limit ?? 100);
+    return records.slice(0, query.limit ?? records.length);
   }
 
   async findTransactionRecordsByConflictKey(key: TransactionConflictKey): Promise<TransactionRecord[]> {

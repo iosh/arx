@@ -211,9 +211,6 @@ export class TransactionAggregateService {
       aggregate.record.status = "submitted";
       aggregate.record.activeSubmissionId = null;
       aggregate.record.submitted = cloneJsonValue(input.submitted);
-      if (input.conflictKey !== undefined) {
-        aggregate.record.conflictKey = input.conflictKey;
-      }
     });
   }
 

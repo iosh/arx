@@ -8,7 +8,7 @@ import type { TransactionStatus as StorageTransactionStatus, TransactionRecord }
 import { buildEip155ApprovalReview } from "../namespace/eip155/approvalReview.js";
 import type { Eip155UnsignedTransaction } from "../namespace/eip155/unsignedTransaction.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
-import type { NamespaceTransaction } from "../namespace/types.js";
+import type { NamespaceTransaction, SubmittedTransactionInspection } from "../namespace/types.js";
 import type { TransactionProposalTerminationReason } from "../proposal/index.js";
 import { TransactionProposalRuntime } from "../proposal/TransactionProposalRuntime.js";
 import type { TransactionProposalMeta } from "../proposal/types.js";
@@ -54,9 +54,14 @@ export const DEFAULT_UNSIGNED_TRANSACTION: Eip155UnsignedTransaction = {
 
 export const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
+const pendingSubmittedInspection = {
+  chainStatus: "pending",
+  evidence: null,
+} satisfies SubmittedTransactionInspection;
+
 export const createReceiptTrackingStub = () => ({
   fetchReceipt: vi.fn(async () => null),
-  inspectSubmittedTransaction: vi.fn(async () => ({ chainStatus: "pending", evidence: null })),
+  inspectSubmittedTransaction: vi.fn(async () => pendingSubmittedInspection),
 });
 
 export const createNamespaceTransactionStub = (
@@ -66,6 +71,8 @@ export const createNamespaceTransactionStub = (
     prepare: (...args: never[]) => unknown;
     buildReview: (...args: never[]) => unknown;
     applyDraftEdit: (...args: never[]) => unknown;
+    deriveApprovalResourceKey: (...args: never[]) => unknown;
+    finalizeApproval: (...args: never[]) => unknown;
     deriveConflictKey: (...args: never[]) => unknown;
     sign: (...args: never[]) => unknown;
     broadcast: (...args: never[]) => unknown;
@@ -84,9 +91,17 @@ export const createNamespaceTransactionStub = (
   proposal: {
     prepare:
       (overrides?.prepare as never) ??
-      vi.fn(async () => ({ status: "ready", prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION) })),
+      vi.fn(async () => ({
+        status: "ready",
+        prepared: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+        reviewSnapshot: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
+      })),
     buildReview: (overrides?.buildReview as never) ?? buildEip155ApprovalReview,
     ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit as never } : {}),
+    ...(overrides?.deriveApprovalResourceKey
+      ? { deriveApprovalResourceKey: overrides.deriveApprovalResourceKey as never }
+      : {}),
+    ...(overrides?.finalizeApproval ? { finalizeApproval: overrides.finalizeApproval as never } : {}),
     ...(overrides?.deriveConflictKey ? { deriveConflictKey: overrides.deriveConflictKey as never } : {}),
   },
   execution: {
@@ -109,7 +124,6 @@ export const createNamespaceTransactionStub = (
       vi.fn(async () => ({
         broadcastIdentity: { hash: DEFAULT_SUBMITTED.hash },
         submitted: DEFAULT_SUBMITTED,
-        conflictKey: null,
       })),
   },
   record: {

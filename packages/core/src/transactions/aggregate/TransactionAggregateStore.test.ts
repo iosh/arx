@@ -23,13 +23,14 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
 const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRecord): number =>
   right.createdAt - left.createdAt || right.id.localeCompare(left.id);
 
-const createTransactionInput = (
-  overrides: Partial<CreateTransactionInput> & {
-    request?: Partial<CreateTransactionInput["request"]> & {
-      payload?: JsonValue;
-    };
-  } = {},
-): CreateTransactionInput => ({
+type CreateTransactionInputOverrides = Omit<Partial<CreateTransactionInput>, "request"> & {
+  request?: {
+    kind?: CreateTransactionInput["request"]["kind"];
+    payload?: JsonValue;
+  };
+};
+
+const createTransactionInput = (overrides: CreateTransactionInputOverrides = {}): CreateTransactionInput => ({
   namespace: overrides.namespace ?? "eip155",
   chainRef: overrides.chainRef ?? DEFAULT_CHAIN_REF,
   origin: overrides.origin ?? "https://dapp.example",
@@ -84,6 +85,9 @@ const createInMemoryTransactionsStoragePort = (
         throw new Error(`Missing aggregate "${transactionId}"`);
       }
       store.set(transactionId, cloneAggregate(aggregate));
+    },
+    async commitApprovedTransactionAggregate({ aggregate }) {
+      await port.saveTransactionAggregate(aggregate);
     },
     async listTransactionHistory(query: ListTransactionHistoryQuery = {}) {
       const records = [...store.values()].map((aggregate) => structuredClone(aggregate.record));

@@ -18,8 +18,13 @@ export type {
 } from "./access.js";
 export { TransactionAggregateStore } from "./aggregate/index.js";
 export type {
+  ApprovalStaleTransactionApprovalSessionResult,
+  ApprovedTransactionApprovalSessionResult,
   ApproveTransactionApprovalSessionInput,
+  ApproveTransactionApprovalSessionResult,
+  BlockedTransactionApprovalSessionResult,
   EditTransactionApprovalSessionInput,
+  FailedTransactionApprovalSessionResult,
   OpenTransactionApprovalSessionInput,
   PrepareTransactionApprovalSessionInput,
   ResolveTransactionApprovalSessionInput,

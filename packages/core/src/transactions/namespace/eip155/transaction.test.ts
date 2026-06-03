@@ -94,7 +94,7 @@ describe("createEip155Transaction", () => {
     });
   });
 
-  it("broadcasts a raw transaction and returns submitted facts plus conflictKey", async () => {
+  it("broadcasts a raw transaction and returns submitted facts", async () => {
     const { adapter, broadcaster } = createAdapter();
     if (!adapter.submission) throw new Error("Expected submission contract");
 
@@ -129,10 +129,6 @@ describe("createEip155Transaction", () => {
       chainId: TEST_CHAINS.MAINNET_CHAIN_ID,
       from: TEST_ADDRESSES.ACCOUNT_AA,
       nonce: "0x3",
-    });
-    expect(result.conflictKey).toEqual({
-      kind: "eip155.nonce",
-      value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x3",
     });
   });
 

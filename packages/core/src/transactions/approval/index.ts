@@ -5,8 +5,13 @@ export {
 } from "./errors.js";
 export { TransactionApprovalSessionService } from "./TransactionApprovalSessionService.js";
 export type {
+  ApprovalStaleTransactionApprovalSessionResult,
+  ApprovedTransactionApprovalSessionResult,
   ApproveTransactionApprovalSessionInput,
+  ApproveTransactionApprovalSessionResult,
+  BlockedTransactionApprovalSessionResult,
   EditTransactionApprovalSessionInput,
+  FailedTransactionApprovalSessionResult,
   OpenTransactionApprovalSessionInput,
   PrepareTransactionApprovalSessionInput,
   ResolveTransactionApprovalSessionInput,

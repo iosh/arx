@@ -57,9 +57,16 @@ export class TransactionAggregateStore {
   }
 
   async approveTransaction(input: ApproveTransactionInput): Promise<TransactionAggregate> {
-    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
-      this.#service.approveTransaction(aggregate, input),
-    );
+    const aggregate = await this.#storage.loadTransactionAggregate(input.transactionId);
+    if (!aggregate) {
+      throw new TransactionAggregateNotFoundError(input.transactionId);
+    }
+
+    const next = this.#service.approveTransaction(aggregate, input);
+    await this.#storage.commitApprovedTransactionAggregate({
+      aggregate: next,
+    });
+    return next;
   }
 
   async rejectTransaction(input: TerminalTransactionInput): Promise<TransactionAggregate> {

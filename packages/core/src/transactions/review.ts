@@ -7,6 +7,7 @@ export const Eip155TransactionReviewDetailsSchema = z.strictObject({
   to: z.string().nullable(),
   value: z.string().min(1),
   data: z.string().nullable(),
+  nonce: z.string().nullable(),
   gasLimit: z.string().nullable(),
   fees: z.strictObject({
     gasPrice: z.string().nullable(),

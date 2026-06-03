@@ -1,3 +1,4 @@
+import * as Hex from "ox/Hex";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { Eip155SubmittedTransactionSchema, Eip155TransactionReceiptSchema } from "../../../storage/schemas.js";
@@ -12,6 +13,8 @@ import { deriveEip155TransactionRequestForChain } from "./request.js";
 import type { Eip155Signer } from "./signer.js";
 import type { Eip155SubmittedTransaction, Eip155TransactionReceipt } from "./transactionTypes.js";
 import type {
+  Eip155ApprovalFinalizeContext,
+  Eip155ApprovalFinalizeResult,
   Eip155ApprovalReviewContext,
   Eip155DraftEditContext,
   Eip155PrepareContext,
@@ -88,6 +91,123 @@ const readSignedTransactionPayload = (broadcastInput: { kind: string; payload: R
   };
 };
 
+const isWalletManagedNonce = (context: Eip155ApprovalFinalizeContext): boolean =>
+  context.request.payload.nonce === undefined;
+
+const hasAllowedReplacementTarget = (context: Eip155ApprovalFinalizeContext): boolean => {
+  const replacement = context.replacement;
+  if (!replacement) {
+    return false;
+  }
+
+  const replaced = context.localActiveTransactions.find(
+    (transaction) => transaction.transactionId === replacement.transactionId,
+  );
+  if (!replaced || replaced.status !== "submitted") {
+    return false;
+  }
+
+  return replaced.approvedPayload.nonce === context.approvedPayload.nonce;
+};
+
+const findBlockingLocalNonceConflicts = (context: Eip155ApprovalFinalizeContext): string[] => {
+  return context.localActiveTransactions
+    .filter((transaction) => transaction.approvedPayload.nonce === context.approvedPayload.nonce)
+    .filter((transaction) => {
+      const replacement = context.replacement;
+      return !(
+        replacement &&
+        replacement.transactionId === transaction.transactionId &&
+        transaction.status === "submitted"
+      );
+    })
+    .map((transaction) => transaction.transactionId);
+};
+
+const deriveLocalNextNonce = (context: Eip155ApprovalFinalizeContext): `0x${string}` | null => {
+  let maxNonce: bigint | null = null;
+
+  for (const transaction of context.localActiveTransactions) {
+    const nonce = transaction.approvedPayload.nonce;
+    const numericNonce = Hex.toBigInt(nonce);
+    maxNonce = maxNonce === null || numericNonce > maxNonce ? numericNonce : maxNonce;
+  }
+
+  return maxNonce === null ? null : (Hex.fromNumber(maxNonce + 1n) as `0x${string}`);
+};
+
+const finalizeEip155Approval = async (
+  context: Eip155ApprovalFinalizeContext,
+  deps: Pick<AdapterDeps, "rpcClientFactory">,
+): Promise<Eip155ApprovalFinalizeResult> => {
+  const rpc = deps.rpcClientFactory(context.chainRef);
+  const pendingNonce = await rpc.getTransactionCount(context.from, { blockTag: "pending" });
+
+  if (isWalletManagedNonce(context)) {
+    const localNextNonce = deriveLocalNextNonce(context);
+    const finalNonce =
+      localNextNonce === null || Hex.toBigInt(localNextNonce) <= Hex.toBigInt(pendingNonce)
+        ? pendingNonce
+        : localNextNonce;
+    const approvedPayload: Eip155UnsignedTransaction = {
+      ...context.approvedPayload,
+      nonce: finalNonce,
+    };
+    return {
+      status: "approved",
+      approvedPayload,
+      conflictKey: buildEip155TransactionConflictKey({
+        chainRef: context.chainRef,
+        accountKey: context.accountKey,
+        nonce: approvedPayload.nonce,
+      }),
+      expiresAt: null,
+    };
+  }
+
+  const approvedNonce = BigInt(context.approvedPayload.nonce);
+  const latestPendingNonce = BigInt(pendingNonce);
+  const blockingLocalConflicts = findBlockingLocalNonceConflicts(context);
+  if (blockingLocalConflicts.length > 0) {
+    return {
+      status: "approval_stale",
+      stale: {
+        reason: "transaction.approval_stale",
+        message: "Transaction approval is stale and must be refreshed.",
+        data: {
+          currentNonce: context.approvedPayload.nonce,
+          conflictingTransactionIds: blockingLocalConflicts,
+        },
+      },
+    };
+  }
+
+  if (approvedNonce < latestPendingNonce && !hasAllowedReplacementTarget(context)) {
+    return {
+      status: "approval_stale",
+      stale: {
+        reason: "transaction.approval_stale",
+        message: "Transaction approval is stale and must be refreshed.",
+        data: {
+          currentNonce: context.approvedPayload.nonce,
+          pendingNonce,
+        },
+      },
+    };
+  }
+
+  return {
+    status: "approved",
+    approvedPayload: context.approvedPayload,
+    conflictKey: buildEip155TransactionConflictKey({
+      chainRef: context.chainRef,
+      accountKey: context.accountKey,
+      nonce: context.approvedPayload.nonce,
+    }),
+    expiresAt: null,
+  };
+};
+
 export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction<"eip155"> => {
   const validateRequest = createEip155RequestValidator({ chains: deps.chains });
   const prepareTransaction = createEip155PrepareTransaction({
@@ -107,6 +227,13 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       prepare: (context: Eip155PrepareContext) => prepareTransaction(context),
       buildReview: (context: Eip155ApprovalReviewContext) => buildEip155ApprovalReview(context),
       applyDraftEdit: (context: Eip155DraftEditContext) => applyEip155TransactionDraftEdit(context),
+      deriveApprovalResourceKey(context) {
+        return {
+          kind: "eip155.account_nonce",
+          value: `${context.chainRef}:${context.accountKey}`,
+        };
+      },
+      finalizeApproval: (context: Eip155ApprovalFinalizeContext) => finalizeEip155Approval(context, deps),
       deriveConflictKey(context) {
         return buildEip155TransactionConflictKey({
           chainRef: context.chainRef,
@@ -168,11 +295,6 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         return {
           broadcastIdentity: { hash: txHash },
           submitted,
-          conflictKey: buildEip155TransactionConflictKey({
-            chainRef: context.chainRef,
-            accountKey: context.accountKey,
-            nonce: submitted.nonce,
-          }),
         };
       },
     },

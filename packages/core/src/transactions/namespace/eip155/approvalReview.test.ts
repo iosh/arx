@@ -38,6 +38,7 @@ describe("buildEip155ApprovalReview", () => {
       to: TEST_ADDRESSES.TO_B,
       value: TEST_VALUES.ZERO,
       data: "0xabcdef",
+      nonce: null,
       gasLimit: TEST_VALUES.STANDARD_GAS_LIMIT,
       fees: {
         gasPrice: TEST_VALUES.GAS_PRICE_1GWEI,

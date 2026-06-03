@@ -152,6 +152,7 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
           ...coreFields,
           gasPrice: prepared.gasPrice,
         }),
+        reviewSnapshot: prepared,
       };
     }
 
@@ -164,6 +165,7 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
           Eip155UnsignedTransactionDraft["maxPriorityFeePerGas"]
         >,
       }),
+      reviewSnapshot: prepared,
     };
   };
 };

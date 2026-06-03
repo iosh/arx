@@ -1,16 +1,23 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
-import type { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
+import { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 import { TransactionRecoveryService } from "./recovery/TransactionRecoveryService.js";
 import { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
+import { TransactionResourceLock } from "./TransactionResourceLock.js";
 import { SubmittedTransactionTrackingService } from "./tracking/SubmittedTransactionTrackingService.js";
+
+type CreateApprovalSessionOptions = {
+  now?: () => number;
+  createId?: () => string;
+};
 
 type CreateTransactionServicesOptions = {
   transactions: TransactionAggregateStore;
-  approvals: TransactionApprovalSessionService;
   namespaces: NamespaceTransactions;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  approvalSessionOptions?: CreateApprovalSessionOptions;
+  resourceLock?: TransactionResourceLock;
 };
 
 export type TransactionServices = {
@@ -21,16 +28,27 @@ export type TransactionServices = {
 };
 
 export const createTransactionServices = (options: CreateTransactionServicesOptions): TransactionServices => {
+  const resourceLock = options.resourceLock ?? new TransactionResourceLock();
+  const approvals = new TransactionApprovalSessionService({
+    transactions: options.transactions,
+    namespaces: options.namespaces,
+    accountCodecs: options.accountCodecs,
+    resourceLock,
+    ...options.approvalSessionOptions,
+  });
+
   const submission = new TransactionSubmissionExecutor({
     transactions: options.transactions,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
+    resourceLock,
   });
 
   const tracking = new SubmittedTransactionTrackingService({
     transactions: options.transactions,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
+    resourceLock,
   });
 
   const recovery = new TransactionRecoveryService({
@@ -39,7 +57,7 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   });
 
   return {
-    approvals: options.approvals,
+    approvals,
     submission,
     tracking,
     recovery,

@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { TransactionConflictKey } from "../aggregate/types.js";
+import type { TransactionConflictKey, TransactionReplacementType } from "../aggregate/types.js";
 import type { TransactionReviewDetails } from "../review.js";
 import type {
   NamespaceTransactionDraftEdit,
@@ -25,6 +25,12 @@ export type TransactionProposalError = {
   data?: unknown;
 };
 
+export type TransactionApprovalStale = {
+  reason: string;
+  message: string;
+  data?: unknown;
+};
+
 // Execution/tracking failure normalized for namespace-owned flow results.
 export type TransactionFailure = {
   reason: string;
@@ -34,7 +40,7 @@ export type TransactionFailure = {
 
 /** Result of one namespace prepare pass. */
 export type TransactionPrepareResult<TPrepared = TransactionPrepared, TReviewSnapshot = TPrepared> =
-  | { status: "ready"; prepared: TPrepared }
+  | { status: "ready"; prepared: TPrepared; reviewSnapshot?: TReviewSnapshot | null }
   | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot?: TReviewSnapshot | null }
   | { status: "failed"; error: TransactionProposalError; reviewSnapshot?: TReviewSnapshot | null };
 
@@ -52,7 +58,6 @@ export type BroadcastInput = {
 export type BroadcastResult<TNamespace extends string = string> = {
   broadcastIdentity: Record<string, unknown>;
   submitted: TransactionSubmitted<TNamespace>;
-  conflictKey: TransactionConflictKey | null;
 };
 
 export type SubmittedTransactionInspection<TNamespace extends string = string> =
@@ -167,6 +172,64 @@ export type TransactionProposalConflictContext<TNamespace extends string = strin
   approvedPayload: TransactionPrepared<TNamespace>;
 };
 
+export type TransactionApprovalResourceKey = {
+  kind: string;
+  value: string;
+};
+
+export type TransactionApprovalResourceContext<TNamespace extends string = string> = {
+  transactionId: string;
+  namespace: TNamespace;
+  chainRef: ChainRef;
+  origin: string;
+  accountKey: string;
+  from: AccountAddress;
+};
+
+export type TransactionApprovalFinalizeContext<TNamespace extends string = string> = {
+  transactionId: string;
+  approvalId: string;
+  namespace: TNamespace;
+  chainRef: ChainRef;
+  origin: string;
+  accountKey: string;
+  from: AccountAddress;
+  request: TransactionRequest<TNamespace>;
+  approvedPayload: TransactionPrepared<TNamespace>;
+  replacement: {
+    transactionId: string;
+    type: TransactionReplacementType | null;
+  } | null;
+  localActiveTransactions: readonly {
+    transactionId: string;
+    status: "submitting" | "submitted";
+    approvedPayload: TransactionPrepared<TNamespace>;
+    conflictKey: TransactionConflictKey | null;
+  }[];
+};
+
+export type TransactionApprovalFinalizeResult<TNamespace extends string = string> =
+  | {
+      status: "approved";
+      approvedPayload: TransactionPrepared<TNamespace>;
+      conflictKey: TransactionConflictKey | null;
+      expiresAt: number | null;
+    }
+  | {
+      status: "approval_stale";
+      stale: TransactionApprovalStale;
+    }
+  | {
+      status: "blocked";
+      blocker: TransactionProposalBlocker;
+      reviewSnapshot?: TransactionReviewSnapshot<TNamespace> | null;
+    }
+  | {
+      status: "failed";
+      error: TransactionProposalError;
+      reviewSnapshot?: TransactionReviewSnapshot<TNamespace> | null;
+    };
+
 export type TransactionBroadcastInputContext<TNamespace extends string = string> = {
   transactionId: string;
   namespace: TNamespace;
@@ -196,6 +259,12 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>, TransactionReviewSnapshot<TNamespace>>>;
   buildReview?(context: TransactionApprovalReviewContext<TNamespace>): TransactionReviewDetails | null;
   applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
+  deriveApprovalResourceKey?(
+    context: TransactionApprovalResourceContext<TNamespace>,
+  ): TransactionApprovalResourceKey | null;
+  finalizeApproval?(
+    context: TransactionApprovalFinalizeContext<TNamespace>,
+  ): Promise<TransactionApprovalFinalizeResult<TNamespace>>;
   deriveConflictKey?(context: TransactionProposalConflictContext<TNamespace>): TransactionConflictKey | null;
 };
 

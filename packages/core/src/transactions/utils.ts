@@ -1,7 +1,6 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type {
   TransactionPrepareContext,
-  TransactionProposalStateContext,
   TransactionRecordContext,
   TransactionReplacementKey,
   TransactionSignContext,
@@ -89,7 +88,7 @@ export const deriveExecutionTerminationReason = (reason: unknown): TransactionPr
   return "execution_failed";
 };
 
-export const buildProposalStateContext = (meta: TransactionProposalMeta): TransactionProposalStateContext => ({
+export const buildProposalStateContext = (meta: TransactionProposalMeta) => ({
   transactionId: meta.id,
   namespace: meta.namespace,
   chainRef: meta.chainRef,

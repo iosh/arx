@@ -1,6 +1,7 @@
-export { TransactionAggregateNotFoundError } from "../aggregate/errors.js";
+export { TransactionAggregateNotFoundError, TransactionConflictKeyCollisionError } from "../aggregate/errors.js";
 export type { JsonObject, JsonPrimitive, JsonValue } from "../aggregate/json.js";
 export type {
+  CommitApprovedTransactionAggregateInput,
   ListRecoverableTransactionAggregatesQuery,
   ListTransactionHistoryCursor,
   ListTransactionHistoryQuery,

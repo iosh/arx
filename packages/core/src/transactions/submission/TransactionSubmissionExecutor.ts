@@ -1,11 +1,13 @@
 import { isArxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { JsonValue, TransactionAggregate } from "../aggregate/index.js";
+import type { JsonValue, TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
+import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
 import { buildBroadcastContext, buildBroadcastInputContext } from "../broadcastContexts.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
 import type { BroadcastInput, BroadcastResult, NamespaceTransactionSubmission } from "../namespace/types.js";
+import type { TransactionResourceLock } from "../TransactionResourceLock.js";
 import { TransactionAcceptanceCommitError } from "./errors.js";
 
 type TransactionSubmissionExecutorDeps = {
@@ -19,6 +21,7 @@ type TransactionSubmissionExecutorDeps = {
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  resourceLock: TransactionResourceLock;
 };
 
 export type TransactionSubmissionResult = {
@@ -37,11 +40,13 @@ export class TransactionSubmissionExecutor {
   >;
   #namespaces: Pick<NamespaceTransactions, "require">;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  #resourceLock: TransactionResourceLock;
 
   constructor(deps: TransactionSubmissionExecutorDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
     this.#accountCodecs = deps.accountCodecs;
+    this.#resourceLock = deps.resourceLock;
   }
 
   /**
@@ -61,7 +66,7 @@ export class TransactionSubmissionExecutor {
     });
 
     const signing = await this.#transactions.beginSubmissionSigning({
-      transactionId,
+      transactionId: current.record.id,
       submissionId,
     });
 
@@ -69,8 +74,8 @@ export class TransactionSubmissionExecutor {
     try {
       broadcastInput = await submission.createBroadcastInput(buildBroadcastInputContext(signing, this.#accountCodecs));
     } catch (error) {
-      await this.#transactions.failSubmission({
-        transactionId,
+      await this.#failSubmissionWithResourceLock({
+        aggregate: current,
         submissionId,
         reason: this.#buildFailureReason({
           error,
@@ -82,7 +87,7 @@ export class TransactionSubmissionExecutor {
     }
 
     const broadcasting = await this.#transactions.queueSubmissionBroadcast({
-      transactionId,
+      transactionId: current.record.id,
       submissionId,
     });
 
@@ -95,8 +100,8 @@ export class TransactionSubmissionExecutor {
       });
       broadcastResult = await broadcast(buildBroadcastContext(broadcasting, broadcastInput, this.#accountCodecs));
     } catch (error) {
-      await this.#transactions.failSubmission({
-        transactionId,
+      await this.#failSubmissionWithResourceLock({
+        aggregate: current,
         submissionId,
         reason: this.#buildFailureReason({
           error,
@@ -109,10 +114,9 @@ export class TransactionSubmissionExecutor {
 
     try {
       const accepted = await this.#transactions.recordBroadcastAcceptance({
-        transactionId,
+        transactionId: current.record.id,
         submissionId,
         submitted: broadcastResult.submitted as never,
-        conflictKey: broadcastResult.conflictKey,
       });
 
       return {
@@ -121,7 +125,7 @@ export class TransactionSubmissionExecutor {
       };
     } catch (error) {
       throw new TransactionAcceptanceCommitError({
-        transactionId,
+        transactionId: current.record.id,
         submissionId,
         broadcastIdentity: structuredClone(broadcastResult.broadcastIdentity as JsonValue),
         submitted: structuredClone(broadcastResult.submitted as JsonValue),
@@ -147,6 +151,20 @@ export class TransactionSubmissionExecutor {
       throw new Error(`Transaction "${aggregate.record.id}" is missing an active submission.`);
     }
     return submissionId;
+  }
+
+  async #failSubmissionWithResourceLock(params: {
+    aggregate: TransactionAggregate;
+    submissionId: string;
+    reason: TransactionTerminalReason;
+  }) {
+    return await this.#resourceLock.withKey(deriveApprovalResourceKeyFromAggregate(params.aggregate), async () => {
+      return await this.#transactions.failSubmission({
+        transactionId: params.aggregate.record.id,
+        submissionId: params.submissionId,
+        reason: params.reason,
+      });
+    });
   }
 
   #buildFailureReason(params: { error: unknown; phase: "create_broadcast_input" | "broadcast"; namespace: string }) {

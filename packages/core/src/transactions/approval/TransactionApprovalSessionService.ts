@@ -91,8 +91,31 @@ export class TransactionApprovalSessionService {
     return session ? structuredClone(session) : null;
   }
 
+  getSessionByApprovalId(approvalId: string): TransactionApprovalSession | null {
+    const session = this.#findOpenSessionByApprovalId(approvalId);
+    return session ? structuredClone(session) : null;
+  }
+
+  discardSessionByTransactionId(transactionId: string): TransactionApprovalSession | null {
+    const session = this.#sessions.get(transactionId);
+    if (!session) {
+      return null;
+    }
+
+    this.#sessions.delete(transactionId);
+    return structuredClone(session);
+  }
+
   async openSession(input: OpenTransactionApprovalSessionInput): Promise<TransactionApprovalSession> {
     const opened = await this.#withSessionLock(input.transactionId, async () => {
+      const approvalSession = this.#findOpenSessionByApprovalId(input.approvalId);
+      if (approvalSession && approvalSession.transactionId !== input.transactionId) {
+        throw new TransactionApprovalSessionInvariantError(
+          input.transactionId,
+          `Approval "${input.approvalId}" already owns transaction "${approvalSession.transactionId}".`,
+        );
+      }
+
       const existing = this.#sessions.get(input.transactionId);
       if (existing) {
         this.#assertApprovalOwnsSession(existing, input.approvalId);
@@ -340,6 +363,16 @@ export class TransactionApprovalSessionService {
       this.#sessions.delete(input.transactionId);
       return next;
     });
+  }
+
+  #findOpenSessionByApprovalId(approvalId: string): TransactionApprovalSession | null {
+    for (const session of this.#sessions.values()) {
+      if (session.approvalId === approvalId) {
+        return session;
+      }
+    }
+
+    return null;
   }
 
   #buildDraftRequest(session: TransactionApprovalSession): TransactionRequest {

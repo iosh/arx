@@ -44,7 +44,7 @@ export type TransactionPrepareResult<TPrepared = TransactionPrepared, TReviewSna
   | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot?: TReviewSnapshot | null }
   | { status: "failed"; error: TransactionProposalError; reviewSnapshot?: TReviewSnapshot | null };
 
-// Legacy execution payload kept for the old facade/runtime until replacement.
+// Legacy execution payload kept for the old transaction runtime until replacement.
 export type SignedTransactionPayload = {
   raw: string;
   hash?: string | null;
@@ -268,7 +268,7 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   deriveConflictKey?(context: TransactionProposalConflictContext<TNamespace>): TransactionConflictKey | null;
 };
 
-// Legacy execution contract kept for the old facade/runtime.
+// Legacy execution contract kept for the old transaction runtime.
 export type NamespaceTransactionExecution<TNamespace extends string = string> = {
   sign(
     context: TransactionSignContext<TNamespace>,
@@ -293,7 +293,7 @@ export type NamespaceTransactionSubmission<TNamespace extends string = string> =
 };
 
 export type NamespaceTransactionTracking<TNamespace extends string = string> = {
-  // Legacy tracking contract kept for the old facade/runtime.
+  // Legacy tracking contract kept for the old transaction runtime.
   fetchReceipt?(context: TransactionTrackingContext<TNamespace>): Promise<ReceiptResolution<TNamespace> | null>;
   detectReplacement?(context: TransactionTrackingContext<TNamespace>): Promise<ReplacementResolution | null>;
   deriveReplacementKey?(context: TransactionTrackingContext<TNamespace>): TransactionReplacementKey | null;

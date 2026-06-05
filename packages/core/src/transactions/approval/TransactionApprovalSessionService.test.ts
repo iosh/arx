@@ -225,7 +225,7 @@ const createServices = (namespaces: NamespaceTransactions) => {
   let nextTransactionId = 0;
   let nextPrepareId = 0;
   const storage = createInMemoryTransactionsStoragePort();
-  const transactionStore = new TransactionAggregateStore({
+  const aggregateStore = new TransactionAggregateStore({
     storage: storage.port,
     now: () => now,
     createId: () => {
@@ -234,7 +234,7 @@ const createServices = (namespaces: NamespaceTransactions) => {
     },
   });
   const sessions = new TransactionApprovalSessionService({
-    transactions: transactionStore,
+    transactions: aggregateStore,
     namespaces,
     accountCodecs,
     resourceLock: new TransactionResourceLock(),
@@ -246,7 +246,7 @@ const createServices = (namespaces: NamespaceTransactions) => {
   });
 
   return {
-    transactionStore,
+    aggregateStore,
     sessions,
     tick: (value: number) => {
       now = value;
@@ -268,9 +268,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions, tick } = createServices(namespaces);
+    const { aggregateStore, sessions, tick } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
 
     const opened = await sessions.openSession({
       transactionId: "tx-1",
@@ -349,9 +349,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -402,9 +402,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions, tick } = createServices(namespaces);
+    const { aggregateStore, sessions, tick } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -446,9 +446,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         request: {
           payload: {
@@ -499,9 +499,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-1",
         request: {
@@ -515,7 +515,7 @@ describe("TransactionApprovalSessionService", () => {
         },
       }),
     );
-    await transactionStore.approveTransaction({
+    await aggregateStore.approveTransaction({
       transactionId: "tx-1",
       approvalId: "approval-1",
       approvedAt: null,
@@ -527,7 +527,7 @@ describe("TransactionApprovalSessionService", () => {
       },
     });
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-2",
         request: {
@@ -577,13 +577,13 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
     const conflictKey = {
       kind: "eip155.nonce",
       value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountKey()}:0x7`,
     } as const;
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-1",
         request: {
@@ -597,7 +597,7 @@ describe("TransactionApprovalSessionService", () => {
         },
       }),
     );
-    await transactionStore.approveTransaction({
+    await aggregateStore.approveTransaction({
       transactionId: "tx-1",
       approvalId: "approval-1",
       approvedAt: null,
@@ -605,15 +605,15 @@ describe("TransactionApprovalSessionService", () => {
       approvedRequestPayload: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
       conflictKey,
     });
-    await transactionStore.beginSubmissionSigning({
+    await aggregateStore.beginSubmissionSigning({
       transactionId: "tx-1",
       submissionId: "submission-1",
     });
-    await transactionStore.queueSubmissionBroadcast({
+    await aggregateStore.queueSubmissionBroadcast({
       transactionId: "tx-1",
       submissionId: "submission-1",
     });
-    await transactionStore.recordBroadcastAcceptance({
+    await aggregateStore.recordBroadcastAcceptance({
       transactionId: "tx-1",
       submissionId: "submission-1",
       submitted: {
@@ -624,7 +624,7 @@ describe("TransactionApprovalSessionService", () => {
       },
     });
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-2",
         replacement: {
@@ -665,9 +665,9 @@ describe("TransactionApprovalSessionService", () => {
     delete namespace.proposal.buildReview;
 
     const namespaces = new NamespaceTransactions([["eip155", namespace]]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -696,9 +696,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -744,9 +744,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -828,9 +828,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     await sessions.openSession({ transactionId: "tx-1", approvalId: "approval-1" });
 
     const firstPrepare = sessions.prepareSession({
@@ -886,9 +886,9 @@ describe("TransactionApprovalSessionService", () => {
 
   it("returns approval_stale when approval uses an older prepare version", async () => {
     const namespaces = new NamespaceTransactions([["eip155", createNamespaceTransactionStub()]]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -912,9 +912,9 @@ describe("TransactionApprovalSessionService", () => {
 
   it("returns approval_stale when the same prepare is approved again after success", async () => {
     const namespaces = new NamespaceTransactions([["eip155", createNamespaceTransactionStub()]]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -954,9 +954,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions } = createServices(namespaces);
+    const { aggregateStore, sessions } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -986,9 +986,9 @@ describe("TransactionApprovalSessionService", () => {
         }),
       ],
     ]);
-    const { transactionStore, sessions, tick } = createServices(namespaces);
+    const { aggregateStore, sessions, tick } = createServices(namespaces);
 
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
     const firstOpened = await sessions.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -1001,7 +1001,7 @@ describe("TransactionApprovalSessionService", () => {
     });
     expect(firstApproved.status).toBe("approved");
 
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
     const secondOpened = await sessions.openSession({
       transactionId: "tx-3",
       approvalId: "approval-2",

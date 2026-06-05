@@ -230,7 +230,7 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
     ],
   ]);
 
-  const transactionStore = new TransactionAggregateStore({
+  const aggregateStore = new TransactionAggregateStore({
     storage: storage.port,
     now: () => now,
     createId: () => {
@@ -240,7 +240,7 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
   });
 
   const services = createTransactionServices({
-    transactions: transactionStore,
+    aggregateStore,
     namespaces,
     accountCodecs,
     approvalSessionOptions: {
@@ -254,7 +254,7 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
 
   return {
     services,
-    transactionStore,
+    aggregateStore,
     tick(value: number) {
       now = value;
     },
@@ -263,8 +263,8 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
 
 describe("createTransactionServices", () => {
   it("submits an approved transaction through createBroadcastInput and broadcast", async () => {
-    const { services, transactionStore, tick } = createServices();
-    await transactionStore.createTransaction(createTransactionInput());
+    const { services, aggregateStore, tick } = createServices();
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -294,7 +294,7 @@ describe("createTransactionServices", () => {
   });
 
   it("inspects a submitted transaction and advances it to confirmed", async () => {
-    const { services, transactionStore, tick } = createServices({
+    const { services, aggregateStore, tick } = createServices({
       getTransactionReceipt: vi.fn(async () =>
         createRpcReceipt({
           transactionHash: DEFAULT_BROADCAST_HASH,
@@ -304,7 +304,7 @@ describe("createTransactionServices", () => {
       ) as Eip155RpcClient["getTransactionReceipt"],
     });
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -330,10 +330,10 @@ describe("createTransactionServices", () => {
   });
 
   it("resumes recovery by cancelling abandoned approval work and failing incomplete submissions", async () => {
-    const { services, transactionStore, tick } = createServices();
+    const { services, aggregateStore, tick } = createServices();
 
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
     const opened = await services.approvals.openSession({
       transactionId: "tx-2",
       approvalId: "approval-2",
@@ -358,11 +358,11 @@ describe("createTransactionServices", () => {
     const getTransactionReceipt = vi.fn(async () => {
       throw new Error("temporary rpc outage");
     });
-    const { services, transactionStore, tick } = createServices({
+    const { services, aggregateStore, tick } = createServices({
       getTransactionReceipt,
     });
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -377,7 +377,7 @@ describe("createTransactionServices", () => {
     await services.submission.submitApprovedTransaction("tx-1");
 
     const result = await services.tracking.inspectSubmittedTransaction("tx-1");
-    const aggregate = await transactionStore.loadTransactionAggregate("tx-1");
+    const aggregate = await aggregateStore.loadTransactionAggregate("tx-1");
 
     expect(result.status).toBe("retry_later");
     expect(result.aggregate.record.status).toBe("submitted");
@@ -407,7 +407,7 @@ describe("createTransactionServices", () => {
       ],
     ]);
 
-    const transactionStore = new TransactionAggregateStore({
+    const aggregateStore = new TransactionAggregateStore({
       storage: {
         ...storage.port,
         async saveTransactionAggregate(aggregate) {
@@ -425,7 +425,7 @@ describe("createTransactionServices", () => {
     });
 
     const services = createTransactionServices({
-      transactions: transactionStore,
+      aggregateStore,
       namespaces,
       accountCodecs,
       approvalSessionOptions: {
@@ -437,7 +437,7 @@ describe("createTransactionServices", () => {
       },
     });
 
-    await transactionStore.createTransaction(createTransactionInput());
+    await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -454,7 +454,7 @@ describe("createTransactionServices", () => {
       TransactionAcceptanceCommitError,
     );
 
-    const aggregate = await transactionStore.loadTransactionAggregate("tx-1");
+    const aggregate = await aggregateStore.loadTransactionAggregate("tx-1");
     expect(aggregate?.record.status).toBe("submitting");
     expect(aggregate?.submissions[0]?.status).toBe("broadcasting");
   });
@@ -503,7 +503,7 @@ describe("createTransactionServices", () => {
         }),
       ],
     ]);
-    const transactionStore = new TransactionAggregateStore({
+    const aggregateStore = new TransactionAggregateStore({
       storage: storage.port,
       now: () => now,
       createId: () => {
@@ -512,7 +512,7 @@ describe("createTransactionServices", () => {
       },
     });
     const services = createTransactionServices({
-      transactions: transactionStore,
+      aggregateStore,
       namespaces,
       accountCodecs,
       approvalSessionOptions: {
@@ -524,7 +524,7 @@ describe("createTransactionServices", () => {
       },
     });
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         request: {
           payload: {
@@ -557,7 +557,7 @@ describe("createTransactionServices", () => {
       value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     });
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-2",
         request: {
@@ -587,7 +587,7 @@ describe("createTransactionServices", () => {
     });
     expect(approvedSecond.status).toBe("approved");
     await services.submission.submitApprovedTransaction("tx-4");
-    await transactionStore.recordTransactionConfirmed({
+    await aggregateStore.recordTransactionConfirmed({
       transactionId: "tx-4",
       receipt: {
         transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -604,7 +604,7 @@ describe("createTransactionServices", () => {
   });
 
   it("replaces other submitted local transactions as soon as the winner is confirmed", async () => {
-    const { services, transactionStore, tick } = createServices({
+    const { services, aggregateStore, tick } = createServices({
       getTransactionReceipt: vi
         .fn()
         .mockResolvedValueOnce({
@@ -615,7 +615,7 @@ describe("createTransactionServices", () => {
         .mockResolvedValue(null),
     });
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         request: {
           payload: {
@@ -641,7 +641,7 @@ describe("createTransactionServices", () => {
     expect(approvedFirst.status).toBe("approved");
     await services.submission.submitApprovedTransaction("tx-1");
 
-    await transactionStore.createTransaction(
+    await aggregateStore.createTransaction(
       createTransactionInput({
         requestId: "request-2",
         request: {
@@ -677,7 +677,7 @@ describe("createTransactionServices", () => {
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("confirmed");
 
-    const loser = await transactionStore.loadTransactionAggregate("tx-1");
+    const loser = await aggregateStore.loadTransactionAggregate("tx-1");
     expect(loser?.record.status).toBe("replaced");
     expect(loser?.record.replacedByTransactionId).toBe("tx-4");
   });
@@ -687,11 +687,11 @@ describe("createTransactionServices", () => {
       .fn()
       .mockRejectedValueOnce(new Error("temporary rpc outage"))
       .mockResolvedValue(null);
-    const { services, transactionStore, tick } = createServices({
+    const { services, aggregateStore, tick } = createServices({
       getTransactionReceipt,
     });
 
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
       approvalId: "approval-1",
@@ -705,7 +705,7 @@ describe("createTransactionServices", () => {
     expect(approved.status).toBe("approved");
     await services.submission.submitApprovedTransaction("tx-1");
 
-    await transactionStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
 
     const results = await services.recovery.recoverAfterRestart();
 

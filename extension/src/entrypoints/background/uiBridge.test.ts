@@ -545,20 +545,57 @@ const createControllers = () => {
       return CHAIN;
     },
   };
+  const mockTransaction = {
+    id: "tx-1",
+    status: "awaiting_approval" as const,
+    namespace: CHAIN.namespace,
+    chainRef: CHAIN.chainRef,
+    source: "wallet" as const,
+    origin: "arx://ui",
+    account: {
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+    requestKind: "eip155.wallet.native_transfer",
+    submitted: null,
+    receipt: null,
+    replacement: null,
+    terminalReason: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const mockTransactionApproval = {
+    approvalId: "approval-id",
+    transactionId: "tx-1",
+    namespace: CHAIN.namespace,
+    chainRef: CHAIN.chainRef,
+    origin: "arx://ui",
+    account: mockTransaction.account,
+    review: null,
+    prepare: {
+      id: "prepare-1",
+      status: "ready" as const,
+      draftRevision: 0,
+      preparedAt: 1,
+      expiresAt: null,
+      updatedAt: 1,
+    },
+    createdAt: 1,
+    updatedAt: 1,
+  };
   const transactionAccess = {
-    commands: {
-      createProposal: vi.fn(async () => ({ transactionId: "approval-id" })),
-      requestApproval: vi.fn(async () => ({ approvalId: "approval-id" })),
-      editRequest: vi.fn(async () => {}),
-      recomputePrepare: vi.fn(async () => {}),
-      approve: vi.fn(async () => ({ status: "approved" as const, transactionId: "approval-id" })),
-      reject: vi.fn(async () => {}),
-    },
-    events: {
-      onProposalChanged: vi.fn(() => () => {}),
-      onRecordChanged: vi.fn(() => () => {}),
-      onApprovalDetailInvalidated: vi.fn(() => () => {}),
-    },
+    requestTransactionApproval: vi.fn(async () => ({
+      transaction: mockTransaction,
+      approval: mockTransactionApproval,
+    })),
+    updateApprovalDraft: vi.fn(async () => mockTransactionApproval),
+    rerunApprovalPrepare: vi.fn(async () => mockTransactionApproval),
+    approveTransaction: vi.fn(async () => ({ status: "approved" as const, transaction: mockTransaction })),
+    rejectTransactionApproval: vi.fn(async () => ({ ...mockTransaction, status: "rejected" as const })),
+    getTransactionApproval: vi.fn(() => null),
+    getTransactionApprovalByTransactionId: vi.fn(() => mockTransactionApproval),
+    getTransaction: vi.fn(async () => mockTransaction),
+    onTransactionApprovalsChanged: vi.fn(() => () => {}),
   } satisfies UiTransactionsAccess;
   const providerTransactionCommands = {
     beginTransactionApproval: vi.fn(async () => ({
@@ -685,8 +722,8 @@ const createUiAccessForTest = (input: {
     keyringExport,
   });
   const transactionsAccess = {
-    commands: input.transactionsAccess?.commands ?? input.controllers.transactionAccess.commands,
-    events: input.transactionsAccess?.events ?? input.controllers.transactionAccess.events,
+    ...input.controllers.transactionAccess,
+    ...input.transactionsAccess,
   } satisfies UiTransactionsAccess;
   const activationEntries = input.activationEntries ?? {
     ...input.platform,
@@ -733,11 +770,7 @@ const createUiAccessForTest = (input: {
             getDetail: vi.fn(() => null),
           },
           write: {
-            resolve: vi.fn(async () => ({
-              approvalId: "approval-id",
-              status: "rejected" as const,
-              terminalReason: "user_reject" as const,
-            })),
+            resolve: vi.fn(async () => ({ status: "resolved" as const })),
           },
         },
         approvalEvents: input.controllers.approvals as never,

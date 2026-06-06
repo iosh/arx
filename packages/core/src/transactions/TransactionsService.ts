@@ -116,6 +116,7 @@ export type TransactionApproval = {
   account: TransactionAccount;
   review: TransactionReviewDetails | null;
   prepare: TransactionApprovalPrepare;
+  createdAt: number;
   updatedAt: number;
 };
 
@@ -203,6 +204,7 @@ type TransactionsServiceDeps = {
     | "applyDraftEdit"
     | "approveTransaction"
     | "rejectTransaction"
+    | "getSession"
     | "getSessionByApprovalId"
     | "discardSessionByTransactionId"
   >;
@@ -329,6 +331,7 @@ const buildTransactionApproval = (session: TransactionApprovalSession): Transact
   account: buildTransactionApprovalAccount(session),
   review: structuredClone(session.review),
   prepare: buildPrepare(session.prepare),
+  createdAt: session.createdAt,
   updatedAt: Math.max(session.draft.updatedAt, session.prepare.updatedAt),
 });
 
@@ -486,6 +489,25 @@ export class TransactionsService {
   getTransactionApproval(approvalId: string): TransactionApproval | null {
     const session = this.#approvalSessions.getSessionByApprovalId(approvalId);
     return session === null ? null : buildTransactionApproval(session);
+  }
+
+  getTransactionApprovalByTransactionId(transactionId: string): TransactionApproval | null {
+    const session = this.#approvalSessions.getSession(transactionId);
+    return session === null ? null : buildTransactionApproval(session);
+  }
+
+  async listTransactionApprovals(): Promise<TransactionApproval[]> {
+    const records = await this.#aggregateStore.listTransactionHistory({ status: "awaiting_approval" });
+    const approvals: TransactionApproval[] = [];
+
+    for (const record of records) {
+      const session = this.#approvalSessions.getSession(record.id);
+      if (session) {
+        approvals.push(buildTransactionApproval(session));
+      }
+    }
+
+    return approvals;
   }
 
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void {

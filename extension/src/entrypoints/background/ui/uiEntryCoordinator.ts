@@ -110,7 +110,7 @@ export const createUiEntryCoordinator = ({
     }
 
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
-    const initialDetail = uiEntryAccess.getApprovalDetail(approvalId);
+    const initialDetail = await uiEntryAccess.getApprovalDetail(approvalId);
 
     if (!initialDetail) {
       return {

@@ -54,6 +54,7 @@ export type TransactionApprovalSession = {
   origin: string;
   accountKey: string;
   from: string;
+  createdAt: number;
   draft: TransactionApprovalDraft;
   review: TransactionReviewDetails | null;
   prepare: TransactionApprovalPrepareState;

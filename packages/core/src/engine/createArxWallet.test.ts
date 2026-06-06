@@ -11,6 +11,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
+  MemoryTransactionAggregatesPort,
   MemoryTransactionsPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
@@ -50,6 +51,7 @@ const createWalletInput = (params?: {
   settingsPort?: MemorySettingsPort;
   keyringMetasPort?: MemoryKeyringMetasPort;
   transactionsPort?: MemoryTransactionsPort;
+  transactionAggregatesPort?: MemoryTransactionAggregatesPort;
 }): CreateArxWalletInput => {
   const modules = params?.modules ?? [createEip155WalletNamespaceModule()];
 
@@ -67,6 +69,7 @@ const createWalletInput = (params?: {
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
         transactions: params?.transactionsPort ?? new MemoryTransactionsPort(),
+        transactionAggregates: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
       },
     },
   };
@@ -587,7 +590,7 @@ describe("createArxWallet", () => {
         throw new Error("Expected an active account for the seeded EIP-155 namespace.");
       }
 
-      const proposal = await runtime.transactions.access.commands.createProposal(
+      const proposal = await runtime.legacyTransactions.access.commands.createProposal(
         {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
@@ -612,7 +615,7 @@ describe("createArxWallet", () => {
           },
         },
       );
-      const approval = await runtime.transactions.access.commands.requestApproval(proposal.transactionId, {
+      const approval = await runtime.legacyTransactions.access.commands.requestApproval(proposal.transactionId, {
         requester: {
           origin: ORIGIN,
           initiator: "dapp",
@@ -621,7 +624,7 @@ describe("createArxWallet", () => {
       });
       transactionId = proposal.transactionId;
 
-      expect(runtime.transactions.review.getTransactionApprovalReview(proposal.transactionId)).toMatchObject({
+      expect(runtime.legacyTransactions.review.getTransactionApprovalReview(proposal.transactionId)).toMatchObject({
         prepare: { state: "preparing" },
       });
       expect(approval.approvalId).toBeDefined();
@@ -699,7 +702,7 @@ describe("createArxWallet", () => {
       }
 
       await expect(
-        runtime.transactions.access.commands.createProposal(
+        runtime.legacyTransactions.access.commands.createProposal(
           {
             namespace: EIP155_NAMESPACE,
             chainRef: "eip155:10",
@@ -779,7 +782,7 @@ describe("createArxWallet", () => {
       await flushAsync();
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
-      expect(runtime.transactions.records.getRecordView("44444444-4444-4444-8444-444444444444")).toMatchObject({
+      expect(runtime.legacyTransactions.records.getRecordView("44444444-4444-4444-8444-444444444444")).toMatchObject({
         id: "44444444-4444-4444-8444-444444444444",
         status: "confirmed",
         receipt: {

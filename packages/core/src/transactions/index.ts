@@ -16,7 +16,7 @@ export type {
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,
 } from "./access.js";
-export { TransactionAggregateStore } from "./aggregate/index.js";
+export { buildTransactionTerminalReason, TransactionAggregateStore } from "./aggregate/index.js";
 export type {
   ApprovalStaleTransactionApprovalSessionResult,
   ApprovedTransactionApprovalSessionResult,
@@ -43,6 +43,8 @@ export {
   TransactionApprovalSessionService,
 } from "./approval/index.js";
 export { createTransactionAccess } from "./createTransactionAccess.js";
+export type { TransactionServices } from "./createTransactionServices.js";
+export { createTransactionServices } from "./createTransactionServices.js";
 export type {
   TransactionIntent,
   TransactionIntentAccount,

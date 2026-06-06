@@ -105,6 +105,7 @@ const SendTransactionRequestSchema = z.strictObject({
   transactionId: z.string().min(1),
   chainRef: ChainRefSchema,
   origin: z.string().min(1),
+  prepareId: z.string().min(1).nullable(),
 });
 
 export const ApprovalAccountSelectionDetailSchema = z.discriminatedUnion("kind", [
@@ -160,6 +161,7 @@ export const ApprovalResolveRequestSchema = z.discriminatedUnion("action", [
     approvalId: z.string().min(1),
     action: z.literal("approve"),
     decision: ApprovalAccountSelectionDecisionSchema.optional(),
+    expectedPrepareId: z.string().min(1).optional(),
   }),
   z.strictObject({
     approvalId: z.string().min(1),

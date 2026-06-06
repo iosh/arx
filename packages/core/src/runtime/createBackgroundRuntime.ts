@@ -25,6 +25,7 @@ import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { CustomRpcRecord } from "../storage/records.js";
 import type { TransactionPublicRuntime } from "../transactions/index.js";
+import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
@@ -67,6 +68,7 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
       customChains?: CustomChainsPort;
       keyringMetas: KeyringMetasPort;
       permissions: PermissionsPort;
+      transactionAggregates: TransactionsStoragePort;
     };
   };
   supportedChains?: Omit<NonNullable<ControllerLayerOptions["supportedChains"]>, "port"> & {
@@ -85,7 +87,8 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
 export type BackgroundRuntime = {
   bus: Messenger;
   controllers: HandlerControllers;
-  transactions: TransactionPublicRuntime;
+  transactions: ReturnType<typeof assembleArxWalletRuntime>["transactions"];
+  legacyTransactions: TransactionPublicRuntime;
   services: {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
@@ -170,6 +173,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         keyringMetas: options.store.ports.keyringMetas,
         networkSelection: networkSelectionPort,
         permissions: options.store.ports.permissions,
+        transactionAggregates: options.store.ports.transactionAggregates,
         settings: options.settings.port,
         transactions: options.store.ports.transactions,
       },
@@ -202,6 +206,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     bus: runtime.bus,
     controllers: runtime.controllers,
     transactions: runtime.transactions,
+    legacyTransactions: runtime.legacyTransactions,
     services: runtime.services,
     rpc: {
       engine: runtime.rpc.engine,

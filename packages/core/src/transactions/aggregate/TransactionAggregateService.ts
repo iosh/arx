@@ -51,7 +51,7 @@ export class TransactionAggregateService {
 
   constructor(options: TransactionAggregateServiceOptions = {}) {
     this.#now = options.now ?? Date.now;
-    this.#createId = options.createId ?? crypto.randomUUID;
+    this.#createId = options.createId ?? (() => crypto.randomUUID());
   }
 
   /** Creates the record before approval or broadcast. */

@@ -36,6 +36,14 @@ import {
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../storage/records.js";
+import type {
+  TransactionRecord as AggregateTransactionRecord,
+  ListRecoverableTransactionAggregatesQuery,
+  ListTransactionHistoryQuery,
+  TransactionAggregate,
+  TransactionConflictKey,
+  TransactionsStoragePort,
+} from "../../transactions/storage/index.js";
 import { TRANSACTION_APPROVAL_DETAIL_INVALIDATED } from "../../transactions/topics.js";
 import { vaultErrors } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
@@ -200,6 +208,68 @@ export class MemoryTransactionsPort implements TransactionsPort {
 
   async remove(id: TransactionRecord["id"]): Promise<void> {
     this.#records.delete(id);
+  }
+}
+
+export class MemoryTransactionAggregatesPort implements TransactionsStoragePort {
+  #aggregates = new Map<string, TransactionAggregate>();
+
+  async loadTransactionAggregate(transactionId: string): Promise<TransactionAggregate | null> {
+    const aggregate = this.#aggregates.get(transactionId);
+    return aggregate ? clone(aggregate) : null;
+  }
+
+  async insertTransactionAggregate(aggregate: TransactionAggregate): Promise<void> {
+    if (this.#aggregates.has(aggregate.record.id)) {
+      throw new Error(`Duplicate transaction aggregate "${aggregate.record.id}"`);
+    }
+    this.#aggregates.set(aggregate.record.id, clone(aggregate));
+  }
+
+  async saveTransactionAggregate(aggregate: TransactionAggregate): Promise<void> {
+    if (!this.#aggregates.has(aggregate.record.id)) {
+      throw new Error(`Missing transaction aggregate "${aggregate.record.id}"`);
+    }
+    this.#aggregates.set(aggregate.record.id, clone(aggregate));
+  }
+
+  async commitApprovedTransactionAggregate(input: { aggregate: TransactionAggregate }): Promise<void> {
+    await this.saveTransactionAggregate(input.aggregate);
+  }
+
+  async listTransactionHistory(query: ListTransactionHistoryQuery = {}): Promise<AggregateTransactionRecord[]> {
+    let records = Array.from(this.#aggregates.values()).map((aggregate) => clone(aggregate.record));
+    if (query.namespace !== undefined) records = records.filter((record) => record.namespace === query.namespace);
+    if (query.chainRef !== undefined) records = records.filter((record) => record.chainRef === query.chainRef);
+    if (query.accountKey !== undefined) records = records.filter((record) => record.accountKey === query.accountKey);
+    if (query.status !== undefined) records = records.filter((record) => record.status === query.status);
+    if (query.before !== undefined) {
+      records = records.filter(
+        (record) =>
+          record.createdAt < query.before!.createdAt ||
+          (record.createdAt === query.before!.createdAt && record.id.localeCompare(query.before!.id) < 0),
+      );
+    }
+    records.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
+    return records.slice(0, query.limit ?? records.length);
+  }
+
+  async findTransactionRecordsByConflictKey(key: TransactionConflictKey): Promise<AggregateTransactionRecord[]> {
+    const records = await this.listTransactionHistory();
+    return records.filter((record) => record.conflictKey?.kind === key.kind && record.conflictKey.value === key.value);
+  }
+
+  async listRecoverableTransactionAggregates(
+    query: ListRecoverableTransactionAggregatesQuery = {},
+  ): Promise<TransactionAggregate[]> {
+    const aggregates = Array.from(this.#aggregates.values())
+      .filter((aggregate) => ["awaiting_approval", "submitting", "submitted"].includes(aggregate.record.status))
+      .map((aggregate) => clone(aggregate))
+      .sort(
+        (left, right) =>
+          right.record.createdAt - left.record.createdAt || right.record.id.localeCompare(left.record.id),
+      );
+    return aggregates.slice(0, query.limit ?? aggregates.length);
   }
 }
 
@@ -603,6 +673,7 @@ export type TestBackgroundContext = {
   customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionsPort: MemoryTransactionsPort;
+  transactionAggregatesPort: MemoryTransactionAggregatesPort;
   settingsPort: MemorySettingsPort;
   destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
@@ -619,6 +690,7 @@ export type SetupBackgroundOptions = {
   vaultMeta?: VaultMetaSnapshot | null;
   transactionsSeed?: TransactionRecord[];
   transactionsPort?: MemoryTransactionsPort;
+  transactionAggregatesPort?: MemoryTransactionAggregatesPort;
   autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -641,6 +713,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionsPort = options.transactionsPort ?? new MemoryTransactionsPort(options.transactionsSeed ?? []);
+  const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
   const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
 
@@ -693,6 +766,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
         customChains: customChainsPort,
         permissions: permissionsPort,
         transactions: transactionsPort,
+        transactionAggregates: transactionAggregatesPort,
         accounts: accountsPort,
         keyringMetas: keyringMetasPort,
       },
@@ -716,7 +790,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
         pending.delete(approvalId);
         return;
       }
-      const review = runtime.transactions.review.getTransactionApprovalReview(subject.transactionId);
+      const review = runtime.legacyTransactions.review.getTransactionApprovalReview(subject.transactionId);
       if (review.prepare.state !== "ready") {
         return;
       }
@@ -754,6 +828,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     customChainsPort,
     vaultMetaPort,
     transactionsPort,
+    transactionAggregatesPort,
     settingsPort,
     enableAutoApproval,
     destroy: () => {

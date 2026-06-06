@@ -50,7 +50,7 @@ export type BackgroundUiEntryAccess = {
   cancelApproval: (params: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
   cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
   getPendingApprovalCount: () => number;
-  getApprovalDetail: (approvalId: string) => ApprovalDetail | null;
+  getApprovalDetail: (approvalId: string) => Promise<ApprovalDetail | null>;
   hasInitializedVault: () => boolean;
 };
 
@@ -104,6 +104,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
             keyringMetas: storage.ports.keyringMetas,
             networkSelection: storage.ports.networkSelection,
             permissions: storage.ports.permissions,
+            transactionAggregates: storage.ports.transactionAggregates,
             settings: storage.ports.settings,
             transactions: storage.ports.transactions,
           },

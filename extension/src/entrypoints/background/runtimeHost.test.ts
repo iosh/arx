@@ -99,7 +99,7 @@ const makeRuntime = () => {
   };
   const createUiAccess = vi.fn();
   const createProvider = vi.fn(() => provider);
-  const getApprovalDetail = vi.fn(() => null);
+  const getApprovalDetail = vi.fn(async () => null);
 
   const runtime = {
     bus: { subscribe },

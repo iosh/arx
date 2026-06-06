@@ -230,7 +230,7 @@ const buildHarness = (
           await Promise.all(pendingIds.map((approvalId) => approvals.cancel({ approvalId, reason })));
         },
         getPendingApprovalCount: () => approvals.getState().pending.length,
-        getApprovalDetail: (approvalId: string) => approvalDetails.get(approvalId) ?? null,
+        getApprovalDetail: async (approvalId: string) => approvalDetails.get(approvalId) ?? null,
         hasInitializedVault: () => true,
       };
     }) as unknown as BackgroundRuntimeHost["getOrInitUiEntryAccess"],

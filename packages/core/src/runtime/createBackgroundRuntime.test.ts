@@ -7,6 +7,7 @@ import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionRequest } from "../transactions/types.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
+import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
@@ -20,6 +21,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
+  MemoryTransactionAggregatesPort,
   MemoryTransactionsPort,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
@@ -116,6 +118,7 @@ const createTestRuntime = (params?: {
         customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
         transactions: new MemoryTransactionsPort(),
+        transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
         ...(params?.storePorts ?? {}),
@@ -169,7 +172,12 @@ const createHandlersForRuntime = (
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.transactions.review,
+    transactions: runtime.legacyTransactions.review,
+    transactionApprovals: runtime.transactions,
+  });
+  const approvalResolveService = createApprovalResolveService({
+    approvalController: runtime.controllers.approvals,
+    transactions: runtime.transactions,
   });
 
   return createUiServerRuntime({
@@ -181,7 +189,7 @@ const createHandlersForRuntime = (
           getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
         },
         write: {
-          resolve: runtime.controllers.approvals.resolve.bind(runtime.controllers.approvals),
+          resolve: (input) => approvalResolveService.resolve(input),
         },
       },
       approvalEvents: runtime.controllers.approvals,
@@ -191,8 +199,21 @@ const createHandlersForRuntime = (
         ),
       },
       transactions: {
-        commands: runtime.transactions.access.commands,
-        events: runtime.transactions.access.events,
+        requestTransactionApproval: runtime.transactions.requestTransactionApproval.bind(
+          runtime.transactions,
+        ),
+        rerunApprovalPrepare: runtime.transactions.rerunApprovalPrepare.bind(runtime.transactions),
+        updateApprovalDraft: runtime.transactions.updateApprovalDraft.bind(runtime.transactions),
+        approveTransaction: runtime.transactions.approveTransaction.bind(runtime.transactions),
+        rejectTransactionApproval: runtime.transactions.rejectTransactionApproval.bind(runtime.transactions),
+        getTransactionApproval: runtime.transactions.getTransactionApproval.bind(runtime.transactions),
+        getTransactionApprovalByTransactionId: runtime.transactions.getTransactionApprovalByTransactionId.bind(
+          runtime.transactions,
+        ),
+        getTransaction: runtime.transactions.getTransaction.bind(runtime.transactions),
+        onTransactionApprovalsChanged: runtime.transactions.onTransactionApprovalsChanged.bind(
+          runtime.transactions,
+        ),
       },
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
@@ -713,7 +734,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       approvalId: expect.any(String),
     });
 
-    expect(runtime.controllers.approvals.getState().pending).toHaveLength(1);
+    await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(1);
+    expect(runtime.controllers.approvals.getState().pending).toHaveLength(0);
 
     runtime.lifecycle.shutdown();
   });
@@ -845,14 +867,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     const from = await createActiveAccount(runtime);
 
-    const approvalId = "33333333-3333-4333-8333-333333333333";
-    const createProposal = vi.spyOn(runtime.transactions.access.commands, "createProposal").mockResolvedValue({
-      transactionId: approvalId,
-    });
-    const requestApproval = vi.spyOn(runtime.transactions.access.commands, "requestApproval").mockResolvedValue({
-      approvalId,
-    });
-
     const handlers = createHandlersForRuntime(runtime);
 
     const result = await handlers["ui.transactions.requestSendTransactionApproval"]({
@@ -867,40 +881,16 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       valueWei: 10_000_000_000_000_000n,
     });
-    expect(result).toEqual({ approvalId });
-    expect(createProposal).toHaveBeenCalledWith(
-      {
-        namespace: "eip155",
-        chainRef: MAINNET_CHAIN.chainRef,
-        account: {
-          accountKey: expect.any(String),
-          accountAddress: from,
-        },
-        request: {
-          namespace: "eip155",
-          chainRef: MAINNET_CHAIN.chainRef,
-          payload: {
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x2386f26fc10000",
-          },
-        },
-      },
+    expect(result).toEqual({ approvalId: expect.any(String) });
+    await expect(runtime.transactions.listTransactionApprovals()).resolves.toEqual([
       expect.objectContaining({
-        caller: {
-          origin: "chrome-extension://arx",
-        },
-      }),
-    );
-    expect(requestApproval).toHaveBeenCalledWith(
-      approvalId,
-      expect.objectContaining({
-        requester: expect.objectContaining({
-          origin: "chrome-extension://arx",
-          initiator: "wallet_ui",
-          requestId: expect.any(String),
+        approvalId: result.approvalId,
+        origin: "chrome-extension://arx",
+        account: expect.objectContaining({
+          address: from,
         }),
       }),
-    );
+    ]);
 
     runtime.lifecycle.shutdown();
   });
@@ -991,13 +981,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const createProposal = vi.spyOn(runtime.transactions.access.commands, "createProposal").mockResolvedValue({
-      transactionId: "11111111-1111-4111-8111-111111111111",
-    });
-    const requestApproval = vi.spyOn(runtime.transactions.access.commands, "requestApproval").mockResolvedValue({
-      approvalId: "11111111-1111-4111-8111-111111111111",
-    });
-
     const platform = {
       openOnboardingTab: async () => ({ activationPath: "create" as const }),
       openNotificationPopup: async () => ({ activationPath: "create" as const }),
@@ -1045,12 +1028,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    expect(createProposal).toHaveBeenCalledTimes(3);
-    expect(requestApproval).toHaveBeenCalledTimes(3);
-
-    expect(createProposal.mock.calls[0]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
-    expect(createProposal.mock.calls[1]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
-    expect(createProposal.mock.calls[2]?.[1]).toEqual({ caller: { origin: "chrome-extension://arx" } });
+    expect(createSendTransactionRequest).toHaveBeenCalledTimes(3);
+    await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(3);
 
     runtime.lifecycle.shutdown();
   });
@@ -1066,7 +1045,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.transactions.access.commands, "createProposal").mockRejectedValue(
+    vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(
       new Error("create approval failed"),
     );
 

@@ -9,6 +9,7 @@ import {
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
 import type { TransactionApprovalReviewReader } from "../../../transactions/runtime.js";
+import type { TransactionApproval, TransactionsService } from "../../../transactions/TransactionsService.js";
 import type {
   ApprovalDetail,
   ApprovalListEntry,
@@ -24,6 +25,10 @@ type ApprovalReadServiceDeps = {
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
   transactions: TransactionApprovalReviewReader;
+  transactionApprovals?: Pick<
+    TransactionsService,
+    "getTransaction" | "getTransactionApproval" | "listTransactionApprovals"
+  >;
 };
 
 const isApprovalRecord = <K extends ApprovalRecord["kind"]>(
@@ -38,6 +43,15 @@ const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
   namespace: item.namespace,
   chainRef: item.chainRef,
   createdAt: item.createdAt,
+});
+
+const toTransactionApprovalListEntry = (approval: TransactionApproval): ApprovalListEntry => ({
+  approvalId: approval.approvalId,
+  kind: ApprovalKinds.SendTransaction,
+  origin: approval.origin,
+  namespace: approval.namespace,
+  chainRef: approval.chainRef,
+  createdAt: approval.createdAt,
 });
 
 const assertUnreachable = (_value: never): never => {
@@ -256,15 +270,95 @@ const buildSendTransactionDetail = (
       transactionId: record.request.transactionId,
       chainRef: record.request.chainRef,
       origin: record.request.origin,
+      prepareId: null,
     },
     review,
   };
 };
 
-export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
-  const listPending = (): ApprovalListEntry[] => deps.approvals.getState().pending.map(toListEntry);
+const toTransactionReviewPrepare = (
+  approval: TransactionApproval,
+): ApprovalSendTransactionDetail["review"]["prepare"] => {
+  const prepare = approval.prepare;
 
-  const getDetail = (approvalId: string): ApprovalDetail | null => {
+  if (prepare.status === "preparing") {
+    return { state: "preparing" };
+  }
+
+  if (prepare.status === "ready") {
+    return { state: "ready" };
+  }
+
+  if (prepare.status === "blocked") {
+    return {
+      state: "blocked",
+      blocker: prepare.blocker,
+    };
+  }
+
+  return {
+    state: "failed",
+    error: prepare.error,
+  };
+};
+
+const buildTransactionOwnedSendTransactionDetail = async (
+  approval: TransactionApproval,
+  deps: ApprovalReadServiceDeps,
+): Promise<ApprovalSendTransactionDetail | null> => {
+  if (!deps.transactionApprovals) {
+    return null;
+  }
+
+  const transaction = await deps.transactionApprovals.getTransaction(approval.transactionId);
+  if (!transaction) {
+    return null;
+  }
+
+  return {
+    approvalId: approval.approvalId,
+    kind: ApprovalKinds.SendTransaction,
+    origin: approval.origin,
+    namespace: approval.namespace,
+    chainRef: approval.chainRef,
+    createdAt: transaction.createdAt,
+    actions: {
+      canApprove: approval.prepare.status === "ready",
+      canReject: true,
+    },
+    request: {
+      transactionId: approval.transactionId,
+      chainRef: approval.chainRef,
+      origin: approval.origin,
+      prepareId: approval.prepare.id,
+    },
+    review: {
+      updatedAt: approval.updatedAt,
+      details: approval.review,
+      prepare: toTransactionReviewPrepare(approval),
+    },
+  };
+};
+
+export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
+  const listPending = (): ApprovalListEntry[] | Promise<ApprovalListEntry[]> => {
+    const oldEntries = deps.approvals.getState().pending.map(toListEntry);
+    if (!deps.transactionApprovals) {
+      return oldEntries;
+    }
+
+    return deps.transactionApprovals.listTransactionApprovals().then((approvals) => {
+      const transactionEntries = approvals.map(toTransactionApprovalListEntry);
+      return [...oldEntries, ...transactionEntries].sort((left, right) => left.createdAt - right.createdAt);
+    });
+  };
+
+  const getDetail = (approvalId: string): ApprovalDetail | null | Promise<ApprovalDetail | null> => {
+    const transactionApproval = deps.transactionApprovals?.getTransactionApproval(approvalId) ?? null;
+    if (transactionApproval) {
+      return buildTransactionOwnedSendTransactionDetail(transactionApproval, deps);
+    }
+
     const record = deps.approvals.get(approvalId);
     if (!record) {
       return null;

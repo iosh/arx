@@ -2,6 +2,33 @@ import { describe, expect, it } from "vitest";
 import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
 import { UI_EVENT_APPROVAL_DETAIL_CHANGED, UI_EVENT_APPROVALS_CHANGED } from "../protocol/events.js";
 import { createUiRuntimeAccess } from "./access.js";
+import type { UiTransactionsAccess } from "./types.js";
+
+const createTransactionAccess = () =>
+  ({
+    requestTransactionApproval: async () => {
+      throw new Error("not used");
+    },
+    rerunApprovalPrepare: async () => {
+      throw new Error("not used");
+    },
+    updateApprovalDraft: async () => {
+      throw new Error("not used");
+    },
+    approveTransaction: async () => {
+      throw new Error("not used");
+    },
+    rejectTransactionApproval: async () => {
+      throw new Error("not used");
+    },
+    getTransactionApproval: () => null,
+    getTransactionApprovalByTransactionId: () => null,
+    getTransaction: async () => null,
+    onTransactionApprovalsChanged: (handler: (approvalIds: string[]) => void) => {
+      transactionHandlers.add(handler);
+      return () => transactionHandlers.delete(handler);
+    },
+  }) satisfies UiTransactionsAccess;
 
 const createUiAccess = () =>
   createUiRuntimeAccess({
@@ -19,7 +46,7 @@ const createUiAccess = () =>
             getDetail: () => null,
           },
           write: {
-            resolve: async () => ({ approvalId: "approval-1", status: "rejected", terminalReason: "user_reject" }),
+            resolve: async () => ({ status: "resolved" }),
           },
         },
         approvalEvents: {
@@ -34,27 +61,7 @@ const createUiAccess = () =>
         permissions: {
           buildUiPermissionsSnapshot: () => ({ origins: [] }),
         },
-        transactions: {
-          commands: {
-            createProposal: async () => ({ transactionId: "tx-1" }),
-            requestApproval: async () => ({ approvalId: "approval-1" }),
-            editRequest: async () => {},
-            recomputePrepare: async () => {},
-            approve: async () => ({
-              status: "approved",
-              transactionId: "tx-1",
-            }),
-            reject: async () => {},
-          },
-          events: {
-            onApprovalDetailInvalidated: (handler: (approvalIds: string[]) => void) => {
-              transactionHandlers.add(handler);
-              return () => transactionHandlers.delete(handler);
-            },
-            onProposalChanged: () => () => {},
-            onRecordChanged: () => () => {},
-          },
-        },
+        transactions: createTransactionAccess(),
         chains: {
           selectWalletChain: async () => {},
           buildWalletNetworksSnapshot: () =>
@@ -151,6 +158,29 @@ describe("createUiRuntimeAccess", () => {
     unsubscribe();
 
     expect(events.filter((event) => event.event === UI_EVENT_APPROVALS_CHANGED)).toHaveLength(1);
+    expect(events.filter((event) => event.event === UI_EVENT_APPROVAL_DETAIL_CHANGED)).toEqual([
+      { event: UI_EVENT_APPROVAL_DETAIL_CHANGED, payload: { approvalId: "approval-1" } },
+    ]);
+  });
+
+  it("emits approvals changed from transaction invalidation", () => {
+    approvalFinishedHandlers.clear();
+    transactionHandlers.clear();
+    const access = createUiAccess();
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const unsubscribe = access.subscribeUiEvents((event) => {
+      events.push({ event: event.event, payload: event.payload });
+    });
+
+    transactionHandlers.forEach((handler) => {
+      handler(["approval-1"]);
+    });
+
+    unsubscribe();
+
+    expect(events.filter((event) => event.event === UI_EVENT_APPROVALS_CHANGED)).toEqual([
+      { event: UI_EVENT_APPROVALS_CHANGED, payload: { reason: "changed" } },
+    ]);
     expect(events.filter((event) => event.event === UI_EVENT_APPROVAL_DETAIL_CHANGED)).toEqual([
       { event: UI_EVENT_APPROVAL_DETAIL_CHANGED, payload: { approvalId: "approval-1" } },
     ]);

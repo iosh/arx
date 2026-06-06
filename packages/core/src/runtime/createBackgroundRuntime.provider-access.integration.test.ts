@@ -136,7 +136,7 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.transactions.review,
+    transactions: runtime.legacyTransactions.review,
   });
 
 const buildProviderContext = (input: { chainRef: string; namespace: string }) => {
@@ -991,7 +991,7 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       const submissionOutcome = capturedTransactionId
-        ? await background.runtime.transactions.submission.waitForOutcome(capturedTransactionId)
+        ? await background.runtime.legacyTransactions.submission.waitForOutcome(capturedTransactionId)
         : null;
       expect(submissionOutcome).toMatchObject({
         submitted: {
@@ -1005,7 +1005,7 @@ describe("createBackgroundRuntime provider access", () => {
       });
       expect(
         capturedTransactionId
-          ? background.runtime.transactions.proposals.getProposalReviewView(capturedTransactionId)
+          ? background.runtime.legacyTransactions.proposals.getProposalReviewView(capturedTransactionId)
           : null,
       ).toBeUndefined();
     } finally {

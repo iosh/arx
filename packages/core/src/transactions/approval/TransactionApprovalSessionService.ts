@@ -83,7 +83,7 @@ export class TransactionApprovalSessionService {
     this.#accountCodecs = deps.accountCodecs;
     this.#resourceLock = deps.resourceLock;
     this.#now = deps.now ?? Date.now;
-    this.#createId = deps.createId ?? crypto.randomUUID;
+    this.#createId = deps.createId ?? (() => crypto.randomUUID());
   }
 
   getSession(transactionId: string): TransactionApprovalSession | null {
@@ -144,6 +144,7 @@ export class TransactionApprovalSessionService {
         from: this.#accountCodecs.toCanonicalAddressFromAccountKey({
           accountKey: aggregate.record.accountKey,
         }),
+        createdAt: aggregate.record.createdAt,
         draft: {
           payload: cloneJsonValue(aggregate.record.request.payload),
           revision: 0,

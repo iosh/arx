@@ -30,11 +30,16 @@ import { createProviderRuntimeAccess } from "../runtime/provider/createProviderR
 import { createProviderRequests } from "../runtime/provider/providerRequests.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
-import type { TransactionPublicRuntime } from "../transactions/index.js";
+import {
+  createTransactionServices,
+  TransactionAggregateStore,
+  type TransactionPublicRuntime,
+} from "../transactions/index.js";
 import type { UiError } from "../ui/protocol/envelopes.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
+import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
@@ -84,7 +89,7 @@ type WalletRuntimeServices = Readonly<{
 type ArxWalletRuntimeCore = Readonly<{
   bus: RuntimeBootstrapScope["bus"];
   controllers: HandlerControllers;
-  transactions: TransactionPublicRuntime;
+  transactions: ReturnType<typeof createTransactionServices>["transactions"];
   services: WalletRuntimeServices;
   surfaceErrors: SurfaceErrorEncoder;
 }>;
@@ -113,7 +118,8 @@ type ArxWalletRuntime = Readonly<{
   shutdown(): Promise<void>;
   bus: RuntimeBootstrapScope["bus"];
   controllers: HandlerControllers;
-  transactions: TransactionPublicRuntime;
+  transactions: ReturnType<typeof createTransactionServices>["transactions"];
+  legacyTransactions: TransactionPublicRuntime;
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
@@ -135,7 +141,7 @@ type ArxWalletRuntime = Readonly<{
   provider: WalletProvider;
   providerAccess: ProviderRuntimeAccess;
   createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
-  getApprovalDetail(approvalId: string): ApprovalDetail | null;
+  getApprovalDetail(approvalId: string): Promise<ApprovalDetail | null>;
   surfaceErrors: SurfaceErrorEncoder;
 }>;
 
@@ -178,9 +184,9 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
 const createWalletUiDeps = (
   runtime: ArxWalletRuntimeCore,
   approvalReadService: ReturnType<typeof createApprovalReadService>,
+  approvalResolveService: ReturnType<typeof createApprovalResolveService>,
   options: WalletCreateUiOptions,
 ): UiRuntimeDeps => {
-  const transactions = runtime.transactions;
   const session = createUiSessionAccess({
     session: runtime.services.session,
     sessionStatus: runtime.services.sessionStatus,
@@ -197,7 +203,7 @@ const createWalletUiDeps = (
             getDetail: (id) => approvalReadService.getDetail(id),
           },
           write: {
-            resolve: (input) => runtime.controllers.approvals.resolve(input),
+            resolve: (input) => approvalResolveService.resolve(input),
           },
         },
         approvalEvents: runtime.controllers.approvals,
@@ -205,8 +211,17 @@ const createWalletUiDeps = (
           buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
         },
         transactions: {
-          commands: transactions.access.commands,
-          events: transactions.access.events,
+          requestTransactionApproval: runtime.transactions.requestTransactionApproval.bind(runtime.transactions),
+          rerunApprovalPrepare: runtime.transactions.rerunApprovalPrepare.bind(runtime.transactions),
+          updateApprovalDraft: runtime.transactions.updateApprovalDraft.bind(runtime.transactions),
+          approveTransaction: runtime.transactions.approveTransaction.bind(runtime.transactions),
+          rejectTransactionApproval: runtime.transactions.rejectTransactionApproval.bind(runtime.transactions),
+          getTransactionApproval: runtime.transactions.getTransactionApproval.bind(runtime.transactions),
+          getTransactionApprovalByTransactionId: runtime.transactions.getTransactionApprovalByTransactionId.bind(
+            runtime.transactions,
+          ),
+          getTransaction: runtime.transactions.getTransaction.bind(runtime.transactions),
+          onTransactionApprovalsChanged: runtime.transactions.onTransactionApprovalsChanged.bind(runtime.transactions),
         },
         chains: {
           buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
@@ -355,6 +370,20 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       }),
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
+  const transactionAggregateStore = new TransactionAggregateStore({
+    storage: input.storage.ports.transactionAggregates,
+    now: bootstrapScope.storageNow,
+    ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
+  });
+  const transactionServices = createTransactionServices({
+    aggregateStore: transactionAggregateStore,
+    namespaces: runtimeSupportScope.namespaceTransactions,
+    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    approvalSessionOptions: {
+      now: bootstrapScope.storageNow,
+      ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
+    },
+  });
 
   const lifecycle = createBackgroundRuntimeLifecycle({
     runtimeLifecycle: sessionScope.runtimeLifecycle,
@@ -467,6 +496,11 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     accounts,
     chainViews: sessionScope.chainViews,
     transactions: runtimeSupportScope.transactionRuntime.review,
+    transactionApprovals: transactionServices.transactions,
+  });
+  const approvalResolveService = createApprovalResolveService({
+    approvalController: sessionScope.controllersBase.approvals,
+    transactions: transactionServices.transactions,
   });
   const permissions = createWalletPermissions({
     permissions: sessionScope.controllersBase.permissions,
@@ -512,7 +546,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
         getDetail: (id: string) => approvalReadService.getDetail(id),
       },
       write: {
-        resolve: (input) => sessionScope.controllersBase.approvals.resolve(input),
+        resolve: (input) => approvalResolveService.resolve(input),
       },
     },
     namespaceBindings: runtimeSupportScope.namespaceBindings,
@@ -538,7 +572,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyringExport: sessionScope.keyringExport,
     keyring: sessionScope.keyringService,
   };
-  const publicTransactions: TransactionPublicRuntime = {
+  const legacyTransactions: TransactionPublicRuntime = {
     access: runtimeSupportScope.transactionRuntime.access,
     provider: runtimeSupportScope.transactionRuntime.providerCommands,
     submission: runtimeSupportScope.transactionRuntime.access.submission,
@@ -552,7 +586,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
     controllers,
-    transactions: publicTransactions,
+    transactions: transactionServices.transactions,
     services,
     surfaceErrors: surfaceErrorEncoder,
   };
@@ -562,9 +596,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     snapshots,
   });
   const createUi = (options: WalletCreateUiOptions) =>
-    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, options));
+    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, approvalResolveService, options));
   const createUiAccess = (options: WalletCreateUiOptions) =>
-    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, options));
+    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, approvalResolveService, options));
 
   const wallet: ArxWallet = {
     namespaces,
@@ -587,19 +621,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     }
 
     shutdownPromise = (async () => {
-      const pendingApprovalIds = sessionScope.controllersBase.approvals
-        .getState()
-        .pending.map(({ approvalId }) => approvalId);
-
-      await Promise.allSettled(
-        pendingApprovalIds.map((approvalId) =>
-          sessionScope.controllersBase.approvals.cancel({
-            approvalId,
-            reason: "runtime_shutdown",
-          }),
-        ),
-      );
-
       cleanupTasks.splice(0).forEach((cleanup) => {
         try {
           cleanup();
@@ -616,7 +637,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     shutdown,
     bus: bootstrapScope.bus,
     controllers,
-    transactions: publicTransactions,
+    transactions: transactionServices.transactions,
+    legacyTransactions,
     services,
     lifecycle,
     rpc: {
@@ -632,7 +654,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     provider,
     providerAccess,
     createUiAccess,
-    getApprovalDetail: (approvalId) => approvalReadService.getDetail(approvalId),
+    getApprovalDetail: async (approvalId) => await approvalReadService.getDetail(approvalId),
     surfaceErrors: surfaceErrorEncoder,
   };
 

@@ -102,6 +102,7 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         context: getContext(),
       });
     };
+    const transactionApprovalsFinishedByController = new Set<string>();
 
     const unsubs = [
       server.access.approvalEvents.onCreated(() => emitApprovalsChanged()),
@@ -109,10 +110,22 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         emitApprovalsChanged();
         if (event.subject?.kind !== "transaction") {
           emitApprovalDetailChanged(event.approvalId);
+        } else {
+          transactionApprovalsFinishedByController.add(event.approvalId);
         }
       }),
-      server.access.transactions.events.onApprovalDetailInvalidated((approvalIds) => {
-        for (const approvalId of new Set(approvalIds)) {
+      server.access.transactions.onTransactionApprovalsChanged((approvalIds) => {
+        const uniqueApprovalIds = Array.from(new Set(approvalIds));
+        let shouldEmitApprovalsChanged = false;
+        for (const approvalId of uniqueApprovalIds) {
+          if (!transactionApprovalsFinishedByController.delete(approvalId)) {
+            shouldEmitApprovalsChanged = true;
+          }
+        }
+        if (shouldEmitApprovalsChanged) {
+          emitApprovalsChanged();
+        }
+        for (const approvalId of uniqueApprovalIds) {
           emitApprovalDetailChanged(approvalId);
         }
       }),

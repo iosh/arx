@@ -77,6 +77,7 @@ import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkSelectionRecord } from "../storage/records.js";
+import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
@@ -152,6 +153,7 @@ export type ArxWalletStoragePorts = Readonly<{
   permissions: PermissionsPort;
   settings: SettingsPort;
   transactions: TransactionsPort;
+  transactionAggregates: TransactionsStoragePort;
 }>;
 
 /** Arguments for `createArxWallet()`. */
@@ -385,7 +387,7 @@ export type WalletUi = Readonly<{
 
 /** Runtime-owned approval detail read model for shell bootstrap. */
 export type WalletApprovalDetails = Readonly<{
-  getDetail(approvalId: string): ApprovalDetail | null;
+  getDetail(approvalId: string): Promise<ApprovalDetail | null>;
 }>;
 
 /**

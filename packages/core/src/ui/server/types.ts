@@ -7,11 +7,12 @@ import type { AttentionService } from "../../services/runtime/attention/index.js
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { TransactionAccess } from "../../transactions/access.js";
+import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
+import type { UiApprovalResolveResult } from "./approvals/resolveService.js";
 import type { UiKeyringsAccess } from "./keyringsAccess.js";
 import type { UiSessionAccess, UiStateChangeSubscription } from "./sessionAccess.js";
 import type { UiWalletSetupAccess } from "./walletSetupAccess.js";
@@ -62,11 +63,13 @@ export type UiAccountsAccess = Pick<
 >;
 
 export type UiApprovalsReadModelAccess = {
-  listPendingEntries(): ApprovalListEntry[];
-  getDetail(id: string): ApprovalDetail | null;
+  listPendingEntries(): Awaitable<ApprovalListEntry[]>;
+  getDetail(id: string): Awaitable<ApprovalDetail | null>;
 };
 
-export type UiApprovalsWriteAccess = Pick<ApprovalController, "resolve">;
+export type UiApprovalsWriteAccess = {
+  resolve(input: UiMethodParams<"ui.approvals.resolve">): Awaitable<UiApprovalResolveResult>;
+};
 
 export type UiApprovalsAccess = {
   read: UiApprovalsReadModelAccess;
@@ -80,7 +83,18 @@ export type UiApprovalEventsAccess = {
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
-export type UiTransactionsAccess = Pick<TransactionAccess, "commands" | "events">;
+export type UiTransactionsAccess = Pick<
+  TransactionsService,
+  | "requestTransactionApproval"
+  | "rerunApprovalPrepare"
+  | "updateApprovalDraft"
+  | "approveTransaction"
+  | "rejectTransactionApproval"
+  | "getTransactionApproval"
+  | "getTransactionApprovalByTransactionId"
+  | "getTransaction"
+  | "onTransactionApprovalsChanged"
+>;
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<

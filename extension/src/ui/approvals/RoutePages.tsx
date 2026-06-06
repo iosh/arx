@@ -27,11 +27,22 @@ export function SimpleApprovalRoutePage(params: {
   const router = useRouter();
   const { approvalId, approval, rejectReason = "User rejected" } = params;
   const { pendingAction, errorMessage, submitResolution } = useApprovalResolveAction();
+  const approveParams =
+    approval.kind === "sendTransaction"
+      ? {
+          approvalId,
+          action: "approve" as const,
+          expectedPrepareId: approval.request.prepareId ?? undefined,
+        }
+      : {
+          approvalId,
+          action: "approve" as const,
+        };
 
   return (
     <ApprovalDetailScreen
       approval={approval}
-      onApprove={() => void submitResolution({ approvalId, action: "approve" })}
+      onApprove={() => void submitResolution(approveParams)}
       onReject={() => void submitResolution({ approvalId, action: "reject", reason: rejectReason })}
       onBack={() => void router.navigate({ to: ROUTES.APPROVALS })}
       pending={pendingAction}

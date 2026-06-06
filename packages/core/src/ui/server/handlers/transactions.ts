@@ -1,8 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
-import type { ApprovalRequester } from "../../../controllers/approval/types.js";
-import type { TransactionIntent } from "../../../transactions/intent/index.js";
-import type { TransactionCaller, TransactionRequest } from "../../../transactions/types.js";
+import type { JsonValue } from "../../../transactions/aggregate/index.js";
+import type { TransactionRequest } from "../../../transactions/types.js";
 import type {
   UiAccountsAccess,
   UiChainsAccess,
@@ -13,16 +12,6 @@ import type {
   UiTransactionsAccess,
 } from "../types.js";
 import { assertUnlocked } from "./lib.js";
-
-const createUiApprovalRequester = (surface: UiSurfaceIdentity): ApprovalRequester => ({
-  origin: surface.origin,
-  initiator: "wallet_ui",
-  requestId: crypto.randomUUID(),
-});
-
-const createUiTransactionCaller = (surface: UiSurfaceIdentity): TransactionCaller => ({
-  origin: surface.origin,
-});
 
 export const createTransactionsHandlers = (deps: {
   transactions: UiTransactionsAccess;
@@ -76,43 +65,53 @@ export const createTransactionsHandlers = (deps: {
         });
       }
 
-      const caller = createUiTransactionCaller(deps.surface);
-      const requester = createUiApprovalRequester(deps.surface);
-
       const request: TransactionRequest = uiBindings.createSendTransactionRequest({
         chainRef: resolvedChainRef,
         to,
         valueWei: wei,
       });
-      const intent: TransactionIntent = {
+
+      const approval = await deps.transactions.requestTransactionApproval({
         namespace: chain.namespace,
         chainRef: resolvedChainRef,
-        account: {
-          accountKey: activeAccount.accountKey,
-          accountAddress: activeAccount.canonicalAddress,
+        origin: deps.surface.origin,
+        source: "wallet",
+        requestId: crypto.randomUUID(),
+        accountKey: activeAccount.accountKey,
+        approvalId: crypto.randomUUID(),
+        request: {
+          kind: `${chain.namespace}.wallet.native_transfer`,
+          payload: request.payload as JsonValue,
         },
-        request,
-      };
-
-      const proposal = await deps.transactions.commands.createProposal(intent, {
-        caller,
       });
 
-      const approval = await deps.transactions.commands.requestApproval(proposal.transactionId, {
-        requester,
-      });
-
-      return { approvalId: approval.approvalId };
+      return { approvalId: approval.approval.approvalId };
     },
     "ui.transactions.rerunPrepare": async ({ transactionId }) => {
       assertUnlocked(deps.session);
-      await deps.transactions.commands.recomputePrepare(transactionId);
+      const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
+      if (!approval) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "Transaction approval was not found.",
+          data: { transactionId },
+        });
+      }
+      await deps.transactions.rerunApprovalPrepare({ approvalId: approval.approvalId });
       return null;
     },
     "ui.transactions.applyDraftEdit": async ({ transactionId, edit, mode }) => {
       assertUnlocked(deps.session);
-      await deps.transactions.commands.editRequest({
-        transactionId,
+      const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
+      if (!approval) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "Transaction approval was not found.",
+          data: { transactionId },
+        });
+      }
+      await deps.transactions.updateApprovalDraft({
+        approvalId: approval.approvalId,
         edit,
         ...(mode ? { mode } : {}),
       });

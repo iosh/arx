@@ -1,4 +1,3 @@
-import type { ApprovalResolveInput } from "../../../controllers/approval/types.js";
 import type { UiApprovalsAccess, UiHandlers } from "../types.js";
 
 export const createApprovalsHandlers = ({
@@ -9,7 +8,10 @@ export const createApprovalsHandlers = ({
   "ui.approvals.listPending": async () => approvals.read.listPendingEntries(),
   "ui.approvals.getDetail": async ({ approvalId }) => approvals.read.getDetail(approvalId),
   "ui.approvals.resolve": async (input) => {
-    await approvals.write.resolve(input as ApprovalResolveInput);
+    const result = await approvals.write.resolve(input);
+    if (result.status === "requires_review") {
+      throw new Error("Transaction approval changed. Review it again.");
+    }
     return null;
   },
 });

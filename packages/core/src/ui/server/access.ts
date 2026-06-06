@@ -5,6 +5,7 @@ import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_TRANSACTIONS_CHANGED,
 } from "../protocol/events.js";
 import type { UiMethodName } from "../protocol/index.js";
 import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
@@ -102,6 +103,18 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         context: getContext(),
       });
     };
+    const emitTransactionsChanged = (transactionIds: readonly string[]) => {
+      const uniqueTransactionIds = Array.from(new Set(transactionIds));
+      if (uniqueTransactionIds.length === 0) {
+        return;
+      }
+      emit({
+        type: "ui:event",
+        event: UI_EVENT_TRANSACTIONS_CHANGED,
+        payload: { transactionIds: uniqueTransactionIds },
+        context: getContext(),
+      });
+    };
     const transactionApprovalsFinishedByController = new Set<string>();
 
     const unsubs = [
@@ -128,6 +141,9 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         for (const approvalId of uniqueApprovalIds) {
           emitApprovalDetailChanged(approvalId);
         }
+      }),
+      server.access.transactions.onTransactionsChanged((transactionIds) => {
+        emitTransactionsChanged(transactionIds);
       }),
     ];
 

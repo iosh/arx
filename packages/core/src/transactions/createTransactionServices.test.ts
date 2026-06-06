@@ -264,6 +264,8 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
 describe("createTransactionServices", () => {
   it("submits an approved transaction through createBroadcastInput and broadcast", async () => {
     const { services, aggregateStore, tick } = createServices();
+    const changes: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => changes.push(ids));
     await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
       transactionId: "tx-1",
@@ -291,6 +293,7 @@ describe("createTransactionServices", () => {
       nonce: "0x7",
     });
     expect(result.aggregate.submissions[0]?.status).toBe("accepted");
+    expect(changes).toEqual([["tx-1"], ["tx-1"], ["tx-1"], ["tx-1"]]);
   });
 
   it("inspects a submitted transaction and advances it to confirmed", async () => {
@@ -303,6 +306,8 @@ describe("createTransactionServices", () => {
         }),
       ) as Eip155RpcClient["getTransactionReceipt"],
     });
+    const changes: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
     await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
@@ -327,10 +332,13 @@ describe("createTransactionServices", () => {
       status: "0x1",
       blockNumber: "0x123",
     });
+    expect(changes.at(-1)).toEqual(["tx-1"]);
   });
 
   it("resumes recovery by cancelling abandoned approval work and failing incomplete submissions", async () => {
     const { services, aggregateStore, tick } = createServices();
+    const changes: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
     await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
     await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
@@ -352,6 +360,7 @@ describe("createTransactionServices", () => {
       ["tx-2", "applied", "failed"],
       ["tx-1", "applied", "cancelled"],
     ]);
+    expect(changes.slice(-2)).toEqual([["tx-2"], ["tx-1"]]);
   });
 
   it("keeps submitted transactions durable-submitted when one tracking attempt fails", async () => {
@@ -436,6 +445,8 @@ describe("createTransactionServices", () => {
         },
       },
     });
+    const changes: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
     await aggregateStore.createTransaction(createTransactionInput());
     const opened = await services.approvals.openSession({
@@ -457,6 +468,7 @@ describe("createTransactionServices", () => {
     const aggregate = await aggregateStore.loadTransactionAggregate("tx-1");
     expect(aggregate?.record.status).toBe("submitting");
     expect(aggregate?.submissions[0]?.status).toBe("broadcasting");
+    expect(changes).toEqual([["tx-1"], ["tx-1"], ["tx-1"]]);
   });
 
   it("marks a dropped transaction as replaced when another local winner shares the conflict key", async () => {
@@ -523,6 +535,8 @@ describe("createTransactionServices", () => {
         },
       },
     });
+    const changes: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
     await aggregateStore.createTransaction(
       createTransactionInput({
@@ -601,6 +615,7 @@ describe("createTransactionServices", () => {
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("replaced");
     expect(result.aggregate.record.replacedByTransactionId).toBe("tx-4");
+    expect(changes.at(-1)).toEqual(["tx-1"]);
   });
 
   it("replaces other submitted local transactions as soon as the winner is confirmed", async () => {

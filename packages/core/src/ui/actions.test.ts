@@ -76,6 +76,8 @@ describe("ui actions", () => {
 
     void actions.networks.switchActive({ chainRef: "eip155:1" });
 
+    void actions.transactions.listHistory({ status: "submitted", limit: 10 });
+    void actions.transactions.getDetail({ transactionId: "tx-1" });
     void actions.transactions.requestSendTransactionApproval({
       to: "0x0000000000000000000000000000000000000000",
       valueEther: "0.01",

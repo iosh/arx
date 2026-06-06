@@ -16,6 +16,7 @@ export {
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_TRANSACTIONS_CHANGED,
   uiEvents,
 } from "./protocol/events.js";
 export {
@@ -32,6 +33,8 @@ export {
   UiProtocol,
 } from "./protocol/index.js";
 export { uiMethods } from "./protocol/methods.js";
+export type { ListTransactionsQuery, UiTransaction } from "./protocol/models/transactions.js";
+export { ListTransactionsQuerySchema, TransactionSchema } from "./protocol/models/transactions.js";
 export type {
   AccountsSnapshot,
   ApprovalDetail,

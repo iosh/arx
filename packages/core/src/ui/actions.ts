@@ -79,6 +79,8 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     transactions: {
+      listHistory: call("ui.transactions.listHistory"),
+      getDetail: call("ui.transactions.getDetail"),
       requestSendTransactionApproval: call("ui.transactions.requestSendTransactionApproval"),
       rerunPrepare: call("ui.transactions.rerunPrepare"),
       applyDraftEdit: call("ui.transactions.applyDraftEdit"),

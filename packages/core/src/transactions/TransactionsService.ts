@@ -26,7 +26,17 @@ import { TransactionApprovalSessionInvariantError } from "./approval/index.js";
 import type { TransactionProposalBlocker, TransactionProposalError } from "./namespace/types.js";
 import type { TransactionReviewDetails } from "./review.js";
 import type { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
+import type {
+  TransactionApprovalsChangedHandler,
+  TransactionInvalidations,
+  TransactionsChangedHandler,
+} from "./TransactionInvalidations.js";
 import type { NamespaceTransactionDraftEdit } from "./types.js";
+
+export type {
+  TransactionApprovalsChangedHandler,
+  TransactionsChangedHandler,
+} from "./TransactionInvalidations.js";
 
 export class TransactionApprovalNotFoundError extends Error {
   readonly approvalId: string;
@@ -219,10 +229,6 @@ export type CreateReplacementTransactionApprovalInput = Omit<RequestTransactionA
 
 export type ListTransactionsQuery = ListTransactionHistoryQuery;
 
-export type TransactionsChangedHandler = (transactionIds: string[]) => void;
-
-export type TransactionApprovalsChangedHandler = (approvalIds: string[]) => void;
-
 export type TransactionsEvents = {
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void;
   onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;
@@ -247,6 +253,7 @@ type TransactionsServiceDeps = {
   >;
   submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  invalidations: TransactionInvalidations;
 };
 
 const buildTransactionAccount = (
@@ -378,14 +385,14 @@ export class TransactionsService {
   #approvalSessions: TransactionsServiceDeps["approvalSessions"];
   #submission: TransactionsServiceDeps["submission"];
   #accountCodecs: TransactionsServiceDeps["accountCodecs"];
-  #transactionChangedHandlers = new Set<TransactionsChangedHandler>();
-  #approvalChangedHandlers = new Set<TransactionApprovalsChangedHandler>();
+  #invalidations: TransactionInvalidations;
 
   constructor(deps: TransactionsServiceDeps) {
     this.#aggregateStore = deps.aggregateStore;
     this.#approvalSessions = deps.approvalSessions;
     this.#submission = deps.submission;
     this.#accountCodecs = deps.accountCodecs;
+    this.#invalidations = deps.invalidations;
   }
 
   async requestTransactionApproval(input: RequestTransactionApprovalInput): Promise<RequestTransactionApprovalResult> {
@@ -399,7 +406,6 @@ export class TransactionsService {
 
     const transaction = this.#buildTransactionRecord(aggregate.record);
     const approval = buildTransactionApproval(session);
-    this.#notifyTransactionsChanged([transaction.id]);
     this.#notifyTransactionApprovalsChanged([approval.approvalId]);
 
     return {
@@ -456,7 +462,6 @@ export class TransactionsService {
 
     if (result.status === "approved") {
       const transaction = this.#buildTransactionRecord(result.aggregate.record);
-      this.#notifyTransactionsChanged([transaction.id]);
       return {
         status: "approved",
         transaction,
@@ -492,21 +497,12 @@ export class TransactionsService {
       return approved;
     }
 
-    try {
-      const submitted = await this.#submission.submitApprovedTransaction(approved.transaction.id);
-      const transaction = this.#buildTransactionRecord(submitted.aggregate.record);
-      this.#notifyTransactionsChanged([transaction.id]);
-      return {
-        status: "submitted",
-        transaction,
-      };
-    } catch (error) {
-      const transaction = await this.getTransaction(approved.transaction.id);
-      if (transaction) {
-        this.#notifyTransactionsChanged([transaction.id]);
-      }
-      throw error;
-    }
+    const submitted = await this.#submission.submitApprovedTransaction(approved.transaction.id);
+    const transaction = this.#buildTransactionRecord(submitted.aggregate.record);
+    return {
+      status: "submitted",
+      transaction,
+    };
   }
 
   async rejectTransactionApproval(input: RejectTransactionApprovalInput): Promise<Transaction> {
@@ -518,7 +514,6 @@ export class TransactionsService {
     });
 
     const transaction = this.#buildTransactionRecord(aggregate.record);
-    this.#notifyTransactionsChanged([transaction.id]);
     this.#notifyTransactionApprovalsChanged([input.approvalId]);
     return transaction;
   }
@@ -536,7 +531,6 @@ export class TransactionsService {
     });
 
     const transaction = this.#buildTransactionRecord(aggregate.record);
-    this.#notifyTransactionsChanged([transaction.id]);
     this.#notifyTransactionApprovalsChanged([input.approvalId]);
     return transaction;
   }
@@ -549,7 +543,6 @@ export class TransactionsService {
     const discarded = this.#approvalSessions.discardSessionByTransactionId(input.transactionId);
     const transaction = this.#buildTransactionRecord(aggregate.record);
 
-    this.#notifyTransactionsChanged([transaction.id]);
     if (discarded) {
       this.#notifyTransactionApprovalsChanged([discarded.approvalId]);
     }
@@ -609,26 +602,29 @@ export class TransactionsService {
       }
 
       input.signal?.addEventListener("abort", abort, { once: true });
+      const readOutcome = async () => {
+        try {
+          const transaction = await this.getTransaction(input.transactionId);
+          if (!transaction) {
+            throw new Error(`Transaction "${input.transactionId}" was not found.`);
+          }
+          const result = this.#buildTransactionSubmissionOutcome(transaction);
+          if (result) {
+            settle(() => resolve(result));
+          }
+        } catch (error) {
+          settle(() => reject(error));
+        }
+      };
+
       unsubscribe = this.onTransactionsChanged((transactionIds) => {
         if (!transactionIds.includes(input.transactionId)) {
           return;
         }
 
-        void (async () => {
-          try {
-            const transaction = await this.getTransaction(input.transactionId);
-            if (!transaction) {
-              throw new Error(`Transaction "${input.transactionId}" was not found.`);
-            }
-            const result = this.#buildTransactionSubmissionOutcome(transaction);
-            if (result) {
-              settle(() => resolve(result));
-            }
-          } catch (error) {
-            settle(() => reject(error));
-          }
-        })();
+        void readOutcome();
       });
+      void readOutcome();
     });
   }
 
@@ -657,17 +653,11 @@ export class TransactionsService {
   }
 
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void {
-    this.#transactionChangedHandlers.add(handler);
-    return () => {
-      this.#transactionChangedHandlers.delete(handler);
-    };
+    return this.#invalidations.onTransactionsChanged(handler);
   }
 
   onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void {
-    this.#approvalChangedHandlers.add(handler);
-    return () => {
-      this.#approvalChangedHandlers.delete(handler);
-    };
+    return this.#invalidations.onTransactionApprovalsChanged(handler);
   }
 
   async #requestReplacementApproval(
@@ -729,15 +719,7 @@ export class TransactionsService {
     }
   }
 
-  #notifyTransactionsChanged(transactionIds: string[]): void {
-    for (const handler of this.#transactionChangedHandlers) {
-      handler(transactionIds);
-    }
-  }
-
   #notifyTransactionApprovalsChanged(approvalIds: string[]): void {
-    for (const handler of this.#approvalChangedHandlers) {
-      handler(approvalIds);
-    }
+    this.#invalidations.publishTransactionApprovalsChanged(approvalIds);
   }
 }

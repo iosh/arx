@@ -2,8 +2,10 @@ import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
 import { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
+import { notifyTransactionChanges } from "./notifyTransactionChanges.js";
 import { TransactionRecoveryService } from "./recovery/TransactionRecoveryService.js";
 import { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
+import { TransactionInvalidations } from "./TransactionInvalidations.js";
 import { TransactionResourceLock } from "./TransactionResourceLock.js";
 import { TransactionsService } from "./TransactionsService.js";
 import { SubmittedTransactionTrackingService } from "./tracking/SubmittedTransactionTrackingService.js";
@@ -31,35 +33,38 @@ export type TransactionServices = {
 
 export const createTransactionServices = (options: CreateTransactionServicesOptions): TransactionServices => {
   const resourceLock = options.resourceLock ?? new TransactionResourceLock();
+  const invalidations = new TransactionInvalidations();
+  const transactionsStore = notifyTransactionChanges(options.aggregateStore, invalidations);
   const approvals = new TransactionApprovalSessionService({
-    transactions: options.aggregateStore,
+    transactions: transactionsStore,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
     resourceLock,
     ...options.approvalSessionOptions,
   });
   const submission = new TransactionSubmissionExecutor({
-    transactions: options.aggregateStore,
+    transactions: transactionsStore,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
     resourceLock,
   });
   const transactions = new TransactionsService({
-    aggregateStore: options.aggregateStore,
+    aggregateStore: transactionsStore,
     approvalSessions: approvals,
     submission,
     accountCodecs: options.accountCodecs,
+    invalidations,
   });
 
   const tracking = new SubmittedTransactionTrackingService({
-    transactions: options.aggregateStore,
+    transactions: transactionsStore,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
     resourceLock,
   });
 
   const recovery = new TransactionRecoveryService({
-    transactions: options.aggregateStore,
+    transactions: transactionsStore,
     tracking,
   });
 

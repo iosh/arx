@@ -93,6 +93,8 @@ export type UiTransactionsAccess = Pick<
   | "getTransactionApproval"
   | "getTransactionApprovalByTransactionId"
   | "getTransaction"
+  | "listTransactions"
+  | "onTransactionsChanged"
   | "onTransactionApprovalsChanged"
 >;
 

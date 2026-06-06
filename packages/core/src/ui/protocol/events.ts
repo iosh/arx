@@ -6,6 +6,7 @@ export const UI_EVENT_SNAPSHOT_CHANGED = "ui:snapshotChanged" as const;
 export const UI_EVENT_ENTRY_CHANGED = "ui:entryChanged" as const;
 export const UI_EVENT_APPROVALS_CHANGED = "ui:approvalsChanged" as const;
 export const UI_EVENT_APPROVAL_DETAIL_CHANGED = "ui:approvalDetailChanged" as const;
+export const UI_EVENT_TRANSACTIONS_CHANGED = "ui:transactionsChanged" as const;
 
 export type UiEventDefinition = {
   payloadSchema: z.ZodTypeAny;
@@ -27,6 +28,13 @@ export const uiEvents = {
     z
       .object({
         approvalId: z.string().min(1),
+      })
+      .strict(),
+  ),
+  [UI_EVENT_TRANSACTIONS_CHANGED]: defineEvent(
+    z
+      .object({
+        transactionIds: z.array(z.string().min(1)),
       })
       .strict(),
   ),

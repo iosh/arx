@@ -335,6 +335,89 @@ describe("TransactionsService", () => {
     ]);
   });
 
+  it("lists public transaction history with filters and cloned JSON summaries", async () => {
+    const { services } = createHarness();
+    const secondAccountKey = createDefaultAccountKey({
+      from: "0xcccccccccccccccccccccccccccccccccccccccc",
+    });
+    const first = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput({
+        requestId: "request-1",
+      }),
+      approvalId: "approval-1",
+    });
+    const opened = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput({
+        requestId: "request-2",
+        accountKey: secondAccountKey,
+      }),
+      approvalId: "approval-2",
+    });
+    const submitted = await services.transactions.approveAndSubmitTransaction({
+      approvalId: "approval-2",
+      expectedPrepareId: opened.approval.prepare.id,
+    });
+    expect(submitted.status).toBe("submitted");
+
+    const submittedHistory = await services.transactions.listTransactions({
+      status: "submitted",
+      accountKey: secondAccountKey,
+    });
+
+    expect(submittedHistory).toHaveLength(1);
+    expect(submittedHistory[0]).toMatchObject({
+      id: "tx-2",
+      status: "submitted",
+      submitted: {
+        hash: "0xdeadbeef",
+      },
+    });
+    expect(submittedHistory[0]).not.toHaveProperty("request");
+    expect(submittedHistory[0]).not.toHaveProperty("approvedRequest");
+    expect(submittedHistory[0]).not.toHaveProperty("conflictKey");
+
+    const submittedSummary = submittedHistory[0]?.submitted as { hash: string };
+    submittedSummary.hash = "mutated";
+    await expect(services.transactions.getTransaction("tx-2")).resolves.toMatchObject({
+      submitted: {
+        hash: "0xdeadbeef",
+      },
+    });
+
+    await expect(
+      services.transactions.listTransactions({
+        before: {
+          createdAt: first.transaction.createdAt,
+          id: first.transaction.id,
+        },
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("ignores lifecycle listener failures and honors unsubscribe", async () => {
+    const { services } = createHarness();
+    const changes: string[][] = [];
+    const unsubscribeThrowing = services.transactions.onTransactionsChanged(() => {
+      throw new Error("listener failed");
+    });
+    const unsubscribe = services.transactions.onTransactionsChanged((ids) => {
+      changes.push(ids);
+    });
+
+    await services.transactions.requestTransactionApproval({
+      ...createTransactionInput(),
+      approvalId: APPROVAL_ID,
+    });
+    unsubscribeThrowing();
+    unsubscribe();
+    await services.transactions.requestTransactionApproval({
+      ...createTransactionInput({ requestId: "request-2" }),
+      approvalId: "approval-2",
+    });
+
+    expect(changes).toEqual([["tx-1"]]);
+  });
+
   it("updates and reruns an approval by approvalId", async () => {
     const applyDraftEdit = vi.fn((context: { edit: NamespaceTransactionDraftEdit }) => ({
       namespace: "eip155",

@@ -1137,5 +1137,4 @@ describe("eip155 handlers - core error paths", () => {
       runtime.lifecycle.shutdown();
     }
   });
-
 });

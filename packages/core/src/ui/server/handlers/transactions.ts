@@ -1,7 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
 import type { JsonValue } from "../../../transactions/aggregate/index.js";
+import type { ListTransactionsQuery } from "../../../transactions/TransactionsService.js";
 import type { TransactionRequest } from "../../../transactions/types.js";
+import type { UiMethodParams } from "../../protocol/index.js";
 import type {
   UiAccountsAccess,
   UiChainsAccess,
@@ -13,6 +15,23 @@ import type {
 } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
+const buildListTransactionsQuery = (
+  input: UiMethodParams<"ui.transactions.listHistory">,
+): ListTransactionsQuery | undefined => {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(input.namespace !== undefined ? { namespace: input.namespace } : {}),
+    ...(input.chainRef !== undefined ? { chainRef: input.chainRef } : {}),
+    ...(input.accountKey !== undefined ? { accountKey: input.accountKey } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
+    ...(input.limit !== undefined ? { limit: input.limit } : {}),
+    ...(input.before !== undefined ? { before: input.before } : {}),
+  };
+};
+
 export const createTransactionsHandlers = (deps: {
   transactions: UiTransactionsAccess;
   chains: UiChainsAccess;
@@ -22,9 +41,21 @@ export const createTransactionsHandlers = (deps: {
   surface: UiSurfaceIdentity;
 }): Pick<
   UiHandlers,
-  "ui.transactions.requestSendTransactionApproval" | "ui.transactions.rerunPrepare" | "ui.transactions.applyDraftEdit"
+  | "ui.transactions.listHistory"
+  | "ui.transactions.getDetail"
+  | "ui.transactions.requestSendTransactionApproval"
+  | "ui.transactions.rerunPrepare"
+  | "ui.transactions.applyDraftEdit"
 > => {
   return {
+    "ui.transactions.listHistory": async (query) => {
+      assertUnlocked(deps.session);
+      return await deps.transactions.listTransactions(buildListTransactionsQuery(query));
+    },
+    "ui.transactions.getDetail": async ({ transactionId }) => {
+      assertUnlocked(deps.session);
+      return await deps.transactions.getTransaction(transactionId);
+    },
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
 

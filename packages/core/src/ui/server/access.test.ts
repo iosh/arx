@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
-import { UI_EVENT_APPROVAL_DETAIL_CHANGED, UI_EVENT_APPROVALS_CHANGED } from "../protocol/events.js";
+import {
+  UI_EVENT_APPROVAL_DETAIL_CHANGED,
+  UI_EVENT_APPROVALS_CHANGED,
+  UI_EVENT_TRANSACTIONS_CHANGED,
+} from "../protocol/events.js";
 import { createUiRuntimeAccess } from "./access.js";
 import type { UiTransactionsAccess } from "./types.js";
 
@@ -24,9 +28,14 @@ const createTransactionAccess = () =>
     getTransactionApproval: () => null,
     getTransactionApprovalByTransactionId: () => null,
     getTransaction: async () => null,
+    listTransactions: async () => [],
+    onTransactionsChanged: (handler: (transactionIds: string[]) => void) => {
+      transactionChangedHandlers.add(handler);
+      return () => transactionChangedHandlers.delete(handler);
+    },
     onTransactionApprovalsChanged: (handler: (approvalIds: string[]) => void) => {
-      transactionHandlers.add(handler);
-      return () => transactionHandlers.delete(handler);
+      transactionApprovalChangedHandlers.add(handler);
+      return () => transactionApprovalChangedHandlers.delete(handler);
     },
   }) satisfies UiTransactionsAccess;
 
@@ -136,12 +145,14 @@ const createUiAccess = () =>
 const approvalFinishedHandlers = new Set<
   (event: { approvalId: string; subject?: { kind: "transaction"; transactionId: string } }) => void
 >();
-const transactionHandlers = new Set<(approvalIds: string[]) => void>();
+const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => void>();
+const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
   it("emits approval detail changed from transaction invalidation without duplicating it on approval finish", () => {
     approvalFinishedHandlers.clear();
-    transactionHandlers.clear();
+    transactionApprovalChangedHandlers.clear();
+    transactionChangedHandlers.clear();
     const access = createUiAccess();
     const events: Array<{ event: string; payload: unknown }> = [];
     const unsubscribe = access.subscribeUiEvents((event) => {
@@ -151,7 +162,7 @@ describe("createUiRuntimeAccess", () => {
     approvalFinishedHandlers.forEach((handler) => {
       handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } });
     });
-    transactionHandlers.forEach((handler) => {
+    transactionApprovalChangedHandlers.forEach((handler) => {
       handler(["approval-1"]);
     });
 
@@ -165,14 +176,15 @@ describe("createUiRuntimeAccess", () => {
 
   it("emits approvals changed from transaction invalidation", () => {
     approvalFinishedHandlers.clear();
-    transactionHandlers.clear();
+    transactionApprovalChangedHandlers.clear();
+    transactionChangedHandlers.clear();
     const access = createUiAccess();
     const events: Array<{ event: string; payload: unknown }> = [];
     const unsubscribe = access.subscribeUiEvents((event) => {
       events.push({ event: event.event, payload: event.payload });
     });
 
-    transactionHandlers.forEach((handler) => {
+    transactionApprovalChangedHandlers.forEach((handler) => {
       handler(["approval-1"]);
     });
 
@@ -183,6 +195,27 @@ describe("createUiRuntimeAccess", () => {
     ]);
     expect(events.filter((event) => event.event === UI_EVENT_APPROVAL_DETAIL_CHANGED)).toEqual([
       { event: UI_EVENT_APPROVAL_DETAIL_CHANGED, payload: { approvalId: "approval-1" } },
+    ]);
+  });
+
+  it("emits transaction history invalidations from transaction lifecycle events", () => {
+    approvalFinishedHandlers.clear();
+    transactionApprovalChangedHandlers.clear();
+    transactionChangedHandlers.clear();
+    const access = createUiAccess();
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const unsubscribe = access.subscribeUiEvents((event) => {
+      events.push({ event: event.event, payload: event.payload });
+    });
+
+    transactionChangedHandlers.forEach((handler) => {
+      handler(["tx-1", "tx-1", "tx-2"]);
+    });
+
+    unsubscribe();
+
+    expect(events.filter((event) => event.event === UI_EVENT_TRANSACTIONS_CHANGED)).toEqual([
+      { event: UI_EVENT_TRANSACTIONS_CHANGED, payload: { transactionIds: ["tx-1", "tx-2"] } },
     ]);
   });
 });

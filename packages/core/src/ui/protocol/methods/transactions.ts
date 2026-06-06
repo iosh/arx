@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
+import { ListTransactionsQuerySchema, TransactionSchema } from "../models/transactions.js";
 import { defineMethod } from "./types.js";
 
 const Eip155TransactionDraftChangeSchema = z.strictObject({
@@ -15,6 +16,17 @@ const NamespaceTransactionDraftEditSchema = z.discriminatedUnion("namespace", [
 ]);
 
 export const transactionsMethods = {
+  "ui.transactions.listHistory": defineMethod("query", ListTransactionsQuerySchema, z.array(TransactionSchema), {
+    broadcastSnapshot: false,
+  }),
+  "ui.transactions.getDetail": defineMethod(
+    "query",
+    z.strictObject({
+      transactionId: z.string().min(1),
+    }),
+    TransactionSchema.nullable(),
+    { broadcastSnapshot: false },
+  ),
   "ui.transactions.requestSendTransactionApproval": defineMethod(
     "command",
     z.strictObject({

@@ -595,6 +595,8 @@ const createControllers = () => {
     getTransactionApproval: vi.fn(() => null),
     getTransactionApprovalByTransactionId: vi.fn(() => mockTransactionApproval),
     getTransaction: vi.fn(async () => mockTransaction),
+    listTransactions: vi.fn(async () => [mockTransaction]),
+    onTransactionsChanged: vi.fn(() => () => {}),
     onTransactionApprovalsChanged: vi.fn(() => () => {}),
   } satisfies UiTransactionsAccess;
   const providerTransactionCommands = {

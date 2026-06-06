@@ -5,6 +5,7 @@ import {
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_TRANSACTIONS_CHANGED,
 } from "./protocol/events.js";
 import {
   isUiEventName,
@@ -130,6 +131,13 @@ describe("ui protocol registry", () => {
     expect(parseUiMethodParams("ui.approvals.getDetail", { approvalId: "approval-1" })).toEqual({
       approvalId: "approval-1",
     });
+    expect(parseUiMethodParams("ui.transactions.listHistory", { status: "submitted", limit: 10 })).toEqual({
+      status: "submitted",
+      limit: 10,
+    });
+    expect(parseUiMethodParams("ui.transactions.getDetail", { transactionId: "tx-1" })).toEqual({
+      transactionId: "tx-1",
+    });
     expect(parseUiMethodParams("ui.entry.getBootstrap", { environment: "notification" })).toEqual({
       environment: "notification",
     });
@@ -147,6 +155,33 @@ describe("ui protocol registry", () => {
 
     const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", null);
     expect(okApprovalResolve).toBeNull();
+
+    const okTransaction = parseUiMethodResult("ui.transactions.getDetail", {
+      id: "tx-1",
+      status: "submitted",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      source: "wallet",
+      origin: "chrome-extension://arx",
+      account: {
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      requestKind: "eip155.wallet.native_transfer",
+      submitted: { hash: "0xdeadbeef" },
+      receipt: null,
+      replacement: null,
+      terminalReason: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    expect(okTransaction?.id).toBe("tx-1");
+    expect(() =>
+      parseUiMethodResult("ui.transactions.getDetail", {
+        ...okTransaction,
+        request: { payload: {} },
+      }),
+    ).toThrow();
 
     const okEntryBootstrap = parseUiMethodResult("ui.entry.getBootstrap", {
       entry: {
@@ -204,6 +239,9 @@ describe("ui protocol registry", () => {
     expect(parseUiEventPayload(UI_EVENT_APPROVALS_CHANGED, { reason: "changed" })).toEqual({ reason: "changed" });
     expect(parseUiEventPayload(UI_EVENT_APPROVAL_DETAIL_CHANGED, { approvalId: "approval-1" })).toEqual({
       approvalId: "approval-1",
+    });
+    expect(parseUiEventPayload(UI_EVENT_TRANSACTIONS_CHANGED, { transactionIds: ["tx-1"] })).toEqual({
+      transactionIds: ["tx-1"],
     });
   });
 });

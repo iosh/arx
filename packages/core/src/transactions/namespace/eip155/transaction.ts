@@ -1,7 +1,6 @@
 import * as Hex from "ox/Hex";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import { Eip155SubmittedTransactionSchema, Eip155TransactionReceiptSchema } from "../../../storage/schemas.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
 import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
@@ -18,8 +17,6 @@ import type {
   Eip155ApprovalReviewContext,
   Eip155DraftEditContext,
   Eip155PrepareContext,
-  Eip155SignContext,
-  Eip155TrackingContext,
 } from "./types.js";
 import { buildEip155TransactionConflictKey, type Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
@@ -67,13 +64,6 @@ const buildEip155SubmittedTransaction = (params: {
         maxFeePerGas: params.transaction.maxFeePerGas,
         maxPriorityFeePerGas: params.transaction.maxPriorityFeePerGas,
       };
-};
-
-const deriveEip155ReplacementKey = (params: { chainRef: string; submitted: Eip155SubmittedTransaction }) => {
-  return {
-    scope: "eip155.nonce",
-    value: `${params.chainRef}:${params.submitted.from.toLowerCase()}:${params.submitted.nonce.toLowerCase()}`,
-  };
 };
 
 const toBroadcastInputPayload = (signed: { raw: string }) => ({
@@ -242,20 +232,6 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         });
       },
     },
-    execution: {
-      sign: (context: Eip155SignContext, prepared, options) => deps.signer.signTransaction(context, prepared, options),
-      async broadcast(context: Eip155PrepareContext, signed, prepared: Eip155UnsignedTransaction) {
-        const broadcast = await deps.broadcaster.broadcast(context, signed);
-        const txHash = broadcast.hash as `0x${string}`;
-        const submitted = buildEip155SubmittedTransaction({
-          hash: txHash,
-          transaction: prepared,
-        });
-        return {
-          submitted,
-        };
-      },
-    },
     submission: {
       async createBroadcastInput(context, options) {
         const signed = await deps.signer.signTransaction(
@@ -299,24 +275,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       },
     },
     tracking: {
-      fetchReceipt: (context: Eip155TrackingContext) => receiptService.fetchReceipt(context),
-      inspectSubmittedTransaction: (context: Eip155TrackingContext) =>
-        receiptService.inspectSubmittedTransaction(context),
-      detectReplacement: (context: Eip155TrackingContext) => receiptService.detectReplacement(context),
-      deriveReplacementKey(context: Eip155TrackingContext) {
-        return deriveEip155ReplacementKey({
-          chainRef: context.chainRef,
-          submitted: context.submitted,
-        });
-      },
-    },
-    record: {
-      parseSubmitted(submitted: Eip155SubmittedTransaction) {
-        return Eip155SubmittedTransactionSchema.parse(submitted) as Eip155SubmittedTransaction;
-      },
-      parseReceipt(receipt: Eip155TransactionReceipt) {
-        return Eip155TransactionReceiptSchema.parse(receipt) as Eip155TransactionReceipt;
-      },
+      inspectSubmittedTransaction: (context) => receiptService.inspectSubmittedTransaction(context),
     },
   };
 };

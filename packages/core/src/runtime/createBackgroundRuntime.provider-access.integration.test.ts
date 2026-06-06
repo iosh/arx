@@ -11,8 +11,8 @@ import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransaction,
-  NamespaceTransactionExecution,
   NamespaceTransactionProposal,
+  NamespaceTransactionSubmission,
   NamespaceTransactionTracking,
 } from "../transactions/namespace/types.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
@@ -26,7 +26,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
-  MemoryTransactionsPort,
+  MemoryTransactionAggregatesPort,
   setupBackground,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
@@ -106,20 +106,26 @@ const buildEip155Submitted = (params: {
 
 const createNamespaceTransactionMock = (params: {
   prepareTransaction: NamespaceTransactionProposal["prepare"];
-  signTransaction?: NamespaceTransactionExecution["sign"];
-  broadcastTransaction?: NamespaceTransactionExecution["broadcast"];
+  createBroadcastInput?: NamespaceTransactionSubmission["createBroadcastInput"];
+  broadcastTransaction?: NamespaceTransactionSubmission["broadcast"];
   tracking?: NamespaceTransactionTracking;
 }): NamespaceTransaction => {
-  const signTransaction = params.signTransaction ?? vi.fn(async () => ({ raw: "0x1111" }));
+  const createBroadcastInput =
+    params.createBroadcastInput ??
+    vi.fn(async () => ({
+      kind: "test.signed_transaction",
+      payload: { raw: "0x1111" },
+    }));
   const broadcastTransaction =
     params.broadcastTransaction ??
-    vi.fn(async (ctx, _signed, prepared) => {
+    vi.fn(async (context) => {
       const txHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
       return {
+        broadcastIdentity: { hash: txHash },
         submitted: buildEip155Submitted({
           txHash,
-          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-          prepared: prepared as Record<string, unknown>,
+          from: context.from,
+          prepared: context.approvedPayload as Record<string, unknown>,
         }),
       };
     });
@@ -128,31 +134,11 @@ const createNamespaceTransactionMock = (params: {
     proposal: {
       prepare: params.prepareTransaction,
     },
-    execution: {
-      sign: signTransaction,
+    submission: {
+      createBroadcastInput,
       broadcast: broadcastTransaction,
     },
-    submission: {
-      createBroadcastInput: async (context) => {
-        const signed = await signTransaction(context as never, context.approvedPayload as never);
-        return {
-          kind: "test.signed_transaction",
-          payload: signed,
-        };
-      },
-      broadcast: async (context) => {
-        const broadcasted = await broadcastTransaction(
-          context as never,
-          context.broadcastInput.payload as never,
-          context.approvedPayload as never,
-        );
-        return {
-          broadcastIdentity: {},
-          submitted: broadcasted.submitted,
-        };
-      },
-    },
-    ...(params.tracking ? { tracking: params.tracking } : { tracking: { fetchReceipt: vi.fn(async () => null) } }),
+    ...(params.tracking ? { tracking: params.tracking } : {}),
   };
 };
 
@@ -161,7 +147,6 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.legacyTransactions.review,
     transactionApprovals: runtime.transactions,
   });
 
@@ -258,7 +243,7 @@ const setupNamespaceAwareProviderRuntime = async () => {
       ports: {
         customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
-        transactions: new MemoryTransactionsPort(),
+        transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
       },
@@ -628,13 +613,17 @@ describe("createBackgroundRuntime provider access", () => {
         nonce: "0x7",
       },
     }));
-    const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({ raw: "0x1111" }));
+    const createBroadcastInput = vi.fn<NamespaceTransactionSubmission["createBroadcastInput"]>(async () => ({
+      kind: "test.signed_transaction",
+      payload: { raw: "0x1111" },
+    }));
     const txHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => ({
+    const broadcastTransaction = vi.fn<NamespaceTransactionSubmission["broadcast"]>(async (context) => ({
+      broadcastIdentity: { hash: txHash },
       submitted: buildEip155Submitted({
         txHash,
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+        from: context.from,
+        prepared: context.approvedPayload as Record<string, unknown>,
       }),
     }));
     const namespaceTransactions = new NamespaceTransactions([
@@ -642,7 +631,7 @@ describe("createBackgroundRuntime provider access", () => {
         chain.namespace,
         createNamespaceTransactionMock({
           prepareTransaction,
-          signTransaction,
+          createBroadcastInput,
           broadcastTransaction,
         }),
       ],
@@ -729,7 +718,7 @@ describe("createBackgroundRuntime provider access", () => {
         jsonrpc: "2.0",
         result: txHash,
       });
-      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(createBroadcastInput).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(1);
     } finally {
       background.destroy();
@@ -747,13 +736,14 @@ describe("createBackgroundRuntime provider access", () => {
       releaseBroadcast = resolve;
     });
     const txHash = "0x1919191919191919191919191919191919191919191919191919191919191919";
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => {
+    const broadcastTransaction = vi.fn<NamespaceTransactionSubmission["broadcast"]>(async (context) => {
       await broadcastReleased;
       return {
+        broadcastIdentity: { hash: txHash },
         submitted: buildEip155Submitted({
           txHash,
-          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-          prepared: prepared as Record<string, unknown>,
+          from: context.from,
+          prepared: context.approvedPayload as Record<string, unknown>,
         }),
       };
     });
@@ -837,7 +827,7 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
-  it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during signing", async () => {
+  it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast input creation", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -847,14 +837,20 @@ describe("createBackgroundRuntime provider access", () => {
     const signReleased = new Promise<void>((resolve) => {
       releaseSign = resolve;
     });
-    const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => {
+    const createBroadcastInput = vi.fn<NamespaceTransactionSubmission["createBroadcastInput"]>(async () => {
       await signReleased;
-      return { raw: "0x1111" };
+      return {
+        kind: "test.signed_transaction",
+        payload: { raw: "0x1111" },
+      };
     });
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async () => ({
+    const txHash = "0x3333333333333333333333333333333333333333333333333333333333333333";
+    const broadcastTransaction = vi.fn<NamespaceTransactionSubmission["broadcast"]>(async (context) => ({
+      broadcastIdentity: { hash: txHash },
       submitted: buildEip155Submitted({
-        txHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
-        from: "0x0000000000000000000000000000000000000000",
+        txHash,
+        from: context.from,
+        prepared: context.approvedPayload as Record<string, unknown>,
       }),
     }));
     const namespaceTransactions = new NamespaceTransactions([
@@ -862,7 +858,7 @@ describe("createBackgroundRuntime provider access", () => {
         chain.namespace,
         createNamespaceTransactionMock({
           prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0xa" } })),
-          signTransaction,
+          createBroadcastInput,
           broadcastTransaction,
         }),
       ],
@@ -902,7 +898,7 @@ describe("createBackgroundRuntime provider access", () => {
         execution: buildProviderExecutionContext({}),
       });
 
-      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(createBroadcastInput).toHaveBeenCalledTimes(1));
       await expect(
         background.runtime.providerAccess.cancelRequestScope({
           transport: "provider",
@@ -941,7 +937,7 @@ describe("createBackgroundRuntime provider access", () => {
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async () => {
+    const broadcastTransaction = vi.fn<NamespaceTransactionSubmission["broadcast"]>(async () => {
       throw new Error("RPC unavailable");
     });
     const namespaceTransactions = new NamespaceTransactions([

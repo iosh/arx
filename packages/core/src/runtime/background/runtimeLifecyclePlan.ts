@@ -6,7 +6,6 @@ import type { NetworkBootstrap } from "./networkBootstrap.js";
 import type { RuntimeLifecycle } from "./runtimeLifecycle.js";
 import { type RuntimePlugin, runPluginHooks, startPlugins } from "./runtimePlugins.js";
 import type { SessionLayerResult } from "./session.js";
-import type { TransactionsLifecycle } from "./transactionsLifecycle.js";
 
 export type BackgroundLifecycleHandle = {
   initialize(): Promise<void>;
@@ -29,7 +28,6 @@ export const createBackgroundRuntimeLifecycle = ({
   permissionsReady,
   deferredNetworkInitialState,
   registeredNamespaces,
-  transactionsLifecycle,
   transactionRecovery,
   networkBootstrap,
   sessionLayer,
@@ -43,7 +41,6 @@ export const createBackgroundRuntimeLifecycle = ({
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
-  transactionsLifecycle: TransactionsLifecycle;
   transactionRecovery: RestartRecovery;
   networkBootstrap: NetworkBootstrap;
   sessionLayer: SessionLayerResult;
@@ -79,13 +76,6 @@ export const createBackgroundRuntimeLifecycle = ({
       }
       await permissionsReady;
     },
-  };
-
-  const transactionsPlugin: RuntimePlugin = {
-    name: "transactionsLifecycle",
-    initialize: () => transactionsLifecycle.initialize(),
-    start: () => transactionsLifecycle.start(),
-    destroy: () => transactionsLifecycle.destroy(),
   };
 
   const transactionRecoveryPlugin: RuntimePlugin = {
@@ -149,15 +139,13 @@ export const createBackgroundRuntimeLifecycle = ({
 
   const initializeOrder = [
     coreReadyPlugin,
-    transactionsPlugin,
     transactionRecoveryPlugin,
     networkBootstrapPlugin,
   ] as const;
   const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [networkBootstrapPlugin] as const;
-  const startOrder = [networkBootstrapPlugin, sessionPlugin, transactionsPlugin] as const;
+  const startOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const destroyOrder = [
-    transactionsPlugin,
     sessionPlugin,
     networkBootstrapPlugin,
     accountsControllerPlugin,

@@ -21,10 +21,8 @@ import type { NetworkSelectionPort } from "../services/store/networkSelection/po
 import type { NetworkSelectionService } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
-import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { CustomRpcRecord } from "../storage/records.js";
-import type { TransactionPublicRuntime } from "../transactions/index.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
@@ -63,7 +61,6 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
   };
   store: {
     ports: {
-      transactions: TransactionsPort;
       accounts: AccountsPort;
       customChains?: CustomChainsPort;
       keyringMetas: KeyringMetasPort;
@@ -88,7 +85,6 @@ export type BackgroundRuntime = {
   bus: Messenger;
   controllers: HandlerControllers;
   transactions: ReturnType<typeof assembleArxWalletRuntime>["transactions"];
-  legacyTransactions: TransactionPublicRuntime;
   services: {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
@@ -175,7 +171,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         permissions: options.store.ports.permissions,
         transactionAggregates: options.store.ports.transactionAggregates,
         settings: options.settings.port,
-        transactions: options.store.ports.transactions,
       },
       ...(options.storage?.vaultMetaPort ? { vaultMetaPort: options.storage.vaultMetaPort } : {}),
       ...(options.storage?.hydrate !== undefined ? { hydrate: options.storage.hydrate } : {}),
@@ -206,7 +201,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     bus: runtime.bus,
     controllers: runtime.controllers,
     transactions: runtime.transactions,
-    legacyTransactions: runtime.legacyTransactions,
     services: runtime.services,
     rpc: {
       engine: runtime.rpc.engine,

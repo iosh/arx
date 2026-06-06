@@ -13,7 +13,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
-  MemoryTransactionsPort,
+  MemoryTransactionAggregatesPort,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
@@ -110,7 +110,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
         ports: {
           customChains: customChainsPort,
           permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
+          transactionAggregates: new MemoryTransactionAggregatesPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
         },
@@ -141,7 +141,6 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       hasUiBindings: true,
       hasTransaction: true,
       hasTransactionReceiptTracking: true,
-      hasTransactionReplacementTracking: true,
     });
     expect(runtime.services.namespaceRuntimeSupport.get("solana")).toMatchObject({
       namespace: "solana",
@@ -151,7 +150,6 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       hasUiBindings: false,
       hasTransaction: false,
       hasTransactionReceiptTracking: false,
-      hasTransactionReplacementTracking: false,
     });
     expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
     expect(runtime.services.namespaceBindings.hasTransaction("solana")).toBe(false);

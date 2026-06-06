@@ -1,21 +1,3 @@
-export type {
-  ProviderTransactionSubmissionCommands,
-  TransactionAccess,
-  TransactionApprovalFailureReason,
-  TransactionApprovalResult,
-  TransactionCommands,
-  TransactionCreateProposalOptions,
-  TransactionCreateProposalResult,
-  TransactionEvents,
-  TransactionPublicRuntime,
-  TransactionQueries,
-  TransactionRecovery,
-  TransactionRequestApprovalOptions,
-  TransactionRequestApprovalResult,
-  TransactionSubmissionPersistenceFailure,
-  TransactionSubmissionResolution,
-  TransactionSubmissionTracker,
-} from "./access.js";
 export { buildTransactionTerminalReason, TransactionAggregateStore } from "./aggregate/index.js";
 export type {
   ApprovalStaleTransactionApprovalSessionResult,
@@ -42,7 +24,6 @@ export {
   TransactionApprovalSessionNotFoundError,
   TransactionApprovalSessionService,
 } from "./approval/index.js";
-export { createTransactionAccess } from "./createTransactionAccess.js";
 export type { TransactionServices } from "./createTransactionServices.js";
 export { createTransactionServices } from "./createTransactionServices.js";
 export type {
@@ -76,13 +57,10 @@ export type {
   BroadcastInput,
   BroadcastResult,
   NamespaceTransaction,
-  NamespaceTransactionExecution,
   NamespaceTransactionProposal,
   NamespaceTransactionRequest,
   NamespaceTransactionSubmission,
   NamespaceTransactionTracking,
-  ReceiptResolution,
-  ReplacementResolution,
   SignedTransactionPayload,
   SubmittedTransactionInspection,
   TransactionApprovalReviewContext,
@@ -94,29 +72,10 @@ export type {
   TransactionPrepareResult,
   TransactionProposalBlocker,
   TransactionProposalError,
-  TransactionReplacementKey,
   TransactionSignContext,
   TransactionTrackingContext,
   TransactionValidationContext,
 } from "./namespace/types.js";
-export type { TransactionExecutionAttemptPhase } from "./orchestration/index.js";
-export type {
-  TransactionApprovalPreview,
-  TransactionProposal,
-  TransactionProposalPrepare,
-  TransactionProposalPrepareStatus,
-  TransactionProposalStatus,
-  TransactionProposalTermination,
-  TransactionProposalTerminationReason,
-  TransactionProposalView,
-  TransactionReviewBlocker,
-  TransactionReviewError,
-} from "./proposal/index.js";
-export type {
-  TransactionRecord,
-  TransactionRecordStatus,
-  TransactionRecordView,
-} from "./record/index.js";
 export type {
   Eip155TransactionReviewDetails,
   TransactionReviewDetails,

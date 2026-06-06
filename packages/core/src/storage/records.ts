@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getChainRefNamespace } from "../chains/caip.js";
 import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
-import { RpcStrategySchema, TransactionReceiptSchema, TransactionSubmittedSchema } from "./schemas.js";
+import { RpcStrategySchema } from "./schemas.js";
 import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
 
 // Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
@@ -266,53 +266,3 @@ export const PermissionRecordSchema = z
   })
   .superRefine(validatePermissionRecord);
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
-
-export const TransactionStatusSchema = z.enum(["broadcast", "confirmed", "failed", "replaced"]);
-export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
-
-export const TransactionReplacementKeySchema = z
-  .strictObject({
-    scope: z.string().min(1),
-    value: z.string().min(1),
-  })
-  .nullable();
-export type TransactionReplacementKey = z.infer<typeof TransactionReplacementKeySchema>;
-
-const TransactionRecordBaseSchema = z.strictObject({
-  id: z.uuid(),
-  namespace: z.string().min(1),
-  chainRef: chainRefSchema,
-  origin: originStringSchema,
-  accountKey: AccountKeySchema,
-  status: TransactionStatusSchema,
-  replacedByRecordId: z.uuid().nullable(),
-  replacementKey: TransactionReplacementKeySchema,
-  createdAt: epochMillisecondsSchema,
-  updatedAt: epochMillisecondsSchema,
-});
-
-const TransactionRecordEnvelopeSchema = TransactionRecordBaseSchema.extend({
-  submitted: TransactionSubmittedSchema,
-  receipt: TransactionReceiptSchema.nullable(),
-});
-
-export const TransactionRecordSchema = TransactionRecordEnvelopeSchema.superRefine((value, ctx) => {
-  const accountNamespace = value.accountKey.split(":", 1)[0];
-  const chainNamespace = getChainRefNamespace(value.chainRef);
-  if (value.namespace !== chainNamespace) {
-    ctx.addIssue({
-      code: "custom",
-      message: "namespace must match chainRef namespace",
-      path: ["namespace"],
-    });
-  }
-
-  if (accountNamespace !== chainNamespace) {
-    ctx.addIssue({
-      code: "custom",
-      message: "accountKey must belong to the same namespace as chainRef",
-      path: ["accountKey"],
-    });
-  }
-});
-export type TransactionRecord = z.infer<typeof TransactionRecordSchema>;

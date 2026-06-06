@@ -16,9 +16,6 @@ export type {
   NetworkSelectionRecord,
   PermissionRecord,
   SettingsRecord,
-  TransactionRecord,
-  TransactionReplacementKey,
-  TransactionStatus as StorageTransactionStatus,
 } from "./records.js";
 export {
   AccountKeySchema,
@@ -30,9 +27,6 @@ export {
   NetworkSelectionRecordSchema,
   PermissionRecordSchema,
   SettingsRecordSchema,
-  TransactionRecordSchema,
-  TransactionReplacementKeySchema,
-  TransactionStatusSchema,
 } from "./records.js";
 
 export type { ChainDefinitionEntity, ChainDefinitionSource, VaultMetaSnapshot } from "./schemas.js";

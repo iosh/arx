@@ -4,14 +4,9 @@ export type NamespaceTransactionOperation =
   | "proposal.prepare"
   | "proposal.buildReview"
   | "proposal.applyDraftEdit"
-  | "execution.sign"
-  | "execution.broadcast"
   | "submission.createBroadcastInput"
   | "submission.broadcast"
-  | "tracking.fetchReceipt"
-  | "tracking.inspectSubmittedTransaction"
-  | "tracking.detectReplacement"
-  | "tracking.deriveReplacementKey";
+  | "tracking.inspectSubmittedTransaction";
 
 export const createMissingNamespaceTransactionOperationError = (params: {
   namespace: string;

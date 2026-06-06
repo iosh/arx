@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { ReceiptResolution, ReplacementResolution, SubmittedTransactionInspection } from "../types.js";
+import type { SubmittedTransactionInspection } from "../types.js";
 import type { Eip155TransactionReceipt } from "./transactionTypes.js";
 import type { Eip155TrackingContext } from "./types.js";
 
@@ -14,6 +14,15 @@ type RawReceipt = {
   transactionHash?: string;
   blockNumber?: unknown;
   [key: string]: unknown;
+};
+
+type ReceiptLookupResult = {
+  status: "success" | "failed";
+  receipt: Eip155TransactionReceipt;
+};
+
+type ReplacementLookupResult = {
+  status: "replaced";
 };
 
 const SUCCESS_STATUS = "0x1";
@@ -76,8 +85,6 @@ const toBigInt = (value: string): bigint | null => {
 };
 
 export type Eip155ReceiptService = {
-  fetchReceipt(context: Eip155TrackingContext): Promise<ReceiptResolution | null>;
-  detectReplacement(context: Eip155TrackingContext): Promise<ReplacementResolution | null>;
   inspectSubmittedTransaction(context: Eip155TrackingContext): Promise<SubmittedTransactionInspection<"eip155">>;
 };
 
@@ -95,59 +102,59 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
     }
   };
 
+  const querySubmittedReceipt = async (context: Eip155TrackingContext): Promise<ReceiptLookupResult | null> => {
+    const submitted = context.submitted;
+    const hash = submitted.hash;
+    if (!hash) {
+      return null;
+    }
+    const client = getClient(context.chainRef);
+    const rawReceipt = (await client.getTransactionReceipt(hash)) as RawReceipt | null;
+    if (!rawReceipt) {
+      return null;
+    }
+
+    if (rawReceipt.transactionHash && rawReceipt.transactionHash.toLowerCase() !== hash.toLowerCase()) {
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
+        message: "RPC node returned a receipt with mismatched transaction hash.",
+        data: { expected: hash, received: rawReceipt.transactionHash },
+      });
+    }
+
+    const receipt = cloneReceipt(rawReceipt);
+    const status = deriveReceiptStatus(rawReceipt);
+    return { status, receipt };
+  };
+
+  const inspectNonceConsumption = async (context: Eip155TrackingContext): Promise<ReplacementLookupResult | null> => {
+    const from = context.from;
+    if (!from) return null;
+
+    const originalNonceHex = context.submitted.nonce;
+
+    const client = getClient(context.chainRef);
+    const latestNonceHex = await client.getTransactionCount(from, { blockTag: "latest" });
+    if (typeof latestNonceHex !== "string") {
+      return null;
+    }
+
+    const latestNonce = toBigInt(latestNonceHex);
+    const originalNonce = toBigInt(originalNonceHex);
+    if (latestNonce === null || originalNonce === null) {
+      return null;
+    }
+
+    if (latestNonce <= originalNonce) {
+      return null;
+    }
+
+    return { status: "replaced" };
+  };
+
   return {
-    async fetchReceipt(context) {
-      const submitted = context.submitted;
-      const hash = submitted.hash;
-      if (!hash) {
-        return null;
-      }
-      const client = getClient(context.chainRef);
-      const rawReceipt = (await client.getTransactionReceipt(hash)) as RawReceipt | null;
-      if (!rawReceipt) {
-        return null;
-      }
-
-      if (rawReceipt.transactionHash && rawReceipt.transactionHash.toLowerCase() !== hash.toLowerCase()) {
-        throw arxError({
-          reason: ArxReasons.RpcInternal,
-          message: "RPC node returned a receipt with mismatched transaction hash.",
-          data: { expected: hash, received: rawReceipt.transactionHash },
-        });
-      }
-
-      const receipt = cloneReceipt(rawReceipt);
-      const status = deriveReceiptStatus(rawReceipt);
-      return { status, receipt };
-    },
-
-    async detectReplacement(context) {
-      const from = context.from;
-      if (!from) return null;
-
-      const originalNonceHex = context.submitted.nonce;
-
-      const client = getClient(context.chainRef);
-      const latestNonceHex = await client.getTransactionCount(from, { blockTag: "latest" });
-      if (typeof latestNonceHex !== "string") {
-        return null;
-      }
-
-      const latestNonce = toBigInt(latestNonceHex);
-      const originalNonce = toBigInt(originalNonceHex);
-      if (latestNonce === null || originalNonce === null) {
-        return null;
-      }
-
-      if (latestNonce <= originalNonce) {
-        return null;
-      }
-
-      return { status: "replaced" };
-    },
-
     async inspectSubmittedTransaction(context) {
-      const receipt = await this.fetchReceipt(context);
+      const receipt = await querySubmittedReceipt(context);
       if (receipt) {
         if (receipt.status === "success") {
           return {
@@ -170,15 +177,12 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
         };
       }
 
-      const replacement = await this.detectReplacement(context);
+      const replacement = await inspectNonceConsumption(context);
       if (replacement) {
         return {
           chainStatus: "dropped",
           evidence: {
             reason: replacement.status,
-            ...(replacement.replacedByRecordId !== undefined
-              ? { replacedByRecordId: replacement.replacedByRecordId }
-              : {}),
           },
         };
       }

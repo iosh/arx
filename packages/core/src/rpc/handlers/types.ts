@@ -10,14 +10,6 @@ import type { SupportedChainsController } from "../../controllers/supportedChain
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
-import type {
-  ProviderTransactionApprovalCommands,
-  TransactionApprovalExecutor,
-  TransactionApprovalReviewReader,
-  TransactionProposalBeginCommands,
-  TransactionProposalDraftCommands,
-  TransactionRecoveryRuntime,
-} from "../../transactions/runtime.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
@@ -42,12 +34,6 @@ export type HandlerControllers = {
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  transactionProposalBegin: TransactionProposalBeginCommands;
-  transactionProposalDraft: TransactionProposalDraftCommands;
-  providerTransactionCommands: ProviderTransactionApprovalCommands;
-  transactionExecution: TransactionApprovalExecutor;
-  transactionRecovery: TransactionRecoveryRuntime;
-  transactionReview: TransactionApprovalReviewReader;
   supportedChains?: SupportedChainsController;
   chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {

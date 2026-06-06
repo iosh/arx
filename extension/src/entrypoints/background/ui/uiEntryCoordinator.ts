@@ -1,8 +1,4 @@
-import {
-  type ApprovalCreatedEvent,
-  type ApprovalTerminalReason,
-  getApprovalType,
-} from "@arx/core/controllers/approval";
+import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/controllers/approval";
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiMethodParams, UiMethodResult } from "@arx/core/ui";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
@@ -20,10 +16,16 @@ type UiEntryCoordinatorDeps = {
   onEntryChanged?: (entry: UiEntryLaunchContext) => void;
 };
 
-type UiApprovalRecord = ApprovalCreatedEvent["record"];
 type UiEntryLaunchContextParams = UiMethodParams<"ui.entry.getLaunchContext">;
 type UiEntryLaunchContext = UiMethodResult<"ui.entry.getLaunchContext">;
 type UiEntryBootstrap = UiMethodResult<"ui.entry.getBootstrap">;
+type UiApprovalEntry = Parameters<BackgroundUiEntryAccess["subscribeApprovalCreated"]>[0] extends (
+  event: infer Event,
+) => void
+  ? Event extends { approval: infer Approval }
+    ? Approval
+    : never
+  : never;
 
 export type UiEntryCoordinator = {
   start(): void;
@@ -239,19 +241,19 @@ export const createUiEntryCoordinator = ({
       });
   };
 
-  const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, record: UiApprovalRecord) => {
-    if (record.requester.initiator !== "dapp") {
+  const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, approval: UiApprovalEntry) => {
+    if (approval.requester.initiator !== "dapp") {
       return;
     }
 
-    const method = getApprovalType(record.kind);
+    const method = getApprovalType(approval.kind);
     if (!uiEntryAccess.hasInitializedVault()) {
       entryLog("skip notification window (vault uninitialized)", {
         reason: "approval_created",
-        origin: record.origin,
+        origin: approval.origin,
         method,
-        chainRef: record.chainRef,
-        namespace: record.namespace,
+        chainRef: approval.chainRef,
+        namespace: approval.namespace,
       });
       return;
     }
@@ -261,11 +263,11 @@ export const createUiEntryCoordinator = ({
         environment: "notification",
         reason: "approval_created",
         context: {
-          approvalId: record.approvalId,
-          origin: record.origin,
+          approvalId: approval.approvalId,
+          origin: approval.origin,
           method,
-          chainRef: record.chainRef,
-          namespace: record.namespace,
+          chainRef: approval.chainRef,
+          namespace: approval.namespace,
         },
       }),
     );
@@ -273,10 +275,10 @@ export const createUiEntryCoordinator = ({
     void platform
       .openNotificationPopup({
         reason: "approval_created",
-        origin: record.origin,
+        origin: approval.origin,
         method,
-        chainRef: record.chainRef,
-        namespace: record.namespace,
+        chainRef: approval.chainRef,
+        namespace: approval.namespace,
       })
       .then(async (result) => {
         if (disposed || !result.windowId) {
@@ -284,16 +286,16 @@ export const createUiEntryCoordinator = ({
         }
 
         ensureWindowTracked(uiEntryAccess, result.windowId);
-        approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.approvalId });
+        approvalWindowTracker.assign({ windowId: result.windowId, approvalId: approval.approvalId });
       })
       .catch((error) => {
         entryLog("failed to open notification window", {
           error,
           reason: "approval_created",
-          origin: record.origin,
+          origin: approval.origin,
           method,
-          chainRef: record.chainRef,
-          namespace: record.namespace,
+          chainRef: approval.chainRef,
+          namespace: approval.namespace,
         });
       });
   };
@@ -328,8 +330,8 @@ export const createUiEntryCoordinator = ({
           }),
         );
         subscriptions.push(
-          uiEntryAccess.subscribeApprovalCreated(({ record }) => {
-            openNotificationForApproval(uiEntryAccess, record);
+          uiEntryAccess.subscribeApprovalCreated(({ approval }) => {
+            openNotificationForApproval(uiEntryAccess, approval);
           }),
         );
         subscriptions.push(
@@ -339,9 +341,16 @@ export const createUiEntryCoordinator = ({
         );
         subscriptions.push(
           uiEntryAccess.subscribeApprovalStateChanged(() => {
-            if (uiEntryAccess.getPendingApprovalCount() === 0) {
-              clearWindowTracking();
-            }
+            void uiEntryAccess
+              .getPendingApprovalCount()
+              .then((pendingApprovalCount) => {
+                if (pendingApprovalCount === 0) {
+                  clearWindowTracking();
+                }
+              })
+              .catch((error) => {
+                entryLog("failed to read pending approval count", error);
+              });
           }),
         );
 

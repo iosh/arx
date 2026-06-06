@@ -27,17 +27,10 @@ import type { NetworkSelectionPort } from "../../services/store/networkSelection
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
-import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../../storage/index.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { TransactionRuntime } from "../../transactions/runtime.js";
 import type { KeyringService } from "../keyring/KeyringService.js";
-import {
-  type ControllerLayerOptions,
-  type ControllersBase,
-  createTransactionRuntimeForControllers,
-  initControllers,
-} from "./controllers.js";
+import { type ControllerLayerOptions, type ControllersBase, initControllers } from "./controllers.js";
 import { type EngineOptions, initEngine } from "./engine.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
 import { buildRuntimeNetworkPlan, type RuntimeNetworkPlan } from "./networkDefaults.js";
@@ -45,7 +38,6 @@ import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
 import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 import { initRuntimeStoreServices } from "./runtimeStoreServices.js";
 import { initSessionLayer, type SessionLayerOptions, type SessionLayerResult, type SessionOptions } from "./session.js";
-import { createTransactionsLifecycle } from "./transactionsLifecycle.js";
 
 type StorageOptions = {
   vaultMetaPort?: VaultMetaPort;
@@ -89,18 +81,15 @@ export type RuntimeSessionScope = {
   keyringService: KeyringService;
   runtimeLifecycle: ReturnType<typeof createRuntimeLifecycle>;
   engine: ReturnType<typeof initEngine>;
-  transactionsService: ReturnType<typeof initRuntimeStoreServices>["transactionsService"];
 };
 
 export type RuntimeSupportScope = {
   namespaceTransactions: NamespaceTransactions;
-  transactionRuntime: TransactionRuntime;
   rpcClientRegistry: ReturnType<typeof initRpcLayer>;
   signers: HandlerControllers["signers"];
   namespaceBindings: NamespaceRuntimeBindingsRegistry;
   namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
   permissionViews: ReturnType<typeof createPermissionViewsService>;
-  transactionsLifecycle: ReturnType<typeof createTransactionsLifecycle>;
   networkBootstrap: ReturnType<typeof createNetworkBootstrap>;
 };
 
@@ -194,7 +183,6 @@ export const createRuntimeSessionScope = ({
   networkSelectionPort: NetworkSelectionPort;
   customRpcPort: CustomRpcPort;
   storePorts: {
-    transactions: TransactionsPort;
     accounts: AccountsPort;
     keyringMetas: KeyringMetasPort;
     permissions: PermissionsPort;
@@ -203,15 +191,14 @@ export const createRuntimeSessionScope = ({
   vaultMetaPort?: VaultMetaPort;
   sessionOptions?: SessionOptions;
 }): RuntimeSessionScope => {
-  const { settingsService, networkSelection, customRpc, transactionsService, accountsStore, keyringMetas } =
-    initRuntimeStoreServices({
-      settingsPort,
-      networkSelectionPort,
-      customRpcPort,
-      ports: storePorts,
-      selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
-      now: bootstrapScope.storageNow,
-    });
+  const { settingsService, networkSelection, customRpc, accountsStore, keyringMetas } = initRuntimeStoreServices({
+    settingsPort,
+    networkSelectionPort,
+    customRpcPort,
+    ports: storePorts,
+    selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
+    now: bootstrapScope.storageNow,
+  });
 
   const controllersInit = initControllers({
     bus: bootstrapScope.bus,
@@ -298,7 +285,6 @@ export const createRuntimeSessionScope = ({
     keyringService: sessionLayer.keyringService,
     runtimeLifecycle,
     engine,
-    transactionsService,
   };
 };
 
@@ -315,7 +301,6 @@ export const createRuntimeSupportScope = ({
   rpcClientOptions?: RpcLayerOptions;
   createApprovalExecutor?: (params: {
     controllersBase: ControllersBase;
-    transactionRuntime: TransactionRuntime;
   }) => ApprovalExecutor | undefined;
 }): RuntimeSupportScope => {
   const manifestRpcClientFactories = namespaceRuntimeSupport.namespaces.flatMap((spec) =>
@@ -343,33 +328,16 @@ export const createRuntimeSupportScope = ({
   });
   const namespaceTransactions = materializedRuntimeSupport.namespaceTransactions;
 
-  const transactionRuntime = createTransactionRuntimeForControllers({
-    bus: bootstrapScope.bus,
-    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
-    accounts: sessionScope.controllersBase.accounts,
-    approvals: sessionScope.controllersBase.approvals,
-    namespaces: namespaceTransactions,
-    transactionsService: sessionScope.transactionsService,
-    ...(bootstrapScope.controllerOptions.network?.now ? { now: bootstrapScope.controllerOptions.network.now } : {}),
-  });
   const approvalExecutor = createApprovalExecutor?.({
     controllersBase: sessionScope.controllersBase,
-    transactionRuntime,
   });
   sessionScope.setApprovalExecutor(approvalExecutor);
-  // Approval execution is wired only after namespace transactions exist,
-  // so approval decisions observe the fully materialized transaction surface.
+  // Approval execution is wired after namespace bindings exist, so decisions
+  // observe fully materialized namespace-specific approval support.
 
   const permissionViews = createPermissionViewsService({
     accounts: sessionScope.controllersBase.accounts,
     permissions: sessionScope.controllersBase.permissions,
-  });
-
-  const transactionsLifecycle = createTransactionsLifecycle({
-    controller: transactionRuntime.recovery,
-    service: sessionScope.transactionsService,
-    unlock: sessionScope.sessionLayer.session.unlock,
-    logger: bootstrapScope.storageLogger,
   });
 
   const networkBootstrap = createNetworkBootstrap({
@@ -386,13 +354,11 @@ export const createRuntimeSupportScope = ({
 
   return {
     namespaceTransactions,
-    transactionRuntime,
     rpcClientRegistry,
     signers: materializedRuntimeSupport.signers,
     namespaceBindings: materializedRuntimeSupport.bindings,
     namespaceRuntimeSupport: materializedRuntimeSupport.runtimeSupport,
     permissionViews,
-    transactionsLifecycle,
     networkBootstrap,
   };
 };

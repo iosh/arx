@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../controllers/approval/types.js";
+import type { Transaction, TransactionApproval } from "../../../transactions/TransactionsService.js";
 import type { SendTransactionApprovalReview } from "../../../transactions/review/types.js";
 import { createApprovalReadService } from "./readService.js";
 
@@ -94,6 +95,11 @@ const SEND_TRANSACTION_REVIEW_BLOCKED = {
   },
 } satisfies SendTransactionApprovalReview;
 
+const TRANSACTION_ACCOUNT = {
+  accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+} as const;
+
 const createRecord = <K extends ApprovalRecord["kind"]>(
   record: Omit<ApprovalRecord<K>, "requester"> & { request: ApprovalRecord<K>["request"] },
 ): ApprovalRecord<K> => ({
@@ -105,7 +111,63 @@ const createRecord = <K extends ApprovalRecord["kind"]>(
   ...record,
 });
 
-const createReadService = (records: ApprovalRecord[], reviews?: Record<string, SendTransactionApprovalReview>) => {
+const createTransaction = (transaction: Partial<Transaction> & Pick<Transaction, "id">): Transaction => ({
+  id: transaction.id,
+  status: transaction.status ?? "awaiting_approval",
+  namespace: transaction.namespace ?? "eip155",
+  chainRef: transaction.chainRef ?? "eip155:1",
+  source: transaction.source ?? "dapp",
+  origin: transaction.origin ?? "https://dapp.example",
+  account: transaction.account ?? TRANSACTION_ACCOUNT,
+  requestKind: transaction.requestKind ?? "eip155.transaction",
+  submitted: transaction.submitted ?? null,
+  receipt: transaction.receipt ?? null,
+  replacement: transaction.replacement ?? null,
+  terminalReason: transaction.terminalReason ?? null,
+  createdAt: transaction.createdAt ?? 1,
+  updatedAt: transaction.updatedAt ?? transaction.createdAt ?? 1,
+});
+
+const createTransactionApproval = (
+  approval: Partial<TransactionApproval> & Pick<TransactionApproval, "approvalId" | "transactionId">,
+): TransactionApproval => ({
+  approvalId: approval.approvalId,
+  transactionId: approval.transactionId,
+  namespace: approval.namespace ?? "eip155",
+  chainRef: approval.chainRef ?? "eip155:1",
+  origin: approval.origin ?? "https://dapp.example",
+  account: approval.account ?? TRANSACTION_ACCOUNT,
+  review: approval.review ?? null,
+  prepare: approval.prepare ?? {
+    id: `prepare-${approval.approvalId}`,
+    status: "ready",
+    draftRevision: 0,
+    updatedAt: approval.updatedAt ?? approval.createdAt ?? 1,
+    preparedAt: approval.updatedAt ?? approval.createdAt ?? 1,
+    expiresAt: null,
+  },
+  createdAt: approval.createdAt ?? 1,
+  updatedAt: approval.updatedAt ?? approval.createdAt ?? 1,
+});
+
+const createTransactionApprovalsStub = (input: {
+  approvals: TransactionApproval[];
+  transactions: Transaction[];
+}) => {
+  const approvalsById = new Map(input.approvals.map((approval) => [approval.approvalId, approval] as const));
+  const transactionsById = new Map(input.transactions.map((transaction) => [transaction.id, transaction] as const));
+
+  return {
+    getTransaction: async (transactionId: string) => transactionsById.get(transactionId) ?? null,
+    getTransactionApproval: (approvalId: string) => approvalsById.get(approvalId) ?? null,
+    listTransactionApprovals: async () => input.approvals,
+  };
+};
+
+const createReadService = (
+  records: ApprovalRecord[],
+  options?: { transactionApprovals?: ReturnType<typeof createTransactionApprovalsStub> },
+) => {
   const byId = new Map(records.map((record) => [record.approvalId, record] as const));
   const pending: ApprovalQueueItem[] = records.map((record) => ({
     approvalId: record.approvalId,
@@ -119,23 +181,11 @@ const createReadService = (records: ApprovalRecord[], reviews?: Record<string, S
   return createApprovalReadService({
     approvals: {
       get: (approvalId) => byId.get(approvalId),
-      getSubject: (approvalId) => {
-        const record = byId.get(approvalId);
-        return record?.subject;
-      },
-      listPendingIdsBySubject: (subject) =>
-        records
-          .filter(
-            (record) => record.subject?.kind === subject.kind && record.subject.transactionId === subject.transactionId,
-          )
-          .map((record) => record.approvalId),
       getState: () => ({ pending }),
     },
     accounts: ACCOUNTS,
     chainViews: CHAIN_VIEWS,
-    transactions: {
-      getTransactionApprovalReview: (transactionId) => reviews?.[transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
-    },
+    ...(options?.transactionApprovals ? { transactionApprovals: options.transactionApprovals } : {}),
   });
 };
 
@@ -321,50 +371,55 @@ describe("createApprovalReadService", () => {
     });
   });
 
-  it("projects sendTransaction detail and gates canApprove from prepare state", () => {
-    const records = [
-      createRecord({
-        approvalId: "approval-send-ready",
-        kind: ApprovalKinds.SendTransaction,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        subject: {
-          kind: "transaction",
-          transactionId: "tx-ready",
-        },
-        createdAt: 7,
-        request: {
-          transactionId: "tx-ready",
-          chainRef: "eip155:1",
-          origin: "https://dapp.example",
-        },
+  it("projects sendTransaction detail and gates canApprove from prepare state", async () => {
+    const readService = createReadService([], {
+      transactionApprovals: createTransactionApprovalsStub({
+        transactions: [
+          createTransaction({
+            id: "tx-ready",
+            createdAt: 7,
+          }),
+          createTransaction({
+            id: "tx-blocked",
+            createdAt: 8,
+          }),
+        ],
+        approvals: [
+          createTransactionApproval({
+            approvalId: "approval-send-ready",
+            transactionId: "tx-ready",
+            createdAt: 7,
+            updatedAt: SEND_TRANSACTION_REVIEW_READY.updatedAt,
+            review: SEND_TRANSACTION_REVIEW_READY.details,
+            prepare: {
+              id: "prepare-ready",
+              status: "ready",
+              draftRevision: 0,
+              updatedAt: SEND_TRANSACTION_REVIEW_READY.updatedAt,
+              preparedAt: SEND_TRANSACTION_REVIEW_READY.updatedAt,
+              expiresAt: null,
+            },
+          }),
+          createTransactionApproval({
+            approvalId: "approval-send-blocked",
+            transactionId: "tx-blocked",
+            createdAt: 8,
+            updatedAt: SEND_TRANSACTION_REVIEW_BLOCKED.updatedAt,
+            review: SEND_TRANSACTION_REVIEW_BLOCKED.details,
+            prepare: {
+              id: "prepare-blocked",
+              status: "blocked",
+              draftRevision: 0,
+              updatedAt: SEND_TRANSACTION_REVIEW_BLOCKED.updatedAt,
+              blocker: SEND_TRANSACTION_REVIEW_BLOCKED.prepare.blocker,
+              expiresAt: null,
+            },
+          }),
+        ],
       }),
-      createRecord({
-        approvalId: "approval-send-blocked",
-        kind: ApprovalKinds.SendTransaction,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        subject: {
-          kind: "transaction",
-          transactionId: "tx-blocked",
-        },
-        createdAt: 8,
-        request: {
-          transactionId: "tx-blocked",
-          chainRef: "eip155:1",
-          origin: "https://dapp.example",
-        },
-      }),
-    ];
-
-    const readService = createReadService(records, {
-      "tx-ready": SEND_TRANSACTION_REVIEW_READY,
-      "tx-blocked": SEND_TRANSACTION_REVIEW_BLOCKED,
     });
 
-    expect(readService.getDetail("approval-send-ready")).toMatchObject({
+    await expect(readService.getDetail("approval-send-ready")).resolves.toMatchObject({
       kind: ApprovalKinds.SendTransaction,
       actions: {
         canApprove: true,
@@ -374,10 +429,15 @@ describe("createApprovalReadService", () => {
         transactionId: "tx-ready",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
+        prepareId: "prepare-ready",
       },
-      review: SEND_TRANSACTION_REVIEW_READY,
+      review: {
+        updatedAt: SEND_TRANSACTION_REVIEW_READY.updatedAt,
+        details: SEND_TRANSACTION_REVIEW_READY.details,
+        prepare: SEND_TRANSACTION_REVIEW_READY.prepare,
+      },
     });
-    expect(readService.getDetail("approval-send-blocked")).toMatchObject({
+    await expect(readService.getDetail("approval-send-blocked")).resolves.toMatchObject({
       kind: ApprovalKinds.SendTransaction,
       actions: {
         canApprove: false,
@@ -387,79 +447,106 @@ describe("createApprovalReadService", () => {
         transactionId: "tx-blocked",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
+        prepareId: "prepare-blocked",
       },
-      review: SEND_TRANSACTION_REVIEW_BLOCKED,
+      review: {
+        updatedAt: SEND_TRANSACTION_REVIEW_BLOCKED.updatedAt,
+        details: SEND_TRANSACTION_REVIEW_BLOCKED.details,
+        prepare: SEND_TRANSACTION_REVIEW_BLOCKED.prepare,
+      },
     });
   });
 
-  it("lists affected approval ids by approvalId and matching transactionId only", () => {
-    const readService = createReadService([
-      createRecord({
+  it("lists transaction-owned approvals together with generic approval entries", async () => {
+    const readService = createReadService(
+      [
+        createRecord({
+          approvalId: "approval-sign-message",
+          kind: ApprovalKinds.SignMessage,
+          origin: "https://dapp.example",
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          createdAt: 11,
+          request: {
+            chainRef: "eip155:1",
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            message: "0xdeadbeef",
+          },
+        }),
+      ],
+      {
+        transactionApprovals: createTransactionApprovalsStub({
+          transactions: [
+            createTransaction({ id: "tx-1", createdAt: 9 }),
+            createTransaction({ id: "tx-2", createdAt: 10 }),
+          ],
+          approvals: [
+            createTransactionApproval({
+              approvalId: "approval-send-1",
+              transactionId: "tx-1",
+              createdAt: 9,
+            }),
+            createTransactionApproval({
+              approvalId: "approval-send-2",
+              transactionId: "tx-2",
+              createdAt: 10,
+            }),
+          ],
+        }),
+      },
+    );
+
+    await expect(readService.listPending()).resolves.toEqual([
+      expect.objectContaining({
         approvalId: "approval-send-1",
         kind: ApprovalKinds.SendTransaction,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        subject: {
-          kind: "transaction",
-          transactionId: "tx-1",
-        },
-        createdAt: 9,
-        request: {
-          chainRef: "eip155:1",
-          origin: "https://dapp.example",
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            payload: {},
-          },
-        },
       }),
-      createRecord({
+      expect.objectContaining({
         approvalId: "approval-send-2",
         kind: ApprovalKinds.SendTransaction,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        subject: {
-          kind: "transaction",
-          transactionId: "tx-2",
-        },
-        createdAt: 10,
-        request: {
-          chainRef: "eip155:1",
-          origin: "https://dapp.example",
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            payload: {},
-          },
-        },
       }),
-      createRecord({
+      expect.objectContaining({
         approvalId: "approval-sign-message",
         kind: ApprovalKinds.SignMessage,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        createdAt: 11,
-        request: {
-          chainRef: "eip155:1",
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          message: "0xdeadbeef",
-        },
       }),
     ]);
+  });
 
-    expect(readService.getDetail("approval-send-1")).toMatchObject({
+  it("reads transaction-owned approval detail by approvalId", async () => {
+    const readService = createReadService([], {
+      transactionApprovals: createTransactionApprovalsStub({
+        transactions: [
+          createTransaction({ id: "tx-1", createdAt: 9 }),
+          createTransaction({ id: "tx-2", createdAt: 10 }),
+        ],
+        approvals: [
+          createTransactionApproval({
+            approvalId: "approval-send-1",
+            transactionId: "tx-1",
+            createdAt: 9,
+          }),
+          createTransactionApproval({
+            approvalId: "approval-send-2",
+            transactionId: "tx-2",
+            createdAt: 10,
+          }),
+        ],
+      }),
+    });
+
+    await expect(readService.getDetail("approval-send-1")).resolves.toMatchObject({
       approvalId: "approval-send-1",
       kind: ApprovalKinds.SendTransaction,
+      request: {
+        transactionId: "tx-1",
+      },
     });
-    expect(readService.getDetail("approval-send-2")).toMatchObject({
+    await expect(readService.getDetail("approval-send-2")).resolves.toMatchObject({
       approvalId: "approval-send-2",
       kind: ApprovalKinds.SendTransaction,
+      request: {
+        transactionId: "tx-2",
+      },
     });
   });
 });

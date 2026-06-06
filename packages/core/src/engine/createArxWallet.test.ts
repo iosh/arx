@@ -12,18 +12,9 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
-  MemoryTransactionsPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
-  TEST_RECEIPT_POLL_INTERVAL,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
-import type { TransactionRecord } from "../storage/records.js";
-import type {
-  NamespaceTransaction,
-  NamespaceTransactionExecution,
-  NamespaceTransactionProposal,
-  NamespaceTransactionTracking,
-} from "../transactions/namespace/types.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
 import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 import type { CreateArxWalletInput, WalletNamespaceModule } from "./types.js";
@@ -50,7 +41,6 @@ const createWalletInput = (params?: {
   permissionsPort?: MemoryPermissionsPort;
   settingsPort?: MemorySettingsPort;
   keyringMetasPort?: MemoryKeyringMetasPort;
-  transactionsPort?: MemoryTransactionsPort;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
 }): CreateArxWalletInput => {
   const modules = params?.modules ?? [createEip155WalletNamespaceModule()];
@@ -68,7 +58,6 @@ const createWalletInput = (params?: {
         networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
-        transactions: params?.transactionsPort ?? new MemoryTransactionsPort(),
         transactionAggregates: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
       },
     },
@@ -117,58 +106,6 @@ const createProviderExecutionContext = () => ({
     portId: PROVIDER_PORT_ID,
     sessionId: PROVIDER_SESSION_ID,
   },
-});
-
-const createWalletModuleWithNamespaceTransaction = (adapter: {
-  prepareTransaction: NamespaceTransactionProposal["prepare"];
-  signTransaction: NamespaceTransactionExecution["sign"];
-  broadcastTransaction: NamespaceTransactionExecution["broadcast"];
-  tracking?: NamespaceTransactionTracking;
-}): WalletNamespaceModule => {
-  const module = createEip155WalletNamespaceModule();
-  const transaction: NamespaceTransaction = {
-    proposal: {
-      prepare: adapter.prepareTransaction,
-    },
-    execution: {
-      sign: adapter.signTransaction,
-      broadcast: adapter.broadcastTransaction,
-    },
-    ...(adapter.tracking ? { tracking: adapter.tracking } : {}),
-  };
-  return {
-    ...module,
-    engine: {
-      ...module.engine,
-      factories: {
-        ...module.engine.factories,
-        createTransaction: () => transaction,
-      },
-    },
-  };
-};
-
-const createTransactionRecord = (
-  overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status">,
-): TransactionRecord => ({
-  id: overrides.id,
-  namespace: "eip155",
-  chainRef: EIP155_CHAIN_REF,
-  origin: ORIGIN,
-  accountKey: ACCOUNT_KEY,
-  status: overrides.status,
-  submitted: {
-    hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    chainId: "0x1",
-    from: ACCOUNT_ADDRESS,
-    nonce: "0x7",
-  },
-  receipt: null,
-  replacementKey: null,
-  replacedByRecordId: null,
-  createdAt: 1_000,
-  updatedAt: 1_000,
-  ...overrides,
 });
 
 afterEach(() => {
@@ -542,256 +479,6 @@ describe("createArxWallet", () => {
       ).toBe(true);
     } finally {
       await reopened.shutdown();
-    }
-  });
-
-  it("does not persist pre-broadcast transactions across restart", async () => {
-    const prepareTransaction = vi.fn(async () => ({ status: "ready", prepared: { ready: true } }));
-    const signTransaction = vi.fn(async () => ({
-      raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => ({
-      submitted: {
-        hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        chainId: "0x1",
-        from: ctx.from,
-        ...(typeof prepared.nonce === "string" ? { nonce: prepared.nonce } : {}),
-      },
-    }));
-    const transactionsPort = new MemoryTransactionsPort();
-
-    const runtime = await createWalletRuntime({
-      accountsPort: createSeededAccountsPort(),
-      permissionsPort: createSeededPermissionsPort(),
-      transactionsPort,
-      modules: [
-        createWalletModuleWithNamespaceTransaction({
-          prepareTransaction,
-          signTransaction,
-          broadcastTransaction,
-          tracking: {
-            fetchReceipt: vi.fn(async () => null),
-          },
-        }),
-      ],
-    });
-
-    let transactionId: string | null = null;
-    try {
-      const { wallet } = runtime;
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-      const activeAccount = runtime.controllers.accounts.getActiveAccountForNamespace({
-        namespace: EIP155_NAMESPACE,
-        chainRef: EIP155_CHAIN_REF,
-      });
-      if (!activeAccount) {
-        throw new Error("Expected an active account for the seeded EIP-155 namespace.");
-      }
-
-      const proposal = await runtime.legacyTransactions.access.commands.createProposal(
-        {
-          namespace: EIP155_NAMESPACE,
-          chainRef: EIP155_CHAIN_REF,
-          account: {
-            accountKey: activeAccount.accountKey,
-            accountAddress: ACCOUNT_ADDRESS,
-          },
-          request: {
-            namespace: EIP155_NAMESPACE,
-            chainRef: EIP155_CHAIN_REF,
-            payload: {
-              from: ACCOUNT_ADDRESS,
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              value: "0x0",
-              data: "0x",
-            },
-          },
-        },
-        {
-          caller: {
-            origin: ORIGIN,
-          },
-        },
-      );
-      const approval = await runtime.legacyTransactions.access.commands.requestApproval(proposal.transactionId, {
-        requester: {
-          origin: ORIGIN,
-          initiator: "dapp",
-          requestId: "request-1",
-        },
-      });
-      transactionId = proposal.transactionId;
-
-      expect(runtime.legacyTransactions.review.getTransactionApprovalReview(proposal.transactionId)).toMatchObject({
-        prepare: { state: "preparing" },
-      });
-      expect(approval.approvalId).toBeDefined();
-      expect(await transactionsPort.list()).toEqual([]);
-    } finally {
-      await runtime.shutdown();
-    }
-
-    const reopened = await createWalletRuntime({
-      accountsPort: createSeededAccountsPort(),
-      permissionsPort: createSeededPermissionsPort(),
-      transactionsPort,
-      modules: [
-        createWalletModuleWithNamespaceTransaction({
-          prepareTransaction,
-          signTransaction,
-          broadcastTransaction,
-          tracking: {
-            fetchReceipt: vi.fn(async () => null),
-          },
-        }),
-      ],
-    });
-
-    try {
-      expect(transactionId).not.toBeNull();
-      if (transactionId === null) {
-        throw new Error("Expected transaction id to be set before restart.");
-      }
-      expect(await transactionsPort.list()).toEqual([]);
-      expect(prepareTransaction).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(0);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-    } finally {
-      await reopened.shutdown();
-    }
-  });
-
-  it("rejects transaction intent whose declared chain does not match the request", async () => {
-    const runtime = await createWalletRuntime({
-      accountsPort: createSeededAccountsPort(),
-      permissionsPort: createSeededPermissionsPort(),
-      transactionsPort: new MemoryTransactionsPort(),
-      modules: [
-        createWalletModuleWithNamespaceTransaction({
-          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { ready: true } })),
-          signTransaction: vi.fn(async () => ({
-            raw: "0x1111",
-            hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-          })),
-          broadcastTransaction: vi.fn(async (ctx) => ({
-            submitted: {
-              hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-              chainId: "0x1",
-              from: ctx.from,
-            },
-          })),
-          tracking: {
-            fetchReceipt: vi.fn(async () => null),
-          },
-        }),
-      ],
-    });
-
-    try {
-      const { wallet } = runtime;
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-      const activeAccount = runtime.controllers.accounts.getActiveAccountForNamespace({
-        namespace: EIP155_NAMESPACE,
-        chainRef: EIP155_CHAIN_REF,
-      });
-      if (!activeAccount) {
-        throw new Error("Expected an active account for the seeded EIP-155 namespace.");
-      }
-
-      await expect(
-        runtime.legacyTransactions.access.commands.createProposal(
-          {
-            namespace: EIP155_NAMESPACE,
-            chainRef: "eip155:10",
-            account: {
-              accountKey: activeAccount.accountKey,
-              accountAddress: ACCOUNT_ADDRESS,
-            },
-            request: {
-              namespace: EIP155_NAMESPACE,
-              chainRef: EIP155_CHAIN_REF,
-              payload: {
-                from: ACCOUNT_ADDRESS,
-                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                value: "0x0",
-                data: "0x",
-              },
-            },
-          },
-          {
-            caller: {
-              origin: ORIGIN,
-            },
-          },
-        ),
-      ).rejects.toThrow(/Transaction intent chainRef mismatch/i);
-    } finally {
-      await runtime.shutdown();
-    }
-  });
-
-  it("resumes broadcast receipt tracking during engine boot", async () => {
-    vi.useFakeTimers();
-
-    const fetchReceipt = vi.fn(async () => ({
-      status: "success" as const,
-      receipt: {
-        status: "0x1",
-        blockNumber: "0x10",
-      },
-    }));
-
-    const runtime = await createWalletRuntime({
-      transactionsPort: new MemoryTransactionsPort([
-        createTransactionRecord({
-          id: "44444444-4444-4444-8444-444444444444",
-          status: "broadcast",
-          submitted: {
-            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            chainId: "0x1",
-            from: ACCOUNT_ADDRESS,
-            nonce: "0x7",
-          },
-        }),
-      ]),
-      modules: [
-        createWalletModuleWithNamespaceTransaction({
-          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
-          signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
-          broadcastTransaction: vi.fn(async () => ({
-            submitted: {
-              hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              chainId: "0x1",
-              from: ACCOUNT_ADDRESS,
-              nonce: "0x7",
-            },
-          })),
-          tracking: {
-            fetchReceipt,
-          },
-        }),
-      ],
-    });
-
-    try {
-      await flushAsync();
-      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
-      await flushAsync();
-
-      expect(fetchReceipt).toHaveBeenCalledTimes(1);
-      expect(runtime.legacyTransactions.records.getRecordView("44444444-4444-4444-8444-444444444444")).toMatchObject({
-        id: "44444444-4444-4444-8444-444444444444",
-        status: "confirmed",
-        receipt: {
-          status: "0x1",
-          blockNumber: "0x10",
-        },
-      });
-    } finally {
-      await runtime.shutdown();
     }
   });
 

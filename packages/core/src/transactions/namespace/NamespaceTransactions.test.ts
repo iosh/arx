@@ -6,12 +6,6 @@ const dummy = (): NamespaceTransaction => ({
   proposal: {
     prepare: async () => ({ status: "ready", prepared: {} }),
   },
-  execution: {
-    sign: async (_ctx, _prepared) => ({ raw: "0x" }),
-    broadcast: async () => ({
-      submitted: { hash: "0xhash" },
-    }),
-  },
   submission: {
     createBroadcastInput: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
     broadcast: async () => ({

@@ -1,21 +1,19 @@
 import type { AccountController } from "../controllers/account/types.js";
 import type {
   ApprovalDecision,
-  ApprovalKind,
   ApprovalRecord,
   ApprovalResult,
   ApprovalTerminalReason,
+  ControllerApprovalKind,
 } from "../controllers/approval/types.js";
 import type { PermissionsWriter } from "../controllers/permission/types.js";
 import type { SupportedChainsController } from "../controllers/supportedChains/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
-import type { TransactionApprovalExecutor } from "../transactions/runtime.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
-  transactions: TransactionApprovalExecutor;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
   supportedChains: Pick<SupportedChainsController, "getChain" | "addChain">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
@@ -26,7 +24,7 @@ export type ApprovalRejectInput = {
   error: Error;
 };
 
-export type ApprovalFlow<K extends ApprovalKind = ApprovalKind> = {
+export type ApprovalFlow<K extends ControllerApprovalKind = ControllerApprovalKind> = {
   kind: K;
   parseDecision(input: unknown): ApprovalDecision<K>;
   approve(record: ApprovalRecord<K>, decision: ApprovalDecision<K>, deps: ApprovalFlowDeps): Promise<ApprovalResult<K>>;
@@ -40,7 +38,7 @@ export type ApprovalFlow<K extends ApprovalKind = ApprovalKind> = {
 };
 
 export type ApprovalFlowRegistry = {
-  get<K extends ApprovalKind>(kind: K): ApprovalFlow<K> | undefined;
+  get<K extends ControllerApprovalKind>(kind: K): ApprovalFlow<K> | undefined;
 };
 
 export type ApprovalExecutor = {

@@ -19,6 +19,7 @@ export const ApprovalTypes = {
 } as const;
 
 export type ApprovalKind = (typeof ApprovalKinds)[keyof typeof ApprovalKinds];
+export type ControllerApprovalKind = Exclude<ApprovalKind, typeof ApprovalKinds.SendTransaction>;
 export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
 
 export const ApprovalKindToType: Record<ApprovalKind, ApprovalType> = {

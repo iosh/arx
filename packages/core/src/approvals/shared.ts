@@ -4,8 +4,8 @@ import type { AccountController } from "../controllers/account/types.js";
 import type {
   ApprovalAccountSelectionDecision,
   ApprovalDecision,
-  ApprovalKind,
   ApprovalRecord,
+  ControllerApprovalKind,
 } from "../controllers/approval/types.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
 import { ApprovalAccountSelectionDecisionSchema } from "./decision.js";
@@ -14,7 +14,7 @@ type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
 };
 
-export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
+export const parseNoDecision = <K extends ControllerApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
   if (input !== undefined) {
     throw arxError({
       reason: ArxReasons.RpcInvalidParams,
@@ -26,7 +26,10 @@ export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown)
   return undefined as ApprovalDecision<K>;
 };
 
-export const parseAccountSelectionDecision = <K extends ApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
+export const parseAccountSelectionDecision = <K extends ControllerApprovalKind>(
+  kind: K,
+  input: unknown,
+): ApprovalDecision<K> => {
   try {
     return ApprovalAccountSelectionDecisionSchema.parse(input) as ApprovalDecision<K>;
   } catch (error) {

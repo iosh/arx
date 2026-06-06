@@ -51,6 +51,31 @@ const makeRuntime = () => {
   const onFinished = vi.fn(() => vi.fn());
   const onApprovalsStateChanged = vi.fn(() => vi.fn());
   const cancelApproval = vi.fn(async () => {});
+  const transactionApprovalHandlers = new Set<(approvalIds: readonly string[]) => void>();
+  const transactionApprovals = new Map<string, unknown>();
+  const transactions = new Map<string, unknown>();
+  const onTransactionApprovalsChanged = vi.fn((handler: (approvalIds: readonly string[]) => void) => {
+    transactionApprovalHandlers.add(handler);
+    return () => {
+      transactionApprovalHandlers.delete(handler);
+    };
+  });
+  const getTransactionApproval = vi.fn((approvalId: string) => transactionApprovals.get(approvalId) ?? null);
+  const getTransaction = vi.fn(async (transactionId: string) => transactions.get(transactionId) ?? null);
+  const listTransactionApprovals = vi.fn(async () => Array.from(transactionApprovals.values()));
+  const cancelTransactionApproval = vi.fn(async ({ approvalId }: { approvalId: string }) => {
+    const approval = transactionApprovals.get(approvalId) as { transactionId?: string } | undefined;
+    if (!approval?.transactionId) {
+      return null;
+    }
+
+    const transaction = transactions.get(approval.transactionId) ?? null;
+    transactionApprovals.delete(approvalId);
+    for (const handler of transactionApprovalHandlers) {
+      handler([approvalId]);
+    }
+    return transaction;
+  });
   const onNetworkStateChanged = vi.fn(() => vi.fn());
   const onAccountsStateChanged = vi.fn(() => vi.fn());
   const onPermissionsStateChanged = vi.fn(() => vi.fn());
@@ -100,6 +125,27 @@ const makeRuntime = () => {
   const createUiAccess = vi.fn();
   const createProvider = vi.fn(() => provider);
   const getApprovalDetail = vi.fn(async () => null);
+  const addTransactionApproval = () => {
+    const transaction = {
+      id: "tx-1",
+      source: "dapp",
+      origin: "https://dapp.example",
+    };
+    const approval = {
+      approvalId: "transaction-approval-1",
+      transactionId: "tx-1",
+      origin: "https://dapp.example",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      createdAt: 1_000,
+    };
+
+    transactions.set("tx-1", transaction);
+    transactionApprovals.set("transaction-approval-1", approval);
+    for (const handler of transactionApprovalHandlers) {
+      handler(["transaction-approval-1"]);
+    }
+  };
 
   const runtime = {
     bus: { subscribe },
@@ -176,6 +222,13 @@ const makeRuntime = () => {
     wallet: {
       createProvider,
     },
+    transactions: {
+      onTransactionApprovalsChanged,
+      getTransactionApproval,
+      getTransaction,
+      listTransactionApprovals,
+      cancelTransactionApproval,
+    },
     createUiAccess,
     getApprovalDetail,
     shutdown,
@@ -200,6 +253,12 @@ const makeRuntime = () => {
     onLocked,
     onUnlockStateChanged,
     subscribeNetworkSelectionChanged,
+    addTransactionApproval,
+    onTransactionApprovalsChanged,
+    getTransactionApproval,
+    getTransaction,
+    listTransactionApprovals,
+    cancelTransactionApproval,
   };
 };
 
@@ -228,7 +287,7 @@ describe("runtimeHost", () => {
         accounts: {},
         keyringMetas: {},
         permissions: {},
-        transactions: {},
+        transactionAggregates: {},
         customChains: {},
         customRpc: {},
         networkSelection: {},
@@ -342,6 +401,60 @@ describe("runtimeHost", () => {
       requestedAt: 1_000,
       expiresAt: 2_000,
     });
+  });
+
+  it("exposes transaction approvals through the UI entry approval stream", async () => {
+    const runtimeHarness = makeRuntime();
+    createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
+    const runtimeHost = createBackgroundRuntimeHost({
+      extensionOrigin: "chrome-extension://test",
+    });
+    const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
+    const createdListener = vi.fn();
+    const finishedListener = vi.fn();
+
+    uiEntryAccess.subscribeApprovalCreated(createdListener);
+    uiEntryAccess.subscribeApprovalFinished(finishedListener);
+
+    runtimeHarness.addTransactionApproval();
+    runtimeHarness.addTransactionApproval();
+
+    await vi.waitFor(() => expect(createdListener).toHaveBeenCalledTimes(1));
+    expect(createdListener).toHaveBeenCalledWith({
+      approval: {
+        approvalId: "transaction-approval-1",
+        kind: "sendTransaction",
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 1_000,
+        requester: {
+          origin: "https://dapp.example",
+          initiator: "dapp",
+        },
+      },
+    });
+    await expect(uiEntryAccess.getPendingApprovalCount()).resolves.toBe(2);
+
+    await uiEntryAccess.cancelApproval({
+      approvalId: "transaction-approval-1",
+      reason: "user_dismissed",
+    });
+
+    expect(runtimeHarness.cancelTransactionApproval).toHaveBeenCalledWith({
+      approvalId: "transaction-approval-1",
+      reason: expect.objectContaining({
+        kind: "approval_cancelled",
+        code: "ui.user_dismissed",
+      }),
+    });
+    expect(runtimeHarness.cancelApproval).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(finishedListener).toHaveBeenCalledWith({
+        approvalId: "transaction-approval-1",
+      }),
+    );
+    await expect(uiEntryAccess.getPendingApprovalCount()).resolves.toBe(1);
   });
 
   it("shuts down runtime and allows a fresh boot on the next access", async () => {

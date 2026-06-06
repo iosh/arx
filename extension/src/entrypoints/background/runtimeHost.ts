@@ -1,8 +1,14 @@
-import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
+import {
+  ApprovalKinds,
+  type ApprovalKind,
+  type ApprovalRequester,
+  type ApprovalTerminalReason,
+} from "@arx/core/controllers/approval";
 import { type ApprovalDetail, createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
+import { buildTransactionTerminalReason } from "@arx/core/transactions";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -30,12 +36,30 @@ export type BackgroundUiAccessParams = {
 
 type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
 type BackgroundRuntimeApprovals = BackgroundRuntime["controllers"]["approvals"];
+type BackgroundRuntimeTransactions = BackgroundRuntime["transactions"];
 type BackgroundRuntimeUnlock = BackgroundRuntime["services"]["session"]["unlock"];
 
-type ApprovalCreatedListener = Parameters<BackgroundRuntimeApprovals["onCreated"]>[0];
-type ApprovalFinishedListener = Parameters<BackgroundRuntimeApprovals["onFinished"]>[0];
-type ApprovalStateChangedListener = Parameters<BackgroundRuntimeApprovals["onStateChanged"]>[0];
+type RuntimeApprovalCreatedEvent = Parameters<Parameters<BackgroundRuntimeApprovals["onCreated"]>[0]>[0];
 type ApprovalSessionLockedListener = Parameters<BackgroundRuntimeUnlock["onLocked"]>[0];
+type RuntimeTransactionApproval = NonNullable<ReturnType<BackgroundRuntimeTransactions["getTransactionApproval"]>>;
+
+export type BackgroundApprovalEntry = {
+  approvalId: string;
+  kind: ApprovalKind;
+  origin: string;
+  namespace: string;
+  chainRef: string;
+  createdAt: number;
+  requester: ApprovalRequester;
+};
+
+export type BackgroundApprovalCreatedEvent = {
+  approval: BackgroundApprovalEntry;
+};
+
+export type BackgroundApprovalFinishedEvent = {
+  approvalId: string;
+};
 
 export type BackgroundUnlockAttentionRequestedPayload = AttentionRequest & { reason: "unlock_required" };
 
@@ -43,13 +67,13 @@ export type BackgroundUiEntryAccess = {
   subscribeUnlockAttentionRequested: (
     listener: (payload: BackgroundUnlockAttentionRequestedPayload) => void,
   ) => () => void;
-  subscribeApprovalCreated: (listener: ApprovalCreatedListener) => () => void;
-  subscribeApprovalFinished: (listener: ApprovalFinishedListener) => () => void;
-  subscribeApprovalStateChanged: (listener: ApprovalStateChangedListener) => () => void;
+  subscribeApprovalCreated: (listener: (event: BackgroundApprovalCreatedEvent) => void) => () => void;
+  subscribeApprovalFinished: (listener: (event: BackgroundApprovalFinishedEvent) => void) => () => void;
+  subscribeApprovalStateChanged: (listener: () => void) => () => void;
   subscribeSessionLocked: (listener: ApprovalSessionLockedListener) => () => void;
   cancelApproval: (params: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
   cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
-  getPendingApprovalCount: () => number;
+  getPendingApprovalCount: () => Promise<number>;
   getApprovalDetail: (approvalId: string) => Promise<ApprovalDetail | null>;
   hasInitializedVault: () => boolean;
 };
@@ -57,6 +81,27 @@ export type BackgroundUiEntryAccess = {
 const isUnlockAttentionRequest = (payload: AttentionRequest): payload is BackgroundUnlockAttentionRequestedPayload => {
   return payload.reason === "unlock_required";
 };
+
+const toGenericApprovalEntry = (record: RuntimeApprovalCreatedEvent["record"]): BackgroundApprovalEntry => ({
+  approvalId: record.approvalId,
+  kind: record.kind,
+  origin: record.origin,
+  namespace: record.namespace,
+  chainRef: record.chainRef,
+  createdAt: record.createdAt,
+  requester: record.requester,
+});
+
+const buildTransactionApprovalCancelReason = (reason: ApprovalTerminalReason) =>
+  buildTransactionTerminalReason({
+    kind: "approval_cancelled",
+    code: `ui.${reason}`,
+    message:
+      reason === "user_dismissed"
+        ? "User dismissed the transaction approval window."
+        : "Transaction approval was cancelled by the UI.",
+    details: { reason },
+  });
 
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
@@ -106,7 +151,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
             permissions: storage.ports.permissions,
             transactionAggregates: storage.ports.transactionAggregates,
             settings: storage.ports.settings,
-            transactions: storage.ports.transactions,
           },
           vaultMetaPort: storage.ports.vaultMeta,
         },
@@ -208,6 +252,40 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const getOrInitUiEntryAccess = async (): Promise<BackgroundUiEntryAccess> => {
     const active = await getOrInitRuntimeCache();
 
+    const buildTransactionApprovalEntry = async (
+      approval: RuntimeTransactionApproval,
+    ): Promise<BackgroundApprovalEntry | null> => {
+      const transaction = await active.runtime.transactions.getTransaction(approval.transactionId);
+      if (!transaction) {
+        return null;
+      }
+
+      return {
+        approvalId: approval.approvalId,
+        kind: ApprovalKinds.SendTransaction,
+        origin: approval.origin,
+        namespace: approval.namespace,
+        chainRef: approval.chainRef,
+        createdAt: approval.createdAt,
+        requester: {
+          origin: approval.origin,
+          initiator: transaction.source === "wallet" ? "wallet_ui" : "dapp",
+        },
+      };
+    };
+
+    const cancelApproval = async ({ approvalId, reason }: { approvalId: string; reason: ApprovalTerminalReason }) => {
+      const transaction = await active.runtime.transactions.cancelTransactionApproval({
+        approvalId,
+        reason: buildTransactionApprovalCancelReason(reason),
+      });
+      if (transaction) {
+        return;
+      }
+
+      await active.runtime.controllers.approvals.cancel({ approvalId, reason });
+    };
+
     return {
       subscribeUnlockAttentionRequested: (listener) =>
         active.runtime.bus.subscribe(ATTENTION_REQUESTED, (payload) => {
@@ -217,18 +295,91 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
           listener(payload);
         }),
-      subscribeApprovalCreated: (listener) => active.runtime.controllers.approvals.onCreated(listener),
-      subscribeApprovalFinished: (listener) => active.runtime.controllers.approvals.onFinished(listener),
-      subscribeApprovalStateChanged: (listener) => active.runtime.controllers.approvals.onStateChanged(listener),
-      subscribeSessionLocked: (listener) => active.runtime.services.session.unlock.onLocked(listener),
-      cancelApproval: (params) => active.runtime.controllers.approvals.cancel(params),
-      cancelPendingApprovals: async (reason) => {
-        const pending = active.runtime.controllers.approvals.getState().pending;
-        await Promise.all(
-          pending.map((item) => active.runtime.controllers.approvals.cancel({ approvalId: item.approvalId, reason })),
-        );
+      subscribeApprovalCreated: (listener) => {
+        const unsubscribeGeneric = active.runtime.controllers.approvals.onCreated((event) => {
+          listener({ approval: toGenericApprovalEntry(event.record) });
+        });
+        const createdTransactionApprovalIds = new Set<string>();
+        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
+          for (const approvalId of approvalIds) {
+            const approval = active.runtime.transactions.getTransactionApproval(approvalId);
+            if (!approval) {
+              createdTransactionApprovalIds.delete(approvalId);
+              continue;
+            }
+            if (createdTransactionApprovalIds.has(approvalId)) {
+              continue;
+            }
+
+            createdTransactionApprovalIds.add(approvalId);
+            void buildTransactionApprovalEntry(approval)
+              .then((entry) => {
+                if (entry && createdTransactionApprovalIds.has(approvalId)) {
+                  listener({ approval: entry });
+                  return;
+                }
+                createdTransactionApprovalIds.delete(approvalId);
+              })
+              .catch((error) => {
+                createdTransactionApprovalIds.delete(approvalId);
+                hostLog("failed to build transaction approval entry", { approvalId, error });
+              });
+          }
+        });
+
+        return () => {
+          unsubscribeGeneric();
+          unsubscribeTransactions();
+        };
       },
-      getPendingApprovalCount: () => active.runtime.controllers.approvals.getState().pending.length,
+      subscribeApprovalFinished: (listener) => {
+        const unsubscribeGeneric = active.runtime.controllers.approvals.onFinished((event) => {
+          listener({ approvalId: event.approvalId });
+        });
+        const activeTransactionApprovalIds = new Set<string>();
+        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
+          for (const approvalId of approvalIds) {
+            const approval = active.runtime.transactions.getTransactionApproval(approvalId);
+            if (approval) {
+              activeTransactionApprovalIds.add(approvalId);
+              continue;
+            }
+
+            if (!activeTransactionApprovalIds.delete(approvalId)) {
+              continue;
+            }
+
+            listener({ approvalId });
+          }
+        });
+
+        return () => {
+          unsubscribeGeneric();
+          unsubscribeTransactions();
+        };
+      },
+      subscribeApprovalStateChanged: (listener) => {
+        const unsubscribeGeneric = active.runtime.controllers.approvals.onStateChanged(() => listener());
+        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged(() => listener());
+
+        return () => {
+          unsubscribeGeneric();
+          unsubscribeTransactions();
+        };
+      },
+      subscribeSessionLocked: (listener) => active.runtime.services.session.unlock.onLocked(listener),
+      cancelApproval,
+      cancelPendingApprovals: async (reason) => {
+        const genericApprovalIds = active.runtime.controllers.approvals.getState().pending.map((item) => item.approvalId);
+        const transactionApprovalIds = (await active.runtime.transactions.listTransactionApprovals()).map(
+          (approval) => approval.approvalId,
+        );
+        const approvalIds = Array.from(new Set([...genericApprovalIds, ...transactionApprovalIds]));
+        await Promise.all(approvalIds.map((approvalId) => cancelApproval({ approvalId, reason })));
+      },
+      getPendingApprovalCount: async () =>
+        active.runtime.controllers.approvals.getState().pending.length +
+        (await active.runtime.transactions.listTransactionApprovals()).length,
       getApprovalDetail: (approvalId) => active.runtime.getApprovalDetail(approvalId),
       hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),
     };

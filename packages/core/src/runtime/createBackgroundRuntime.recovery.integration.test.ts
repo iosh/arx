@@ -1,37 +1,31 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TransactionRecord } from "../storage/records.js";
+import { describe, expect, it, vi } from "vitest";
+import type { TransactionAggregate } from "../transactions/aggregate/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction, NamespaceTransactionTracking } from "../transactions/namespace/types.js";
 import {
   createChainMetadata,
   flushAsync,
+  MemoryTransactionAggregatesPort,
   setupBackground,
-  TEST_RECEIPT_POLL_INTERVAL,
 } from "./__fixtures__/backgroundTestSetup.js";
 
-beforeEach(() => {
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 describe("createBackgroundRuntime (recovery integration)", () => {
-  it("resumes receipt tracking for broadcast transactions during initialization", async () => {
+  it("resumes submitted transaction tracking during initialization", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
 
-    const fetchReceipt = vi.fn<NamespaceTransactionTracking["fetchReceipt"]>(async () => ({
-      status: "success",
-      receipt: { status: "0x1", blockNumber: "0x10" },
-    }));
-    const prepareTransaction = vi.fn(async () => ({ status: "ready" as const, prepared: {} }));
-    const signTransaction = vi.fn(async (_ctx, _prepared) => ({ raw: "0x" }));
+    const inspectSubmittedTransaction = vi.fn<NonNullable<NamespaceTransactionTracking["inspectSubmittedTransaction"]>>(
+      async () => ({
+        chainStatus: "confirmed",
+        receipt: { status: "0x1", blockNumber: "0x10" },
+      }),
+    );
+    const createBroadcastInput = vi.fn(async () => ({ kind: "test.raw", payload: { raw: "0x" } }));
     const broadcastTransaction = vi.fn(async () => ({
+      broadcastIdentity: { hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
       submitted: {
         hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         chainId: "0x1",
@@ -41,60 +35,84 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     }));
 
     const adapter: NamespaceTransaction = {
-      proposal: {
-        prepare: prepareTransaction,
-      },
-      execution: {
-        sign: signTransaction,
+      submission: {
+        createBroadcastInput,
         broadcast: broadcastTransaction,
       },
-      tracking: { fetchReceipt },
+      tracking: { inspectSubmittedTransaction },
     };
-
-    const namespaceTransactions = new NamespaceTransactions([[chain.namespace, adapter]]);
 
     const txId = "11111111-1111-4111-8111-111111111111";
-    const seed: TransactionRecord = {
-      id: txId,
-      namespace: chain.namespace,
-      chainRef: chain.chainRef,
-      origin: "https://dapp.example",
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
-      submitted: {
-        hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        chainId: "0x1",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        nonce: "0x7",
+    const seed: TransactionAggregate = {
+      record: {
+        id: txId,
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        origin: "https://dapp.example",
+        source: "dapp",
+        requestId: "request-1",
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        status: "submitted",
+        request: {
+          kind: "eip155.transaction",
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        },
+        approvedRequest: {
+          approvalId: "approval-1",
+          payload: {
+            nonce: "0x7",
+          },
+          approvedAt: 1_000,
+        },
+        activeSubmissionId: null,
+        submitted: {
+          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
+        receipt: null,
+        conflictKey: null,
+        replacesTransactionId: null,
+        replacementType: null,
+        replacedByTransactionId: null,
+        terminalReason: null,
+        createdAt: 1_000,
+        updatedAt: 1_000,
       },
-      receipt: null,
-      replacementKey: null,
-      replacedByRecordId: null,
-      createdAt: 1_000,
-      updatedAt: 1_000,
+      submissions: [
+        {
+          id: "submission-1",
+          transactionId: txId,
+          status: "accepted",
+          terminalReason: null,
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        },
+      ],
     };
+    const transactionAggregatesPort = new MemoryTransactionAggregatesPort();
+    await transactionAggregatesPort.insertTransactionAggregate(seed);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactionsSeed: [seed],
-      transactions: { namespaces: namespaceTransactions },
+      transactionAggregatesPort,
+      transactions: { namespaces: new NamespaceTransactions([[chain.namespace, adapter]]) },
       persistDebounceMs: 0,
     });
 
     try {
       await flushAsync();
 
-      // Tracker polls after the initial delay.
-      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
-      await flushAsync();
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(0);
-      expect(signTransaction).toHaveBeenCalledTimes(0);
+      expect(createBroadcastInput).toHaveBeenCalledTimes(0);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-      expect(fetchReceipt).toHaveBeenCalledTimes(1);
+      expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(1);
 
-      const view = context.runtime.legacyTransactions.records.getRecordView(txId);
-      expect(view).toMatchObject({
+      await expect(context.runtime.transactions.getTransaction(txId)).resolves.toMatchObject({
         status: "confirmed",
         receipt: {
           status: "0x1",

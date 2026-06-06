@@ -27,11 +27,7 @@ import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
-import type { TransactionsService } from "../../services/store/transactions/types.js";
-import { createTransactionRuntime } from "../../transactions/createTransactionRuntime.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { TransactionRuntime } from "../../transactions/runtime.js";
-import { TRANSACTION_TOPICS } from "../../transactions/topics.js";
 import { DEFAULT_STRATEGY } from "./constants.js";
 import type { RuntimeNetworkPlan } from "./networkDefaults.js";
 
@@ -78,34 +74,6 @@ export type ControllersInitResult = {
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
   setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
-};
-
-export const createTransactionRuntimeForControllers = (params: {
-  bus: Messenger;
-  accountCodecs: AccountCodecRegistry;
-  accounts: AccountController;
-  approvals: ApprovalController;
-  namespaces: NamespaceTransactions;
-  transactionsService: TransactionsService;
-  now?: () => number;
-}): TransactionRuntime => {
-  return createTransactionRuntime({
-    messenger: params.bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
-    accountCodecs: params.accountCodecs,
-    accounts: {
-      listOwnedForNamespace: (input) => params.accounts.listOwnedForNamespace(input),
-    },
-    approvals: {
-      create: (...args) => params.approvals.create(...args),
-      createPending: (...args) => params.approvals.createPending(...args),
-      cancel: (input) => params.approvals.cancel(input),
-      onFinished: (handler) => params.approvals.onFinished(handler),
-      listPendingIdsBySubject: (subject) => params.approvals.listPendingIdsBySubject(subject),
-    },
-    namespaces: params.namespaces,
-    service: params.transactionsService,
-    ...(params.now ? { now: params.now } : {}),
-  });
 };
 
 export const initControllers = ({

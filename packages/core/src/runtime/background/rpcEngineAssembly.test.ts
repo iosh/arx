@@ -11,7 +11,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
-  MemoryTransactionsPort,
+  MemoryTransactionAggregatesPort,
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../createBackgroundRuntime.js";
 import { createBackgroundRpcMiddlewares, createRpcEngineForBackground } from "./rpcEngineAssembly.js";
@@ -56,7 +56,7 @@ const createTestRuntime = () => {
     store: {
       ports: {
         customChains: customChainsPort,
-        transactions: new MemoryTransactionsPort(),
+        transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
         permissions: new MemoryPermissionsPort(),

@@ -89,12 +89,6 @@ describe("namespace stage assembly", () => {
       proposal: {
         prepare: async () => ({ status: "ready" as const, prepared: {} }),
       },
-      execution: {
-        sign: async () => ({ raw: "0x1111" }),
-        broadcast: async () => ({
-          submitted: { hash: "0xhash", chainId: "0x1", from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-        }),
-      },
     };
 
     const materialized = materializeNamespaceRuntimeSupport({
@@ -115,7 +109,6 @@ describe("namespace stage assembly", () => {
     expect(materialized.runtimeSupport.get("eip155")).toMatchObject({
       hasTransaction: true,
       hasTransactionReceiptTracking: false,
-      hasTransactionReplacementTracking: false,
     });
   });
 
@@ -124,12 +117,6 @@ describe("namespace stage assembly", () => {
     const solanaOverride = {
       proposal: {
         prepare: async () => ({ status: "ready" as const, prepared: {} }),
-      },
-      execution: {
-        sign: async () => ({ raw: "0x1111" }),
-        broadcast: async () => ({
-          submitted: { hash: "0xhash", chainId: "0x1", from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-        }),
       },
     };
 

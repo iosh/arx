@@ -3,9 +3,9 @@ import {
   type ApprovalController,
   type ApprovalCreateParams,
   type ApprovalHandle,
-  type ApprovalKind,
   ApprovalKinds,
   type ApprovalRequester,
+  type ControllerApprovalKind,
 } from "../controllers/approval/types.js";
 import { requestApproval } from "./creation.js";
 
@@ -27,7 +27,7 @@ const createApprovals = () => {
 
   return {
     calls,
-    create: <K extends ApprovalKind>(
+    create: <K extends ControllerApprovalKind>(
       request: ApprovalCreateParams<K>,
       requester: ApprovalRequester,
     ): ApprovalHandle<K> => {
@@ -86,7 +86,7 @@ describe("requestApproval", () => {
     });
   });
 
-  it("preserves explicit approvalId and createdAt for transaction-backed approvals", () => {
+  it("preserves explicit approvalId and createdAt", () => {
     const approvals = createApprovals();
 
     const handle = requestApproval(
@@ -95,27 +95,12 @@ describe("requestApproval", () => {
         now: () => 123,
       },
       {
-        kind: ApprovalKinds.SendTransaction,
+        kind: ApprovalKinds.SwitchChain,
         requester: REQUESTER,
         approvalId: "22222222-2222-4222-8222-222222222222",
         createdAt: 456,
-        subject: {
-          kind: "transaction",
-          transactionId: "33333333-3333-4333-8333-333333333333",
-        },
         request: {
           chainRef: "eip155:10",
-          origin: REQUESTER.origin,
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            chainRef: "eip155:10",
-            payload: {
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              value: "0x0",
-            },
-          },
         },
       },
     );
@@ -125,12 +110,12 @@ describe("requestApproval", () => {
     expect(approvals.calls[0]).toEqual({
       request: expect.objectContaining({
         approvalId: "22222222-2222-4222-8222-222222222222",
+        kind: ApprovalKinds.SwitchChain,
         createdAt: 456,
         namespace: "eip155",
         chainRef: "eip155:10",
-        subject: {
-          kind: "transaction",
-          transactionId: "33333333-3333-4333-8333-333333333333",
+        request: {
+          chainRef: "eip155:10",
         },
       }),
       requester: {
@@ -139,38 +124,5 @@ describe("requestApproval", () => {
         requestId: REQUESTER.requestId,
       },
     });
-  });
-
-  it("rejects transaction approval requests whose payload origin mismatches requester", () => {
-    const approvals = createApprovals();
-
-    expect(() =>
-      requestApproval(
-        {
-          approvals,
-          now: () => 123,
-        },
-        {
-          kind: ApprovalKinds.SendTransaction,
-          requester: REQUESTER,
-          subject: {
-            kind: "transaction",
-            transactionId: "33333333-3333-4333-8333-333333333333",
-          },
-          request: {
-            chainRef: "eip155:1",
-            origin: "https://other.example",
-            chain: null,
-            from: null,
-            request: {
-              namespace: "eip155",
-              chainRef: "eip155:1",
-              payload: {},
-            },
-          },
-        },
-      ),
-    ).toThrow(/origin/i);
-    expect(approvals.calls).toHaveLength(0);
   });
 });

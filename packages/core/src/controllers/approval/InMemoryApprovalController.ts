@@ -8,15 +8,14 @@ import type {
   ApprovalCreateParams,
   ApprovalFinishedEvent,
   ApprovalHandle,
-  ApprovalKind,
   ApprovalRecord,
   ApprovalRequester,
   ApprovalResolveInput,
   ApprovalResolveResult,
   ApprovalResultByKind,
   ApprovalState,
-  ApprovalSubject,
   ApprovalTerminalReason,
+  ControllerApprovalKind,
   PendingApproval,
   PendingApprovalSettlement,
 } from "./types.js";
@@ -162,8 +161,6 @@ export class InMemoryApprovalController implements ApprovalController {
   #records: Map<string, ApprovalRecord> = new Map();
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
-  #approvalSubjectIndex: Map<string, ApprovalSubject> = new Map();
-  #subjectApprovalIndex: Map<string, Set<string>> = new Map();
 
   constructor({ messenger, autoRejectMessage, ttlMs, logger, getExecutor }: CreateInMemoryApprovalControllerOptions) {
     this.#messenger = messenger;
@@ -198,12 +195,10 @@ export class InMemoryApprovalController implements ApprovalController {
     return record ? cloneRecord(record) : undefined;
   }
 
-  getSubject(approvalId: string): ApprovalSubject | undefined {
-    const subject = this.#approvalSubjectIndex.get(approvalId);
-    return subject ? structuredClone(subject) : undefined;
-  }
-
-  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K> {
+  create<K extends ControllerApprovalKind>(
+    request: ApprovalCreateParams<K>,
+    requester: ApprovalRequester,
+  ): ApprovalHandle<K> {
     const deferred = createDeferred<ApprovalResultByKind[K]>();
     const record = this.#enqueuePendingApproval(request, requester, {
       kind: "handle",
@@ -213,13 +208,13 @@ export class InMemoryApprovalController implements ApprovalController {
     return { approvalId: record.approvalId, settled: deferred.promise };
   }
 
-  createPending<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void {
+  createPending<K extends ControllerApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void {
     this.#enqueuePendingApproval(request, requester, {
       kind: "internal",
     });
   }
 
-  #enqueuePendingApproval<K extends ApprovalKind>(
+  #enqueuePendingApproval<K extends ControllerApprovalKind>(
     request: ApprovalCreateParams<K>,
     requester: ApprovalRequester,
     settlement: PendingApprovalSettlement,
@@ -250,7 +245,6 @@ export class InMemoryApprovalController implements ApprovalController {
     );
 
     this.#records.set(record.approvalId, record);
-    this.#indexSubject(record);
     this.#enqueue(record);
     this.#publishCreated({ record });
 
@@ -289,7 +283,6 @@ export class InMemoryApprovalController implements ApprovalController {
         status: "rejected",
         terminalReason: "user_reject",
         ...this.#recordMeta(entry.record),
-        ...(entry.record.subject ? { subject: entry.record.subject } : {}),
         error: toSimpleError(error),
       });
 
@@ -309,7 +302,6 @@ export class InMemoryApprovalController implements ApprovalController {
         status: "approved",
         terminalReason: "user_approve",
         ...this.#recordMeta(entry.record),
-        ...(entry.record.subject ? { subject: entry.record.subject } : {}),
         value,
       });
 
@@ -323,7 +315,6 @@ export class InMemoryApprovalController implements ApprovalController {
         status: "failed",
         terminalReason: "internal_error",
         ...this.#recordMeta(entry.record),
-        ...(entry.record.subject ? { subject: entry.record.subject } : {}),
         error: toSimpleError(err),
       });
 
@@ -362,18 +353,8 @@ export class InMemoryApprovalController implements ApprovalController {
       status: deriveApprovalFinalStatus(input.reason),
       terminalReason: input.reason,
       ...this.#recordMeta(entry.record),
-      ...(entry.record.subject ? { subject: entry.record.subject } : {}),
       error: toSimpleError(error),
     });
-  }
-
-  listPendingIdsBySubject(subject: ApprovalSubject): string[] {
-    const approvalIds = this.#subjectApprovalIndex.get(this.#toSubjectKey(subject));
-    if (!approvalIds) {
-      return [];
-    }
-
-    return [...approvalIds].filter((approvalId) => this.#pending.has(approvalId)).sort();
   }
 
   #enqueue(record: ApprovalRecord) {
@@ -407,50 +388,7 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#dequeue(approvalId);
     const record = this.#records.get(approvalId);
     this.#records.delete(approvalId);
-    this.#unindexSubject(approvalId);
     return record;
-  }
-
-  #indexSubject(record: ApprovalRecord) {
-    if (!record.subject) {
-      return;
-    }
-
-    const subject = structuredClone(record.subject);
-    const subjectKey = this.#toSubjectKey(subject);
-    this.#approvalSubjectIndex.set(record.approvalId, subject);
-    const approvalIds = this.#subjectApprovalIndex.get(subjectKey) ?? new Set<string>();
-    approvalIds.add(record.approvalId);
-    this.#subjectApprovalIndex.set(subjectKey, approvalIds);
-  }
-
-  #unindexSubject(approvalId: string) {
-    const subject = this.#approvalSubjectIndex.get(approvalId);
-    if (!subject) {
-      return;
-    }
-
-    this.#approvalSubjectIndex.delete(approvalId);
-    const subjectKey = this.#toSubjectKey(subject);
-    const approvalIds = this.#subjectApprovalIndex.get(subjectKey);
-    if (!approvalIds) {
-      return;
-    }
-
-    approvalIds.delete(approvalId);
-    if (approvalIds.size === 0) {
-      this.#subjectApprovalIndex.delete(subjectKey);
-    }
-  }
-
-  #toSubjectKey(subject: ApprovalSubject) {
-    switch (subject.kind) {
-      case "transaction":
-        return `transaction:${subject.transactionId}`;
-      default: {
-        throw new Error(`Unsupported approval subject: ${String((subject as ApprovalSubject).kind)}`);
-      }
-    }
   }
 
   #clearTimeout(approvalId: string) {

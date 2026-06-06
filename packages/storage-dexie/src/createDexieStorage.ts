@@ -6,7 +6,6 @@ import type {
   NetworkSelectionPort,
   PermissionsPort,
   SettingsPort,
-  TransactionsPort,
 } from "@arx/core/services";
 import type { VaultMetaPort } from "@arx/core/storage";
 import type { TransactionsStoragePort } from "@arx/core/transactions/storage";
@@ -21,7 +20,6 @@ import { DexieNetworkSelectionPort } from "./ports/networkSelectionPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
 import { DexieSettingsPort } from "./ports/settingsPort.js";
 import { DexieTransactionAggregatesPort } from "./ports/transactionAggregatesPort.js";
-import { DexieTransactionsPort } from "./ports/transactionsPort.js";
 import { DexieVaultMetaPort } from "./ports/vaultMetaPort.js";
 
 export const DEFAULT_DEXIE_DATABASE_NAME = "arx-storage";
@@ -36,7 +34,6 @@ export type DexieStoragePorts = {
   accounts: AccountsPort;
   permissions: PermissionsPort;
   keyringMetas: KeyringMetasPort;
-  transactions: TransactionsPort;
   transactionAggregates: TransactionsStoragePort;
 };
 
@@ -76,7 +73,6 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
       accounts: new DexieAccountsPort(ctx),
       permissions: new DexiePermissionsPort(ctx),
       keyringMetas: new DexieKeyringMetasPort(ctx),
-      transactions: new DexieTransactionsPort(ctx),
       transactionAggregates: new DexieTransactionAggregatesPort(ctx),
     },
     close: () => db.close(),

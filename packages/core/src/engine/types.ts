@@ -9,12 +9,12 @@ import type {
   ApprovalCreateParams,
   ApprovalFinishedEvent,
   ApprovalHandle,
-  ApprovalKind,
   ApprovalRecord,
   ApprovalRequester,
   ApprovalResolveInput,
   ApprovalResolveResult,
   ApprovalState,
+  ControllerApprovalKind,
 } from "../controllers/approval/types.js";
 import type {
   NetworkController,
@@ -74,7 +74,6 @@ import type { NetworkSelectionPort } from "../services/store/networkSelection/po
 import type { NetworkSelectionChangedHandler } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
-import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
@@ -152,7 +151,6 @@ export type ArxWalletStoragePorts = Readonly<{
   networkSelection: NetworkSelectionPort;
   permissions: PermissionsPort;
   settings: SettingsPort;
-  transactions: TransactionsPort;
   transactionAggregates: TransactionsStoragePort;
 }>;
 
@@ -252,7 +250,10 @@ export type WalletApprovals = Readonly<{
   getState(): ApprovalState;
   get(id: string): ApprovalRecord | undefined;
   listPending(): ApprovalRecord[];
-  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
+  create<K extends ControllerApprovalKind>(
+    request: ApprovalCreateParams<K>,
+    requester: ApprovalRequester,
+  ): ApprovalHandle<K>;
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
   cancel: ApprovalController["cancel"];
   onStateChanged: ApprovalController["onStateChanged"];

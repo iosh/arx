@@ -22,7 +22,6 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
-  MemoryTransactionsPort,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
@@ -66,9 +65,10 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
   proposal: {
     prepare: async () => ({ status: "ready", prepared: {} }),
   },
-  execution: {
-    sign: async () => ({ raw: "0x1111" }),
+  submission: {
+    createBroadcastInput: async () => ({ kind: "test.raw", payload: { raw: "0x1111" } }),
     broadcast: async (context) => ({
+      broadcastIdentity: { hash: "0x1111111111111111111111111111111111111111111111111111111111111111" },
       submitted: {
         hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
         chainId: "0x1",
@@ -117,7 +117,6 @@ const createTestRuntime = (params?: {
       ports: {
         customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
-        transactions: new MemoryTransactionsPort(),
         transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
@@ -172,7 +171,6 @@ const createHandlersForRuntime = (
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.legacyTransactions.review,
     transactionApprovals: runtime.transactions,
   });
   const approvalResolveService = createApprovalResolveService({
@@ -528,7 +526,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasUiBindings: true,
       hasTransaction: true,
       hasTransactionReceiptTracking: true,
-      hasTransactionReplacementTracking: true,
     });
 
     const handlers = createHandlersForRuntime(runtime);
@@ -636,7 +633,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasUiBindings: true,
       hasTransaction: true,
       hasTransactionReceiptTracking: true,
-      hasTransactionReplacementTracking: true,
     });
 
     runtime.lifecycle.shutdown();
@@ -774,7 +770,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
       hasTransaction: true,
       hasTransactionReceiptTracking: false,
-      hasTransactionReplacementTracking: false,
     });
     expect(runtime.services.namespaceBindings.hasTransaction("eip155")).toBe(true);
     expect(runtime.services.namespaceBindings.hasTransactionReceiptTracking("eip155")).toBe(false);
@@ -821,7 +816,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
       hasTransaction: true,
       hasTransactionReceiptTracking: false,
-      hasTransactionReplacementTracking: false,
     });
 
     runtime.lifecycle.shutdown();

@@ -60,9 +60,7 @@ const createUiAccess = () =>
         },
         approvalEvents: {
           onCreated: () => () => {},
-          onFinished: (
-            handler: (event: { approvalId: string; subject?: { kind: "transaction"; transactionId: string } }) => void,
-          ) => {
+          onFinished: (handler: (event: { approvalId: string }) => void) => {
             approvalFinishedHandlers.add(handler);
             return () => approvalFinishedHandlers.delete(handler);
           },
@@ -142,14 +140,12 @@ const createUiAccess = () =>
     },
   });
 
-const approvalFinishedHandlers = new Set<
-  (event: { approvalId: string; subject?: { kind: "transaction"; transactionId: string } }) => void
->();
+const approvalFinishedHandlers = new Set<(event: { approvalId: string }) => void>();
 const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => void>();
 const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
-  it("emits approval detail changed from transaction invalidation without duplicating it on approval finish", () => {
+  it("emits approval invalidations from generic approval finish", () => {
     approvalFinishedHandlers.clear();
     transactionApprovalChangedHandlers.clear();
     transactionChangedHandlers.clear();
@@ -160,10 +156,7 @@ describe("createUiRuntimeAccess", () => {
     });
 
     approvalFinishedHandlers.forEach((handler) => {
-      handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } });
-    });
-    transactionApprovalChangedHandlers.forEach((handler) => {
-      handler(["approval-1"]);
+      handler({ approvalId: "approval-1" });
     });
 
     unsubscribe();

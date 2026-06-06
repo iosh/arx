@@ -1,8 +1,8 @@
 import type {
   ApprovalCreatedEvent,
+  ControllerApprovalKind,
   ApprovalFinalStatus,
   ApprovalFinishedEvent,
-  ApprovalKind,
   ApprovalRecord,
   ApprovalState,
   ApprovalTerminalReason,
@@ -44,14 +44,13 @@ export const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
   return true;
 };
 
-export const cloneRecord = <K extends ApprovalKind>(record: ApprovalRecord<K>): ApprovalRecord<K> => ({
+export const cloneRecord = <K extends ControllerApprovalKind>(record: ApprovalRecord<K>): ApprovalRecord<K> => ({
   approvalId: record.approvalId,
   kind: record.kind,
   origin: record.origin,
   namespace: record.namespace,
   chainRef: record.chainRef,
   request: record.request,
-  ...(record.subject ? { subject: structuredClone(record.subject) } : {}),
   createdAt: record.createdAt,
   requester: { ...record.requester },
 });
@@ -68,7 +67,6 @@ export const cloneFinishEvent = <T>(event: ApprovalFinishedEvent<T>): ApprovalFi
   ...(event.origin !== undefined ? { origin: event.origin } : {}),
   ...(event.namespace !== undefined ? { namespace: event.namespace } : {}),
   ...(event.chainRef !== undefined ? { chainRef: event.chainRef } : {}),
-  ...(event.subject ? { subject: structuredClone(event.subject) } : {}),
   ...(event.value !== undefined ? { value: event.value } : {}),
   ...(event.error ? { error: { ...event.error } } : {}),
 });

@@ -4,11 +4,9 @@ import {
   ApprovalKinds,
   type ApprovalQueueItem,
   type ApprovalRecord,
-  type ApprovalSubject,
 } from "../../../controllers/approval/types.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
-import type { TransactionApprovalReviewReader } from "../../../transactions/runtime.js";
 import type { TransactionApproval, TransactionsService } from "../../../transactions/TransactionsService.js";
 import type {
   ApprovalDetail,
@@ -19,12 +17,10 @@ import type {
 type ApprovalReadServiceDeps = {
   approvals: {
     get(approvalId: string): ApprovalRecord | undefined;
-    getSubject(approvalId: string): ApprovalSubject | undefined;
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
-  transactions: TransactionApprovalReviewReader;
   transactionApprovals?: Pick<
     TransactionsService,
     "getTransaction" | "getTransactionApproval" | "listTransactionApprovals"
@@ -84,8 +80,7 @@ const getApprovalRequestChainRef = (record: ApprovalRecord): string | undefined 
     isApprovalRecord(record, ApprovalKinds.RequestPermissions) ||
     isApprovalRecord(record, ApprovalKinds.SignMessage) ||
     isApprovalRecord(record, ApprovalKinds.SignTypedData) ||
-    isApprovalRecord(record, ApprovalKinds.SwitchChain) ||
-    isApprovalRecord(record, ApprovalKinds.SendTransaction)
+    isApprovalRecord(record, ApprovalKinds.SwitchChain)
   ) {
     return record.request.chainRef;
   }
@@ -248,34 +243,6 @@ const buildStaticDetail = (
   return assertUnreachable(record);
 };
 
-const buildSendTransactionDetail = (
-  record: ApprovalRecord<typeof ApprovalKinds.SendTransaction>,
-  deps: ApprovalReadServiceDeps,
-): ApprovalSendTransactionDetail => {
-  const subject = deps.approvals.getSubject(record.approvalId);
-  if (subject?.kind !== "transaction") {
-    throw new Error(`Send-transaction approval ${record.approvalId} is missing a transaction subject.`);
-  }
-
-  const review = deps.transactions.getTransactionApprovalReview(subject.transactionId);
-
-  return {
-    ...toDetailMeta(record),
-    kind: ApprovalKinds.SendTransaction,
-    actions: {
-      canApprove: review.prepare.state === "ready",
-      canReject: true,
-    },
-    request: {
-      transactionId: record.request.transactionId,
-      chainRef: record.request.chainRef,
-      origin: record.request.origin,
-      prepareId: null,
-    },
-    review,
-  };
-};
-
 const toTransactionReviewPrepare = (
   approval: TransactionApproval,
 ): ApprovalSendTransactionDetail["review"]["prepare"] => {
@@ -378,10 +345,6 @@ export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
       isApprovalRecord(record, ApprovalKinds.AddChain)
     ) {
       return buildStaticDetail(record, deps);
-    }
-
-    if (isApprovalRecord(record, ApprovalKinds.SendTransaction)) {
-      return buildSendTransactionDetail(record, deps);
     }
 
     throw new Error(`Unsupported approval kind: ${record.kind}`);

@@ -15,7 +15,6 @@ import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js
 import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
-import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
@@ -25,7 +24,6 @@ import type {
   NetworkSelectionRecord,
   PermissionRecord,
   SettingsRecord,
-  TransactionRecord,
 } from "../../storage/records.js";
 import {
   AccountRecordSchema,
@@ -34,7 +32,6 @@ import {
   KeyringMetaRecordSchema,
   NetworkSelectionRecordSchema,
   PermissionRecordSchema,
-  TransactionRecordSchema,
 } from "../../storage/records.js";
 import type {
   TransactionRecord as AggregateTransactionRecord,
@@ -44,7 +41,6 @@ import type {
   TransactionConflictKey,
   TransactionsStoragePort,
 } from "../../transactions/storage/index.js";
-import { TRANSACTION_APPROVAL_DETAIL_INVALIDATED } from "../../transactions/topics.js";
 import { vaultErrors } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
 import type { BackgroundRpcEnvHooks } from "../background/rpcEngineAssembly.js";
@@ -129,85 +125,6 @@ export class MemoryPermissionsPort implements PermissionsPort {
         this.#records.delete(id);
       }
     }
-  }
-}
-
-export class MemoryTransactionsPort implements TransactionsPort {
-  #records = new Map<string, TransactionRecord>();
-
-  constructor(seed: TransactionRecord[] = []) {
-    for (const record of seed) {
-      const checked = TransactionRecordSchema.parse(record);
-      this.#records.set(checked.id, clone(checked));
-    }
-  }
-
-  async get(id: TransactionRecord["id"]): Promise<TransactionRecord | null> {
-    const found = this.#records.get(id);
-    return found ? clone(found) : null;
-  }
-
-  async list(query?: {
-    chainRef?: string;
-    status?: TransactionRecord["status"];
-    replacementKey?: TransactionRecord["replacementKey"];
-    limit?: number;
-    before?: {
-      createdAt: number;
-      id: TransactionRecord["id"];
-    };
-  }): Promise<TransactionRecord[]> {
-    const chainRef = query?.chainRef;
-    const status = query?.status;
-    const replacementKey = query?.replacementKey;
-    const limit = query?.limit ?? 100;
-    const before = query?.before;
-
-    let all = Array.from(this.#records.values());
-    if (chainRef !== undefined) all = all.filter((r) => r.chainRef === chainRef);
-    if (status !== undefined) all = all.filter((r) => r.status === status);
-    if (replacementKey !== undefined) {
-      all = all.filter((record) => JSON.stringify(record.replacementKey) === JSON.stringify(replacementKey));
-    }
-    all.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
-    if (before !== undefined) {
-      all = all.filter(
-        (r) =>
-          r.createdAt < before.createdAt || (r.createdAt === before.createdAt && r.id.localeCompare(before.id) < 0),
-      );
-    }
-
-    return all.slice(0, limit).map((r) => clone(r));
-  }
-
-  async findByReplacementKey(key: NonNullable<TransactionRecord["replacementKey"]>): Promise<TransactionRecord[]> {
-    return await this.list({ replacementKey: key });
-  }
-
-  async create(record: TransactionRecord): Promise<void> {
-    const checked = TransactionRecordSchema.parse(record);
-    if (this.#records.has(checked.id)) {
-      throw new Error(`Duplicate transaction id "${checked.id}"`);
-    }
-    this.#records.set(checked.id, clone(checked));
-  }
-
-  async updateIfStatus(params: {
-    id: TransactionRecord["id"];
-    expectedStatus: TransactionRecord["status"];
-    next: TransactionRecord;
-  }): Promise<boolean> {
-    const current = this.#records.get(params.id);
-    if (!current) return false;
-    if (current.status !== params.expectedStatus) return false;
-
-    const checked = TransactionRecordSchema.parse(params.next);
-    this.#records.set(checked.id, clone(checked));
-    return true;
-  }
-
-  async remove(id: TransactionRecord["id"]): Promise<void> {
-    this.#records.delete(id);
   }
 }
 
@@ -672,7 +589,6 @@ export type TestBackgroundContext = {
   networkSelectionPort: MemoryNetworkSelectionPort;
   customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
-  transactionsPort: MemoryTransactionsPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
   settingsPort: MemorySettingsPort;
   destroy: () => void;
@@ -688,8 +604,6 @@ export type SetupBackgroundOptions = {
   keyringMetasSeed?: KeyringMetaRecord[];
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
-  transactionsSeed?: TransactionRecord[];
-  transactionsPort?: MemoryTransactionsPort;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
   autoLockDurationMs?: number;
   now?: () => number;
@@ -712,7 +626,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const networkSelectionPort = new MemoryNetworkSelectionPort(options.networkSelectionSeed ?? null);
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
-  const transactionsPort = options.transactionsPort ?? new MemoryTransactionsPort(options.transactionsSeed ?? []);
   const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
   const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
@@ -765,7 +678,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       ports: {
         customChains: customChainsPort,
         permissions: permissionsPort,
-        transactions: transactionsPort,
         transactionAggregates: transactionAggregatesPort,
         accounts: accountsPort,
         keyringMetas: keyringMetasPort,
@@ -803,29 +715,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
         return;
       }
 
-      const subject = runtime.controllers.approvals.getSubject(approvalId);
-      if (subject?.kind !== "transaction") {
-        pending.delete(approvalId);
-        return;
-      }
-      const review = runtime.legacyTransactions.review.getTransactionApprovalReview(subject.transactionId);
-      if (review.prepare.state !== "ready") {
-        return;
-      }
-
-      try {
-        await runtime.controllers.approvals.resolve({ approvalId, action: "approve" });
-        pending.delete(approvalId);
-      } catch {
-        // Keep pending until the transaction review becomes ready or the approval disappears.
-      }
+      pending.delete(approvalId);
     };
-
-    const unsubscribeState = runtime.bus.subscribe(TRANSACTION_APPROVAL_DETAIL_INVALIDATED, () => {
-      for (const approvalId of pending) {
-        void tryApprove(approvalId);
-      }
-    });
 
     const unsubscribeTransactionApprovals = runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
       for (const approvalId of approvalIds) {
@@ -840,7 +731,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     });
     return () => {
       unsubscribe();
-      unsubscribeState();
       unsubscribeTransactionApprovals();
       pending.clear();
     };
@@ -853,7 +743,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     networkSelectionPort,
     customChainsPort,
     vaultMetaPort,
-    transactionsPort,
     transactionAggregatesPort,
     settingsPort,
     enableAutoApproval,

@@ -34,13 +34,13 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    await expect(service.fetchReceipt(BASE_CONTEXT)).rejects.toMatchObject({
+    await expect(service.inspectSubmittedTransaction(BASE_CONTEXT)).rejects.toMatchObject({
       reason: ArxReasons.RpcInternal,
       message: expect.stringContaining("mismatched"),
     });
   });
 
-  it("resolves status as success when blockNumber exists", async () => {
+  it("reports confirmed when blockNumber exists", async () => {
     const client = createEip155RpcClient({
       getTransactionReceipt: vi.fn(async () => ({
         blockNumber: "0x123",
@@ -51,12 +51,14 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const result = await service.fetchReceipt(BASE_CONTEXT);
-    expect(result?.status).toBe("success");
-    expect(result?.receipt).toMatchObject({ blockNumber: "0x123" });
+    const result = await service.inspectSubmittedTransaction(BASE_CONTEXT);
+    expect(result).toEqual({
+      chainStatus: "confirmed",
+      receipt: { blockNumber: "0x123" },
+    });
   });
 
-  it("detects replacement when nonce is already consumed", async () => {
+  it("reports dropped when nonce is already consumed", async () => {
     const client = createEip155RpcClient({
       getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
     });
@@ -69,13 +71,16 @@ describe("createEip155ReceiptService", () => {
       ...BASE_CONTEXT,
     };
 
-    const result = await service.detectReplacement(context);
-    expect(result).toEqual({ status: "replaced" });
+    const result = await service.inspectSubmittedTransaction(context);
+    expect(result).toEqual({
+      chainStatus: "dropped",
+      evidence: { reason: "replaced" },
+    });
   });
 
-  it("detects replacement when nonce is available in submitted payload", async () => {
+  it("reports pending when nonce has not been consumed", async () => {
     const client = createEip155RpcClient({
-      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
+      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x3"),
     });
 
     const service = createEip155ReceiptService({
@@ -86,7 +91,10 @@ describe("createEip155ReceiptService", () => {
       ...BASE_CONTEXT,
     };
 
-    const result = await service.detectReplacement(context);
-    expect(result).toEqual({ status: "replaced" });
+    const result = await service.inspectSubmittedTransaction(context);
+    expect(result).toEqual({
+      chainStatus: "pending",
+      evidence: null,
+    });
   });
 });

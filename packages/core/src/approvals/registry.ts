@@ -1,9 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { ApprovalKind, ApprovalRecord } from "../controllers/approval/types.js";
+import type { ApprovalRecord, ControllerApprovalKind } from "../controllers/approval/types.js";
 import { addChainApprovalFlow } from "./flows/addChain.js";
 import { requestAccountsApprovalFlow } from "./flows/requestAccounts.js";
 import { requestPermissionsApprovalFlow } from "./flows/requestPermissions.js";
-import { sendTransactionApprovalFlow } from "./flows/sendTransaction.js";
 import { signMessageApprovalFlow } from "./flows/signMessage.js";
 import { signTypedDataApprovalFlow } from "./flows/signTypedData.js";
 import { switchChainApprovalFlow } from "./flows/switchChain.js";
@@ -14,12 +13,11 @@ const APPROVAL_FLOWS = [
   requestPermissionsApprovalFlow,
   signMessageApprovalFlow,
   signTypedDataApprovalFlow,
-  sendTransactionApprovalFlow,
   switchChainApprovalFlow,
   addChainApprovalFlow,
 ] as const satisfies readonly ApprovalFlow[];
 
-const getRequiredFlow = <K extends ApprovalKind>(
+const getRequiredFlow = <K extends ControllerApprovalKind>(
   registry: ApprovalFlowRegistry,
   record: Pick<ApprovalRecord<K>, "approvalId" | "kind">,
 ) => {
@@ -37,7 +35,7 @@ const getRequiredFlow = <K extends ApprovalKind>(
 
 export const createApprovalFlowRegistry = (options?: { flows?: readonly ApprovalFlow[] }): ApprovalFlowRegistry => {
   const flows = options?.flows ?? APPROVAL_FLOWS;
-  const byKind = new Map<ApprovalKind, ApprovalFlow>(flows.map((flow) => [flow.kind, flow]));
+  const byKind = new Map<ControllerApprovalKind, ApprovalFlow>(flows.map((flow) => [flow.kind, flow]));
 
   return {
     get: (kind) => byKind.get(kind) as ApprovalFlow<typeof kind> | undefined,

@@ -44,7 +44,7 @@ export type TransactionPrepareResult<TPrepared = TransactionPrepared, TReviewSna
   | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot?: TReviewSnapshot | null }
   | { status: "failed"; error: TransactionProposalError; reviewSnapshot?: TReviewSnapshot | null };
 
-// Legacy execution payload kept for the old transaction runtime until replacement.
+/** Signed payload ready for namespace-owned broadcast. */
 export type SignedTransactionPayload = {
   raw: string;
   hash?: string | null;
@@ -123,20 +123,6 @@ export type TransactionRecordContext<TNamespace extends string = string> = {
 
 export type TransactionTrackingContext<TNamespace extends string = string> = TransactionRecordContext<TNamespace> & {
   submitted: TransactionSubmitted<TNamespace>;
-};
-
-export type TransactionReplacementKey = {
-  scope: string;
-  value: string;
-};
-
-export type ReceiptResolution<TNamespace extends string = string> =
-  | { status: "success"; receipt: TransactionReceipt<TNamespace> }
-  | { status: "failed"; receipt: TransactionReceipt<TNamespace> };
-
-export type ReplacementResolution = {
-  replacedByRecordId?: string | null;
-  status: "replaced";
 };
 
 export type TransactionApprovalReviewContext<TNamespace extends string = string> = {
@@ -268,22 +254,6 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   deriveConflictKey?(context: TransactionProposalConflictContext<TNamespace>): TransactionConflictKey | null;
 };
 
-// Legacy execution contract kept for the old transaction runtime.
-export type NamespaceTransactionExecution<TNamespace extends string = string> = {
-  sign(
-    context: TransactionSignContext<TNamespace>,
-    prepared: TransactionPrepared<TNamespace>,
-    options?: TransactionSignOptions,
-  ): Promise<SignedTransactionPayload>;
-  broadcast(
-    context: TransactionPrepareContext<TNamespace>,
-    signed: SignedTransactionPayload,
-    prepared: TransactionPrepared<TNamespace>,
-  ): Promise<{
-    submitted: TransactionSubmitted<TNamespace>;
-  }>;
-};
-
 export type NamespaceTransactionSubmission<TNamespace extends string = string> = {
   createBroadcastInput(
     context: TransactionBroadcastInputContext<TNamespace>,
@@ -293,29 +263,16 @@ export type NamespaceTransactionSubmission<TNamespace extends string = string> =
 };
 
 export type NamespaceTransactionTracking<TNamespace extends string = string> = {
-  // Legacy tracking contract kept for the old transaction runtime.
-  fetchReceipt?(context: TransactionTrackingContext<TNamespace>): Promise<ReceiptResolution<TNamespace> | null>;
-  detectReplacement?(context: TransactionTrackingContext<TNamespace>): Promise<ReplacementResolution | null>;
-  deriveReplacementKey?(context: TransactionTrackingContext<TNamespace>): TransactionReplacementKey | null;
-
-  // New aggregate-centric tracking contract.
   inspectSubmittedTransaction?(
     context: TransactionTrackingContext<TNamespace>,
   ): Promise<SubmittedTransactionInspection<TNamespace>>;
 };
 
-export type NamespaceTransactionRecord<TNamespace extends string = string> = {
-  parseSubmitted(submitted: TransactionSubmitted<TNamespace>): TransactionSubmitted<TNamespace>;
-  parseReceipt(receipt: TransactionReceipt<TNamespace>): TransactionReceipt<TNamespace>;
-};
-
 export type NamespaceTransaction<TNamespace extends string = string> = {
   request?: NamespaceTransactionRequest<TNamespace>;
   proposal?: NamespaceTransactionProposal<TNamespace>;
-  execution?: NamespaceTransactionExecution<TNamespace>;
   submission?: NamespaceTransactionSubmission<TNamespace>;
   tracking?: NamespaceTransactionTracking<TNamespace>;
-  record?: NamespaceTransactionRecord<TNamespace>;
 };
 
 export type AnyNamespaceTransaction = NamespaceTransaction<string>;

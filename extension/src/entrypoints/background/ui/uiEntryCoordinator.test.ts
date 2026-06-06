@@ -219,8 +219,8 @@ const buildHarness = (
       return {
         subscribeUnlockAttentionRequested: (handler: (payload: unknown) => void) =>
           bus.subscribe(ATTENTION_REQUESTED, handler),
-        subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
-          approvals.onCreated(handler),
+        subscribeApprovalCreated: (handler: (event: { approval: ApprovalRecordLike }) => void) =>
+          approvals.onCreated(({ record }) => handler({ approval: record })),
         subscribeApprovalFinished: (handler: (event: { approvalId: string }) => void) => approvals.onFinished(handler),
         subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
         subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
@@ -229,7 +229,7 @@ const buildHarness = (
           const pendingIds = approvals.getState().pending.map((item) => item.approvalId);
           await Promise.all(pendingIds.map((approvalId) => approvals.cancel({ approvalId, reason })));
         },
-        getPendingApprovalCount: () => approvals.getState().pending.length,
+        getPendingApprovalCount: async () => approvals.getState().pending.length,
         getApprovalDetail: async (approvalId: string) => approvalDetails.get(approvalId) ?? null,
         hasInitializedVault: () => true,
       };

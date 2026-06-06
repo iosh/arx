@@ -14,7 +14,7 @@ import {
   MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
-  MemoryTransactionsPort,
+  MemoryTransactionAggregatesPort,
   TEST_NAMESPACE_MANIFESTS,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
@@ -73,7 +73,7 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
       ports: {
         customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
-        transactions: new MemoryTransactionsPort(),
+        transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
         ...(store?.ports ?? {}),

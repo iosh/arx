@@ -1,7 +1,7 @@
 import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
-import type { HandlerControllers } from "../rpc/handlers/types.js";
+import type { RpcHandlerDeps } from "../rpc/handlers/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
@@ -314,7 +314,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
   transactionOverrides?: NamespaceTransactions;
 }): {
   namespaceTransactions: NamespaceTransactions;
-  signers: HandlerControllers["signers"];
+  signers: RpcHandlerDeps["signers"];
   bindings: NamespaceRuntimeBindingsRegistry;
   runtimeSupport: NamespaceRuntimeSupportIndex;
 } => {

@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../approvals/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
@@ -11,15 +11,15 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
-  handler: async ({ origin, controllers, executionContext, invocation }) => {
+  handler: async ({ origin, deps, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
-    const suggested = controllers.accounts
+    const suggested = deps.accounts
       .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
       .map((account) => account.displayAddress);
 
     try {
       const approval = await requestProviderApproval({
-        controllers,
+        deps,
         executionContext,
         method: "eth_requestAccounts",
         kind: ApprovalKinds.RequestAccounts,

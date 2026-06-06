@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import { buildNetworkRuntimeInput } from "../../controllers/network/config.js";
-import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
-import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
-import { InMemorySupportedChainsController } from "../../controllers/supportedChains/SupportedChainsController.js";
-import { SUPPORTED_CHAINS_TOPICS } from "../../controllers/supportedChains/topics.js";
+import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
+import { InMemoryRpcRoutingService } from "../../chains/runtime/RpcRoutingService.js";
+import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
+import { SUPPORTED_CHAINS_TOPICS } from "../../chains/runtime/supportedChains/topics.js";
+import { NETWORK_TOPICS } from "../../chains/runtime/topics.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createCustomRpcService } from "../../services/store/customRpc/CustomRpcService.js";
@@ -45,9 +45,9 @@ const SOLANA_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
-const createNetworkController = (chain: ChainMetadata) => {
+const createRpcRoutingService = (chain: ChainMetadata) => {
   const bus = new Messenger();
-  return new InMemoryNetworkController({
+  return new InMemoryRpcRoutingService({
     messenger: bus.scope({ publish: NETWORK_TOPICS }),
     initialRuntime: buildNetworkRuntimeInput(
       {
@@ -94,19 +94,19 @@ const toCustomChainRecord = (metadata: ChainMetadata) => ({
 
 const createSupportedChains = async (params: { builtin?: ChainMetadata[]; custom?: ChainMetadata[] }) => {
   const bus = new Messenger();
-  const controller = new InMemorySupportedChainsController({
+  const supportedChains = new InMemorySupportedChainsService({
     messenger: bus.scope({ publish: SUPPORTED_CHAINS_TOPICS }),
     port: new MemoryCustomChainsPort((params.custom ?? []).map(toCustomChainRecord)),
     seed: params.builtin ?? [],
     now: () => 0,
   });
-  await controller.whenReady();
-  return controller;
+  await supportedChains.whenReady();
+  return supportedChains;
 };
 
 describe("networkBootstrap", () => {
   it("mounts only registered namespace chains, applies custom RPC, and repairs stored selection", async () => {
-    const network = createNetworkController(MAINNET_CHAIN);
+    const network = createRpcRoutingService(MAINNET_CHAIN);
     const supportedChains = await createSupportedChains({
       builtin: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN],
     });
@@ -163,7 +163,7 @@ describe("networkBootstrap", () => {
   });
 
   it("repairs the selected UI chain when supported chains remove the current chain", async () => {
-    const network = createNetworkController(MAINNET_CHAIN);
+    const network = createRpcRoutingService(MAINNET_CHAIN);
     const supportedChains = await createSupportedChains({
       custom: [MAINNET_CHAIN, ALT_CHAIN],
     });
@@ -211,7 +211,7 @@ describe("networkBootstrap", () => {
   });
 
   it("repairs the selected namespace chain using the resolved active chain for the same namespace", async () => {
-    const network = createNetworkController(MAINNET_CHAIN);
+    const network = createRpcRoutingService(MAINNET_CHAIN);
     const supportedChains = await createSupportedChains({
       custom: [ALT_CHAIN],
     });

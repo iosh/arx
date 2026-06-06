@@ -1,4 +1,4 @@
-import type { UnlockController } from "../../controllers/unlock/types.js";
+import type { UnlockService } from "../../runtime/session/unlock/types.js";
 import type { VaultService } from "../../vault/types.js";
 
 export type SessionStatusPhase = "uninitialized" | "locked" | "unlocked";
@@ -18,7 +18,7 @@ export type SessionStatusService = {
 };
 
 type CreateSessionStatusServiceDeps = {
-  unlock: Pick<UnlockController, "getState" | "isUnlocked">;
+  unlock: Pick<UnlockService, "getState" | "isUnlocked">;
   vault: Pick<VaultService, "getStatus">;
 };
 

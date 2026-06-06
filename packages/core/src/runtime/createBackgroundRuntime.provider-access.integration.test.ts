@@ -2,10 +2,10 @@ import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
+import { ApprovalKinds } from "../approvals/queue/types.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
-import { ApprovalKinds } from "../controllers/approval/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
@@ -53,7 +53,7 @@ const deriveActiveAccount = async (runtime: CreateBackgroundRuntimeResult) => {
   const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
   const account = await runtime.services.keyring.deriveAccount(keyringId);
 
-  await runtime.controllers.accounts.setActiveAccount({
+  await runtime.services.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
     accountKey: toAccountKeyFromAddress({
@@ -70,12 +70,12 @@ const grantProviderPermission = async (
   runtime: CreateBackgroundRuntimeResult,
   input: { origin: string; chainRef: string; address: string },
 ) => {
-  const chain = runtime.controllers?.supportedChains?.getChain(input.chainRef)?.metadata;
+  const chain = runtime.services?.supportedChains?.getChain(input.chainRef)?.metadata;
   if (!chain) {
     throw new Error(`Missing chain metadata for ${input.chainRef}`);
   }
 
-  await runtime.controllers.permissions.grantAuthorization(input.origin, {
+  await runtime.services.permissions.grantAuthorization(input.origin, {
     namespace: chain.namespace,
     chains: [
       {
@@ -144,8 +144,8 @@ const createNamespaceTransactionMock = (params: {
 
 const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
   createApprovalReadService({
-    approvals: runtime.controllers.approvals,
-    accounts: runtime.controllers.accounts,
+    approvals: runtime.services.approvals,
+    accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,
     transactionApprovals: runtime.transactions,
   });
@@ -319,7 +319,7 @@ describe("createBackgroundRuntime provider access", () => {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -354,7 +354,7 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
       const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot(chain.namespace);
 
-      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -396,7 +396,7 @@ describe("createBackgroundRuntime provider access", () => {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -458,7 +458,7 @@ describe("createBackgroundRuntime provider access", () => {
       const approvalCreated = new Promise<void>((resolve) => {
         approvalCreatedResolve = resolve;
       });
-      const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
+      const unsubscribe = background.runtime.services.approvals.onCreated(({ record }) => {
         capturedApprovalRequesterId = record.requester.requestId;
         approvalCreatedResolve?.();
       });
@@ -477,7 +477,7 @@ describe("createBackgroundRuntime provider access", () => {
 
       await approvalCreated;
       await flushAsync();
-      expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(1);
+      expect(background.runtime.services.approvals.getState().pending).toHaveLength(1);
       expect(capturedApprovalRequesterId).toBeTruthy();
       expect(capturedApprovalRequesterId).not.toBe("rpc-2");
 
@@ -497,7 +497,7 @@ describe("createBackgroundRuntime provider access", () => {
           code: 4900,
         },
       });
-      expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
+      expect(background.runtime.services.approvals.getState().pending).toHaveLength(0);
 
       unsubscribe();
     } finally {
@@ -512,7 +512,7 @@ describe("createBackgroundRuntime provider access", () => {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {

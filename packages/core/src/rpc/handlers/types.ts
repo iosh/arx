@@ -1,13 +1,13 @@
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
+import type { AccountSelectionService } from "../../accounts/runtime/types.js";
+import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
-import type { AccountController } from "../../controllers/account/types.js";
-import type { ApprovalController } from "../../controllers/approval/types.js";
-import type { NetworkController } from "../../controllers/network/types.js";
-import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
-import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
+import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
@@ -28,13 +28,13 @@ export {
   RpcExecutionContextKinds,
 } from "../executionContext.js";
 
-export type HandlerControllers = {
-  network: NetworkController;
+export type RpcHandlerDeps = {
+  network: RpcRoutingService;
   networkSelection: NetworkSelectionService;
-  accounts: AccountController;
-  approvals: ApprovalController;
+  accounts: AccountSelectionService;
+  approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  supportedChains?: SupportedChainsController;
+  supportedChains?: SupportedChainsService;
   chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {
     now: () => number;
@@ -61,7 +61,7 @@ type MethodHandlerContext<P> = {
   origin: string;
   request: RpcRequest;
   params: P;
-  controllers: HandlerControllers;
+  deps: RpcHandlerDeps;
   services: HandlerRuntimeServices;
   invocation: { namespace: Namespace; chainRef: ChainRef };
   executionContext: RpcExecutionContext;

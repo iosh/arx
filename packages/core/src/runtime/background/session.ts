@@ -1,8 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
-import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/topics.js";
-import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";
-import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
@@ -13,12 +9,15 @@ import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import { encodePayload } from "../keyring/keyring-utils.js";
 import type { NamespaceConfig } from "../keyring/namespaces.js";
-import type { ControllersBase } from "./controllers.js";
+import { DEFAULT_AUTO_LOCK_MS } from "../session/unlock/constants.js";
+import { InMemoryUnlockService } from "../session/unlock/InMemoryUnlockService.js";
+import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../session/unlock/topics.js";
+import type { UnlockService, UnlockServiceOptions } from "../session/unlock/types.js";
 
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 
 type VaultFactory = () => VaultService;
-type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
+type UnlockFactory = (options: UnlockServiceOptions) => UnlockService;
 type SessionVaultLifecycleAction = "createVault" | "importVault";
 
 export type SessionOptions = {
@@ -26,7 +25,7 @@ export type SessionOptions = {
   unlock?: UnlockFactory;
   autoLockDurationMs?: number;
   persistDebounceMs?: number;
-  timers?: UnlockControllerOptions["timers"];
+  timers?: UnlockServiceOptions["timers"];
   uuid?: () => string;
   keyringNamespaces?: NamespaceConfig[];
 };
@@ -35,7 +34,7 @@ export type SessionLayerOptions = Omit<SessionOptions, "keyringNamespaces">;
 
 export type BackgroundSessionServices = {
   vault: VaultService;
-  unlock: UnlockController;
+  unlock: UnlockService;
   createVault(params: CreateVaultParams): Promise<VaultEnvelope>;
   importVault(envelope: VaultEnvelope): Promise<VaultEnvelope>;
   getVaultMetaState(): VaultMetaSnapshot["payload"];
@@ -47,7 +46,6 @@ export type BackgroundSessionServices = {
 
 type SessionLayerParams = {
   bus: Messenger;
-  controllers: ControllersBase;
   vaultMetaPort?: VaultMetaPort;
   accountsStore: AccountsService;
   keyringMetas: KeyringMetasService;
@@ -74,7 +72,6 @@ export type SessionLayerResult = {
 
 export const initSessionLayer = ({
   bus,
-  controllers: _controllers,
   vaultMetaPort,
   accountsStore,
   keyringMetas,
@@ -96,7 +93,7 @@ export const initSessionLayer = ({
 
   const baseVault = createBaseVaultService();
   const unlockFactory =
-    sessionOptions?.unlock ?? ((options: UnlockControllerOptions) => new InMemoryUnlockController(options));
+    sessionOptions?.unlock ?? ((options: UnlockServiceOptions) => new InMemoryUnlockService(options));
 
   const sessionTimers = sessionOptions?.timers ?? {};
   const sessionSetTimeout = sessionTimers.setTimeout ?? setTimeout;
@@ -316,7 +313,7 @@ export const initSessionLayer = ({
     },
   };
 
-  const unlockOptions: UnlockControllerOptions = {
+  const unlockOptions: UnlockServiceOptions = {
     messenger: bus.scope({ name: "unlock", publish: UNLOCK_TOPICS }),
     vault: {
       unlock: async (params) => {

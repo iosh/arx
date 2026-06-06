@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../controllers/approval/types.js";
-import type { Transaction, TransactionApproval } from "../../../transactions/TransactionsService.js";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../approvals/queue/types.js";
 import type { SendTransactionApprovalReview } from "../../../transactions/review/types.js";
+import type { Transaction, TransactionApproval } from "../../../transactions/TransactionsService.js";
 import { createApprovalReadService } from "./readService.js";
 
 const CHAIN_VIEWS = {
@@ -150,10 +150,7 @@ const createTransactionApproval = (
   updatedAt: approval.updatedAt ?? approval.createdAt ?? 1,
 });
 
-const createTransactionApprovalsStub = (input: {
-  approvals: TransactionApproval[];
-  transactions: Transaction[];
-}) => {
+const createTransactionApprovalsStub = (input: { approvals: TransactionApproval[]; transactions: Transaction[] }) => {
   const approvalsById = new Map(input.approvals.map((approval) => [approval.approvalId, approval] as const));
   const transactionsById = new Map(input.transactions.map((transaction) => [transaction.id, transaction] as const));
 

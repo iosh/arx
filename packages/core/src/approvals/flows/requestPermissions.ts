@@ -1,6 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { ConnectionGrantKinds, type ConnectionGrantRequest } from "../../controllers/permission/types.js";
+import { ApprovalKinds } from "../../approvals/queue/types.js";
+import { ConnectionGrantKinds } from "../../permissions/connectionGrantKinds.js";
+import type { ConnectionGrantRequest } from "../../permissions/service/types.js";
 import {
   deriveApprovalReviewContext,
   getApprovalSelectableAccounts,

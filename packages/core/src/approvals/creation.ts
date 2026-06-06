@@ -1,20 +1,20 @@
-import { parseChainRef } from "../chains/caip.js";
 import {
-  type ApprovalController,
   type ApprovalCreateParams,
   type ApprovalHandle,
   ApprovalKinds,
+  type ApprovalQueueKind,
+  type ApprovalQueueService,
   type ApprovalRequest,
   type ApprovalRequester,
-  type ControllerApprovalKind,
-} from "../controllers/approval/types.js";
+} from "../approvals/queue/types.js";
+import { parseChainRef } from "../chains/caip.js";
 
 export type ApprovalCreationDeps = {
-  approvals: Pick<ApprovalController, "create">;
+  approvals: Pick<ApprovalQueueService, "create">;
   now: () => number;
 };
 
-export type ApprovalCreationInput<K extends ControllerApprovalKind = ControllerApprovalKind> = {
+export type ApprovalCreationInput<K extends ApprovalQueueKind = ApprovalQueueKind> = {
   kind: K;
   request: ApprovalRequest<K>;
   requester: ApprovalRequester;
@@ -22,7 +22,7 @@ export type ApprovalCreationInput<K extends ControllerApprovalKind = ControllerA
   createdAt?: number;
 };
 
-const deriveApprovalRecordContext = <K extends ControllerApprovalKind>(input: ApprovalCreationInput<K>) => {
+const deriveApprovalRecordContext = <K extends ApprovalQueueKind>(input: ApprovalCreationInput<K>) => {
   // Creator owns record-level context derivation so call sites only provide kind-specific payload.
   if (input.kind === ApprovalKinds.AddChain) {
     const request = input.request as ApprovalRequest<typeof ApprovalKinds.AddChain>;
@@ -42,7 +42,7 @@ const deriveApprovalRecordContext = <K extends ControllerApprovalKind>(input: Ap
   };
 };
 
-export const requestApproval = <K extends ControllerApprovalKind>(
+export const requestApproval = <K extends ApprovalQueueKind>(
   deps: ApprovalCreationDeps,
   input: ApprovalCreationInput<K>,
 ): ApprovalHandle<K> => {

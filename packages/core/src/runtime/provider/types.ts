@@ -1,5 +1,4 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import type {
   JsonRpcError,
   JsonRpcParams,
@@ -8,6 +7,7 @@ import type {
   RpcProviderExecutionContext,
   RpcProviderRequestContext,
 } from "../../rpc/index.js";
+import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 

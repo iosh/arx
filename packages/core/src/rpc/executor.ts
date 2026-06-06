@@ -3,11 +3,11 @@ import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
 import type {
-  HandlerControllers,
   HandlerRuntimeServices,
   MethodDefinition,
   Namespace,
   RpcExecutionContext,
+  RpcHandlerDeps,
   RpcInvocationHint,
   RpcRequest,
 } from "./handlers/types.js";
@@ -25,7 +25,7 @@ type RpcExecutorCatalog = {
 
 type CreateRpcMethodExecutorOptions = {
   registry: RpcExecutorCatalog;
-  controllers: HandlerControllers;
+  deps: RpcHandlerDeps;
   rpcClientRegistry: RpcClientRegistry;
   services: HandlerRuntimeServices;
 };
@@ -59,7 +59,7 @@ const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: 
 
 export const createRpcMethodExecutor = ({
   registry,
-  controllers,
+  deps,
   rpcClientRegistry,
   services,
 }: CreateRpcMethodExecutorOptions) => {
@@ -126,7 +126,7 @@ export const createRpcMethodExecutor = ({
       origin: args.origin,
       request: args.request,
       params,
-      controllers,
+      deps,
       services,
       invocation: { namespace: args.namespace, chainRef: args.chainRef },
       executionContext: args.executionContext,
@@ -214,7 +214,7 @@ export const createRpcMethodExecutor = ({
 
   return async (args: RpcExecutorArgs) => {
     const { namespace, chainRef, definition } =
-      args.invocation ?? resolveRpcInvocationDetails(registry, controllers, args.request.method, args.hint);
+      args.invocation ?? resolveRpcInvocationDetails(registry, deps, args.request.method, args.hint);
 
     if (definition) {
       return executeLocal({

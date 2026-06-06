@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../approvals/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -52,12 +52,12 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, executionContext, invocation }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, deps, executionContext, invocation }) => {
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
       const approval = await requestProviderApproval({
-        controllers,
+        deps,
         executionContext,
         method: "personal_sign",
         kind: ApprovalKinds.SignMessage,

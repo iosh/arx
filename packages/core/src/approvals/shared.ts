@@ -1,12 +1,12 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
-import type { AccountController } from "../controllers/account/types.js";
+import type { AccountSelectionService } from "../accounts/runtime/types.js";
 import type {
   ApprovalAccountSelectionDecision,
   ApprovalDecision,
+  ApprovalQueueKind,
   ApprovalRecord,
-  ControllerApprovalKind,
-} from "../controllers/approval/types.js";
+} from "../approvals/queue/types.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
 import { ApprovalAccountSelectionDecisionSchema } from "./decision.js";
 
@@ -14,7 +14,7 @@ type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
 };
 
-export const parseNoDecision = <K extends ControllerApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
+export const parseNoDecision = <K extends ApprovalQueueKind>(kind: K, input: unknown): ApprovalDecision<K> => {
   if (input !== undefined) {
     throw arxError({
       reason: ArxReasons.RpcInvalidParams,
@@ -26,7 +26,7 @@ export const parseNoDecision = <K extends ControllerApprovalKind>(kind: K, input
   return undefined as ApprovalDecision<K>;
 };
 
-export const parseAccountSelectionDecision = <K extends ControllerApprovalKind>(
+export const parseAccountSelectionDecision = <K extends ApprovalQueueKind>(
   kind: K,
   input: unknown,
 ): ApprovalDecision<K> => {
@@ -52,7 +52,7 @@ export const deriveApprovalReviewContext = (
 export const getApprovalSelectableAccounts = (
   record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
   deps: {
-    accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+    accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   },
   options?: DeriveApprovalReviewContextOptions,
 ) => {

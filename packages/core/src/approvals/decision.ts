@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ApprovalAccountSelectionDecision } from "../controllers/approval/types.js";
+import type { ApprovalAccountSelectionDecision } from "../approvals/queue/types.js";
 import { AccountKeySchema } from "../storage/records.js";
 
 export const ApprovalAccountSelectionDecisionSchema = z

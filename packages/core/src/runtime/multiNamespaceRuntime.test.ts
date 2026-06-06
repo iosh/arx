@@ -153,8 +153,6 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     });
     expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
     expect(runtime.services.namespaceBindings.hasTransaction("solana")).toBe(false);
-    expect(runtime.controllers.signers.listNamespaces()).toEqual(["eip155"]);
-
     runtime.lifecycle.shutdown();
   });
 });

@@ -1,11 +1,11 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
+import { ApprovalKinds } from "../../../../approvals/index.js";
 import {
   type ChainMetadata,
   createEip155MetadataFromEip3085,
   isSameAddChainComparableMetadata,
 } from "../../../../chains/index.js";
-import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
@@ -43,7 +43,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
   },
-  handler: async ({ origin: _origin, params: metadata, controllers, executionContext }) => {
+  handler: async ({ origin: _origin, params: metadata, deps, executionContext }) => {
     if (metadata.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
@@ -52,7 +52,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
 
-    const existing = controllers.supportedChains?.getChain(metadata.chainRef) ?? null;
+    const existing = deps.supportedChains?.getChain(metadata.chainRef) ?? null;
     if (existing && existing.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
@@ -80,7 +80,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
     }
 
     const approval = await requestProviderApproval({
-      controllers,
+      deps,
       executionContext,
       method: "wallet_addEthereumChain",
       kind: ApprovalKinds.AddChain,

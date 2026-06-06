@@ -10,7 +10,7 @@ import { createEip155PrepareTransaction } from "./prepareTransaction.js";
 import { createEip155ReceiptService } from "./receipt.js";
 import { deriveEip155TransactionRequestForChain } from "./request.js";
 import type { Eip155Signer } from "./signer.js";
-import type { Eip155SubmittedTransaction, Eip155TransactionReceipt } from "./transactionTypes.js";
+import type { Eip155SubmittedTransaction } from "./transactionTypes.js";
 import type {
   Eip155ApprovalFinalizeContext,
   Eip155ApprovalFinalizeResult,

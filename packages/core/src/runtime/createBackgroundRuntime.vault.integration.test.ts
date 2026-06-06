@@ -250,7 +250,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
     try {
       await flushAsync();
       expect(second.runtime.services.sessionStatus.hasInitializedVault()).toBe(false);
-      expect(second.runtime.controllers.accounts.getState().namespaces).toEqual({});
+      expect(second.runtime.services.accounts.getState().namespaces).toEqual({});
       await expect(second.accountsPort.list()).resolves.toEqual([]);
       await expect(second.keyringMetasPort.list()).resolves.toEqual([]);
     } finally {

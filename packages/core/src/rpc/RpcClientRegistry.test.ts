@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
+import type { RpcEndpointInfo, RpcOutcomeReport } from "../chains/runtime/types.js";
 import { createEip155RpcClientFactory, type Eip155RpcCapabilities } from "./namespaceClients/eip155.js";
 import {
   type RpcClientFactory,
@@ -109,7 +109,7 @@ describe("RpcClientRegistry", () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
-  it("reports success and failure outcomes through the network controller", async () => {
+  it("reports success and failure outcomes through the network service", async () => {
     const network = createNetworkStub();
     const responses = [
       new Response(JSON.stringify({ result: "0x1" }), { status: 200 }),

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  type ApprovalController,
   type ApprovalCreateParams,
   type ApprovalHandle,
   ApprovalKinds,
+  type ApprovalQueueKind,
+  type ApprovalQueueService,
   type ApprovalRequester,
-  type ControllerApprovalKind,
-} from "../controllers/approval/types.js";
+} from "../approvals/queue/types.js";
 import { requestApproval } from "./creation.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,7 +27,7 @@ const createApprovals = () => {
 
   return {
     calls,
-    create: <K extends ControllerApprovalKind>(
+    create: <K extends ApprovalQueueKind>(
       request: ApprovalCreateParams<K>,
       requester: ApprovalRequester,
     ): ApprovalHandle<K> => {
@@ -41,7 +41,7 @@ const createApprovals = () => {
         settled: new Promise<Awaited<ApprovalHandle<K>["settled"]>>(() => {}),
       };
     },
-  } satisfies Pick<ApprovalController, "create"> & { calls: ApprovalCreateCall[] };
+  } satisfies Pick<ApprovalQueueService, "create"> & { calls: ApprovalCreateCall[] };
 };
 
 describe("requestApproval", () => {

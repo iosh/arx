@@ -17,7 +17,7 @@ const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
   const chain = runtime.services.chainViews.getSelectedChainView();
   const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
   const account = await runtime.services.keyring.deriveAccount(keyringId);
-  await runtime.controllers.accounts.setActiveAccount({
+  await runtime.services.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
     accountKey: toAccountKeyFromAddress({
@@ -93,10 +93,10 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
   it("enforces lock semantics for eth_accounts and personal_sign", async () => {
     const harness = await createRpcHarness();
     const { runtime } = harness;
-    const approval = vi.spyOn(runtime.controllers.approvals, "create");
+    const approval = vi.spyOn(runtime.services.approvals, "create");
     let approvalId: string | null = null;
     const approvalRequested = new Promise<void>((resolve) => {
-      const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
+      const unsubscribe = runtime.services.approvals.onCreated(({ record }) => {
         approvalId = record.approvalId;
         unsubscribe();
         resolve();
@@ -107,7 +107,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       await initializeSession(runtime);
       const { chain, address } = await deriveAccount(runtime);
 
-      await runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+      await runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -150,7 +150,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
       if (!approvalId) throw new Error("Expected approvalId to be set");
-      await runtime.controllers.approvals.resolve({ approvalId, action: "approve" });
+      await runtime.services.approvals.resolve({ approvalId, action: "approve" });
       await expect(pending).resolves.toMatch(/^0x[0-9a-f]+$/i);
 
       expect(approval).toHaveBeenCalledTimes(1);

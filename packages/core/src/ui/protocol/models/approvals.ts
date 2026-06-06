@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ApprovalAccountSelectionDecisionSchema } from "../../../approvals/decision.js";
+import { type ApprovalKind, ApprovalKinds } from "../../../approvals/queue/types.js";
 import { ChainRefSchema } from "../../../chains/ids.js";
-import { type ApprovalKind, ApprovalKinds } from "../../../controllers/approval/types.js";
 import { AccountKeySchema } from "../../../storage/records.js";
 import {
   type SendTransactionApprovalReview,

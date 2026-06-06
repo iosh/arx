@@ -1,21 +1,21 @@
-import type { AccountController } from "../controllers/account/types.js";
+import type { AccountSelectionService } from "../accounts/runtime/types.js";
 import type {
   ApprovalDecision,
+  ApprovalQueueKind,
   ApprovalRecord,
   ApprovalResult,
   ApprovalTerminalReason,
-  ControllerApprovalKind,
-} from "../controllers/approval/types.js";
-import type { PermissionsWriter } from "../controllers/permission/types.js";
-import type { SupportedChainsController } from "../controllers/supportedChains/types.js";
+} from "../approvals/queue/types.js";
+import type { SupportedChainsService } from "../chains/runtime/supportedChains/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
+import type { PermissionsWriter } from "../permissions/service/types.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
 
 export type ApprovalFlowDeps = {
-  accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
-  supportedChains: Pick<SupportedChainsController, "getChain" | "addChain">;
+  supportedChains: Pick<SupportedChainsService, "getChain" | "addChain">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };
 
@@ -24,7 +24,7 @@ export type ApprovalRejectInput = {
   error: Error;
 };
 
-export type ApprovalFlow<K extends ControllerApprovalKind = ControllerApprovalKind> = {
+export type ApprovalFlow<K extends ApprovalQueueKind = ApprovalQueueKind> = {
   kind: K;
   parseDecision(input: unknown): ApprovalDecision<K>;
   approve(record: ApprovalRecord<K>, decision: ApprovalDecision<K>, deps: ApprovalFlowDeps): Promise<ApprovalResult<K>>;
@@ -38,7 +38,7 @@ export type ApprovalFlow<K extends ControllerApprovalKind = ControllerApprovalKi
 };
 
 export type ApprovalFlowRegistry = {
-  get<K extends ControllerApprovalKind>(kind: K): ApprovalFlow<K> | undefined;
+  get<K extends ApprovalQueueKind>(kind: K): ApprovalFlow<K> | undefined;
 };
 
 export type ApprovalExecutor = {

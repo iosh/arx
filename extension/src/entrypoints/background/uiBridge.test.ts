@@ -1,18 +1,22 @@
+import type { PermissionsState } from "@arx/core";
 import {
   createAccountCodecRegistry,
   eip155Codec,
   toAccountKeyFromAddress,
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
-import type { PermissionsState } from "@arx/core/controllers";
-import { ApprovalKinds } from "@arx/core/controllers/approval";
-import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
+import { ApprovalKinds } from "@arx/core/approvals";
 import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
-import { createRpcRegistry, type HandlerControllers } from "@arx/core/rpc";
-import type { BackgroundSessionServices } from "@arx/core/runtime";
-import { KeyringService } from "@arx/core/runtime";
+import { createRpcRegistry, type RpcHandlerDeps } from "@arx/core/rpc";
+import {
+  type BackgroundSessionServices,
+  KeyringService,
+  type UnlockLockedPayload,
+  type UnlockReason,
+  type UnlockUnlockedPayload,
+} from "@arx/core/runtime";
 import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
@@ -253,7 +257,9 @@ const createMemoryAccountsStore = () => {
   };
 };
 
-const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
+const createStoreBackedAccountSelectionService = (deps: {
+  accountsStore: ReturnType<typeof createMemoryAccountsStore>;
+}) => {
   const toAccountKey = (chainRef: ChainRef, address: string) =>
     toAccountKeyFromAddress({ chainRef, address, accountCodecs });
   const toAddress = (_chainRef: ChainRef, accountKey: AccountKey) =>
@@ -360,10 +366,10 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-  } satisfies HandlerControllers["accounts"];
+  } satisfies RpcHandlerDeps["accounts"];
 };
 
-const createAccountsController = () => {
+const createAccountSelectionService = () => {
   const toAddress = (_chainRef: ChainRef, accountKey: AccountKey) =>
     toCanonicalAddressFromAccountKey({ accountKey, accountCodecs });
 
@@ -440,10 +446,10 @@ const createAccountsController = () => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-  } satisfies HandlerControllers["accounts"];
+  } satisfies RpcHandlerDeps["accounts"];
 };
 
-const createApprovalsController = () => {
+const createApprovalQueueService = () => {
   type StubTask = {
     id: string;
     kind: string;
@@ -516,9 +522,9 @@ const createApprovalsController = () => {
   };
 };
 
-const createControllers = () => {
-  const accounts = createAccountsController();
-  const approvals = createApprovalsController();
+const createRuntimeServices = () => {
+  const accounts = createAccountSelectionService();
+  const approvals = createApprovalQueueService();
   const permissionListeners = new Set<(state: PermissionsState) => void>();
   const permissions = {
     getState: () => ({ origins: {} }),
@@ -668,10 +674,10 @@ const createControllers = () => {
   };
 };
 
-type UiBridgeTestControllers = ReturnType<typeof createControllers>;
+type UiBridgeTestRuntimeServices = ReturnType<typeof createRuntimeServices>;
 
 const createUiAccessForTest = (input: {
-  controllers: UiBridgeTestControllers;
+  services: UiBridgeTestRuntimeServices;
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
@@ -703,7 +709,7 @@ const createUiAccessForTest = (input: {
   };
   installSurfaceActivationExtension?: boolean;
 }) => {
-  const controllerViews = input.controllers;
+  const runtimeServices = input.services;
   const sessionStatus = createSessionStatusService({
     unlock: input.session.unlock,
     vault: input.session.vault,
@@ -724,7 +730,7 @@ const createUiAccessForTest = (input: {
     keyringExport,
   });
   const transactionsAccess = {
-    ...input.controllers.transactionAccess,
+    ...input.services.transactionAccess,
     ...input.transactionsAccess,
   } satisfies UiTransactionsAccess;
   const activationEntries = input.activationEntries ?? {
@@ -765,7 +771,7 @@ const createUiAccessForTest = (input: {
   return createUiRuntimeAccess({
     server: {
       access: {
-        accounts: input.controllers.accounts,
+        accounts: input.services.accounts,
         approvals: {
           read: {
             listPendingEntries: vi.fn(() => []),
@@ -775,20 +781,20 @@ const createUiAccessForTest = (input: {
             resolve: vi.fn(async () => ({ status: "resolved" as const })),
           },
         },
-        approvalEvents: input.controllers.approvals as never,
+        approvalEvents: input.services.approvals as never,
         permissions: {
-          buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)
+          buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? runtimeServices.permissionViews)
             .buildUiPermissionsSnapshot as never,
         },
         transactions: transactionsAccess as never,
         chains: {
-          ...(input.chainViewsOverride ?? controllerViews.chainViews),
+          ...(input.chainViewsOverride ?? runtimeServices.chainViews),
           selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
         } as never,
         accountCodecs,
         session: sessionAccess,
         walletSetup: createUiWalletSetupAccess({
-          accounts: input.controllers.accounts,
+          accounts: input.services.accounts,
           session: input.session as BackgroundSessionServices,
           keyring: input.keyring,
         }),
@@ -819,12 +825,12 @@ const createUiAccessForTest = (input: {
         }) as never,
       persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
       stateChanged: {
-        accounts: input.controllers.accounts,
+        accounts: input.services.accounts,
         permissions: {
-          onStateChanged: input.controllers.permissions.onStateChanged,
+          onStateChanged: input.services.permissions.onStateChanged,
         },
         chains: {
-          onStateChanged: input.controllers.network.onStateChanged,
+          onStateChanged: input.services.network.onStateChanged,
           onSelectionChanged: (listener: () => void) => input.networkSelection.subscribeChanged(() => listener()),
         },
         session: sessionAccess,
@@ -869,7 +875,7 @@ const buildBridge = (opts?: {
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
   const keyringMetas = createMemoryKeyringMetasStore();
   const accountsStore = createMemoryAccountsStore();
-  const accountsController = createStoreBackedAccountsController({ accountsStore });
+  const accountSelectionService = createStoreBackedAccountSelectionService({ accountsStore });
   let hasEnvelope = opts?.hasEnvelope ?? true;
 
   const keyring = new KeyringService({
@@ -900,11 +906,11 @@ const buildBridge = (opts?: {
   });
   keyring.attach();
 
-  const approvalsController = createApprovalsController();
-  const controllers = {
-    ...createControllers(),
-    accounts: accountsController,
-    approvals: approvalsController,
+  const approvalQueueService = createApprovalQueueService();
+  const runtimeServices = {
+    ...createRuntimeServices(),
+    accounts: accountSelectionService,
+    approvals: approvalQueueService,
   };
 
   const session = {
@@ -960,7 +966,7 @@ const buildBridge = (opts?: {
     },
   };
   const uiAccess = createUiAccessForTest({
-    controllers,
+    services: runtimeServices,
     session: {
       ...session,
       persistVaultMeta,
@@ -970,7 +976,7 @@ const buildBridge = (opts?: {
     uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
     installSurfaceActivationExtension: opts?.installSurfaceActivationExtension,
     networkSelection,
-    transactionsAccess: controllers.transactionAccess,
+    transactionsAccess: runtimeServices.transactionAccess,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
       return () => attentionStateHandlers.delete(listener);
@@ -984,7 +990,7 @@ const buildBridge = (opts?: {
     keyring,
     vault,
     unlock,
-    approvals: approvalsController,
+    approvals: approvalQueueService,
     browser: browserApi,
     persistVaultMeta,
     emitNetworkSelectionChanged: () => {
@@ -1268,13 +1274,13 @@ describe("uiBridge", () => {
       browser: browserApi as unknown as Parameters<typeof createUiPlatform>[0]["browser"],
       entrypoints: ENTRYPOINTS,
     });
-    const controllers = createControllers();
+    const runtimeServices = createRuntimeServices();
     const listeners = new Set<(payload: { next: { activeChainByNamespace: Record<string, string> } }) => void>();
     const attentionStateHandlers = new Set<() => void>();
     let snapshotBroken = true;
 
     const uiAccess = createUiAccessForTest({
-      controllers,
+      services: runtimeServices,
       session: {
         onStateChanged: () => () => {},
         unlock: new FakeUnlock(true),
@@ -1306,7 +1312,7 @@ describe("uiBridge", () => {
         return () => attentionStateHandlers.delete(listener);
       },
       chainViewsOverride: {
-        ...controllers.chainViews,
+        ...runtimeServices.chainViews,
         getSelectedNamespace: () => CHAIN.namespace,
         getSelectedChainView: () => {
           if (snapshotBroken) {

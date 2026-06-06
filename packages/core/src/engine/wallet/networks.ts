@@ -1,5 +1,5 @@
-import type { NetworkController } from "../../controllers/network/types.js";
-import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
+import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
@@ -9,11 +9,11 @@ import type { WalletNetworks } from "../types.js";
 // Selected namespace, supported chains, and custom RPC overrides.
 export const createWalletNetworks = (deps: {
   networkSelection: NetworkSelectionService;
-  supportedChains: SupportedChainsController;
+  supportedChains: SupportedChainsService;
   customRpc: CustomRpcService;
   chainViews: ChainViewsService;
   chainActivation: ChainActivationService;
-  network: NetworkController;
+  network: RpcRoutingService;
 }): WalletNetworks => {
   const { networkSelection, supportedChains, customRpc, chainViews, chainActivation, network } = deps;
 

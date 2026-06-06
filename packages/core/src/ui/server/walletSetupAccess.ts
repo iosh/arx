@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { AccountController } from "../../controllers/account/types.js";
+import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -32,7 +32,7 @@ export type UiWalletSetupAccess = {
 };
 
 export type CreateUiWalletSetupAccessDeps = {
-  accounts: Pick<AccountController, "getState">;
+  accounts: Pick<AccountSelectionService, "getState">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
 };

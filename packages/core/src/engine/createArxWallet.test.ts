@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
-import { ApprovalKinds } from "../controllers/approval/types.js";
+import { ApprovalKinds } from "../approvals/queue/types.js";
 import {
   flushAsync,
   MemoryAccountsPort,

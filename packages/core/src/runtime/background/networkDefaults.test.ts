@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { NetworkStateInput } from "../../controllers/network/types.js";
+import type { NetworkStateInput } from "../../chains/runtime/types.js";
 import { buildRuntimeNetworkPlan } from "./networkDefaults.js";
 
 const ETH_MAINNET: ChainMetadata = {

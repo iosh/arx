@@ -1,48 +1,36 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
-import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
-import type { ChainAddressCodec } from "../chains/types.js";
-import type { AccountController, MultiNamespaceAccountsState } from "../controllers/account/types.js";
+import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/runtime/types.js";
 import type {
-  ApprovalController,
   ApprovalCreatedEvent,
   ApprovalCreateParams,
   ApprovalFinishedEvent,
   ApprovalHandle,
+  ApprovalQueueKind,
+  ApprovalQueueService,
   ApprovalRecord,
   ApprovalRequester,
   ApprovalResolveInput,
   ApprovalResolveResult,
   ApprovalState,
-  ControllerApprovalKind,
-} from "../controllers/approval/types.js";
+} from "../approvals/queue/types.js";
+import type { ChainRef } from "../chains/ids.js";
+import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
 import type {
-  NetworkController,
-  NetworkState,
-  RpcOutcomeReport,
-  RpcStrategyConfig,
-} from "../controllers/network/types.js";
+  AddSupportedChainOptions,
+  AddSupportedChainResult,
+  SupportedChainEntity,
+  SupportedChainsUpdate,
+} from "../chains/runtime/supportedChains/types.js";
+import type { NetworkState, RpcOutcomeReport, RpcRoutingService, RpcStrategyConfig } from "../chains/runtime/types.js";
+import type { ChainAddressCodec } from "../chains/types.js";
+import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type {
   PermissionAuthorization,
   PermissionsEvents,
   PermissionsReader,
   PermissionsState,
   PermissionsWriter,
-} from "../controllers/permission/types.js";
-import type {
-  AddSupportedChainOptions,
-  AddSupportedChainResult,
-  SupportedChainEntity,
-  SupportedChainsUpdate,
-} from "../controllers/supportedChains/types.js";
-import type {
-  UnlockLockedPayload,
-  UnlockParams,
-  UnlockReason,
-  UnlockState,
-  UnlockUnlockedPayload,
-} from "../controllers/unlock/types.js";
-import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
+} from "../permissions/service/types.js";
 import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
@@ -60,6 +48,13 @@ import type {
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
+import type {
+  UnlockLockedPayload,
+  UnlockParams,
+  UnlockReason,
+  UnlockState,
+  UnlockUnlockedPayload,
+} from "../runtime/session/unlock/types.js";
 import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
 import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
@@ -220,12 +215,12 @@ export type WalletSetupState = Readonly<{
 /** Accounts, keyrings, and related projections. */
 export type WalletAccounts = Readonly<{
   getState(): MultiNamespaceAccountsState;
-  listOwnedForNamespace: AccountController["listOwnedForNamespace"];
-  getOwnedAccount: AccountController["getOwnedAccount"];
-  getAccountKeysForNamespace: AccountController["getAccountKeysForNamespace"];
-  getSelectedAccountKey: AccountController["getSelectedAccountKey"];
-  getActiveAccountForNamespace: AccountController["getActiveAccountForNamespace"];
-  setActiveAccount: AccountController["setActiveAccount"];
+  listOwnedForNamespace: AccountSelectionService["listOwnedForNamespace"];
+  getOwnedAccount: AccountSelectionService["getOwnedAccount"];
+  getAccountKeysForNamespace: AccountSelectionService["getAccountKeysForNamespace"];
+  getSelectedAccountKey: AccountSelectionService["getSelectedAccountKey"];
+  getActiveAccountForNamespace: AccountSelectionService["getActiveAccountForNamespace"];
+  setActiveAccount: AccountSelectionService["setActiveAccount"];
   generateMnemonic: KeyringService["generateMnemonic"];
   confirmNewMnemonic: (params: ConfirmNewMnemonicParams) => ReturnType<KeyringService["confirmNewMnemonic"]>;
   importMnemonic: (params: ImportMnemonicParams) => ReturnType<KeyringService["importMnemonic"]>;
@@ -250,18 +245,18 @@ export type WalletApprovals = Readonly<{
   getState(): ApprovalState;
   get(id: string): ApprovalRecord | undefined;
   listPending(): ApprovalRecord[];
-  create<K extends ControllerApprovalKind>(
+  create<K extends ApprovalQueueKind>(
     request: ApprovalCreateParams<K>,
     requester: ApprovalRequester,
   ): ApprovalHandle<K>;
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
-  cancel: ApprovalController["cancel"];
-  onStateChanged: ApprovalController["onStateChanged"];
+  cancel: ApprovalQueueService["cancel"];
+  onStateChanged: ApprovalQueueService["onStateChanged"];
   onCreated(listener: (event: ApprovalCreatedEvent) => void): () => void;
   onFinished(listener: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
 }>;
 
-/** Persistent authorization facts owned by the permissions domain. */
+/** Persistent authorization facts stored by the permissions service. */
 export type WalletPermissions = Readonly<{
   getState(): PermissionsState;
   getAuthorization(origin: string, options: { namespace: string }): PermissionAuthorization | null;
@@ -292,7 +287,7 @@ export type WalletNetworks = Readonly<{
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
   getNetworkState(): NetworkState;
   getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
-  getActiveEndpoint: NetworkController["getActiveEndpoint"];
+  getActiveEndpoint: RpcRoutingService["getActiveEndpoint"];
   addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
   removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
   setCustomRpc(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;

@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds } from "../../controllers/approval/types.js";
+import { ApprovalKinds } from "../../approvals/queue/types.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 

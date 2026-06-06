@@ -1,4 +1,4 @@
-import type { AccountController } from "../../controllers/account/types.js";
+import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { KeyringExportService } from "../../services/runtime/keyringExport.js";
 import type { WalletAccounts, WalletBackupStatus, WalletSetupState } from "../types.js";
@@ -22,7 +22,7 @@ const deriveBackupStatus = (keyrings: Pick<KeyringService, "getKeyrings">): Wall
   };
 };
 
-const deriveWalletSetupState = (accounts: Pick<AccountController, "getState">): WalletSetupState => {
+const deriveWalletSetupState = (accounts: Pick<AccountSelectionService, "getState">): WalletSetupState => {
   const state = accounts.getState();
   const totalAccountCount = Object.values(state.namespaces).reduce((sum, namespaceState) => {
     return sum + namespaceState.accountKeys.length;
@@ -35,7 +35,7 @@ const deriveWalletSetupState = (accounts: Pick<AccountController, "getState">): 
 };
 
 export const createWalletAccounts = (deps: {
-  accounts: AccountController;
+  accounts: AccountSelectionService;
   keyring: KeyringService;
   keyringExport: KeyringExportService;
 }): WalletAccounts => {

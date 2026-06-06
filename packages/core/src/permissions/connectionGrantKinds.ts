@@ -1,5 +1,5 @@
 /**
- * Grant kinds persisted by the permission domain.
+ * Grant kinds persisted in permission records.
  *
  * These values describe connection scope only. Request-level signing and
  * transaction approvals remain runtime state.

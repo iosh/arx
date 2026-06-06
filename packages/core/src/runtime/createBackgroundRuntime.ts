@@ -4,7 +4,7 @@ import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manif
 import type { ArxWallet, WalletCreateUiOptions } from "../engine/types.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
-import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
+import type { Namespace } from "../rpc/handlers/types.js";
 import type { RpcInvocationHint, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
@@ -25,10 +25,11 @@ import type { VaultMetaPort } from "../storage/index.js";
 import type { CustomRpcRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
-import type { ControllerLayerOptions } from "./background/controllers.js";
+import type { BackgroundStateServices } from "./background/backgroundStateServices.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
 import type { BackgroundRpcEnvHooks } from "./background/rpcEngineAssembly.js";
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
+import type { BackgroundAssemblyOptions } from "./background/runtimeScopes.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
 import type { ProviderRuntimeAccess } from "./provider/types.js";
@@ -38,7 +39,7 @@ export type { BackgroundSessionServices } from "./background/session.js";
 
 export type BackgroundRuntimeUiAccessOptions = WalletCreateUiOptions;
 
-export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "supportedChains"> & {
+export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "supportedChains"> & {
   messenger?: {
     violationMode?: ViolationMode;
   };
@@ -68,7 +69,7 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
       transactionAggregates: TransactionsStoragePort;
     };
   };
-  supportedChains?: Omit<NonNullable<ControllerLayerOptions["supportedChains"]>, "port"> & {
+  supportedChains?: Omit<NonNullable<BackgroundAssemblyOptions["supportedChains"]>, "port"> & {
     port?: CustomChainsPort;
   };
   settings: {
@@ -83,9 +84,8 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
 
 export type BackgroundRuntime = {
   bus: Messenger;
-  controllers: HandlerControllers;
   transactions: ReturnType<typeof assembleArxWalletRuntime>["transactions"];
-  services: {
+  services: BackgroundStateServices & {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
@@ -183,9 +183,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       boot: false,
       lifecycleLabel: "createBackgroundRuntime",
       ...(options.messenger ? { messenger: options.messenger } : {}),
-      controllerOptions: {
+      assemblyOptions: {
         ...(options.network ? { network: options.network } : {}),
-        ...(options.accounts ? { accounts: options.accounts } : {}),
         ...(options.approvals ? { approvals: options.approvals } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
         supportedChains,
@@ -199,7 +198,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   return {
     bus: runtime.bus,
-    controllers: runtime.controllers,
     transactions: runtime.transactions,
     services: runtime.services,
     rpc: {

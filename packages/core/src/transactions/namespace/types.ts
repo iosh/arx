@@ -1,5 +1,5 @@
+import type { AccountAddress } from "../../accounts/runtime/types.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountAddress } from "../../controllers/account/types.js";
 import type { TransactionConflictKey, TransactionReplacementType } from "../aggregate/types.js";
 import type { TransactionReviewDetails } from "../review.js";
 import type {

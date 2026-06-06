@@ -1,6 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../chains/ids.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import type {
   JsonRpcError,
   JsonRpcParams,
@@ -9,6 +8,7 @@ import type {
   RpcInvocationHint,
 } from "../../rpc/index.js";
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
+import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
@@ -243,7 +243,7 @@ export const createProviderRuntimeAccess = ({
     };
 
     const runEngineRequest = async (begun: BegunProviderRuntimeRequest): Promise<JsonRpcResponse> => {
-      // Scope-cancel error mapping lives at the handler/controller boundary.
+      // Scope-cancel error mapping lives at the handler/provider boundary.
       // Long-running handlers must honor the request signal before reporting success.
       return await new Promise<JsonRpcResponse>((resolve) => {
         handleRpcRequest(begun.engineRequest, (error, response) => {

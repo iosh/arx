@@ -1,13 +1,13 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
+import { ApprovalKinds } from "../../../../approvals/index.js";
 import type { ChainRef } from "../../../../chains/ids.js";
+import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
 import {
-  ApprovalKinds,
   type ConnectionGrantKind,
   ConnectionGrantKinds,
   type ConnectionGrantRequest,
-} from "../../../../controllers/index.js";
-import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
+} from "../../../../permissions/index.js";
 import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -93,13 +93,13 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, services, executionContext, invocation }) => {
+  handler: async ({ origin, params, deps, services, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
     try {
       const approval = await requestProviderApproval({
-        controllers,
+        deps,
         executionContext,
         method: "wallet_requestPermissions",
         kind: ApprovalKinds.RequestPermissions,

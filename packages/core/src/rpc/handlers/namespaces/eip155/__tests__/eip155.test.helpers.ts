@@ -3,9 +3,9 @@ import {
   toCanonicalAddressFromAccountKey,
   toDisplayAddressFromAccountKey,
 } from "../../../../../accounts/addressing/accountKey.js";
+import { ApprovalKinds, type ApprovalRecord } from "../../../../../approvals/index.js";
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/index.js";
 import {
   FakeVault,
   MemoryAccountsPort,
@@ -91,14 +91,14 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
 };
 
 type TestRuntime = ReturnType<typeof createRuntime>;
-type TestOwnedAccount = ReturnType<TestRuntime["controllers"]["accounts"]["getOwnedAccount"]>;
-type TestAccountsController = TestRuntime["controllers"]["accounts"] & {
+type TestOwnedAccount = ReturnType<TestRuntime["services"]["accounts"]["getOwnedAccount"]>;
+type TestAccountSelectionService = TestRuntime["services"]["accounts"] & {
   __testOwnedAccounts?: Map<string, TestOwnedAccount>;
-  __originalGetOwnedAccount?: TestRuntime["controllers"]["accounts"]["getOwnedAccount"];
+  __originalGetOwnedAccount?: TestRuntime["services"]["accounts"]["getOwnedAccount"];
 };
 
 export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
-  return runtime.controllers.supportedChains.getChain(chainRef)?.metadata ?? null;
+  return runtime.services.supportedChains.getChain(chainRef)?.metadata ?? null;
 };
 
 export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
@@ -120,7 +120,7 @@ export const connectOrigin = async (args: {
   const [firstChainRef] = chainRefs;
   const [namespace] = firstChainRef.split(":");
 
-  await runtime.controllers.permissions.grantAuthorization(origin, {
+  await runtime.services.permissions.grantAuthorization(origin, {
     namespace,
     chains: chainRefs.map((chainRef, index) => ({
       chainRef,
@@ -140,18 +140,18 @@ export const connectOrigin = async (args: {
     ],
   });
 
-  const accountsController = runtime.controllers.accounts as TestAccountsController;
+  const accountSelectionService = runtime.services.accounts as TestAccountSelectionService;
 
-  if (!accountsController.__testOwnedAccounts) {
-    accountsController.__testOwnedAccounts = new Map();
+  if (!accountSelectionService.__testOwnedAccounts) {
+    accountSelectionService.__testOwnedAccounts = new Map();
   }
 
-  if (!accountsController.__originalGetOwnedAccount) {
-    const original = accountsController.getOwnedAccount.bind(accountsController);
-    accountsController.__originalGetOwnedAccount = original;
-    accountsController.getOwnedAccount = (params) => {
+  if (!accountSelectionService.__originalGetOwnedAccount) {
+    const original = accountSelectionService.getOwnedAccount.bind(accountSelectionService);
+    accountSelectionService.__originalGetOwnedAccount = original;
+    accountSelectionService.getOwnedAccount = (params) => {
       const key = `${params.chainRef}:${params.accountKey}`;
-      return accountsController.__testOwnedAccounts?.get(key) ?? original(params);
+      return accountSelectionService.__testOwnedAccounts?.get(key) ?? original(params);
     };
   }
 
@@ -162,7 +162,7 @@ export const connectOrigin = async (args: {
         address,
         accountCodecs: runtime.services.accountCodecs,
       });
-      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountKey}`, {
+      accountSelectionService.__testOwnedAccounts.set(`${chainRef}:${accountKey}`, {
         accountKey,
         namespace,
         canonicalAddress: toCanonicalAddressFromAccountKey({
@@ -242,7 +242,7 @@ export const waitForChainInNetwork = async (
   chainRef: ChainRef,
   timeoutMs = 5000,
 ): Promise<ChainMetadata> => {
-  const isAvailable = runtime.controllers.network.getState().availableChainRefs.includes(chainRef);
+  const isAvailable = runtime.services.network.getState().availableChainRefs.includes(chainRef);
   const existing = isAvailable ? getChainMetadata(runtime, chainRef) : null;
   if (existing) {
     return existing;
@@ -264,7 +264,7 @@ export const waitForChainInNetwork = async (
     };
 
     const tryResolve = () => {
-      const nextIsAvailable = runtime.controllers.network.getState().availableChainRefs.includes(chainRef);
+      const nextIsAvailable = runtime.services.network.getState().availableChainRefs.includes(chainRef);
       const chain = nextIsAvailable ? getChainMetadata(runtime, chainRef) : null;
       if (chain) {
         cleanup();
@@ -274,10 +274,10 @@ export const waitForChainInNetwork = async (
 
     timeoutId = setTimeout(() => {
       cleanup();
-      reject(new Error(`Timeout waiting for chain ${chainRef} in network controller`));
+      reject(new Error(`Timeout waiting for chain ${chainRef} in network service`));
     }, timeoutMs);
 
-    unsubscribe = runtime.controllers.network.onStateChanged(() => {
+    unsubscribe = runtime.services.network.onStateChanged(() => {
       tryResolve();
     });
 
@@ -289,15 +289,15 @@ export const setupApprovalResponder = (
   runtime: ReturnType<typeof createRuntime>,
   responder: (record: ApprovalRecord) => Promise<boolean | undefined> | boolean | undefined,
 ) => {
-  const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
+  const unsubscribe = runtime.services.approvals.onCreated(({ record }) => {
     void (async () => {
       try {
         await Promise.resolve();
         await responder(record);
       } catch (error) {
         console.error("[setupApprovalResponder] Responder error:", error);
-        if (runtime.controllers.approvals.has(record.approvalId)) {
-          await runtime.controllers.approvals.cancel({
+        if (runtime.services.approvals.has(record.approvalId)) {
+          await runtime.services.approvals.cancel({
             approvalId: record.approvalId,
             reason: "internal_error",
             error: new Error("setupApprovalResponder: responder did not resolve/reject approval"),
@@ -316,7 +316,7 @@ export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof cre
       return false;
     }
 
-    await runtime.controllers.approvals.resolve({ approvalId: record.approvalId, action: "approve" });
+    await runtime.services.approvals.resolve({ approvalId: record.approvalId, action: "approve" });
     return true;
   });
 };

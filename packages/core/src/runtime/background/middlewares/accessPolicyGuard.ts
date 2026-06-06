@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
+import type { ChainNamespace } from "../../../accounts/runtime/types.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { ChainNamespace } from "../../../controllers/index.js";
 import { type AuthorizationRequirement, AuthorizationRequirements } from "../../../rpc/handlers/types.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 import { requireArxInvocation } from "./invocationContext.js";

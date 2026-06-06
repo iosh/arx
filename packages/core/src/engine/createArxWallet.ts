@@ -6,12 +6,12 @@ import {
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
   createRpcRegistry,
-  type HandlerControllers,
   type JsonRpcError,
+  type RpcHandlerDeps,
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
 } from "../rpc/index.js";
-import type { ControllerLayerOptions } from "../runtime/background/controllers.js";
+import type { BackgroundStateServices } from "../runtime/background/backgroundStateServices.js";
 import type { EngineOptions } from "../runtime/background/engine.js";
 import {
   type BackgroundRpcEnvHooks,
@@ -21,9 +21,10 @@ import {
 import type { RpcLayerOptions } from "../runtime/background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
 import {
-  createRuntimeBootstrapScope,
-  createRuntimeSessionScope,
-  createRuntimeSupportScope,
+  type BackgroundAssemblyOptions,
+  createBackgroundBootstrapScope,
+  createBackgroundSessionScope,
+  createBackgroundSupportScope,
 } from "../runtime/background/runtimeScopes.js";
 import type { SessionOptions } from "../runtime/background/session.js";
 import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
@@ -59,9 +60,9 @@ import {
   createWalletSnapshots,
 } from "./wallet.js";
 
-type RuntimeBootstrapScope = ReturnType<typeof createRuntimeBootstrapScope>;
-type RuntimeSessionScope = ReturnType<typeof createRuntimeSessionScope>;
-type RuntimeSupportScope = ReturnType<typeof createRuntimeSupportScope>;
+type BackgroundBootstrapScope = ReturnType<typeof createBackgroundBootstrapScope>;
+type BackgroundSessionScope = ReturnType<typeof createBackgroundSessionScope>;
+type BackgroundSupportScope = ReturnType<typeof createBackgroundSupportScope>;
 type RuntimeLifecycle = ReturnType<typeof createBackgroundRuntimeLifecycle>;
 
 const DEFAULT_RPC_ENV_HOOKS = {
@@ -69,26 +70,27 @@ const DEFAULT_RPC_ENV_HOOKS = {
   shouldRequestUnlockAttention: () => false,
 } satisfies BackgroundRpcEnvHooks;
 
-type WalletRuntimeServices = Readonly<{
-  attention: RuntimeSessionScope["attention"];
-  chainActivation: RuntimeSessionScope["chainActivation"];
-  chainViews: RuntimeSessionScope["chainViews"];
-  permissionViews: RuntimeSupportScope["permissionViews"];
-  accountCodecs: RuntimeBootstrapScope["namespaceBootstrap"]["accountCodecs"];
-  networkSelection: RuntimeSessionScope["networkSelection"];
-  customRpc: RuntimeSessionScope["customRpc"];
-  namespaceBindings: RuntimeSupportScope["namespaceBindings"];
-  namespaceRuntimeSupport: RuntimeSupportScope["namespaceRuntimeSupport"];
-  session: RuntimeSessionScope["sessionLayer"]["session"];
-  sessionStatus: RuntimeSessionScope["sessionStatus"];
-  accountSigning: RuntimeSessionScope["accountSigning"];
-  keyringExport: RuntimeSessionScope["keyringExport"];
-  keyring: RuntimeSessionScope["keyringService"];
-}>;
+type WalletRuntimeServices = Readonly<
+  BackgroundStateServices & {
+    attention: BackgroundSessionScope["attention"];
+    chainActivation: BackgroundSessionScope["chainActivation"];
+    chainViews: BackgroundSessionScope["chainViews"];
+    permissionViews: BackgroundSupportScope["permissionViews"];
+    accountCodecs: BackgroundBootstrapScope["namespaceBootstrap"]["accountCodecs"];
+    networkSelection: BackgroundSessionScope["networkSelection"];
+    customRpc: BackgroundSessionScope["customRpc"];
+    namespaceBindings: BackgroundSupportScope["namespaceBindings"];
+    namespaceRuntimeSupport: BackgroundSupportScope["namespaceRuntimeSupport"];
+    session: BackgroundSessionScope["sessionLayer"]["session"];
+    sessionStatus: BackgroundSessionScope["sessionStatus"];
+    accountSigning: BackgroundSessionScope["accountSigning"];
+    keyringExport: BackgroundSessionScope["keyringExport"];
+    keyring: BackgroundSessionScope["keyringService"];
+  }
+>;
 
 type ArxWalletRuntimeCore = Readonly<{
-  bus: RuntimeBootstrapScope["bus"];
-  controllers: HandlerControllers;
+  bus: BackgroundBootstrapScope["bus"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   services: WalletRuntimeServices;
   surfaceErrors: SurfaceErrorEncoder;
@@ -102,7 +104,7 @@ type CreateArxWalletRuntimeInput = CreateArxWalletInput &
       messenger?: Readonly<{
         violationMode?: ViolationMode;
       }>;
-      controllerOptions?: ControllerLayerOptions;
+      assemblyOptions?: BackgroundAssemblyOptions;
       engine?: EngineOptions;
       rpcClients?: RpcLayerOptions;
       rpcEngine?: Readonly<{
@@ -116,15 +118,14 @@ type CreateArxWalletRuntimeInput = CreateArxWalletInput &
 type ArxWalletRuntime = Readonly<{
   wallet: ArxWallet;
   shutdown(): Promise<void>;
-  bus: RuntimeBootstrapScope["bus"];
-  controllers: HandlerControllers;
+  bus: BackgroundBootstrapScope["bus"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
-    engine: RuntimeSessionScope["engine"];
-    namespaceIndex: RuntimeBootstrapScope["rpcRegistry"];
-    clients: RuntimeSupportScope["rpcClientRegistry"];
+    engine: BackgroundSessionScope["engine"];
+    namespaceIndex: BackgroundBootstrapScope["rpcRegistry"];
+    clients: BackgroundSupportScope["rpcClientRegistry"];
     resolveHintNamespace: ReturnType<typeof createRpcHintNamespaceResolver>;
     resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
     resolveInvocation: (
@@ -195,7 +196,7 @@ const createWalletUiDeps = (
   return {
     server: {
       access: {
-        accounts: runtime.controllers.accounts,
+        accounts: runtime.services.accounts,
         approvals: {
           read: {
             listPendingEntries: () => approvalReadService.listPending(),
@@ -205,7 +206,7 @@ const createWalletUiDeps = (
             resolve: (input) => approvalResolveService.resolve(input),
           },
         },
-        approvalEvents: runtime.controllers.approvals,
+        approvalEvents: runtime.services.approvals,
         permissions: {
           buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
         },
@@ -238,7 +239,7 @@ const createWalletUiDeps = (
         accountCodecs: runtime.services.accountCodecs,
         session,
         walletSetup: createUiWalletSetupAccess({
-          accounts: runtime.controllers.accounts,
+          accounts: runtime.services.accounts,
           session: runtime.services.session,
           keyring: runtime.services.keyring,
         }),
@@ -264,12 +265,12 @@ const createWalletUiDeps = (
         }) as UiError,
       persistVaultMeta: runtime.services.session.persistVaultMeta,
       stateChanged: {
-        accounts: runtime.controllers.accounts,
+        accounts: runtime.services.accounts,
         permissions: {
-          onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
+          onStateChanged: (listener) => runtime.services.permissions.onStateChanged(listener),
         },
         chains: {
-          onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
+          onStateChanged: (listener) => runtime.services.network.onStateChanged(listener),
           onSelectionChanged: (listener) => runtime.services.networkSelection.subscribeChanged(() => listener()),
         },
         session,
@@ -292,8 +293,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const namespaceStages = assembleRuntimeNamespaceStagesFromWalletModules(namespaces.listModules());
   const storageOptions = buildStorageOptions(input);
   const cleanupTasks: Array<() => void> = [];
-  let sessionScope: RuntimeSessionScope | null = null;
-  let runtimeSupportScope: RuntimeSupportScope | null = null;
+  let sessionScope: BackgroundSessionScope | null = null;
+  let backgroundSupportScope: BackgroundSupportScope | null = null;
 
   const requireSessionScope = () => {
     if (!sessionScope) {
@@ -302,34 +303,33 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     return sessionScope;
   };
 
-  const requireRuntimeSupportScope = () => {
-    if (!runtimeSupportScope) {
-      throw new Error("Wallet runtime support scope is not initialized");
+  const requireBackgroundSupportScope = () => {
+    if (!backgroundSupportScope) {
+      throw new Error("Wallet background support scope is not initialized");
     }
-    return runtimeSupportScope;
+    return backgroundSupportScope;
   };
 
-  const controllerOptions = input.runtime?.controllerOptions;
+  const assemblyOptions = input.runtime?.assemblyOptions;
   const runtimeSessionOptions = buildRuntimeSessionOptions(input);
   const runtimeRpcEnv = input.runtime?.rpcEngine?.env ?? DEFAULT_RPC_ENV_HOOKS;
   const approvalFlowRegistry = createApprovalFlowRegistry();
 
-  const bootstrapScope: RuntimeBootstrapScope = createRuntimeBootstrapScope({
+  const bootstrapScope: BackgroundBootstrapScope = createBackgroundBootstrapScope({
     rpcRegistry,
     namespaceBootstrap: namespaceStages.bootstrap,
     ...(input.runtime?.messenger ? { messengerOptions: input.runtime.messenger } : {}),
     ...(storageOptions ? { storageOptions } : {}),
-    ...(controllerOptions?.network ? { networkOptions: controllerOptions.network } : {}),
-    ...(controllerOptions?.accounts ? { accountOptions: controllerOptions.accounts } : {}),
-    ...(controllerOptions?.approvals ? { approvalOptions: controllerOptions.approvals } : {}),
-    ...(controllerOptions?.transactions ? { transactionOptions: controllerOptions.transactions } : {}),
+    ...(assemblyOptions?.network ? { networkOptions: assemblyOptions.network } : {}),
+    ...(assemblyOptions?.approvals ? { approvalOptions: assemblyOptions.approvals } : {}),
+    ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
     supportedChainsOptions: {
-      ...(controllerOptions?.supportedChains ?? {}),
+      ...(assemblyOptions?.supportedChains ?? {}),
       port: input.storage.ports.customChains,
     },
   });
 
-  sessionScope = createRuntimeSessionScope({
+  sessionScope = createBackgroundSessionScope({
     lifecycleLabel: input.runtime?.lifecycleLabel ?? "createArxWallet",
     bootstrapScope,
     namespaceSession: namespaceStages.session,
@@ -346,23 +346,23 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
   });
 
-  runtimeSupportScope = createRuntimeSupportScope({
+  backgroundSupportScope = createBackgroundSupportScope({
     bootstrapScope,
     sessionScope,
     namespaceRuntimeSupport: namespaceStages.runtimeSupport,
-    createApprovalExecutor: ({ controllersBase }) =>
+    createApprovalExecutor: ({ stateServices }) =>
       createApprovalExecutor({
         registry: approvalFlowRegistry,
         getDeps: () => {
           const activeSessionScope = requireSessionScope();
-          const activeRuntimeSupportScope = requireRuntimeSupportScope();
+          const activeBackgroundSupportScope = requireBackgroundSupportScope();
 
           return {
-            accounts: controllersBase.accounts,
-            permissions: controllersBase.permissions,
+            accounts: stateServices.accounts,
+            permissions: stateServices.permissions,
             chainActivation: activeSessionScope.chainActivation,
-            supportedChains: controllersBase.supportedChains,
-            namespaceBindings: activeRuntimeSupportScope.namespaceBindings,
+            supportedChains: stateServices.supportedChains,
+            namespaceBindings: activeBackgroundSupportScope.namespaceBindings,
           };
         },
       }),
@@ -375,7 +375,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const transactionServices = createTransactionServices({
     aggregateStore: transactionAggregateStore,
-    namespaces: runtimeSupportScope.namespaceTransactions,
+    namespaces: backgroundSupportScope.namespaceTransactions,
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     approvalSessionOptions: {
       now: bootstrapScope.storageNow,
@@ -385,48 +385,48 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
 
   const lifecycle = createBackgroundRuntimeLifecycle({
     runtimeLifecycle: sessionScope.runtimeLifecycle,
-    controllersBase: sessionScope.controllersBase,
+    stateServices: sessionScope.stateServices,
     permissionsReady: sessionScope.permissionsReady,
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
     transactionRecovery: transactionServices.recovery,
-    networkBootstrap: runtimeSupportScope.networkBootstrap,
+    networkBootstrap: backgroundSupportScope.networkBootstrap,
     sessionLayer: sessionScope.sessionLayer,
-    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
+    rpcClientRegistry: backgroundSupportScope.rpcClientRegistry,
     engine: sessionScope.engine,
     bus: bootstrapScope.bus,
     logger: bootstrapScope.storageLogger,
   });
-  const controllers: HandlerControllers = {
-    ...sessionScope.controllersBase,
+  const stateServices = sessionScope.stateServices;
+  const rpcHandlerDeps: RpcHandlerDeps = {
+    ...stateServices,
     networkSelection: sessionScope.networkSelection,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
       now: bootstrapScope.storageNow,
     },
-    signers: runtimeSupportScope.signers,
+    signers: backgroundSupportScope.signers,
   };
   const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
   const resolveHintNamespace = createRpcHintNamespaceResolver(rpcRegistry);
   const resolveInvocation = (method: string, hint?: Parameters<typeof resolveRpcInvocation>[3]) =>
-    resolveRpcInvocation(rpcRegistry, controllers, method, hint);
+    resolveRpcInvocation(rpcRegistry, rpcHandlerDeps, method, hint);
   const resolveInvocationDetails = (method: string, hint?: Parameters<typeof resolveRpcInvocationDetails>[3]) =>
-    resolveRpcInvocationDetails(rpcRegistry, controllers, method, hint);
+    resolveRpcInvocationDetails(rpcRegistry, rpcHandlerDeps, method, hint);
   const executeRequest = createRpcMethodExecutor({
     registry: rpcRegistry,
-    controllers,
-    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
+    deps: rpcHandlerDeps,
+    rpcClientRegistry: backgroundSupportScope.rpcClientRegistry,
     services: {
-      permissionViews: runtimeSupportScope.permissionViews,
+      permissionViews: backgroundSupportScope.permissionViews,
       transactions: transactionServices.transactions,
     },
   });
   const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
   const engineRuntime: BackgroundRpcRuntime = {
-    controllers,
     services: {
       attention: sessionScope.attention,
-      permissionViews: runtimeSupportScope.permissionViews,
+      permissionViews: backgroundSupportScope.permissionViews,
       sessionStatus: sessionScope.sessionStatus,
     },
     rpc: {
@@ -464,7 +464,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       if (transaction) {
         return;
       }
-      await sessionScope.controllersBase.approvals.cancel({ approvalId, reason });
+      await stateServices.approvals.cancel({ approvalId, reason });
     },
   });
   const providerAccess = createProviderRuntimeAccess({
@@ -473,7 +473,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
     getActiveChainByNamespace: () => sessionScope.networkSelection.getChainRefByNamespace(),
     listPermittedAccountsView: (origin, options) =>
-      runtimeSupportScope.permissionViews.listPermittedAccounts(origin, options),
+      backgroundSupportScope.permissionViews.listPermittedAccounts(origin, options),
     formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
     resolveMethodNamespace,
     handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
@@ -481,10 +481,10 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     providerRequests,
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
-    subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),
+    subscribeNetworkStateChanged: (listener) => stateServices.network.onStateChanged(listener),
     subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
-    subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(listener),
-    subscribePermissionsStateChanged: (listener) => sessionScope.controllersBase.permissions.onStateChanged(listener),
+    subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(listener),
+    subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(listener),
   });
   const session = createWalletSession({
     session: sessionScope.sessionLayer.session,
@@ -492,33 +492,33 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyring: sessionScope.keyringService,
   });
   const accounts = createWalletAccounts({
-    accounts: sessionScope.controllersBase.accounts,
+    accounts: stateServices.accounts,
     keyring: sessionScope.keyringService,
     keyringExport: sessionScope.keyringExport,
   });
   const approvals = createWalletApprovals({
-    approvals: sessionScope.controllersBase.approvals,
+    approvals: stateServices.approvals,
   });
   const approvalReadService = createApprovalReadService({
-    approvals: sessionScope.controllersBase.approvals,
+    approvals: stateServices.approvals,
     accounts,
     chainViews: sessionScope.chainViews,
     transactionApprovals: transactionServices.transactions,
   });
   const approvalResolveService = createApprovalResolveService({
-    approvalController: sessionScope.controllersBase.approvals,
+    approvals: stateServices.approvals,
     transactions: transactionServices.transactions,
   });
   const permissions = createWalletPermissions({
-    permissions: sessionScope.controllersBase.permissions,
+    permissions: stateServices.permissions,
   });
   const networks = createWalletNetworks({
     networkSelection: sessionScope.networkSelection,
-    supportedChains: sessionScope.controllersBase.supportedChains,
+    supportedChains: stateServices.supportedChains,
     customRpc: sessionScope.customRpc,
     chainViews: sessionScope.chainViews,
     chainActivation: sessionScope.chainActivation,
-    network: sessionScope.controllersBase.network,
+    network: stateServices.network,
   });
   const attention = createWalletAttention({
     attention: sessionScope.attention,
@@ -526,14 +526,13 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const dappConnections = createWalletDappConnections({
     ...(input.env?.now ? { now: input.env.now } : {}),
     sessionStatus: sessionScope.sessionStatus,
-    permissionViews: runtimeSupportScope.permissionViews,
+    permissionViews: backgroundSupportScope.permissionViews,
     chainViews: sessionScope.chainViews,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(() => listener()),
-    subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(() => listener()),
-    subscribePermissionsStateChanged: (listener) =>
-      sessionScope.controllersBase.permissions.onStateChanged(() => listener()),
-    subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(() => listener()),
+    subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(() => listener()),
+    subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(() => listener()),
+    subscribeNetworkStateChanged: (listener) => stateServices.network.onStateChanged(() => listener()),
     subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
     registerCleanup: (cleanup) => {
       cleanupTasks.push(cleanup);
@@ -545,7 +544,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyring: sessionScope.keyringService,
     attention: sessionScope.attention,
     chainViews: sessionScope.chainViews,
-    permissionViews: runtimeSupportScope.permissionViews,
+    permissionViews: backgroundSupportScope.permissionViews,
     accounts,
     approvals: {
       read: {
@@ -556,7 +555,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
         resolve: (input) => approvalResolveService.resolve(input),
       },
     },
-    namespaceBindings: runtimeSupportScope.namespaceBindings,
+    namespaceBindings: backgroundSupportScope.namespaceBindings,
     dappConnections,
     providerProjection: {
       sessionStatus: sessionScope.sessionStatus,
@@ -564,15 +563,16 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     },
   });
   const services: WalletRuntimeServices = {
+    ...stateServices,
     attention: sessionScope.attention,
     chainActivation: sessionScope.chainActivation,
     chainViews: sessionScope.chainViews,
-    permissionViews: runtimeSupportScope.permissionViews,
+    permissionViews: backgroundSupportScope.permissionViews,
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     networkSelection: sessionScope.networkSelection,
     customRpc: sessionScope.customRpc,
-    namespaceBindings: runtimeSupportScope.namespaceBindings,
-    namespaceRuntimeSupport: runtimeSupportScope.namespaceRuntimeSupport,
+    namespaceBindings: backgroundSupportScope.namespaceBindings,
+    namespaceRuntimeSupport: backgroundSupportScope.namespaceRuntimeSupport,
     session: sessionScope.sessionLayer.session,
     sessionStatus: sessionScope.sessionStatus,
     accountSigning: sessionScope.accountSigning,
@@ -581,7 +581,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   };
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
-    controllers,
     transactions: transactionServices.transactions,
     services,
     surfaceErrors: surfaceErrorEncoder,
@@ -632,14 +631,13 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     wallet,
     shutdown,
     bus: bootstrapScope.bus,
-    controllers,
     transactions: transactionServices.transactions,
     services,
     lifecycle,
     rpc: {
       engine: sessionScope.engine,
       namespaceIndex: rpcRegistry,
-      clients: runtimeSupportScope.rpcClientRegistry,
+      clients: backgroundSupportScope.rpcClientRegistry,
       resolveHintNamespace,
       resolveMethodNamespace,
       resolveInvocation,

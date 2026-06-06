@@ -1,6 +1,6 @@
-import type { UnlockReason, UnlockState } from "../../controllers/unlock/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { UnlockReason, UnlockState } from "../../runtime/session/unlock/types.js";
 import type { SessionStatus, SessionStatusService } from "../../services/runtime/sessionStatus.js";
 
 export type UiStateChangeSubscription = (listener: () => void) => () => void;

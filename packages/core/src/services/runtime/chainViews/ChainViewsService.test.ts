@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { ApprovalKinds } from "../../../approvals/queue/types.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
-import { ApprovalKinds } from "../../../controllers/approval/types.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
 const MAINNET: ChainMetadata = {

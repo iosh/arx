@@ -1,7 +1,4 @@
-import type {
-  ApprovalResolveInput,
-  ApprovalResolveResult as ControllerApprovalResolveResult,
-} from "../../../controllers/approval/types.js";
+import type { ApprovalResolveInput, ApprovalResolveResult } from "../../../approvals/queue/types.js";
 import { buildTransactionTerminalReason } from "../../../transactions/index.js";
 import type { TransactionsService } from "../../../transactions/TransactionsService.js";
 import type { UiMethodParams } from "../../protocol/index.js";
@@ -18,8 +15,8 @@ export type UiApprovalResolveResult =
     };
 
 type ApprovalResolveServiceDeps = {
-  approvalController: {
-    resolve(input: ApprovalResolveInput): Promise<ControllerApprovalResolveResult>;
+  approvals: {
+    resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
   };
   transactions: Pick<
     TransactionsService,
@@ -27,7 +24,7 @@ type ApprovalResolveServiceDeps = {
   >;
 };
 
-const toControllerApprovalResolveInput = (input: ApprovalResolveRequest): ApprovalResolveInput => {
+const toApprovalResolveInput = (input: ApprovalResolveRequest): ApprovalResolveInput => {
   if (input.action === "approve") {
     return input.decision === undefined
       ? { approvalId: input.approvalId, action: "approve" }
@@ -43,7 +40,7 @@ export const createApprovalResolveService = (deps: ApprovalResolveServiceDeps) =
   async resolve(input: ApprovalResolveRequest): Promise<UiApprovalResolveResult> {
     const transactionApproval = deps.transactions.getTransactionApproval(input.approvalId);
     if (!transactionApproval) {
-      await deps.approvalController.resolve(toControllerApprovalResolveInput(input));
+      await deps.approvals.resolve(toApprovalResolveInput(input));
       return { status: "resolved" };
     }
 

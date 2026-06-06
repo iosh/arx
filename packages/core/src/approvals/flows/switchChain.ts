@@ -1,4 +1,4 @@
-import { ApprovalKinds } from "../../controllers/approval/types.js";
+import { ApprovalKinds } from "../../approvals/queue/types.js";
 import { NamespaceChainActivationReasons } from "../../services/runtime/chainActivation/types.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";

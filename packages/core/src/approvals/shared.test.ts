@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalKinds } from "../controllers/approval/types.js";
+import { ApprovalKinds } from "../approvals/queue/types.js";
 import { deriveApprovalReviewContext, parseAccountSelectionDecision, parseNoDecision } from "./shared.js";
 
 describe("deriveApprovalReviewContext", () => {

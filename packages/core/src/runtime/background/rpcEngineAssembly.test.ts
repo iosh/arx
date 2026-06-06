@@ -123,7 +123,7 @@ describe("background rpc engine assembly", () => {
   it("does not consult global active chain when namespace cannot be inferred", async () => {
     const runtime = createTestRuntime();
 
-    const getStateSpy = vi.spyOn(runtime.controllers.network, "getState");
+    const getStateSpy = vi.spyOn(runtime.services.network, "getState");
 
     const middlewares = createBackgroundRpcMiddlewares(runtime, {
       isInternalOrigin: () => false,

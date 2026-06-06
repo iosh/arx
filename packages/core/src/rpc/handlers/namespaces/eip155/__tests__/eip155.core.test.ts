@@ -1,8 +1,8 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
+import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../approvals/index.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../controllers/index.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
@@ -61,7 +61,7 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
     const derived = await runtime.services.keyring.deriveAccount(keyringId);
-    await runtime.controllers.accounts.setActiveAccount({
+    await runtime.services.accounts.setActiveAccount({
       namespace: mainnet.namespace,
       chainRef: mainnet.chainRef,
       accountKey: toAccountKeyFromAddress({
@@ -86,7 +86,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
       expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
       expect(
-        runtime.controllers.accounts.getActiveAccountForNamespace({
+        runtime.services.accounts.getActiveAccountForNamespace({
           namespace: ALT_CHAIN.namespace,
           chainRef: ALT_CHAIN.chainRef,
         }),
@@ -300,7 +300,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
+        await runtime.services.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         return true;
       }
       return false;
@@ -321,7 +321,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(networkChain.displayName).toBe("Base Mainnet");
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
 
-      const registryEntry = runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
     } finally {
       teardownApprovalResponder();
@@ -370,7 +370,7 @@ describe("eip155 handlers - core error paths", () => {
     const rejectionError = Object.assign(new Error("user denied"), { code: 4001 });
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        void runtime.controllers.approvals.resolve({
+        void runtime.services.approvals.resolve({
           approvalId: task.approvalId,
           action: "reject",
           error: rejectionError,
@@ -461,7 +461,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
+        await runtime.services.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         return true;
       }
       return false;
@@ -497,7 +497,7 @@ describe("eip155 handlers - core error paths", () => {
       const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
 
-      const registryEntry = runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
       teardownApprovalResponder();
@@ -551,7 +551,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createExecutor(runtime);
     let approvalRequested = false;
-    const unsubscribeApproval = runtime.controllers.approvals.onCreated(() => {
+    const unsubscribeApproval = runtime.services.approvals.onCreated(() => {
       approvalRequested = true;
     });
 
@@ -573,7 +573,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(approvalRequested).toBe(false);
-      expect(runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF)).toMatchObject({
+      expect(runtime.services.supportedChains.getChain(ADDED_CHAIN_REF)).toMatchObject({
         source: "builtin",
         metadata: {
           chainRef: existing.chainRef,
@@ -594,7 +594,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createExecutor(runtime);
     let approvalRequested = false;
-    const unsubscribeApproval = runtime.controllers.approvals.onCreated(() => {
+    const unsubscribeApproval = runtime.services.approvals.onCreated(() => {
       approvalRequested = true;
     });
 
@@ -758,14 +758,14 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const account = await runtime.services.keyring.deriveAccount(keyringId);
 
-    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
-    await accountsController.refresh?.();
+    const accountSelectionService = runtime.services.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountSelectionService.refresh?.();
     const accountKey = toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: account.address,
       accountCodecs: runtime.services.accountCodecs,
     });
-    await runtime.controllers.accounts.setActiveAccount({
+    await runtime.services.accounts.setActiveAccount({
       namespace: chain.namespace,
       chainRef: chain.chainRef,
       accountKey,
@@ -776,7 +776,7 @@ describe("eip155 handlers - core error paths", () => {
       const payload = task.request as RequestPermissionsApprovalPayload;
       expect(payload.chainRef).toBe(chain.chainRef);
       expect(payload.requestedGrants).toEqual([{ grantKind: "eth_accounts", chainRefs: [chain.chainRef] }]);
-      await runtime.controllers.approvals.resolve({
+      await runtime.services.approvals.resolve({
         approvalId: task.approvalId,
         action: "approve",
         decision: { accountKeys: [accountKey] },
@@ -797,7 +797,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ]);
 
-      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
+      const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
       expect(Object.keys(authorization?.chains ?? {})).toEqual([chain.chainRef]);
       expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([accountKey]);
     } finally {
@@ -835,12 +835,12 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
 
-    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
-    await accountsController.refresh?.();
+    const accountSelectionService = runtime.services.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountSelectionService.refresh?.();
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
-      void runtime.controllers.approvals
+      void runtime.services.approvals
         .resolve({
           approvalId: task.approvalId,
           action: "approve",
@@ -859,7 +859,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: 4100 });
 
-      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
+      const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
       expect(authorization).toBeNull();
     } finally {
       teardown();
@@ -879,8 +879,8 @@ describe("eip155 handlers - core error paths", () => {
     const first = await runtime.services.keyring.deriveAccount(keyringId);
     const second = await runtime.services.keyring.deriveAccount(keyringId);
 
-    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
-    await accountsController.refresh?.();
+    const accountSelectionService = runtime.services.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountSelectionService.refresh?.();
 
     const firstAccountId = toAccountKeyFromAddress({
       chainRef: chain.chainRef,
@@ -893,7 +893,7 @@ describe("eip155 handlers - core error paths", () => {
       accountCodecs: runtime.services.accountCodecs,
     });
 
-    await runtime.controllers.accounts.setActiveAccount({
+    await runtime.services.accounts.setActiveAccount({
       namespace: chain.namespace,
       chainRef: chain.chainRef,
       accountKey: firstAccountId,
@@ -906,7 +906,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestAccounts) return false;
-      await runtime.controllers.approvals.resolve({
+      await runtime.services.approvals.resolve({
         approvalId: task.approvalId,
         action: "approve",
         decision: { accountKeys: [secondAccountId] },
@@ -921,7 +921,7 @@ describe("eip155 handlers - core error paths", () => {
         request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
       });
 
-      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
+      const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
       expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([secondAccountId]);
     } finally {
       teardown();
@@ -940,12 +940,12 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
 
-    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
-    await accountsController.refresh?.();
+    const accountSelectionService = runtime.services.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountSelectionService.refresh?.();
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestAccounts) return false;
-      void runtime.controllers.approvals
+      void runtime.services.approvals
         .resolve({
           approvalId: task.approvalId,
           action: "approve",
@@ -964,7 +964,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: 4100 });
 
-      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
+      const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
       expect(authorization).toBeNull();
     } finally {
       teardown();
@@ -1044,7 +1044,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "create");
+    const requestApprovalSpy = vi.spyOn(runtime.services.approvals, "create");
     try {
       await expect(
         execute({
@@ -1074,7 +1074,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "create");
+    const requestApprovalSpy = vi.spyOn(runtime.services.approvals, "create");
     const typedData = {
       domain: { name: "ARX", version: "1" },
       message: { contents: "hello" },

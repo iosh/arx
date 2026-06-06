@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { HandlerControllers, MethodDefinition, Namespace, RpcInvocationHint } from "./handlers/types.js";
+import type { MethodDefinition, Namespace, RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 
 export type RpcPassthroughAllowance = {
@@ -187,14 +187,14 @@ const toPassthroughAllowance = (policy: RpcPassthroughPolicy | null, method: str
 
 export const resolveRpcInvocation = (
   catalog: RpcInvocationCatalog,
-  controllers: HandlerControllers,
+  handlerDeps: RpcHandlerDeps,
   method: string,
   hint?: RpcInvocationHint,
 ): ResolvedRpcInvocation => {
   assertInvocationHintConsistency(method, hint);
 
   const namespace = resolveInvocationNamespace(catalog, method, hint);
-  const namespaceActiveChainRef = controllers.networkSelection.getSelectedChainRef(namespace);
+  const namespaceActiveChainRef = handlerDeps.networkSelection.getSelectedChainRef(namespace);
   const chainRef = resolveInvocationChainRef({
     method,
     namespace,
@@ -208,11 +208,11 @@ export const resolveRpcInvocation = (
 
 export const resolveRpcInvocationDetails = (
   catalog: RpcInvocationCatalog,
-  controllers: HandlerControllers,
+  handlerDeps: RpcHandlerDeps,
   method: string,
   hint?: RpcInvocationHint,
 ): ResolvedRpcInvocationDetails => {
-  const { namespace, chainRef } = resolveRpcInvocation(catalog, controllers, method, hint);
+  const { namespace, chainRef } = resolveRpcInvocation(catalog, handlerDeps, method, hint);
 
   return {
     namespace,

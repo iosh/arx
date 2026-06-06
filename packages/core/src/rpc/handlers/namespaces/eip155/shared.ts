@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { requestApproval } from "../../../../approvals/creation.js";
+import type { ApprovalQueueKind, ApprovalRequest, ApprovalRequester } from "../../../../approvals/queue/types.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
-import type { ApprovalRequest, ApprovalRequester, ControllerApprovalKind } from "../../../../controllers/approval/types.js";
 import type {
   PermissionViewsService,
   PermittedAccountView,
@@ -49,8 +49,8 @@ export const buildDappApprovalRequester = (requestContext: RpcProviderRequestCon
   requestId: requestContext.requestId,
 });
 
-export const requestProviderApproval = <K extends ControllerApprovalKind>(args: {
-  controllers: {
+export const requestProviderApproval = <K extends ApprovalQueueKind>(args: {
+  deps: {
     approvals: {
       create: Parameters<typeof requestApproval>[0]["approvals"]["create"];
     };
@@ -69,8 +69,8 @@ export const requestProviderApproval = <K extends ControllerApprovalKind>(args: 
   return providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
     requestApproval(
       {
-        approvals: args.controllers.approvals,
-        now: args.controllers.clock.now,
+        approvals: args.deps.approvals,
+        now: args.deps.clock.now,
       },
       {
         kind: args.kind,
@@ -93,12 +93,12 @@ export const assertPermittedEip155Account = (args: {
   method: string;
   chainRef: ChainRef;
   address: string;
-  controllers: PermittedAccountDeps;
+  deps: PermittedAccountDeps;
 }) => {
-  const { origin, method, chainRef, address, controllers } = args;
+  const { origin, method, chainRef, address, deps } = args;
 
-  const canonical = controllers.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
-  const permittedAccounts = controllers.permissionViews.listPermittedAccounts(origin, { chainRef });
+  const canonical = deps.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
+  const permittedAccounts = deps.permissionViews.listPermittedAccounts(origin, { chainRef });
 
   if (permittedAccounts.length === 0) {
     throw arxError({
@@ -212,9 +212,9 @@ export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
         method: context.request.method,
         chainRef,
         address,
-        controllers: {
+        deps: {
           permissionViews: context.services.permissionViews,
-          chainAddressCodecs: context.controllers.chainAddressCodecs,
+          chainAddressCodecs: context.deps.chainAddressCodecs,
         },
       });
 

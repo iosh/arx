@@ -19,13 +19,13 @@ export {
   EIP155_PASSTHROUGH_READONLY_METHODS,
 } from "./handlers/namespaces/index.js";
 export {
-  type HandlerControllers,
   type HandlerRuntimeServices,
   type MethodDefinition,
   type Namespace,
   NO_RPC_EXECUTION_CONTEXT,
   type RpcExecutionContext,
   RpcExecutionContextKinds,
+  type RpcHandlerDeps,
   type RpcInvocationHint,
   type RpcProviderExecutionContext,
   type RpcProviderRequestContext,

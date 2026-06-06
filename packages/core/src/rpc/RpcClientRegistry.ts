@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams } from "@metamask/utils";
 import { getChainRefNamespace, normalizeChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { NetworkController, RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
+import type { RpcEndpointInfo, RpcOutcomeReport, RpcRoutingService } from "../chains/runtime/types.js";
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 type AbortFactory = () => AbortController;
@@ -60,7 +60,7 @@ export type RpcClientLogEvent =
 
 export type RpcClientRegistryOptions = {
   network: Pick<
-    NetworkController,
+    RpcRoutingService,
     "getActiveEndpoint" | "reportRpcOutcome" | "onRpcEndpointChanged" | "onChainConfigChanged"
   >;
   fetch?: FetchFn;
@@ -213,7 +213,7 @@ const createJsonRpcTransport = (
         await wait(delay);
         continue;
       }
-      const controller = abortFactory();
+      const abortHandle = abortFactory();
       const timeout = request.timeoutMs ?? defaultTimeoutMs;
       const startedAt = Date.now();
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -228,7 +228,7 @@ const createJsonRpcTransport = (
       });
 
       try {
-        timer = setTimeout(() => controller.abort(), timeout);
+        timer = setTimeout(() => abortHandle.abort(), timeout);
 
         const payload: Record<string, unknown> = {
           jsonrpc: "2.0",
@@ -248,7 +248,7 @@ const createJsonRpcTransport = (
           method: "POST",
           body: JSON.stringify(payload),
           headers,
-          signal: controller.signal,
+          signal: abortHandle.signal,
         });
 
         clearTimeout(timer);

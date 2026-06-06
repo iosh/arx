@@ -149,12 +149,9 @@ const makeRuntime = () => {
 
   const runtime = {
     bus: { subscribe },
-    controllers: {
+    services: {
       accounts: {
         onStateChanged: onAccountsStateChanged,
-      },
-      network: {
-        onStateChanged: onNetworkStateChanged,
       },
       approvals: {
         onCreated,
@@ -166,9 +163,9 @@ const makeRuntime = () => {
       permissions: {
         onStateChanged: onPermissionsStateChanged,
       },
-      transactions: {},
-    },
-    services: {
+      network: {
+        onStateChanged: onNetworkStateChanged,
+      },
       attention: {},
       chainActivation: {},
       chainViews: {

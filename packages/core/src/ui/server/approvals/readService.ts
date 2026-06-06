@@ -1,10 +1,6 @@
 import { deriveApprovalReviewContext } from "../../../approvals/chainContext.js";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../approvals/queue/types.js";
 import { getApprovalSelectableAccounts } from "../../../approvals/shared.js";
-import {
-  ApprovalKinds,
-  type ApprovalQueueItem,
-  type ApprovalRecord,
-} from "../../../controllers/approval/types.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
 import type { TransactionApproval, TransactionsService } from "../../../transactions/TransactionsService.js";

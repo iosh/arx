@@ -2,12 +2,12 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { NetworkController } from "../../../controllers/network/types.js";
+import type { RpcRoutingService } from "../../../chains/runtime/types.js";
 import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
 import type { ActivateNamespaceChainParams, ChainActivationService } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
-  network: Pick<NetworkController, "getState">;
+  network: Pick<RpcRoutingService, "getState">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
   logger?: (message: string, error?: unknown) => void;
 };

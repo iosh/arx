@@ -1,5 +1,5 @@
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { RpcRoutingState, RpcStrategyConfig } from "../../controllers/network/types.js";
+import type { RpcRoutingState, RpcStrategyConfig } from "../../chains/runtime/types.js";
 
 export const UNKNOWN_ORIGIN = "unknown://";
 export const DEFAULT_STRATEGY: RpcStrategyConfig = { id: "round-robin" };

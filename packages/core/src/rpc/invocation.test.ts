@@ -1,16 +1,16 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import type { HandlerControllers, RpcInvocationHint } from "./handlers/types.js";
+import type { RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
 import { resolveRpcInvocation } from "./invocation.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
-const makeControllers = (activeChainByNamespace?: Record<string, string>): HandlerControllers => {
+const makeRpcHandlerDeps = (activeChainByNamespace?: Record<string, string>): RpcHandlerDeps => {
   return {
     network: {} as never,
     networkSelection: {
       getSelectedChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
     },
-  } as unknown as HandlerControllers;
+  } as unknown as RpcHandlerDeps;
 };
 
 const getErrorReason = (error: unknown) => {
@@ -24,10 +24,10 @@ describe("resolveRpcInvocation", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
 
-    const controllers = makeControllers(undefined);
+    const handlerDeps = makeRpcHandlerDeps(undefined);
 
     try {
-      resolveRpcInvocation(registry, controllers, "custom_ping", undefined);
+      resolveRpcInvocation(registry, handlerDeps, "custom_ping", undefined);
       throw new Error("Expected resolveRpcInvocation to throw");
     } catch (error) {
       expect(getErrorReason(error)).toBe(ArxReasons.RpcInvalidRequest);
@@ -39,9 +39,9 @@ describe("resolveRpcInvocation", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
 
-    const controllers = makeControllers(undefined);
+    const handlerDeps = makeRpcHandlerDeps(undefined);
 
-    expect(() => resolveRpcInvocation(registry, controllers, "eth_chainId", undefined)).toThrow(/Missing chainRef/);
+    expect(() => resolveRpcInvocation(registry, handlerDeps, "eth_chainId", undefined)).toThrow(/Missing chainRef/);
   });
 
   it("falls back to the namespace-specific active chain when chainRef is absent", () => {
@@ -49,8 +49,8 @@ describe("resolveRpcInvocation", () => {
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "solana", methodPrefixes: ["sol_"], definitions: {} });
 
-    const controllers = makeControllers({ eip155: "eip155:10", solana: "solana:101" });
-    expect(resolveRpcInvocation(registry, controllers, "eth_chainId", undefined)).toEqual({
+    const handlerDeps = makeRpcHandlerDeps({ eip155: "eip155:10", solana: "solana:101" });
+    expect(resolveRpcInvocation(registry, handlerDeps, "eth_chainId", undefined)).toEqual({
       namespace: "eip155",
       chainRef: "eip155:10",
     });
@@ -59,9 +59,9 @@ describe("resolveRpcInvocation", () => {
   it("uses provided chainRef when present and infers namespace from its prefix", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
-    const controllers = makeControllers(undefined);
+    const handlerDeps = makeRpcHandlerDeps(undefined);
 
-    expect(resolveRpcInvocation(registry, controllers, "eth_chainId", { chainRef: "eip155:137" })).toEqual({
+    expect(resolveRpcInvocation(registry, handlerDeps, "eth_chainId", { chainRef: "eip155:137" })).toEqual({
       namespace: "eip155",
       chainRef: "eip155:137",
     });
@@ -72,9 +72,9 @@ describe("resolveRpcInvocation", () => {
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
-    const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" });
+    const handlerDeps = makeRpcHandlerDeps({ eip155: "eip155:10", conflux: "conflux:1029" });
 
-    expect(resolveRpcInvocation(registry, controllers, "custom_ping", { namespace: "conflux" })).toEqual({
+    expect(resolveRpcInvocation(registry, handlerDeps, "custom_ping", { namespace: "conflux" })).toEqual({
       namespace: "conflux",
       chainRef: "conflux:1029",
     });
@@ -85,9 +85,9 @@ describe("resolveRpcInvocation", () => {
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
-    const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" });
+    const handlerDeps = makeRpcHandlerDeps({ eip155: "eip155:10", conflux: "conflux:1029" });
 
-    expect(resolveRpcInvocation(registry, controllers, "eth_chainId", undefined)).toEqual({
+    expect(resolveRpcInvocation(registry, handlerDeps, "eth_chainId", undefined)).toEqual({
       namespace: "eip155",
       chainRef: "eip155:10",
     });
@@ -98,10 +98,10 @@ describe("resolveRpcInvocation", () => {
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
     registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
 
-    const controllers = makeControllers(undefined);
+    const handlerDeps = makeRpcHandlerDeps(undefined);
     const context: RpcInvocationHint = { namespace: "eip155", chainRef: "conflux:cfx" };
     try {
-      resolveRpcInvocation(registry, controllers, "eth_chainId", context);
+      resolveRpcInvocation(registry, handlerDeps, "eth_chainId", context);
       throw new Error("Expected resolveRpcInvocation to throw");
     } catch (error) {
       expect(getErrorReason(error)).toBe(ArxReasons.RpcInvalidRequest);
@@ -111,9 +111,9 @@ describe("resolveRpcInvocation", () => {
   it("rejects invalid chainRef identifiers", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
-    const controllers = makeControllers(undefined);
+    const handlerDeps = makeRpcHandlerDeps(undefined);
 
-    expect(() => resolveRpcInvocation(registry, controllers, "eth_chainId", { chainRef: "eip155" })).toThrow(
+    expect(() => resolveRpcInvocation(registry, handlerDeps, "eth_chainId", { chainRef: "eip155" })).toThrow(
       /Invalid chainRef/,
     );
   });

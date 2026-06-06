@@ -13,12 +13,10 @@ export const ethAccountsDefinition = defineNoParamsMethod({
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedResponse([]),
-  handler: ({ origin, controllers, services, invocation }) => {
+  handler: ({ origin, deps, services, invocation }) => {
     const chainRef = invocation.chainRef;
     return services.permissionViews
       .listPermittedAccounts(origin, { chainRef })
-      .map((account) =>
-        controllers.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }),
-      );
+      .map((account) => deps.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }));
   },
 });

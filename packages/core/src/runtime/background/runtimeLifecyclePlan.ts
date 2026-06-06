@@ -1,7 +1,7 @@
-import { buildNetworkRuntimeInput } from "../../controllers/network/config.js";
-import type { NetworkStateInput } from "../../controllers/network/types.js";
+import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
+import type { NetworkStateInput } from "../../chains/runtime/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
-import type { ControllersBase } from "./controllers.js";
+import type { BackgroundStateServices } from "./backgroundStateServices.js";
 import type { NetworkBootstrap } from "./networkBootstrap.js";
 import type { RuntimeLifecycle } from "./runtimeLifecycle.js";
 import { type RuntimePlugin, runPluginHooks, startPlugins } from "./runtimePlugins.js";
@@ -24,7 +24,7 @@ type RestartRecovery = {
 
 export const createBackgroundRuntimeLifecycle = ({
   runtimeLifecycle,
-  controllersBase,
+  stateServices,
   permissionsReady,
   deferredNetworkInitialState,
   registeredNamespaces,
@@ -37,7 +37,7 @@ export const createBackgroundRuntimeLifecycle = ({
   logger,
 }: {
   runtimeLifecycle: RuntimeLifecycle;
-  controllersBase: ControllersBase;
+  stateServices: BackgroundStateServices;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
@@ -52,12 +52,12 @@ export const createBackgroundRuntimeLifecycle = ({
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
     initialize: async () => {
-      await controllersBase.supportedChains.whenReady();
-      await controllersBase.accounts.whenReady?.();
+      await stateServices.supportedChains.whenReady();
+      await stateServices.accounts.whenReady?.();
 
       if (deferredNetworkInitialState) {
         const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
-          const metadata = controllersBase.supportedChains.getChain(chainRef)?.metadata;
+          const metadata = stateServices.supportedChains.getChain(chainRef)?.metadata;
           if (!metadata) {
             throw new Error(`Deferred network state references missing supported chain ${chainRef}`);
           }
@@ -69,7 +69,7 @@ export const createBackgroundRuntimeLifecycle = ({
         );
 
         if (allDeferredChainsAdmitted) {
-          controllersBase.network.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
+          stateServices.network.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
         } else {
           logger("network: skipped deferred initial state with unregistered namespace chain");
         }
@@ -111,13 +111,13 @@ export const createBackgroundRuntimeLifecycle = ({
     },
   };
 
-  const accountsControllerPlugin: RuntimePlugin = {
-    name: "accountsController",
+  const accountSelectionServicePlugin: RuntimePlugin = {
+    name: "accountSelectionService",
     destroy: () => {
       try {
-        controllersBase.accounts.destroy?.();
+        stateServices.accounts.destroy?.();
       } catch (error) {
-        logger("lifecycle: failed to destroy accounts controller", error);
+        logger("lifecycle: failed to destroy account selection service", error);
       }
     },
   };
@@ -137,18 +137,14 @@ export const createBackgroundRuntimeLifecycle = ({
     destroy: () => bus.clear(),
   };
 
-  const initializeOrder = [
-    coreReadyPlugin,
-    transactionRecoveryPlugin,
-    networkBootstrapPlugin,
-  ] as const;
+  const initializeOrder = [coreReadyPlugin, transactionRecoveryPlugin, networkBootstrapPlugin] as const;
   const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [networkBootstrapPlugin] as const;
   const startOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const destroyOrder = [
     sessionPlugin,
     networkBootstrapPlugin,
-    accountsControllerPlugin,
+    accountSelectionServicePlugin,
     rpcClientsPlugin,
     enginePlugin,
     busPlugin,

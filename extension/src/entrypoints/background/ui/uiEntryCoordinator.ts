@@ -1,4 +1,4 @@
-import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/controllers/approval";
+import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/approvals";
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiMethodParams, UiMethodResult } from "@arx/core/ui";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";

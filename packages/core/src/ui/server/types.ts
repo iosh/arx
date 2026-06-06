@@ -1,8 +1,8 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { AccountController } from "../../controllers/account/types.js";
-import type { ApprovalController } from "../../controllers/approval/types.js";
-import type { PermissionsEvents } from "../../controllers/permission/types.js";
+import type { AccountSelectionService } from "../../accounts/runtime/types.js";
+import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
+import type { PermissionsEvents } from "../../permissions/service/types.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
@@ -58,7 +58,7 @@ export type UiResolvedContext = {
 export type UiContextResolver = () => UiResolvedContext;
 
 export type UiAccountsAccess = Pick<
-  AccountController,
+  AccountSelectionService,
   "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "setActiveAccount"
 >;
 
@@ -77,8 +77,8 @@ export type UiApprovalsAccess = {
 };
 
 export type UiApprovalEventsAccess = {
-  onCreated: ApprovalController["onCreated"];
-  onFinished: ApprovalController["onFinished"];
+  onCreated: ApprovalQueueService["onCreated"];
+  onFinished: ApprovalQueueService["onFinished"];
 };
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
@@ -147,7 +147,7 @@ export type UiSurfaceIdentity = {
 };
 
 export type UiStateChangeSources = {
-  accounts: Pick<AccountController, "onStateChanged">;
+  accounts: Pick<AccountSelectionService, "onStateChanged">;
   permissions: {
     onStateChanged: PermissionsEvents["onStateChanged"];
   };

@@ -8,8 +8,8 @@ import { getChainRefNamespace } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
-import type { NetworkController } from "../../../controllers/network/types.js";
-import type { SupportedChainsController } from "../../../controllers/supportedChains/types.js";
+import type { SupportedChainsService } from "../../../chains/runtime/supportedChains/types.js";
+import type { RpcRoutingService } from "../../../chains/runtime/types.js";
 import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
 import type {
   ApprovalReviewChainViewParams,
@@ -21,8 +21,8 @@ import type {
 } from "./types.js";
 
 type CreateChainViewsServiceOptions = {
-  supportedChains: SupportedChainsController;
-  network: NetworkController;
+  supportedChains: SupportedChainsService;
+  network: RpcRoutingService;
   selection: Pick<NetworkSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 };
 
@@ -45,8 +45,8 @@ const toChainView = (metadata: ChainMetadata): ChainView => ({
 const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
 
 class DefaultChainViewsService implements ChainViewsService {
-  readonly #supportedChains: SupportedChainsController;
-  readonly #network: NetworkController;
+  readonly #supportedChains: SupportedChainsService;
+  readonly #network: RpcRoutingService;
   readonly #selection: Pick<NetworkSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 
   constructor(options: CreateChainViewsServiceOptions) {

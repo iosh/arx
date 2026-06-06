@@ -1,9 +1,9 @@
 import {
-  ApprovalKinds,
   type ApprovalKind,
+  ApprovalKinds,
   type ApprovalRequester,
   type ApprovalTerminalReason,
-} from "@arx/core/controllers/approval";
+} from "@arx/core/approvals";
 import { type ApprovalDetail, createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
@@ -35,7 +35,7 @@ export type BackgroundUiAccessParams = {
 };
 
 type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
-type BackgroundRuntimeApprovals = BackgroundRuntime["controllers"]["approvals"];
+type BackgroundRuntimeApprovals = BackgroundRuntime["services"]["approvals"];
 type BackgroundRuntimeTransactions = BackgroundRuntime["transactions"];
 type BackgroundRuntimeUnlock = BackgroundRuntime["services"]["session"]["unlock"];
 
@@ -283,7 +283,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         return;
       }
 
-      await active.runtime.controllers.approvals.cancel({ approvalId, reason });
+      await active.runtime.services.approvals.cancel({ approvalId, reason });
     };
 
     return {
@@ -296,7 +296,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
           listener(payload);
         }),
       subscribeApprovalCreated: (listener) => {
-        const unsubscribeGeneric = active.runtime.controllers.approvals.onCreated((event) => {
+        const unsubscribeGeneric = active.runtime.services.approvals.onCreated((event) => {
           listener({ approval: toGenericApprovalEntry(event.record) });
         });
         const createdTransactionApprovalIds = new Set<string>();
@@ -333,7 +333,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         };
       },
       subscribeApprovalFinished: (listener) => {
-        const unsubscribeGeneric = active.runtime.controllers.approvals.onFinished((event) => {
+        const unsubscribeGeneric = active.runtime.services.approvals.onFinished((event) => {
           listener({ approvalId: event.approvalId });
         });
         const activeTransactionApprovalIds = new Set<string>();
@@ -359,7 +359,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         };
       },
       subscribeApprovalStateChanged: (listener) => {
-        const unsubscribeGeneric = active.runtime.controllers.approvals.onStateChanged(() => listener());
+        const unsubscribeGeneric = active.runtime.services.approvals.onStateChanged(() => listener());
         const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged(() => listener());
 
         return () => {
@@ -370,7 +370,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       subscribeSessionLocked: (listener) => active.runtime.services.session.unlock.onLocked(listener),
       cancelApproval,
       cancelPendingApprovals: async (reason) => {
-        const genericApprovalIds = active.runtime.controllers.approvals.getState().pending.map((item) => item.approvalId);
+        const genericApprovalIds = active.runtime.services.approvals.getState().pending.map((item) => item.approvalId);
         const transactionApprovalIds = (await active.runtime.transactions.listTransactionApprovals()).map(
           (approval) => approval.approvalId,
         );
@@ -378,7 +378,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         await Promise.all(approvalIds.map((approvalId) => cancelApproval({ approvalId, reason })));
       },
       getPendingApprovalCount: async () =>
-        active.runtime.controllers.approvals.getState().pending.length +
+        active.runtime.services.approvals.getState().pending.length +
         (await active.runtime.transactions.listTransactionApprovals()).length,
       getApprovalDetail: (approvalId) => active.runtime.getApprovalDetail(approvalId),
       hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),

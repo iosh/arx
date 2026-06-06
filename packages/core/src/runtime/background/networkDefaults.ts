@@ -1,8 +1,8 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../chains/metadata.js";
-import { cloneNetworkStateInput } from "../../controllers/network/config.js";
-import type { NetworkStateInput, RpcStrategyConfig } from "../../controllers/network/types.js";
+import { cloneNetworkStateInput } from "../../chains/runtime/config.js";
+import type { NetworkStateInput, RpcStrategyConfig } from "../../chains/runtime/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
 
 export type RuntimeNetworkSelectionDefaults = {

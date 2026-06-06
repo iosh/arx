@@ -161,10 +161,11 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
     if (query.accountKey !== undefined) records = records.filter((record) => record.accountKey === query.accountKey);
     if (query.status !== undefined) records = records.filter((record) => record.status === query.status);
     if (query.before !== undefined) {
+      const before = query.before;
       records = records.filter(
         (record) =>
-          record.createdAt < query.before!.createdAt ||
-          (record.createdAt === query.before!.createdAt && record.id.localeCompare(query.before!.id) < 0),
+          record.createdAt < before.createdAt ||
+          (record.createdAt === before.createdAt && record.id.localeCompare(before.id) < 0),
       );
     }
     records.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
@@ -268,7 +269,7 @@ export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
 
 const requireActiveChainMetadata = (runtime: CreateBackgroundRuntimeResult): ChainMetadata => {
   const chainRef = runtime.services.chainViews.getSelectedChainView().chainRef;
-  const chain = runtime.controllers.supportedChains.getChain(chainRef)?.metadata;
+  const chain = runtime.services.supportedChains.getChain(chainRef)?.metadata;
   if (!chain) {
     throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
   }
@@ -617,7 +618,7 @@ export type SetupBackgroundOptions = {
 
 /**
  * Sets up a complete background service environment for testing.
- * This function initializes all controllers, storage, and provides helpers
+ * This function initializes runtime services, storage, and provides helpers
  * like auto-approval for streamlined test scenarios.
  */
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
@@ -725,7 +726,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       }
     });
 
-    const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
+    const unsubscribe = runtime.services.approvals.onCreated(async ({ record }) => {
       pending.add(record.approvalId);
       await tryApprove(record.approvalId);
     });
@@ -868,7 +869,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         requestContext,
       });
     const resolvedChainRef =
-      hintPayload.chainRef ?? (namespace ? runtime.controllers.networkSelection.getSelectedChainRef(namespace) : null);
+      hintPayload.chainRef ?? (namespace ? runtime.services.networkSelection.getSelectedChainRef(namespace) : null);
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {

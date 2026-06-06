@@ -1,5 +1,5 @@
-import type { UnlockController } from "../../controllers/unlock/types.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
+import type { UnlockService } from "../../runtime/session/unlock/types.js";
 import type { VaultKeyringEntry } from "../../storage/keyringSchemas.js";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { VaultService } from "../../vault/types.js";
@@ -10,7 +10,7 @@ export type KeyringServiceOptions = {
   now: () => number;
   uuid: () => string;
   vault: Pick<VaultService, "exportSecret" | "isUnlocked" | "verifyPassword">;
-  unlock: Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked">;
+  unlock: Pick<UnlockService, "onUnlocked" | "onLocked" | "isUnlocked">;
   keyringMetas: {
     get(id: KeyringMetaRecord["id"]): Promise<KeyringMetaRecord | null>;
     list(): Promise<KeyringMetaRecord[]>;

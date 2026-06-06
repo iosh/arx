@@ -1,7 +1,7 @@
-import type { ApprovalController } from "../../controllers/approval/types.js";
+import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { WalletApprovals } from "../types.js";
 
-export const createWalletApprovals = (deps: { approvals: ApprovalController }): WalletApprovals => {
+export const createWalletApprovals = (deps: { approvals: ApprovalQueueService }): WalletApprovals => {
   const { approvals } = deps;
 
   return {

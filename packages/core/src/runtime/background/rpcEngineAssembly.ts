@@ -8,7 +8,7 @@ import { createInvocationContextMiddleware, requireArxInvocation } from "./middl
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
 import { createRequireInitializedMiddleware } from "./middlewares/requireInitialized.js";
 
-export type BackgroundRpcRuntime = Pick<BackgroundRuntime, "controllers" | "surfaceErrors" | "lifecycle"> & {
+export type BackgroundRpcRuntime = Pick<BackgroundRuntime, "surfaceErrors" | "lifecycle"> & {
   services: Pick<BackgroundRuntime["services"], "attention" | "permissionViews" | "sessionStatus">;
   rpc: Pick<
     BackgroundRuntime["rpc"],

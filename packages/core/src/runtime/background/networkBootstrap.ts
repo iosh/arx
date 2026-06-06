@@ -1,16 +1,16 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../controllers/network/config.js";
-import type { NetworkChainConfig, NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
-import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
+import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../chains/runtime/config.js";
+import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { NetworkChainConfig, RpcRoutingService, RpcRoutingState } from "../../chains/runtime/types.js";
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
 import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
 
 export type CreateNetworkBootstrapOptions = {
-  network: NetworkController;
-  supportedChains: SupportedChainsController;
+  network: RpcRoutingService;
+  supportedChains: SupportedChainsService;
   selection: NetworkSelectionService;
   customRpc: CustomRpcService;
   selectionDefaults: RuntimeNetworkSelectionDefaults;

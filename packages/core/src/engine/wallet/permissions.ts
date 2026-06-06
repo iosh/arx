@@ -1,7 +1,7 @@
-import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { WalletPermissions } from "../types.js";
 
-// Persistent authorization facts owned by the permissions domain.
+// Persistent authorization facts stored by the permissions service.
 export const createWalletPermissions = (deps: {
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
 }): WalletPermissions => {

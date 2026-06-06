@@ -1,4 +1,4 @@
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/controllers/approval";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/approvals";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
 import type { ApprovalDetail } from "@arx/core/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +42,7 @@ class FakeBus {
   }
 }
 
-class FakeApprovalsController {
+class FakeApprovalQueueService {
   #pending: ApprovalQueueItemLike[] = [];
   #createdHandlers = new Set<(event: { record: ApprovalRecordLike }) => void>();
   #finishedHandlers = new Set<(event: { approvalId: string }) => void>();
@@ -162,7 +162,7 @@ const buildHarness = (
   },
 ) => {
   const bus = new FakeBus();
-  const approvals = new FakeApprovalsController();
+  const approvals = new FakeApprovalQueueService();
   const unlock = new FakeUnlock();
   const trackedWindowClosers = new Map<number, () => void>();
   const notificationOpenResults =

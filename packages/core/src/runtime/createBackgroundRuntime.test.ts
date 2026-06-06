@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
+import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainMetadata } from "../chains/metadata.js";
-import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
@@ -93,7 +93,6 @@ const createTestRuntime = (params?: {
   messenger?: Parameters<typeof createBackgroundRuntime>[0]["messenger"];
   network?: Parameters<typeof createBackgroundRuntime>[0]["network"];
   rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
-  accounts?: Parameters<typeof createBackgroundRuntime>[0]["accounts"];
   approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
   customRpc?: Parameters<typeof createBackgroundRuntime>[0]["customRpc"];
   engine?: Parameters<typeof createBackgroundRuntime>[0]["engine"];
@@ -129,7 +128,6 @@ const createTestRuntime = (params?: {
     ...(params?.messenger ? { messenger: params.messenger } : {}),
     ...(params?.network ? { network: params.network } : {}),
     ...(params?.rpcClients ? { rpcClients: params.rpcClients } : {}),
-    ...(params?.accounts ? { accounts: params.accounts } : {}),
     ...(params?.approvals ? { approvals: params.approvals } : {}),
     ...(params?.customRpc ? { customRpc: params.customRpc } : {}),
     ...(params?.engine ? { engine: params.engine } : {}),
@@ -146,7 +144,7 @@ const createActiveAccount = async (
   chainRef = MAINNET_CHAIN.chainRef,
 ) => {
   const { address } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
-  await runtime.controllers.accounts.setActiveAccount({
+  await runtime.services.accounts.setActiveAccount({
     namespace: MAINNET_CHAIN.namespace,
     chainRef,
     accountKey: toAccountKeyFromAddress({
@@ -168,19 +166,19 @@ const createHandlersForRuntime = (
     keyring: runtime.services.keyring,
   });
   const approvalReadService = createApprovalReadService({
-    approvals: runtime.controllers.approvals,
-    accounts: runtime.controllers.accounts,
+    approvals: runtime.services.approvals,
+    accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,
     transactionApprovals: runtime.transactions,
   });
   const approvalResolveService = createApprovalResolveService({
-    approvalController: runtime.controllers.approvals,
+    approvals: runtime.services.approvals,
     transactions: runtime.transactions,
   });
 
   return createUiServerRuntime({
     access: {
-      accounts: runtime.controllers.accounts,
+      accounts: runtime.services.accounts,
       approvals: {
         read: {
           listPendingEntries: () => approvalReadService.listPending(),
@@ -190,7 +188,7 @@ const createHandlersForRuntime = (
           resolve: (input) => approvalResolveService.resolve(input),
         },
       },
-      approvalEvents: runtime.controllers.approvals,
+      approvalEvents: runtime.services.approvals,
       permissions: {
         buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
           runtime.services.permissionViews,
@@ -231,7 +229,7 @@ const createHandlersForRuntime = (
       accountCodecs: runtime.services.accountCodecs,
       session,
       walletSetup: createUiWalletSetupAccess({
-        accounts: runtime.controllers.accounts,
+        accounts: runtime.services.accounts,
         session: runtime.services.session,
         keyring: runtime.services.keyring,
       }),
@@ -308,7 +306,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const networkState = runtime.controllers.network.getState();
+    const networkState = runtime.services.network.getState();
     expect(runtime.services.networkSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
@@ -412,7 +410,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.grantAuthorization("https://dapp.example", {
+    await runtime.services.permissions.grantAuthorization("https://dapp.example", {
       namespace: MAINNET_CHAIN.namespace,
       chains: [
         {
@@ -430,10 +428,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createHandlersForRuntime(runtime);
 
-    const before = structuredClone(runtime.controllers.permissions.getState());
+    const before = structuredClone(runtime.services.permissions.getState());
     await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
 
-    expect(runtime.controllers.permissions.getState()).toEqual(before);
+    expect(runtime.services.permissions.getState()).toEqual(before);
 
     runtime.lifecycle.shutdown();
   });
@@ -448,7 +446,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.grantAuthorization("https://dapp.example", {
+    await runtime.services.permissions.grantAuthorization("https://dapp.example", {
       namespace: MAINNET_CHAIN.namespace,
       chains: [
         {
@@ -466,7 +464,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createHandlersForRuntime(runtime);
 
-    const approvalPromise = runtime.controllers.approvals.create(
+    const approvalPromise = runtime.services.approvals.create(
       {
         approvalId: "switch-chain-approval",
         kind: ApprovalKinds.SwitchChain,
@@ -485,12 +483,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await flushAsync();
 
-    const before = structuredClone(runtime.controllers.permissions.getState());
+    const before = structuredClone(runtime.services.permissions.getState());
     await expect(
       handlers["ui.approvals.resolve"]({ approvalId: "switch-chain-approval", action: "approve" }),
     ).resolves.toBeNull();
     await expect(approvalPromise).resolves.toBeNull();
-    expect(runtime.controllers.permissions.getState()).toEqual(before);
+    expect(runtime.services.permissions.getState()).toEqual(before);
 
     runtime.lifecycle.shutdown();
   });
@@ -568,7 +566,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const approvalPromise = runtime.controllers.approvals.create(
+    const approvalPromise = runtime.services.approvals.create(
       {
         approvalId: "sign-message-approval",
         kind: ApprovalKinds.SignMessage,
@@ -590,14 +588,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     ).settled;
 
     await expect(
-      runtime.controllers.approvals.resolve({ approvalId: "sign-message-approval", action: "approve" }),
+      runtime.services.approvals.resolve({ approvalId: "sign-message-approval", action: "approve" }),
     ).rejects.toMatchObject({
       reason: "ChainNotCompatible",
     });
     await expect(approvalPromise).rejects.toMatchObject({
       reason: "ChainNotCompatible",
     });
-    expect(runtime.controllers.approvals.getState().pending).toEqual([]);
+    expect(runtime.services.approvals.getState().pending).toEqual([]);
 
     runtime.lifecycle.shutdown();
   });
@@ -728,7 +726,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
 
     await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(1);
-    expect(runtime.controllers.approvals.getState().pending).toHaveLength(0);
+    expect(runtime.services.approvals.getState().pending).toHaveLength(0);
 
     runtime.lifecycle.shutdown();
   });

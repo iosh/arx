@@ -202,16 +202,17 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           id: requestContext.requestId,
           providerNamespace: "eip155",
           signal: new AbortController().signal,
-          attachBlockingApproval: <T extends object>(
-            createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+          attachBlockingApproval: async <T extends object>(
+            createApproval: (reservation: { approvalId: string; createdAt: number }) => T | Promise<T>,
             reservation?: Partial<{ approvalId: string; createdAt: number }>,
           ) => {
             const approvalIdentity = {
               approvalId: reservation?.approvalId ?? "test-request-approval",
               createdAt: reservation?.createdAt ?? 0,
             };
+            const approval = await createApproval(approvalIdentity);
             return {
-              ...createApproval(approvalIdentity),
+              ...approval,
               ...approvalIdentity,
             };
           },

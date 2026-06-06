@@ -32,7 +32,7 @@ describe("createProviderRequests", () => {
       method: "eth_requestAccounts",
     });
 
-    targetHandle.attachBlockingApproval(({ approvalId }) => ({
+    await targetHandle.attachBlockingApproval(({ approvalId }) => ({
       approvalId,
     }));
 
@@ -138,23 +138,30 @@ describe("createProviderRequests", () => {
     });
 
     let cancelPromise: Promise<boolean> | null = null;
-    const approvalHandle = handle.attachBlockingApproval(({ approvalId, createdAt }) => {
-      expect(createdAt).toBe(300);
-      expect(providerRequests.get("request-3")).toMatchObject({
-        id: "request-3",
-        blockingApprovalId: approvalId,
-      });
-      cancelPromise = handle.cancel("caller_disconnected");
+    await expect(
+      handle.attachBlockingApproval(({ approvalId, createdAt }) => {
+        expect(createdAt).toBe(300);
+        expect(providerRequests.get("request-3")).toMatchObject({
+          id: "request-3",
+          blockingApprovalId: approvalId,
+        });
+        cancelPromise = handle.cancel("caller_disconnected");
 
-      return {
-        approvalId,
-      };
+        return {
+          approvalId,
+        };
+      }),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.TransportDisconnected,
     });
 
-    expect(approvalHandle.approvalId).toBe("approval-3");
     await expect(cancelPromise).resolves.toBe(true);
-    expect(cancelApproval).toHaveBeenCalledTimes(1);
-    expect(cancelApproval).toHaveBeenCalledWith({
+    expect(cancelApproval).toHaveBeenCalledTimes(2);
+    expect(cancelApproval).toHaveBeenNthCalledWith(1, {
+      approvalId: "approval-3",
+      reason: "caller_disconnected",
+    });
+    expect(cancelApproval).toHaveBeenNthCalledWith(2, {
       approvalId: "approval-3",
       reason: "caller_disconnected",
     });

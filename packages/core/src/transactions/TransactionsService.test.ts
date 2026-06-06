@@ -130,6 +130,7 @@ const createInMemoryTransactionsStoragePort = (seed: TransactionAggregate[] = []
 
 const createHarness = (params?: {
   applyDraftEdit?: (context: { edit: NamespaceTransactionDraftEdit }) => CreateTransactionInput["request"];
+  submitBroadcastInput?: (...args: never[]) => unknown;
 }) => {
   let nextTransactionId = 0;
   let nextPrepareId = 0;
@@ -146,6 +147,11 @@ const createHarness = (params?: {
     ...(params?.applyDraftEdit
       ? {
           applyDraftEdit: params.applyDraftEdit as never,
+        }
+      : {}),
+    ...(params?.submitBroadcastInput
+      ? {
+          submitBroadcastInput: params.submitBroadcastInput as never,
         }
       : {}),
   });
@@ -247,6 +253,60 @@ describe("TransactionsService", () => {
     await expect(services.transactions.getTransaction("tx-1")).resolves.toMatchObject({
       id: "tx-1",
       status: "submitting",
+    });
+  });
+
+  it("approves and submits through one service call", async () => {
+    const { services } = createHarness();
+    const opened = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput(),
+      approvalId: APPROVAL_ID,
+    });
+
+    const submitted = await services.transactions.approveAndSubmitTransaction({
+      approvalId: APPROVAL_ID,
+      expectedPrepareId: opened.approval.prepare.id,
+    });
+
+    expect(submitted).toMatchObject({
+      status: "submitted",
+      transaction: {
+        id: "tx-1",
+        status: "submitted",
+        submitted: {
+          hash: "0xdeadbeef",
+        },
+      },
+    });
+    expect(services.transactions.getTransactionApproval(APPROVAL_ID)).toBeNull();
+  });
+
+  it("keeps the failed transaction visible when submit fails", async () => {
+    const submitBroadcastInput = vi.fn(async () => {
+      throw new Error("RPC unavailable");
+    });
+    const { services } = createHarness({ submitBroadcastInput });
+    const opened = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput(),
+      approvalId: APPROVAL_ID,
+    });
+
+    await expect(
+      services.transactions.approveAndSubmitTransaction({
+        approvalId: APPROVAL_ID,
+        expectedPrepareId: opened.approval.prepare.id,
+      }),
+    ).rejects.toThrow("RPC unavailable");
+
+    expect(submitBroadcastInput).toHaveBeenCalledOnce();
+    await expect(services.transactions.getTransaction("tx-1")).resolves.toMatchObject({
+      id: "tx-1",
+      status: "failed",
+      submitted: null,
+      terminalReason: expect.objectContaining({
+        kind: "broadcast_failed",
+        message: "RPC unavailable",
+      }),
     });
   });
 

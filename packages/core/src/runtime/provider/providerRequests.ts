@@ -51,6 +51,8 @@ type CreateProviderRequestsDeps = {
   cancelApproval: (input: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
 };
 
+type Awaitable<T> = T | Promise<T>;
+
 const cloneRecord = (record: ProviderRequestRecord): ProviderRequestRecord => ({
   id: record.id,
   scope: { ...record.scope },
@@ -162,15 +164,16 @@ export const createProviderRequests = ({
       removeFromScopeIndex(liveRecord);
       return true;
     };
+    const getTerminalState = () => terminalState;
 
     const handle: ProviderRequestHandle = {
       id,
       providerNamespace: currentRecord.providerNamespace,
       signal: abortController.signal,
-      attachBlockingApproval: <T extends object>(
-        createApproval: (reservation: BlockingApprovalReservation) => T,
+      attachBlockingApproval: async <T extends object>(
+        createApproval: (reservation: BlockingApprovalReservation) => Awaitable<T>,
         reservationInput?: Partial<BlockingApprovalReservation>,
-      ): T & BlockingApprovalReservation => {
+      ): Promise<T & BlockingApprovalReservation> => {
         if (terminalState) {
           throw createTerminalRequestError(currentRecord, terminalState);
         }
@@ -196,8 +199,18 @@ export const createProviderRequests = ({
         records.set(id, currentRecord);
 
         try {
+          const approval = await createApproval(reservation);
+          const currentTerminalState = getTerminalState();
+          if (currentTerminalState) {
+            await cancelApproval({
+              approvalId: reservation.approvalId,
+              reason: currentTerminalState.status === "cancelled" ? currentTerminalState.reason : "internal_error",
+            });
+            throw createTerminalRequestError(currentRecord, currentTerminalState);
+          }
+
           return {
-            ...createApproval(reservation),
+            ...approval,
             approvalId: reservation.approvalId,
             createdAt: reservation.createdAt,
           };

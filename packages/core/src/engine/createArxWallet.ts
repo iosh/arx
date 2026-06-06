@@ -31,6 +31,7 @@ import { createProviderRequests } from "../runtime/provider/providerRequests.js"
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import {
+  buildTransactionTerminalReason,
   createTransactionServices,
   TransactionAggregateStore,
   type TransactionPublicRuntime,
@@ -214,7 +215,7 @@ const createWalletUiDeps = (
           requestTransactionApproval: runtime.transactions.requestTransactionApproval.bind(runtime.transactions),
           rerunApprovalPrepare: runtime.transactions.rerunApprovalPrepare.bind(runtime.transactions),
           updateApprovalDraft: runtime.transactions.updateApprovalDraft.bind(runtime.transactions),
-          approveTransaction: runtime.transactions.approveTransaction.bind(runtime.transactions),
+          approveAndSubmitTransaction: runtime.transactions.approveAndSubmitTransaction.bind(runtime.transactions),
           rejectTransactionApproval: runtime.transactions.rejectTransactionApproval.bind(runtime.transactions),
           getTransactionApproval: runtime.transactions.getTransactionApproval.bind(runtime.transactions),
           getTransactionApprovalByTransactionId: runtime.transactions.getTransactionApprovalByTransactionId.bind(
@@ -392,6 +393,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
     transactionsLifecycle: runtimeSupportScope.transactionsLifecycle,
+    transactionRecovery: transactionServices.recovery,
     networkBootstrap: runtimeSupportScope.networkBootstrap,
     sessionLayer: sessionScope.sessionLayer,
     rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
@@ -426,6 +428,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
     services: {
       permissionViews: runtimeSupportScope.permissionViews,
+      transactions: transactionServices.transactions,
     },
   });
   const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
@@ -455,8 +458,23 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const providerRequests = createProviderRequests({
     generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
     now: bootstrapScope.storageNow,
-    cancelApproval: async (input) => {
-      await sessionScope.controllersBase.approvals.cancel(input);
+    cancelApproval: async ({ approvalId, reason }) => {
+      const transaction = await transactionServices.transactions.cancelTransactionApproval({
+        approvalId,
+        reason: buildTransactionTerminalReason({
+          kind: "approval_cancelled",
+          code: `provider.${reason}`,
+          message:
+            reason === "caller_disconnected"
+              ? "Provider caller disconnected before transaction approval completed."
+              : "Provider request ended before transaction approval completed.",
+          details: { reason },
+        }),
+      });
+      if (transaction) {
+        return;
+      }
+      await sessionScope.controllersBase.approvals.cancel({ approvalId, reason });
     },
   });
   const providerAccess = createProviderRuntimeAccess({

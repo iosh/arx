@@ -199,21 +199,17 @@ const createHandlersForRuntime = (
         ),
       },
       transactions: {
-        requestTransactionApproval: runtime.transactions.requestTransactionApproval.bind(
-          runtime.transactions,
-        ),
+        requestTransactionApproval: runtime.transactions.requestTransactionApproval.bind(runtime.transactions),
         rerunApprovalPrepare: runtime.transactions.rerunApprovalPrepare.bind(runtime.transactions),
         updateApprovalDraft: runtime.transactions.updateApprovalDraft.bind(runtime.transactions),
-        approveTransaction: runtime.transactions.approveTransaction.bind(runtime.transactions),
+        approveAndSubmitTransaction: runtime.transactions.approveAndSubmitTransaction.bind(runtime.transactions),
         rejectTransactionApproval: runtime.transactions.rejectTransactionApproval.bind(runtime.transactions),
         getTransactionApproval: runtime.transactions.getTransactionApproval.bind(runtime.transactions),
         getTransactionApprovalByTransactionId: runtime.transactions.getTransactionApprovalByTransactionId.bind(
           runtime.transactions,
         ),
         getTransaction: runtime.transactions.getTransaction.bind(runtime.transactions),
-        onTransactionApprovalsChanged: runtime.transactions.onTransactionApprovalsChanged.bind(
-          runtime.transactions,
-        ),
+        onTransactionApprovalsChanged: runtime.transactions.onTransactionApprovalsChanged.bind(runtime.transactions),
       },
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
@@ -1045,9 +1041,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(
-      new Error("create approval failed"),
-    );
+    vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(new Error("create approval failed"));
 
     const handlers = createHandlersForRuntime(runtime);
 

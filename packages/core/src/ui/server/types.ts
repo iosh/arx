@@ -88,7 +88,7 @@ export type UiTransactionsAccess = Pick<
   | "requestTransactionApproval"
   | "rerunApprovalPrepare"
   | "updateApprovalDraft"
-  | "approveTransaction"
+  | "approveAndSubmitTransaction"
   | "rejectTransactionApproval"
   | "getTransactionApproval"
   | "getTransactionApprovalByTransactionId"

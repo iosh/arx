@@ -11,14 +11,16 @@ export type RpcBlockingApprovalReservation = {
   createdAt: number;
 };
 
+type Awaitable<T> = T | Promise<T>;
+
 export type RpcProviderRequestHandle = {
   id: string;
   providerNamespace: string;
   signal: AbortSignal;
   attachBlockingApproval<T extends object>(
-    createApproval: (reservation: RpcBlockingApprovalReservation) => T,
+    createApproval: (reservation: RpcBlockingApprovalReservation) => Awaitable<T>,
     reservation?: Partial<RpcBlockingApprovalReservation>,
-  ): T & RpcBlockingApprovalReservation;
+  ): Promise<T & RpcBlockingApprovalReservation>;
   fulfill(): boolean;
   reject(): boolean;
   cancel(reason: RpcProviderRequestCancellationReason): Promise<boolean>;

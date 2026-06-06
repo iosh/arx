@@ -123,11 +123,13 @@ export type {
 } from "./review.js";
 export type {
   ApprovalStaleTransactionResult,
+  ApproveAndSubmitTransactionResult,
   ApprovedTransactionResult,
   ApproveTransactionInput,
   ApproveTransactionResult,
   BlockedTransactionApprovalResult,
   CancelPendingTransactionInput,
+  CancelTransactionApprovalInput,
   CreateReplacementTransactionApprovalInput,
   FailedTransactionApprovalResult,
   ListTransactionsQuery,
@@ -135,6 +137,7 @@ export type {
   RequestTransactionApprovalInput,
   RequestTransactionApprovalResult,
   RerunApprovalPrepareInput,
+  SubmittedTransactionResult,
   Transaction,
   TransactionAccount,
   TransactionApproval,
@@ -149,7 +152,11 @@ export type {
   TransactionSubmittedSummary,
   TransactionsChangedHandler,
   TransactionsEvents,
+  TransactionSubmissionOutcome,
+  TransactionSubmittedOutcome,
+  TransactionTerminalOutcome,
   UpdateApprovalDraftInput,
+  WaitForTransactionSubmissionOutcomeInput,
 } from "./TransactionsService.js";
 export {
   TransactionApprovalNotFoundError,

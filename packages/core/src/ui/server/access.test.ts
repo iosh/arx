@@ -15,7 +15,7 @@ const createTransactionAccess = () =>
     updateApprovalDraft: async () => {
       throw new Error("not used");
     },
-    approveTransaction: async () => {
+    approveAndSubmitTransaction: async () => {
       throw new Error("not used");
     },
     rejectTransactionApproval: async () => {

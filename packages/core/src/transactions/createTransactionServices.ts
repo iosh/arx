@@ -38,17 +38,17 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
     resourceLock,
     ...options.approvalSessionOptions,
   });
-  const transactions = new TransactionsService({
-    aggregateStore: options.aggregateStore,
-    approvalSessions: approvals,
-    accountCodecs: options.accountCodecs,
-  });
-
   const submission = new TransactionSubmissionExecutor({
     transactions: options.aggregateStore,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
     resourceLock,
+  });
+  const transactions = new TransactionsService({
+    aggregateStore: options.aggregateStore,
+    approvalSessions: approvals,
+    submission,
+    accountCodecs: options.accountCodecs,
   });
 
   const tracking = new SubmittedTransactionTrackingService({

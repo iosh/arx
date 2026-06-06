@@ -18,6 +18,7 @@ import type {
   TransactionProposalDraftCommands,
   TransactionRecoveryRuntime,
 } from "../../transactions/runtime.js";
+import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
@@ -57,6 +58,7 @@ export type HandlerControllers = {
 
 export type HandlerRuntimeServices = {
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
+  transactions: Pick<TransactionsService, "requestTransactionApproval" | "waitForTransactionSubmissionOutcome">;
 };
 
 export type RpcRequest = {

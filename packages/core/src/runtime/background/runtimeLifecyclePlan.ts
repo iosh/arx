@@ -19,6 +19,10 @@ type Destroyable = {
   destroy(): void;
 };
 
+type RestartRecovery = {
+  recoverAfterRestart(): Promise<unknown>;
+};
+
 export const createBackgroundRuntimeLifecycle = ({
   runtimeLifecycle,
   controllersBase,
@@ -26,6 +30,7 @@ export const createBackgroundRuntimeLifecycle = ({
   deferredNetworkInitialState,
   registeredNamespaces,
   transactionsLifecycle,
+  transactionRecovery,
   networkBootstrap,
   sessionLayer,
   rpcClientRegistry,
@@ -39,6 +44,7 @@ export const createBackgroundRuntimeLifecycle = ({
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
   transactionsLifecycle: TransactionsLifecycle;
+  transactionRecovery: RestartRecovery;
   networkBootstrap: NetworkBootstrap;
   sessionLayer: SessionLayerResult;
   rpcClientRegistry: Destroyable;
@@ -80,6 +86,17 @@ export const createBackgroundRuntimeLifecycle = ({
     initialize: () => transactionsLifecycle.initialize(),
     start: () => transactionsLifecycle.start(),
     destroy: () => transactionsLifecycle.destroy(),
+  };
+
+  const transactionRecoveryPlugin: RuntimePlugin = {
+    name: "transactionRecovery",
+    initialize: async () => {
+      try {
+        await transactionRecovery.recoverAfterRestart();
+      } catch (error) {
+        logger("transactions: failed to recover aggregate transactions on initialize", error);
+      }
+    },
   };
 
   const networkBootstrapPlugin: RuntimePlugin = {
@@ -130,7 +147,12 @@ export const createBackgroundRuntimeLifecycle = ({
     destroy: () => bus.clear(),
   };
 
-  const initializeOrder = [coreReadyPlugin, transactionsPlugin, networkBootstrapPlugin] as const;
+  const initializeOrder = [
+    coreReadyPlugin,
+    transactionsPlugin,
+    transactionRecoveryPlugin,
+    networkBootstrapPlugin,
+  ] as const;
   const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [networkBootstrapPlugin] as const;
   const startOrder = [networkBootstrapPlugin, sessionPlugin, transactionsPlugin] as const;

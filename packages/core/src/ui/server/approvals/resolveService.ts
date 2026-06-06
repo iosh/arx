@@ -23,7 +23,7 @@ type ApprovalResolveServiceDeps = {
   };
   transactions: Pick<
     TransactionsService,
-    "getTransactionApproval" | "approveTransaction" | "rejectTransactionApproval"
+    "getTransactionApproval" | "approveAndSubmitTransaction" | "rejectTransactionApproval"
   >;
 };
 
@@ -63,12 +63,12 @@ export const createApprovalResolveService = (deps: ApprovalResolveServiceDeps) =
       throw new Error("Send-transaction approval requires expectedPrepareId.");
     }
 
-    const result = await deps.transactions.approveTransaction({
+    const result = await deps.transactions.approveAndSubmitTransaction({
       approvalId: input.approvalId,
       expectedPrepareId: input.expectedPrepareId,
     });
 
-    return result.status === "approved"
+    return result.status === "submitted"
       ? { status: "resolved" }
       : { status: "requires_review", approvalId: input.approvalId };
   },

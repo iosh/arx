@@ -1,32 +1,19 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { isTransactionSubmissionError } from "../../../../transactions/runtime.js";
+import type { JsonValue } from "../../../../transactions/aggregate/index.js";
+import type { Eip155SubmittedTransaction } from "../../../../transactions/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { toParamsArray } from "../utils.js";
 import {
-  buildDappApprovalRequester,
-  buildEip155TransactionIntent,
   defineEip155AuthorizedAccountApprovalMethod,
   requireProviderRequestHandle,
   requireRequestContext,
 } from "./shared.js";
 import { buildEip155TransactionRequest } from "./transactionRequest.js";
 
-type RpcLikeError = Error & { code: number; data?: unknown };
-
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
-const isRejectedBeforeBroadcast = (params: {
-  userRejected: boolean;
-  error: { code?: number | undefined; name?: string | undefined } | null;
-}) => params.userRejected || params.error?.code === 4001 || params.error?.name === "TransactionRejectedError";
-
-const isTransportDisconnectedBeforeCompletion = (
-  error: { code?: number | undefined; name?: string | undefined } | null,
-) =>
-  error?.code === 4900 ||
-  error?.name === "TransportDisconnectedError" ||
-  error?.name === "TransactionCallerDisconnectedError";
+const ETH_SEND_TRANSACTION_REQUEST_KIND = "eip155.rpc.eth_sendTransaction";
 
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
   requestKind: RpcRequestKinds.TransactionSubmission,
@@ -51,91 +38,54 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       prepared: txRequest,
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, executionContext }) => {
-    try {
-      const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
-      const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
-      const requester = buildDappApprovalRequester(requestContext);
-      const intent = buildEip155TransactionIntent({
-        origin,
-        method: "eth_sendTransaction",
+  executeAuthorizedRequest: async ({ origin, prepared, account, services, executionContext }) => {
+    const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
+    const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
+
+    const approval = await providerRequestHandle.attachBlockingApproval(({ approvalId }) =>
+      services.transactions.requestTransactionApproval({
+        namespace: "eip155",
         chainRef: prepared.chainRef,
-        request: prepared,
-        account,
-      });
-      const submission = await providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
-        controllers.providerTransactionCommands.beginTransactionApproval(intent, requester, {
-          approvalIdentity: {
-            approvalId,
-            createdAt,
-          },
-          requestScope: {
-            abortSignal: providerRequestHandle.signal,
-          },
-        }),
-      );
-      const settled = await submission.waitForSubmission();
-      const submitted = settled.submitted as { hash?: unknown };
-      const hash = typeof submitted?.hash === "string" ? submitted.hash : null;
-      if (!hash) {
+        origin,
+        source: "dapp",
+        requestId: requestContext.requestId,
+        accountKey: account.accountKey,
+        approvalId,
+        request: {
+          kind: ETH_SEND_TRANSACTION_REQUEST_KIND,
+          payload: prepared.payload as JsonValue,
+        },
+      }),
+    );
+
+    const outcome = await services.transactions.waitForTransactionSubmissionOutcome({
+      transactionId: approval.transaction.id,
+      signal: providerRequestHandle.signal,
+    });
+    if (outcome.kind === "terminal") {
+      const reason = outcome.transaction.terminalReason;
+      if (outcome.transaction.status === "rejected" && reason?.kind === "user_rejected") {
         throw arxError({
-          reason: ArxReasons.RpcInternal,
-          message: "EIP-155 transaction submission did not return a transaction hash.",
-          data: {
-            id: submission.transactionId,
-            submitted: settled.submitted,
-          },
+          reason: ArxReasons.ApprovalRejected,
+          message: reason.message,
+          data: { origin, id: outcome.transaction.id, terminalReason: reason },
         });
       }
-      return hash;
-    } catch (error) {
-      if (isDomainError(error) || isRpcError(error)) {
-        throw error;
-      }
-
-      if (isTransactionSubmissionError(error)) {
-        const failure = error.failure.error ?? null;
-        const userRejected = error.failure.userRejected;
-        const transactionId = error.failure.transactionId;
-
-        if (isRejectedBeforeBroadcast({ userRejected, error: failure })) {
-          throw arxError({
-            reason: ArxReasons.ApprovalRejected,
-            message: "User rejected transaction",
-            data: { origin, id: transactionId },
-          });
-        }
-
-        if (isTransportDisconnectedBeforeCompletion(failure)) {
-          throw arxError({
-            reason: ArxReasons.TransportDisconnected,
-            message: failure?.message ?? "Transport disconnected.",
-            data: { origin, id: transactionId },
-          });
-        }
-
-        if (failure && typeof failure.code === "number") {
-          const rpcLikeError = new Error(failure.message ?? "Transaction failed") as RpcLikeError;
-          rpcLikeError.code = failure.code;
-          if (failure.data !== undefined) {
-            rpcLikeError.data = failure.data;
-          }
-          throw rpcLikeError;
-        }
-
+      if (outcome.transaction.status === "cancelled" && reason?.code === "provider.caller_disconnected") {
         throw arxError({
-          reason: ArxReasons.RpcInternal,
-          message: error.failure.message,
-          data: { origin, id: transactionId, error: failure ?? undefined },
+          reason: ArxReasons.TransportDisconnected,
+          message: reason.message,
+          data: { origin, id: outcome.transaction.id, terminalReason: reason },
         });
       }
-
       throw arxError({
         reason: ArxReasons.RpcInternal,
-        message: error instanceof Error ? error.message : "Transaction submission failed",
-        data: { origin },
-        cause: error,
+        message: reason?.message ?? "Transaction submission failed",
+        data: { origin, id: outcome.transaction.id, terminalReason: reason ?? undefined },
       });
     }
+
+    const submitted = outcome.submitted as Eip155SubmittedTransaction;
+    return submitted.hash;
   },
 });

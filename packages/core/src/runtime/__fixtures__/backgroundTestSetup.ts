@@ -785,6 +785,24 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     const pending = new Set<string>();
 
     const tryApprove = async (approvalId: string) => {
+      const transactionApproval = runtime.transactions.getTransactionApproval(approvalId);
+      if (transactionApproval) {
+        if (transactionApproval.prepare.status !== "ready") {
+          return;
+        }
+
+        try {
+          await runtime.transactions.approveAndSubmitTransaction({
+            approvalId,
+            expectedPrepareId: transactionApproval.prepare.id,
+          });
+          pending.delete(approvalId);
+        } catch {
+          // Keep pending until the transaction review becomes ready or the approval disappears.
+        }
+        return;
+      }
+
       const subject = runtime.controllers.approvals.getSubject(approvalId);
       if (subject?.kind !== "transaction") {
         pending.delete(approvalId);
@@ -809,6 +827,13 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       }
     });
 
+    const unsubscribeTransactionApprovals = runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
+      for (const approvalId of approvalIds) {
+        pending.add(approvalId);
+        void tryApprove(approvalId);
+      }
+    });
+
     const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
       pending.add(record.approvalId);
       await tryApprove(record.approvalId);
@@ -816,6 +841,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     return () => {
       unsubscribe();
       unsubscribeState();
+      unsubscribeTransactionApprovals();
       pending.clear();
     };
   };
@@ -910,16 +936,17 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         id: requestContext.requestId,
         providerNamespace: namespace,
         signal: new AbortController().signal,
-        attachBlockingApproval: <T extends object>(
-          createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+        attachBlockingApproval: async <T extends object>(
+          createApproval: (reservation: { approvalId: string; createdAt: number }) => T | Promise<T>,
           reservation?: Partial<{ approvalId: string; createdAt: number }>,
         ) => {
           const approvalIdentity = {
             approvalId: reservation?.approvalId ?? `${requestContext.requestId}-approval`,
             createdAt: reservation?.createdAt ?? 0,
           };
+          const approval = await createApproval(approvalIdentity);
           return {
-            ...createApproval(approvalIdentity),
+            ...approval,
             ...approvalIdentity,
           };
         },

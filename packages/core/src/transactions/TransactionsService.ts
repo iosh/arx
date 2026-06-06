@@ -11,6 +11,7 @@ import type {
   TransactionStatus,
   TransactionTerminalReason,
 } from "./aggregate/index.js";
+import { isTransactionStatusTerminal } from "./aggregate/index.js";
 import { cloneJsonValue } from "./aggregate/json.js";
 import type { TransactionAggregateStore } from "./aggregate/TransactionAggregateStore.js";
 import type {
@@ -24,6 +25,7 @@ import type {
 import { TransactionApprovalSessionInvariantError } from "./approval/index.js";
 import type { TransactionProposalBlocker, TransactionProposalError } from "./namespace/types.js";
 import type { TransactionReviewDetails } from "./review.js";
+import type { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
 import type { NamespaceTransactionDraftEdit } from "./types.js";
 
 export class TransactionApprovalNotFoundError extends Error {
@@ -167,7 +169,23 @@ export type ApproveTransactionResult =
   | BlockedTransactionApprovalResult
   | FailedTransactionApprovalResult;
 
+export type SubmittedTransactionResult = {
+  status: "submitted";
+  transaction: Transaction;
+};
+
+export type ApproveAndSubmitTransactionResult =
+  | SubmittedTransactionResult
+  | ApprovalStaleTransactionResult
+  | BlockedTransactionApprovalResult
+  | FailedTransactionApprovalResult;
+
 export type RejectTransactionApprovalInput = {
+  approvalId: string;
+  reason?: TransactionTerminalReason | null;
+};
+
+export type CancelTransactionApprovalInput = {
   approvalId: string;
   reason?: TransactionTerminalReason | null;
 };
@@ -176,6 +194,24 @@ export type CancelPendingTransactionInput = {
   transactionId: string;
   reason?: TransactionTerminalReason | null;
 };
+
+export type WaitForTransactionSubmissionOutcomeInput = {
+  transactionId: string;
+  signal?: AbortSignal;
+};
+
+export type TransactionSubmittedOutcome = {
+  kind: "submitted";
+  transaction: Transaction;
+  submitted: TransactionSubmittedSummary;
+};
+
+export type TransactionTerminalOutcome = {
+  kind: "terminal";
+  transaction: Transaction;
+};
+
+export type TransactionSubmissionOutcome = TransactionSubmittedOutcome | TransactionTerminalOutcome;
 
 export type CreateReplacementTransactionApprovalInput = Omit<RequestTransactionApprovalInput, "replacement"> & {
   transactionId: string;
@@ -204,10 +240,12 @@ type TransactionsServiceDeps = {
     | "applyDraftEdit"
     | "approveTransaction"
     | "rejectTransaction"
+    | "cancelTransaction"
     | "getSession"
     | "getSessionByApprovalId"
     | "discardSessionByTransactionId"
   >;
+  submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
 };
 
@@ -338,6 +376,7 @@ const buildTransactionApproval = (session: TransactionApprovalSession): Transact
 export class TransactionsService {
   #aggregateStore: TransactionsServiceDeps["aggregateStore"];
   #approvalSessions: TransactionsServiceDeps["approvalSessions"];
+  #submission: TransactionsServiceDeps["submission"];
   #accountCodecs: TransactionsServiceDeps["accountCodecs"];
   #transactionChangedHandlers = new Set<TransactionsChangedHandler>();
   #approvalChangedHandlers = new Set<TransactionApprovalsChangedHandler>();
@@ -345,6 +384,7 @@ export class TransactionsService {
   constructor(deps: TransactionsServiceDeps) {
     this.#aggregateStore = deps.aggregateStore;
     this.#approvalSessions = deps.approvalSessions;
+    this.#submission = deps.submission;
     this.#accountCodecs = deps.accountCodecs;
   }
 
@@ -446,12 +486,53 @@ export class TransactionsService {
     };
   }
 
+  async approveAndSubmitTransaction(input: ApproveTransactionInput): Promise<ApproveAndSubmitTransactionResult> {
+    const approved = await this.approveTransaction(input);
+    if (approved.status !== "approved") {
+      return approved;
+    }
+
+    try {
+      const submitted = await this.#submission.submitApprovedTransaction(approved.transaction.id);
+      const transaction = this.#buildTransactionRecord(submitted.aggregate.record);
+      this.#notifyTransactionsChanged([transaction.id]);
+      return {
+        status: "submitted",
+        transaction,
+      };
+    } catch (error) {
+      const transaction = await this.getTransaction(approved.transaction.id);
+      if (transaction) {
+        this.#notifyTransactionsChanged([transaction.id]);
+      }
+      throw error;
+    }
+  }
+
   async rejectTransactionApproval(input: RejectTransactionApprovalInput): Promise<Transaction> {
     const session = this.#requireOpenSessionByApprovalId(input.approvalId);
     const aggregate = await this.#approvalSessions.rejectTransaction({
       transactionId: session.transactionId,
       approvalId: input.approvalId,
       ...(input.reason !== undefined ? { reason: input.reason } : {}),
+    });
+
+    const transaction = this.#buildTransactionRecord(aggregate.record);
+    this.#notifyTransactionsChanged([transaction.id]);
+    this.#notifyTransactionApprovalsChanged([input.approvalId]);
+    return transaction;
+  }
+
+  async cancelTransactionApproval(input: CancelTransactionApprovalInput): Promise<Transaction | null> {
+    const session = this.#approvalSessions.getSessionByApprovalId(input.approvalId);
+    if (session === null) {
+      return null;
+    }
+
+    const aggregate = await this.#approvalSessions.cancelTransaction({
+      transactionId: session.transactionId,
+      approvalId: input.approvalId,
+      reason: input.reason ?? null,
     });
 
     const transaction = this.#buildTransactionRecord(aggregate.record);
@@ -484,6 +565,71 @@ export class TransactionsService {
   async listTransactions(query?: ListTransactionsQuery): Promise<Transaction[]> {
     const records = await this.#aggregateStore.listTransactionHistory(query);
     return records.map((record) => this.#buildTransactionRecord(record));
+  }
+
+  async waitForTransactionSubmissionOutcome(
+    input: WaitForTransactionSubmissionOutcomeInput,
+  ): Promise<TransactionSubmissionOutcome> {
+    this.#throwIfAborted(input.signal);
+    const current = await this.getTransaction(input.transactionId);
+    if (!current) {
+      throw new Error(`Transaction "${input.transactionId}" was not found.`);
+    }
+
+    const currentResult = this.#buildTransactionSubmissionOutcome(current);
+    if (currentResult) {
+      return currentResult;
+    }
+
+    return await new Promise<TransactionSubmissionOutcome>((resolve, reject) => {
+      let settled = false;
+      let unsubscribe: (() => void) | null = null;
+      const cleanup = () => {
+        if (unsubscribe) {
+          unsubscribe();
+          unsubscribe = null;
+        }
+        input.signal?.removeEventListener("abort", abort);
+      };
+      const settle = (run: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        run();
+      };
+      const abort = () => {
+        settle(() => reject(input.signal?.reason ?? new Error("Transaction wait was aborted.")));
+      };
+
+      if (input.signal?.aborted) {
+        abort();
+        return;
+      }
+
+      input.signal?.addEventListener("abort", abort, { once: true });
+      unsubscribe = this.onTransactionsChanged((transactionIds) => {
+        if (!transactionIds.includes(input.transactionId)) {
+          return;
+        }
+
+        void (async () => {
+          try {
+            const transaction = await this.getTransaction(input.transactionId);
+            if (!transaction) {
+              throw new Error(`Transaction "${input.transactionId}" was not found.`);
+            }
+            const result = this.#buildTransactionSubmissionOutcome(transaction);
+            if (result) {
+              settle(() => resolve(result));
+            }
+          } catch (error) {
+            settle(() => reject(error));
+          }
+        })();
+      });
+    });
   }
 
   getTransactionApproval(approvalId: string): TransactionApproval | null {
@@ -558,6 +704,29 @@ export class TransactionsService {
 
   #buildTransactionRecord(record: TransactionRecord): Transaction {
     return buildTransaction(record, this.#accountCodecs);
+  }
+
+  #buildTransactionSubmissionOutcome(transaction: Transaction): TransactionSubmissionOutcome | null {
+    if (transaction.submitted !== null) {
+      return {
+        kind: "submitted",
+        transaction,
+        submitted: transaction.submitted,
+      };
+    }
+    if (isTransactionStatusTerminal(transaction.status)) {
+      return {
+        kind: "terminal",
+        transaction,
+      };
+    }
+    return null;
+  }
+
+  #throwIfAborted(signal: AbortSignal | undefined): void {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error("Transaction wait was aborted.");
+    }
   }
 
   #notifyTransactionsChanged(transactionIds: string[]): void {

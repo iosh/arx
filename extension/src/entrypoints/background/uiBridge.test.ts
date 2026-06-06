@@ -590,7 +590,7 @@ const createControllers = () => {
     })),
     updateApprovalDraft: vi.fn(async () => mockTransactionApproval),
     rerunApprovalPrepare: vi.fn(async () => mockTransactionApproval),
-    approveTransaction: vi.fn(async () => ({ status: "approved" as const, transaction: mockTransaction })),
+    approveAndSubmitTransaction: vi.fn(async () => ({ status: "submitted" as const, transaction: mockTransaction })),
     rejectTransactionApproval: vi.fn(async () => ({ ...mockTransaction, status: "rejected" as const })),
     getTransactionApproval: vi.fn(() => null),
     getTransactionApprovalByTransactionId: vi.fn(() => mockTransactionApproval),

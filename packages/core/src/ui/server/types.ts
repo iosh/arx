@@ -8,7 +8,7 @@ import type { ChainActivationService } from "../../services/runtime/chainActivat
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
-import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
+import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
@@ -119,11 +119,6 @@ export type UiNamespaceBindingsAccess = Pick<
   "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
 >;
 
-export type UiEncodeError = (
-  error: unknown,
-  context: { namespace: string; chainRef: string; method: string },
-) => UiError;
-
 export type UiServerAccess = {
   accounts: UiAccountsAccess;
   approvals: UiApprovalsAccess;
@@ -162,7 +157,6 @@ export type UiStateChangeSources = {
 };
 
 export type UiRuntimeBridgeAccess = {
-  encodeError: UiEncodeError;
   persistVaultMeta: () => Promise<void>;
   stateChanged: UiStateChangeSources;
 };

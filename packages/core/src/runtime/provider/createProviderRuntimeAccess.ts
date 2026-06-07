@@ -1,13 +1,16 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../chains/ids.js";
-import type {
-  JsonRpcError,
-  JsonRpcParams,
-  JsonRpcRequest,
-  JsonRpcResponse,
-  RpcInvocationHint,
-} from "../../rpc/index.js";
+import { isArxBaseError } from "../../error.js";
+import { PermissionNotConnectedError } from "../../permissions/errors.js";
+import {
+  isJsonRpcErrorLike,
+  RpcInternalError,
+  RpcUnsupportedMethodError,
+  sanitizeJsonRpcErrorObject,
+} from "../../rpc/errors.js";
+import { AuthorizationRequirements } from "../../rpc/handlers/types.js";
+import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHint } from "../../rpc/index.js";
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
+import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
@@ -16,20 +19,15 @@ import type {
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
-  ProviderRuntimeErrorContext,
   ProviderRuntimeExecutionContext,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
+  ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
+  ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
 } from "./types.js";
-
-type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
-  origin: string;
-  arx: RpcInvocationHint;
-  arxExecution: ProviderRuntimeExecutionContext;
-};
 
 const UNKNOWN_ORIGIN = "unknown://";
 
@@ -38,7 +36,18 @@ type ProviderRuntimeChainView = {
   chainRef: ChainRef;
 };
 
+type ProviderRuntimeExecuteRequest = (args: {
+  origin: string;
+  request: {
+    method: string;
+    params?: JsonRpcParams;
+  };
+  invocation: ResolvedRpcInvocationDetails;
+  executionContext: ProviderRuntimeExecutionContext;
+}) => Promise<unknown>;
+
 type ProviderRuntimeAccessDeps = {
+  getIsInitialized: () => boolean;
   getSessionStatus: () => { isUnlocked: boolean };
   getActiveChainViewForNamespace: (namespace: string) => ProviderRuntimeChainView;
   buildProviderMeta: (namespace: string) => {
@@ -48,20 +57,22 @@ type ProviderRuntimeAccessDeps = {
   getActiveChainByNamespace: () => Record<string, ChainRef>;
   listPermittedAccountsView: (origin: string, options: { chainRef: ChainRef }) => Array<{ canonicalAddress: string }>;
   formatAddress: (input: { chainRef: ChainRef; canonical: string }) => string;
-  resolveMethodNamespace: (method: string, hint?: RpcInvocationHint) => string | null;
-  handleRpcRequest: (
-    request: ProviderRuntimeRequestEnvelope,
-    callback: (error: unknown, response: JsonRpcResponse | null | undefined) => void,
-  ) => void;
-  encodeDappError: (
-    error: unknown,
-    context: {
-      namespace: string | null;
-      chainRef: ChainRef | null;
-      origin: string;
-      method: string;
-    },
-  ) => JsonRpcError;
+  resolveInvocationDetails: (method: string, hint?: RpcInvocationHint) => ResolvedRpcInvocationDetails;
+  executeRequest: ProviderRuntimeExecuteRequest;
+  isInternalOrigin: (origin: string) => boolean;
+  shouldRequestUnlockAttention?: (ctx: {
+    origin: string;
+    method: string;
+    chainRef: string | null;
+    namespace: string | null;
+  }) => boolean;
+  requestUnlockAttention: (args: {
+    origin: string;
+    method: string;
+    chainRef: string | null;
+    namespace: string | null;
+  }) => void;
+  isAuthorized: (origin: string, options: { namespace: string; chainRef: ChainRef }) => boolean;
   providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
@@ -72,11 +83,22 @@ type ProviderRuntimeAccessDeps = {
 };
 
 type BegunProviderRuntimeRequest = {
+  kind: "begun";
   providerRequestHandle: ProviderRequestHandle;
   resolvedContext: ProviderRuntimeRpcContext;
   resolvedExecutionContext: ProviderRuntimeExecutionContext;
-  engineRequest: ProviderRuntimeRequestEnvelope;
+  invocation: ResolvedRpcInvocationDetails;
 };
+
+type PreparedProviderRuntimeRequest =
+  | BegunProviderRuntimeRequest
+  | {
+      kind: "response";
+      resolvedContext: ProviderRuntimeRpcContext;
+      result: Json;
+    };
+
+type ProviderAccessPolicyResult = { kind: "continue" } | { kind: "response"; result: Json };
 
 const buildRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => {
   if (context.chainRef !== undefined) {
@@ -94,16 +116,33 @@ const getProviderRequestTerminalError = (handle: ProviderRequestHandle | null) =
   return handle?.getTerminalError() ?? null;
 };
 
+const encodeProviderRuntimeError = (error: unknown): ProviderRuntimeRpcError => {
+  if (isJsonRpcErrorLike(error)) {
+    const sanitized = sanitizeJsonRpcErrorObject(error);
+    return { kind: "JsonRpcError", ...sanitized };
+  }
+
+  if (isArxBaseError(error)) {
+    return { kind: "ArxError", code: error.code };
+  }
+
+  return { kind: "JsonRpcError", code: -32603, message: "Internal error" };
+};
+
 export const createProviderRuntimeAccess = ({
+  getIsInitialized,
   getSessionStatus,
   getActiveChainViewForNamespace,
   buildProviderMeta,
   getActiveChainByNamespace,
   listPermittedAccountsView,
   formatAddress,
-  resolveMethodNamespace,
-  handleRpcRequest,
-  encodeDappError,
+  resolveInvocationDetails,
+  executeRequest: executeCoreRequest,
+  isInternalOrigin,
+  shouldRequestUnlockAttention,
+  requestUnlockAttention,
+  isAuthorized,
   providerRequests,
   subscribeSessionUnlocked,
   subscribeSessionLocked,
@@ -158,15 +197,106 @@ export const createProviderRuntimeAccess = ({
     );
   };
 
-  const encodeRpcError = (error: unknown, { origin, method, context }: ProviderRuntimeErrorContext): JsonRpcError => {
-    const invocationHint = buildRpcInvocationHint(context);
+  const encodeRuntimeRpcError = (error: unknown): ProviderRuntimeRpcError => {
+    return encodeProviderRuntimeError(error);
+  };
 
-    return encodeDappError(error, {
-      namespace: resolveMethodNamespace(method, invocationHint) ?? null,
-      chainRef: context.chainRef ?? null,
-      origin,
-      method,
-    });
+  const requestUnlockAttentionIfNeeded = (args: {
+    origin: string;
+    method: string;
+    chainRef: string | null;
+    namespace: string | null;
+  }) => {
+    const shouldRequest = shouldRequestUnlockAttention ?? (() => true);
+    if (!shouldRequest(args)) {
+      return;
+    }
+
+    try {
+      requestUnlockAttention(args);
+    } catch {
+      // best-effort
+    }
+  };
+
+  const applyAccessPolicy = (args: {
+    origin: string;
+    method: string;
+    invocation: ResolvedRpcInvocationDetails;
+  }): ProviderAccessPolicyResult => {
+    if (!getIsInitialized()) {
+      throw new RpcInternalError({
+        message: "Background runtime is not initialized (call lifecycle.initialize() first).",
+      });
+    }
+
+    const { origin, method, invocation } = args;
+    if (isInternalOrigin(origin)) {
+      return { kind: "continue" };
+    }
+
+    const unlocked = getSessionStatus().isUnlocked;
+    const definition = invocation.definition;
+    const passthrough = invocation.passthrough;
+    const requestUnlockAttention = () => {
+      requestUnlockAttentionIfNeeded({
+        origin,
+        method,
+        chainRef: invocation.chainRef,
+        namespace: invocation.namespace,
+      });
+    };
+
+    if (!definition) {
+      if (passthrough.isPassthrough) {
+        if (unlocked || passthrough.allowWhenLocked) {
+          return { kind: "continue" };
+        }
+        requestUnlockAttention();
+        throw new SessionLockedError();
+      }
+
+      throw new RpcUnsupportedMethodError({
+        message: `Method "${method}" is not supported`,
+      });
+    }
+
+    if (!unlocked && definition.locked) {
+      switch (definition.locked.type) {
+        case "response":
+          return { kind: "response", result: definition.locked.response };
+        case "allow":
+          break;
+        case "queue":
+          requestUnlockAttention();
+          break;
+        case "deny":
+          requestUnlockAttention();
+          throw new SessionLockedError();
+      }
+    }
+
+    switch (definition.authorizationRequirement) {
+      case AuthorizationRequirements.None:
+        return { kind: "continue" };
+      case AuthorizationRequirements.Required: {
+        const authorized =
+          origin !== UNKNOWN_ORIGIN &&
+          invocation.chainRef.length > 0 &&
+          isAuthorized(origin, {
+            namespace: invocation.namespace,
+            chainRef: invocation.chainRef,
+          });
+
+        if (!authorized) {
+          throw new PermissionNotConnectedError();
+        }
+
+        return { kind: "continue" };
+      }
+      default:
+        throw new RpcInternalError({ message: "Unknown authorization requirement." });
+    }
   };
 
   const executeRpcRequest = async ({
@@ -174,36 +304,37 @@ export const createProviderRuntimeAccess = ({
     context,
     execution,
     ...request
-  }: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse> => {
+  }: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse> => {
     let providerRequestHandle: ProviderRequestHandle | null = null;
-    let errorContext: ProviderRuntimeRpcContext = context;
 
-    const buildErrorResponse = (error: unknown, nextErrorContext: ProviderRuntimeRpcContext): JsonRpcResponse => ({
+    const buildErrorResponse = (error: unknown): ProviderRuntimeRpcResponse => ({
       id: request.id,
       jsonrpc: request.jsonrpc,
-      error: encodeRpcError(error, {
-        origin,
-        method: request.method,
-        context: nextErrorContext,
-      }),
+      error: encodeRuntimeRpcError(error),
     });
 
-    const validateAndBeginRequest = (): BegunProviderRuntimeRequest => {
+    const prepareRequest = (): PreparedProviderRuntimeRequest => {
       const requestScope = execution.requestScope;
+      const invocationHint = buildRpcInvocationHint(context);
+      const invocation = resolveInvocationDetails(request.method, invocationHint);
+      const resolvedContext: ProviderRuntimeRpcContext = {
+        providerNamespace: invocation.namespace,
+        chainRef: invocation.chainRef,
+      };
 
-      const providerNamespace = resolveMethodNamespace(request.method, buildRpcInvocationHint(context));
-      if (!providerNamespace) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidRequest,
-          message: `Missing namespace context for "${request.method}"`,
-          data: { method: request.method, origin },
-        });
+      const accessPolicy = applyAccessPolicy({ origin, method: request.method, invocation });
+      if (accessPolicy.kind === "response") {
+        return {
+          kind: "response",
+          resolvedContext,
+          result: accessPolicy.result,
+        };
       }
 
       providerRequestHandle = providerRequests.beginRequest({
         scope: requestScope,
         rpcId: request.id,
-        providerNamespace,
+        providerNamespace: invocation.namespace,
         method: request.method,
       });
 
@@ -215,73 +346,61 @@ export const createProviderRuntimeAccess = ({
         requestId: providerRequestHandle.id,
       };
 
-      const resolvedContext: ProviderRuntimeRpcContext = {
-        providerNamespace,
-        ...(context.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
-      };
       const resolvedExecutionContext: ProviderRuntimeExecutionContext = {
         kind: RpcExecutionContextKinds.Provider,
         requestContext,
         providerRequestHandle,
       };
-      const invocationHint = buildRpcInvocationHint(resolvedContext);
 
       return {
+        kind: "begun",
         providerRequestHandle,
         resolvedContext,
         resolvedExecutionContext,
-        engineRequest: {
-          id: request.id,
-          jsonrpc: request.jsonrpc,
-          method: request.method,
-          origin,
-          ...(request.params !== undefined ? { params: request.params } : {}),
-          arx: invocationHint,
-          arxExecution: resolvedExecutionContext,
-        },
+        invocation,
       };
     };
 
-    const runEngineRequest = async (begun: BegunProviderRuntimeRequest): Promise<JsonRpcResponse> => {
-      // Scope-cancel error mapping lives at the handler/provider boundary.
-      // Long-running handlers must honor the request signal before reporting success.
-      return await new Promise<JsonRpcResponse>((resolve) => {
-        handleRpcRequest(begun.engineRequest, (error, response) => {
-          if (error) {
-            begun.providerRequestHandle.reject();
-            resolve(buildErrorResponse(error, begun.resolvedContext));
-            return;
-          }
-
-          if (!response) {
-            const missingResponseError = new Error("Missing JSON-RPC response");
-            begun.providerRequestHandle.reject();
-            resolve(buildErrorResponse(missingResponseError, begun.resolvedContext));
-            return;
-          }
-
-          if ("error" in response) {
-            begun.providerRequestHandle.reject();
-            resolve(response as JsonRpcResponse);
-            return;
-          }
-
-          begun.providerRequestHandle.fulfill();
-          resolve(response as JsonRpcResponse);
-        });
+    const runRequest = async (begun: BegunProviderRuntimeRequest): Promise<ProviderRuntimeRpcResponse> => {
+      const result = await executeCoreRequest({
+        origin,
+        request: {
+          method: request.method,
+          ...(request.params !== undefined ? { params: request.params } : {}),
+        },
+        invocation: begun.invocation,
+        executionContext: begun.resolvedExecutionContext,
       });
+
+      if (!begun.providerRequestHandle.fulfill()) {
+        return buildErrorResponse(
+          getProviderRequestTerminalError(begun.providerRequestHandle) ?? new RpcInternalError(),
+        );
+      }
+
+      return {
+        id: request.id,
+        jsonrpc: request.jsonrpc,
+        result,
+      };
     };
 
     try {
-      const begun = validateAndBeginRequest();
-      errorContext = begun.resolvedContext;
-      return await runEngineRequest(begun);
+      const prepared = prepareRequest();
+      if (prepared.kind === "response") {
+        return {
+          id: request.id,
+          jsonrpc: request.jsonrpc,
+          result: prepared.result,
+        };
+      }
+      return await runRequest(prepared);
     } catch (error) {
       const didReject = rejectProviderRequestHandle(providerRequestHandle);
       if (didReject) {
-        return buildErrorResponse(error, errorContext);
+        return buildErrorResponse(error);
       }
-      return buildErrorResponse(getProviderRequestTerminalError(providerRequestHandle) ?? error, errorContext);
+      return buildErrorResponse(getProviderRequestTerminalError(providerRequestHandle) ?? error);
     }
   };
 
@@ -325,7 +444,7 @@ export const createProviderRuntimeAccess = ({
     subscribeAccountsStateChanged,
     subscribePermissionsStateChanged,
     executeRpcRequest,
-    encodeRpcError,
+    encodeRuntimeRpcError,
     listPermittedAccounts,
     cancelRequestScope,
   };

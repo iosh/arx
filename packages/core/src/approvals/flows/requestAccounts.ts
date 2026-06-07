@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../approvals/queue/types.js";
+import { PermissionDeniedError } from "../../permissions/errors.js";
 import {
   getApprovalSelectableAccounts,
   parseAccountSelectionDecision,
@@ -16,11 +16,7 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
     });
 
     if (selectableAccounts.length === 0) {
-      throw arxError({
-        reason: ArxReasons.PermissionDenied,
-        message: "No accounts available for connection request",
-        data: { origin: record.origin, reason: "no_accounts", chainRef, namespace },
-      });
+      throw new PermissionDeniedError();
     }
 
     const selectedAccounts = resolveApprovalSelectedAccounts({

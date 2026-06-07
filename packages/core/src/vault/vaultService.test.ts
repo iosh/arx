@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { VaultEnvelope } from "./types.js";
 import { randomBytes } from "./utils.js";
@@ -26,7 +25,12 @@ describe("vaultService", () => {
     expect(typeof envelope.cipher.data).toBe("string");
 
     expect(vault.getStatus()).toEqual({ isUnlocked: false, hasEnvelope: true });
-    expect(() => vault.exportSecret()).toThrowError(/locked/i);
+    try {
+      vault.exportSecret();
+      throw new Error("Expected exportSecret to throw");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "vault.locked" });
+    }
   });
 
   it("rejects unlock attempts with an incorrect password", async () => {
@@ -34,7 +38,7 @@ describe("vaultService", () => {
     const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
 
     await expect(vault.unlock({ password: "wrong", envelope })).rejects.toMatchObject({
-      reason: ArxReasons.VaultInvalidPassword,
+      code: "vault.invalid_password",
     });
   });
 
@@ -61,7 +65,7 @@ describe("vaultService", () => {
     } as unknown as VaultEnvelope;
 
     await expect(vault.unlock({ password: PASSWORD, envelope: tampered })).rejects.toMatchObject({
-      reason: ArxReasons.VaultInvalidCiphertext,
+      code: "vault.invalid_ciphertext",
     });
   });
 
@@ -100,7 +104,9 @@ describe("vaultService", () => {
 
   it("throws when commitSecret is called while locked", async () => {
     const vault = createVaultService();
-    await expect(vault.commitSecret({ secret: new Uint8Array([1]) })).rejects.toThrowError(/locked/i);
+    await expect(vault.commitSecret({ secret: new Uint8Array([1]) })).rejects.toMatchObject({
+      code: "vault.locked",
+    });
   });
 
   it("reencrypt changes password and keeps the vault unlocked", async () => {
@@ -117,7 +123,7 @@ describe("vaultService", () => {
 
     vault.lock();
     await expect(vault.unlock({ password: "old-password", envelope: nextEnvelope })).rejects.toMatchObject({
-      reason: ArxReasons.VaultInvalidPassword,
+      code: "vault.invalid_password",
     });
   });
 });

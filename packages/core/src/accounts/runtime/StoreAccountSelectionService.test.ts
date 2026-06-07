@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { Messenger } from "../../messenger/index.js";
@@ -149,7 +148,7 @@ describe("StoreAccountSelectionService", () => {
         chainRef,
         accountKey: hidden.accountKey,
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.PermissionDenied });
+    ).rejects.toMatchObject({ code: "global.permission.denied" });
 
     await expect(
       service.setActiveAccount({
@@ -157,7 +156,7 @@ describe("StoreAccountSelectionService", () => {
         chainRef,
         accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.KeyringAccountNotFound });
+    ).rejects.toMatchObject({ code: "keyring.account_not_found" });
   });
 
   it("rejects namespace and chainRef mismatch", async () => {
@@ -172,6 +171,6 @@ describe("StoreAccountSelectionService", () => {
         chainRef,
         accountKey: "solana:1111111111111111111111111111111111111111",
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.RpcInvalidRequest });
+    ).rejects.toMatchObject({ code: "global.rpc.invalid_request" });
   });
 });

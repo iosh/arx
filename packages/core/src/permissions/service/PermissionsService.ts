@@ -1,6 +1,6 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import { PermissionNotConnectedError } from "../errors.js";
 import {
   arePermissionChainStatesEqual,
   buildPermissionAuthorization,
@@ -124,21 +124,13 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
       const namespace = parsePermissionNamespace(options.namespace);
       const currentChains = this.#state.origins[origin]?.[namespace]?.chains;
       if (!currentChains) {
-        throw arxError({
-          reason: ArxReasons.PermissionNotConnected,
-          message: `Origin "${origin}" is not connected to namespace "${namespace}"`,
-          data: { origin, namespace },
-        });
+        throw new PermissionNotConnectedError();
       }
 
       const chainRef = parsePermissionChainRefForNamespace(namespace, options.chainRef);
       const currentChain = currentChains[chainRef];
       if (!currentChain) {
-        throw arxError({
-          reason: ArxReasons.PermissionNotConnected,
-          message: `Origin "${origin}" is not connected to chain "${chainRef}"`,
-          data: { origin, namespace, chainRef },
-        });
+        throw new PermissionNotConnectedError();
       }
 
       const accountKeys = parsePermissionAccountKeysForNamespace(namespace, options.accountKeys);

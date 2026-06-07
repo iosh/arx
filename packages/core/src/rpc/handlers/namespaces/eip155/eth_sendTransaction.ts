@@ -1,6 +1,8 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ApprovalRejectedError } from "../../../../approvals/errors.js";
+import { TransportDisconnectedError } from "../../../../runtime/provider/errors.js";
 import type { JsonValue } from "../../../../transactions/aggregate/index.js";
 import type { Eip155SubmittedTransaction } from "../../../../transactions/index.js";
+import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { toParamsArray } from "../utils.js";
@@ -22,10 +24,8 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     const paramsArray = toParamsArray(params);
 
     if (paramsArray.length === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "eth_sendTransaction requires at least one transaction parameter",
-        data: { params },
       });
     }
 
@@ -65,23 +65,17 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     if (outcome.kind === "terminal") {
       const reason = outcome.transaction.terminalReason;
       if (outcome.transaction.status === "rejected" && reason?.kind === "user_rejected") {
-        throw arxError({
-          reason: ArxReasons.ApprovalRejected,
+        throw new ApprovalRejectedError({
           message: reason.message,
-          data: { origin, id: outcome.transaction.id, terminalReason: reason },
         });
       }
       if (outcome.transaction.status === "cancelled" && reason?.code === "provider.caller_disconnected") {
-        throw arxError({
-          reason: ArxReasons.TransportDisconnected,
+        throw new TransportDisconnectedError({
           message: reason.message,
-          data: { origin, id: outcome.transaction.id, terminalReason: reason },
         });
       }
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: reason?.message ?? "Transaction submission failed",
-        data: { origin, id: outcome.transaction.id, terminalReason: reason ?? undefined },
       });
     }
 

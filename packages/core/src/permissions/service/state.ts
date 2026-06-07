@@ -1,8 +1,8 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
+import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountKey, PermissionRecord } from "../../storage/records.js";
 import type {
   AuthorizationChainInput,
@@ -53,10 +53,9 @@ export const clonePermissionsState = (state: PermissionsState): PermissionsState
 export const parsePermissionNamespace = (namespace: string): ChainNamespace => {
   const normalized = namespace.trim();
   if (!normalized) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Permission namespace is required",
-      data: { namespace },
+      details: { namespace },
     });
   }
 
@@ -66,10 +65,9 @@ export const parsePermissionNamespace = (namespace: string): ChainNamespace => {
 export const parsePermissionChainRefForNamespace = (namespace: ChainNamespace, chainRef: ChainRef): ChainRef => {
   const parsed = parseCaipChainRef(chainRef);
   if (parsed.namespace !== namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Permission chainRef "${chainRef}" does not belong to namespace "${namespace}"`,
-      data: { namespace, chainRef },
+      details: { namespace, chainRef },
     });
   }
 
@@ -84,10 +82,9 @@ export const parsePermissionAccountKeysForNamespace = (
     accountKeys.map((value) => {
       const accountKey = String(value) as AccountKey;
       if (getAccountKeyNamespace(accountKey) !== namespace) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidRequest,
-          message: `Permission accountKey "${accountKey}" does not belong to namespace "${namespace}"`,
-          data: { namespace, accountKey },
+        throw new RpcInvalidRequestError({
+          message: `Permission account does not belong to namespace "${namespace}"`,
+          details: { namespace },
         });
       }
 
@@ -101,10 +98,9 @@ export const buildValidatedPermissionChainStates = (
   chains: readonly AuthorizationChainInput[],
 ): Record<ChainRef, ChainPermissionState> => {
   if (chains.length === 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Permission chains must not be empty",
-      data: { namespace },
+      details: { namespace },
     });
   }
 
@@ -116,10 +112,9 @@ export const buildValidatedPermissionChainStates = (
   ]);
 
   if (new Set(normalizedEntries.map(([chainRef]) => chainRef)).size !== normalizedEntries.length) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Permission chains must not contain duplicate chainRef values",
-      data: { namespace },
+      details: { namespace },
     });
   }
 

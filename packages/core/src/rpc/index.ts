@@ -9,6 +9,7 @@ export type {
   JsonRpcSuccess,
   JsonRpcVersion2,
 } from "@metamask/utils";
+export * from "./errors.js";
 export { createRpcMethodExecutor } from "./executor.js";
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 export {

@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { TransactionValidationContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import type { Eip155TransactionPayload } from "./transactionTypes.js";
@@ -12,26 +12,18 @@ type Deps = {
   chains: ChainAddressCodecRegistry;
 };
 
-const throwInvalidRequest = (message: string, data?: Record<string, unknown>): never => {
-  throw arxError({
-    reason: ArxReasons.RpcInvalidParams,
-    message,
-    ...(data ? { data } : {}),
-  });
-};
-
 const runRequestParser = <T>(parse: () => T): T => {
   try {
     return parse();
   } catch (error) {
     if (error instanceof Eip155FieldParseError) {
-      throwInvalidRequest(error.message, {
-        code: error.reason,
+      throw new RpcInvalidParamsError({
+        message: error.message,
         details: {
+          code: error.reason,
           field: error.field,
-          value: error.value,
-          error: error.parseMessage,
         },
+        cause: error,
       });
     }
     throw error;
@@ -51,8 +43,8 @@ export const createEip155RequestValidator = (deps: Deps) => {
   return (context: TransactionValidationContext): void => {
     const { request } = context;
     if (request.namespace !== "eip155") {
-      throwInvalidRequest(`EIP-155 request validator cannot validate namespace "${request.namespace}"`, {
-        namespace: request.namespace,
+      throw new RpcInvalidParamsError({
+        message: `EIP-155 request validator cannot validate namespace "${request.namespace}"`,
       });
     }
 
@@ -74,9 +66,11 @@ export const createEip155RequestValidator = (deps: Deps) => {
 
     if (addressResult.status !== "ok") {
       const issue = addressResult.status === "blocked" ? addressResult.blocker : addressResult.error;
-      throwInvalidRequest(issue.message, {
-        code: issue.reason,
-        ...(issue.data !== undefined ? { details: issue.data } : {}),
+      throw new RpcInvalidParamsError({
+        message: issue.message,
+        details: {
+          code: issue.reason,
+        },
       });
     }
 
@@ -91,32 +85,28 @@ export const createEip155RequestValidator = (deps: Deps) => {
 
     const expectedChainId = deriveExpectedChainId(context.chainRef);
     if (payloadChainId && expectedChainId && payloadChainId !== expectedChainId) {
-      throwInvalidRequest("Transaction chainId does not match the active chain.", {
-        code: "transaction.prepare.chain_id_mismatch",
+      throw new RpcInvalidParamsError({
+        message: "Transaction chainId does not match the active chain.",
         details: {
-          payloadChainId,
-          expectedChainId,
+          code: "transaction.prepare.chain_id_mismatch",
         },
       });
     }
 
     if (payloadGasPrice && (payloadMaxFee || payloadPriorityFee)) {
-      throwInvalidRequest("Cannot mix legacy gasPrice with EIP-1559 fields.", {
-        code: "transaction.prepare.fee_conflict",
+      throw new RpcInvalidParamsError({
+        message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
         details: {
-          gasPrice: payloadGasPrice,
-          maxFeePerGas: payloadMaxFee,
-          maxPriorityFeePerGas: payloadPriorityFee,
+          code: "transaction.prepare.fee_conflict",
         },
       });
     }
 
     if ((payloadMaxFee && !payloadPriorityFee) || (!payloadMaxFee && payloadPriorityFee)) {
-      throwInvalidRequest("EIP-1559 requires both maxFeePerGas and maxPriorityFeePerGas.", {
-        code: "transaction.prepare.fee_pair_incomplete",
+      throw new RpcInvalidParamsError({
+        message: "EIP-1559 requires both maxFeePerGas and maxPriorityFeePerGas.",
         details: {
-          maxFeePerGas: payloadMaxFee,
-          maxPriorityFeePerGas: payloadPriorityFee,
+          code: "transaction.prepare.fee_pair_incomplete",
         },
       });
     }
@@ -124,9 +114,11 @@ export const createEip155RequestValidator = (deps: Deps) => {
     if (gas) {
       const gasValue = BigInt(gas);
       if (gasValue < MIN_NETWORK_GAS_LIMIT) {
-        throwInvalidRequest("gas must be at least 0x5208 for EVM transactions.", {
-          code: "transaction.validation.gas_too_low",
-          details: { gas, minimum: "0x5208" },
+        throw new RpcInvalidParamsError({
+          message: "gas must be at least 0x5208 for EVM transactions.",
+          details: {
+            code: "transaction.validation.gas_too_low",
+          },
         });
       }
     }

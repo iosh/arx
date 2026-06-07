@@ -11,7 +11,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./engine": "./src/engine/index.ts",
-    "./errors": "./src/errors/index.ts",
     "./logger": "./src/utils/logger.ts",
     "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
@@ -30,9 +29,7 @@
     "./services": "./src/services/index.ts"
   },
   "dependencies": {
-    "@metamask/json-rpc-engine": "10.0.3",
     "@metamask/utils": "11.8.0",
-    "@arx/errors": "workspace:*",
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
     "@scure/bip32": "1.7.0",

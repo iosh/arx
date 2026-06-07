@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { Messenger } from "../../messenger/Messenger.js";
+import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
@@ -340,10 +340,9 @@ export const initSessionLayer = ({
       return;
     }
 
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `${action} requires the session to be locked`,
-      data: {
+      details: {
         action,
         unlockState: unlockState.isUnlocked ? "unlocked" : "locked",
         vaultState: vaultUnlocked ? "unlocked" : "locked",

@@ -54,11 +54,9 @@ const BASE_CHAIN: ChainMetadata = {
 };
 
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
-const DEFAULT_RPC_ENGINE = {
-  env: {
-    isInternalOrigin: () => false,
-    shouldRequestUnlockAttention: () => false,
-  },
+const DEFAULT_RPC_ACCESS_POLICY = {
+  isInternalOrigin: () => false,
+  shouldRequestUnlockAttention: () => false,
 } as const;
 
 const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
@@ -83,7 +81,7 @@ const createTestRuntime = (params?: {
   customChainsPort?: MemoryCustomChainsPort;
   networkSelectionPort?: MemoryNetworkSelectionPort;
   namespaces?: Parameters<typeof createBackgroundRuntime>[0]["namespaces"];
-  rpcEngine?: Parameters<typeof createBackgroundRuntime>[0]["rpcEngine"];
+  rpcAccessPolicy?: Parameters<typeof createBackgroundRuntime>[0]["rpcAccessPolicy"];
   settingsPort?: MemorySettingsPort;
   storePorts?: Partial<Parameters<typeof createBackgroundRuntime>[0]["store"]["ports"]>;
   supportedChains?: Omit<NonNullable<Parameters<typeof createBackgroundRuntime>[0]["supportedChains"]>, "port">;
@@ -95,7 +93,6 @@ const createTestRuntime = (params?: {
   rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
   approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
   customRpc?: Parameters<typeof createBackgroundRuntime>[0]["customRpc"];
-  engine?: Parameters<typeof createBackgroundRuntime>[0]["engine"];
 }) => {
   const customChainsPort = params?.customChainsPort ?? new MemoryCustomChainsPort();
   return createBackgroundRuntime({
@@ -105,7 +102,7 @@ const createTestRuntime = (params?: {
       ...(params?.supportedChains ?? {}),
     },
     namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
-    rpcEngine: params?.rpcEngine ?? DEFAULT_RPC_ENGINE,
+    rpcAccessPolicy: params?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY,
     networkSelection: {
       port: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
     },
@@ -130,7 +127,6 @@ const createTestRuntime = (params?: {
     ...(params?.rpcClients ? { rpcClients: params.rpcClients } : {}),
     ...(params?.approvals ? { approvals: params.approvals } : {}),
     ...(params?.customRpc ? { customRpc: params.customRpc } : {}),
-    ...(params?.engine ? { engine: params.engine } : {}),
   });
 };
 
@@ -590,10 +586,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(
       runtime.services.approvals.resolve({ approvalId: "sign-message-approval", action: "approve" }),
     ).rejects.toMatchObject({
-      reason: "ChainNotCompatible",
+      code: "chain.not_compatible",
     });
     await expect(approvalPromise).rejects.toMatchObject({
-      reason: "ChainNotCompatible",
+      code: "chain.not_compatible",
     });
     expect(runtime.services.approvals.getState().pending).toEqual([]);
 

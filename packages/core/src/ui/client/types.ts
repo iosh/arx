@@ -29,14 +29,18 @@ export class UiProtocolError extends Error {
 export class UiRemoteError extends Error {
   name = "UiRemoteError" as const;
 
-  reason: UiError["reason"];
-  data?: unknown;
+  kind: UiError["kind"];
+  remoteName: UiError["name"];
+  code: UiError["code"];
+  details?: unknown;
   context?: UiContext | undefined;
 
   constructor(payload: UiError, context?: UiContext) {
     super(payload.message);
-    this.reason = payload.reason;
-    this.data = payload.data;
+    this.kind = payload.kind;
+    this.remoteName = payload.name;
+    this.code = payload.code;
+    this.details = payload.details;
     this.context = context;
   }
 }

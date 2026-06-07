@@ -1,5 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
-import { chainErrors } from "../../../../chains/errors.js";
+import { ChainNotCompatibleError, ChainNotFoundError } from "../../../../chains/errors.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../../chains/metadata.js";
 
@@ -28,7 +27,7 @@ const listAvailableChainMetadata = ({
   return network.getState().availableChainRefs.map((chainRef) => {
     const entry = supportedChains.getChain(chainRef);
     if (!entry) {
-      throw chainErrors.notFound({ chainRef });
+      throw new ChainNotFoundError();
     }
     return cloneChainMetadata(entry.metadata);
   });
@@ -50,16 +49,12 @@ export const resolveSwitchEthereumChainTarget = ({
   });
 
   if (!target) {
-    throw chainErrors.notFound({
-      chainId,
-    });
+    throw new ChainNotFoundError();
   }
 
   if (target.namespace !== "eip155") {
-    throw arxError({
-      reason: ArxReasons.ChainNotCompatible,
+    throw new ChainNotCompatibleError({
       message: "Requested chain is not compatible with wallet_switchEthereumChain",
-      data: { chainRef: target.chainRef },
     });
   }
 

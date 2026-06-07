@@ -1,5 +1,5 @@
-import { isArxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { isArxBaseError } from "../../error.js";
 import {
   buildTransactionTerminalReason,
   type JsonValue,
@@ -192,13 +192,14 @@ export class SubmittedTransactionTrackingService {
         }
       }
     } catch (error) {
+      const details =
+        isArxBaseError(error) && error.details && typeof error.details === "object"
+          ? (structuredClone(error.details) as JsonValue)
+          : null;
       const failure = {
-        reason: isArxError(error) ? error.reason : `${aggregate.record.namespace}.tracking`,
+        reason: isArxBaseError(error) ? error.code : `${aggregate.record.namespace}.tracking`,
         message: error instanceof Error ? error.message : "tracking failed",
-        data:
-          isArxError(error) && error.data && typeof error.data === "object"
-            ? (structuredClone(error.data) as JsonValue)
-            : null,
+        data: details,
       };
 
       return {

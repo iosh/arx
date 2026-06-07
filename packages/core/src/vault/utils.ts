@@ -1,4 +1,4 @@
-import { vaultErrors } from "./errors.js";
+import { VaultInvalidCiphertextError, VaultInvalidPasswordError } from "./errors.js";
 
 const KEY_LENGTH_BITS = 256;
 
@@ -54,7 +54,7 @@ export const fromBase64 = (value: string): Uint8Array => {
 
 export const importPasswordKey = (password: string): Promise<CryptoKey> => {
   if (password.trim().length === 0) {
-    throw vaultErrors.invalidPassword();
+    throw new VaultInvalidPasswordError();
   }
   return cryptoApi.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
 };
@@ -111,6 +111,6 @@ export const aesGcmDecrypt = async (
     );
     return new Uint8Array(decrypted);
   } catch (cause) {
-    throw vaultErrors.invalidCiphertext(cause);
+    throw new VaultInvalidCiphertextError({ cause });
   }
 };

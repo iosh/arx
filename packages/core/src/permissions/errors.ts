@@ -1,0 +1,27 @@
+import { ArxBaseError, type ErrorCause } from "../error.js";
+
+export type PermissionErrorInput = ErrorCause & {
+  message?: string;
+};
+
+export class PermissionNotConnectedError extends ArxBaseError {
+  static readonly code = "global.permission.not_connected";
+
+  constructor(input: PermissionErrorInput = {}) {
+    super(input.message ?? "Origin is not connected.", {
+      code: PermissionNotConnectedError.code,
+      cause: input.cause,
+    });
+  }
+}
+
+export class PermissionDeniedError extends ArxBaseError {
+  static readonly code = "global.permission.denied";
+
+  constructor(input: PermissionErrorInput = {}) {
+    super(input.message ?? "Permission denied.", {
+      code: PermissionDeniedError.code,
+      cause: input.cause,
+    });
+  }
+}

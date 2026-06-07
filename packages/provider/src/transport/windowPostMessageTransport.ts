@@ -144,10 +144,8 @@ export class WindowPostMessageTransport<TSnapshot = unknown, TPatch = unknown>
     });
 
     if ("error" in rpc) {
-      throw Object.assign(new Error(rpc.error.message), {
-        code: rpc.error.code,
-        data: rpc.error.data,
-      });
+      const message = rpc.error.kind === "JsonRpcError" ? rpc.error.message : "Provider request failed";
+      throw Object.assign(new Error(message), rpc.error);
     }
     return rpc.result;
   }

@@ -1,4 +1,5 @@
 export { createProviderRuntimeAccess } from "./createProviderRuntimeAccess.js";
+export { TransportDisconnectedError } from "./errors.js";
 export type {
   ProviderRequestBeginInput,
   ProviderRequestCancellationReason,
@@ -12,13 +13,14 @@ export type {
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
-  ProviderRuntimeErrorContext,
   ProviderRuntimeExecutionContext,
   ProviderRuntimeMeta,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestExecution,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
+  ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
+  ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
 } from "./types.js";

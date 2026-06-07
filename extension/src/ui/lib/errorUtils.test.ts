@@ -11,7 +11,9 @@ import {
 describe("errorUtils", () => {
   it("treats UiRemoteError as the wallet-owned error shape", () => {
     const error = new UiRemoteError({
-      reason: "ApprovalRejected",
+      kind: "ArxError",
+      name: "ApprovalRejectedError",
+      code: "approval.rejected",
       message: "Rejected",
     });
 
@@ -20,17 +22,47 @@ describe("errorUtils", () => {
     expect(getErrorMessage(error)).toBe("Request rejected by user");
   });
 
+  it("keeps system approval cancellation separate from user rejection", () => {
+    const dismissed = new UiRemoteError({
+      kind: "ArxError",
+      name: "ApprovalUserDismissedError",
+      code: "approval.user_dismissed",
+      message: "Approval dismissed by user.",
+    });
+    const superseded = new UiRemoteError({
+      kind: "ArxError",
+      name: "ApprovalSupersededError",
+      code: "approval.superseded",
+      message: "Approval superseded.",
+    });
+    const cancelled = new UiRemoteError({
+      kind: "ArxError",
+      name: "ApprovalCancelledError",
+      code: "approval.cancelled",
+      message: "Approval cancelled.",
+    });
+
+    expect(isUserRejection(dismissed)).toBe(true);
+    expect(getErrorMessage(dismissed)).toBe("Request rejected by user");
+    expect(isUserRejection(superseded)).toBe(false);
+    expect(getErrorMessage(superseded)).toBe("Request was replaced.");
+    expect(isUserRejection(cancelled)).toBe(false);
+    expect(getErrorMessage(cancelled)).toBe("Request was cancelled.");
+  });
+
   it("maps UiProtocolError to a generic user-facing message", () => {
     expect(getErrorMessage(new UiProtocolError("UI protocol error: Invalid reply envelope"))).toBe(
       "Unexpected wallet response. Please try again.",
     );
   });
 
-  it("keeps remote reason handling for unlock and init flows", () => {
+  it("keeps remote code handling for unlock and init flows", () => {
     expect(
       getUnlockErrorMessage(
         new UiRemoteError({
-          reason: "VaultInvalidPassword",
+          kind: "ArxError",
+          name: "VaultInvalidPasswordError",
+          code: "vault.invalid_password",
           message: "Invalid password",
         }),
       ),
@@ -39,7 +71,9 @@ describe("errorUtils", () => {
     expect(
       getInitErrorMessage(
         new UiRemoteError({
-          reason: "VaultNotInitialized",
+          kind: "ArxError",
+          name: "VaultNotInitializedError",
+          code: "vault.not_initialized",
           message: "Vault is not initialized",
         }),
       ),

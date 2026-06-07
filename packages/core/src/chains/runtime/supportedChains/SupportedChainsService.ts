@@ -1,6 +1,6 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { CustomChainsPort } from "../../../services/store/customChains/port.js";
 import { type CustomChainRecord, CustomChainRecordSchema } from "../../../storage/records.js";
+import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
 import { type ChainMetadata, isSameAddChainComparableMetadata } from "../../metadata.js";
 import { prepareChainMetadataForStorage } from "../chainDefinitions/state.js";
@@ -63,11 +63,7 @@ export class InMemorySupportedChainsService implements SupportedChainsService {
         return { kind: "noop", chain: cloneSupportedChainEntity(previous) };
       }
 
-      throw arxError({
-        reason: ArxReasons.ChainNotSupported,
-        message: "Requested chain conflicts with a builtin chain definition",
-        data: { chainRef: storedMetadata.chainRef },
-      });
+      throw new ChainDefinitionConflictError({ chainRef: storedMetadata.chainRef });
     }
 
     const createdByOrigin = previous?.createdByOrigin ?? options?.createdByOrigin;

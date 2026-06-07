@@ -1,6 +1,6 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
+import { RpcInvalidParamsError } from "../rpc/errors.js";
 
 export type ApprovalChainContextRecord = {
   approvalId: string;
@@ -33,10 +33,9 @@ export const deriveApprovalReviewContext = (
   const parsed = parseChainRef(resolvedChainRef);
 
   if (record.namespace !== parsed.namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Approval record has mismatched namespace and chainRef.",
-      data: {
+      details: {
         approvalId: record.approvalId,
         kind: record.kind,
         namespace: record.namespace,

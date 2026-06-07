@@ -1,6 +1,6 @@
 import { add0x, getChecksumAddress, type Hex, isValidHexAddress } from "@metamask/utils";
 import { assertNamespace } from "../caip.js";
-import { chainErrors } from "../errors.js";
+import { ChainInvalidAddressError } from "../errors.js";
 import type {
   CanonicalizeAddressParams,
   CanonicalizedAddressResult,
@@ -14,22 +14,22 @@ const with0xPrefix = (value: string): Hex => (value.startsWith("0x") ? (value as
 
 const toCanonical = (value: string): Hex => with0xPrefix(value).toLowerCase() as Hex;
 
-const fail = (where: "input" | "canonical", value: string) => {
-  throw chainErrors.invalidAddress("eip155", { where, value });
+const fail = (field: "input" | "canonical") => {
+  throw new ChainInvalidAddressError({ namespace: "eip155", field });
 };
 
 const assertValidInput = (value: string): void => {
   if (typeof value !== "string" || value.trim().length === 0) {
-    fail("input", String(value));
+    fail("input");
   }
   if (!HEX_ADDRESS_PATTERN.test(value.trim())) {
-    fail("input", value);
+    fail("input");
   }
 };
 
 const validateCanonical = (canonical: Hex): void => {
   if (!isValidHexAddress(canonical)) {
-    fail("canonical", canonical);
+    fail("canonical");
   }
 };
 

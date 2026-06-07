@@ -1,5 +1,5 @@
 import { parseChainRef } from "./caip.js";
-import { chainErrors } from "./errors.js";
+import { ChainAddressNamespaceNotSupportedError } from "./errors.js";
 import type { ChainRef } from "./ids.js";
 import type {
   CanonicalizeAddressParams,
@@ -32,7 +32,7 @@ export class ChainAddressCodecRegistry {
     const { namespace } = parseChainRef(chainRef);
     const codec = this.#codecs.get(namespace);
     if (codec) return codec;
-    throw chainErrors.namespaceNotSupported({ chainRef, namespace });
+    throw new ChainAddressNamespaceNotSupportedError({ chainRef, namespace });
   }
 
   getAddressModule(chainRef: ChainRef) {

@@ -1,4 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ChainNotSupportedError } from "../../../chains/errors.js";
 import type { UiChainsAccess, UiHandlers, UiNamespaceBindingsAccess, UiSessionAccess } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
@@ -13,10 +13,8 @@ export const createBalancesHandlers = (deps: {
       const chain = deps.chains.requireAvailableChainMetadata(chainRef);
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
       if (!uiBindings?.getNativeBalance) {
-        throw arxError({
-          reason: ArxReasons.ChainNotSupported,
+        throw new ChainNotSupportedError({
           message: `Native balance is not supported for namespace "${chain.namespace}" yet.`,
-          data: { chainRef, namespace: chain.namespace },
         });
       }
 

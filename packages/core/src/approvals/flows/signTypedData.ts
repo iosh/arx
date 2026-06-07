@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../approvals/queue/types.js";
+import { ChainNotCompatibleError } from "../../chains/errors.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
@@ -12,10 +12,8 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
     const chainRef = reviewChainRef;
     const approvalBindings = deps.namespaceBindings.getApproval(namespace);
     if (!approvalBindings?.signTypedData) {
-      throw arxError({
-        reason: ArxReasons.ChainNotCompatible,
+      throw new ChainNotCompatibleError({
         message: `SignTypedData is not supported for namespace "${namespace}".`,
-        data: { namespace, chainRef },
       });
     }
 

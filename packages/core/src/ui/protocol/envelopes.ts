@@ -1,6 +1,6 @@
-import { isArxReason, type UiErrorPayload } from "@arx/errors";
 import { z } from "zod";
 import { ChainRefSchema } from "../../chains/ids.js";
+import { ARX_ERROR_KIND, type SerializedArxError } from "../../error.js";
 import { isUiEventName, isUiMethodName, type UiEventName, type UiMethodName } from "./index.js";
 
 export const UI_CHANNEL = "arx:ui" as const;
@@ -10,11 +10,7 @@ export type UiContext = {
   chainRef?: string;
 };
 
-export type UiError = {
-  reason: UiErrorPayload["reason"];
-  message: UiErrorPayload["message"];
-  data?: UiErrorPayload["data"];
-};
+export type UiError = SerializedArxError;
 
 export type UiRequestEnvelope = {
   type: "ui:request";
@@ -55,9 +51,11 @@ const UiContextSchema = z
 
 const UiErrorSchema = z
   .object({
-    reason: z.string().refine(isArxReason, { message: "Unknown UI error reason" }),
+    kind: z.literal(ARX_ERROR_KIND),
+    name: z.string().min(1),
+    code: z.string().min(1),
     message: z.string().min(1),
-    data: z.unknown().optional(),
+    details: z.unknown().optional(),
   })
   .strict();
 

@@ -269,7 +269,12 @@ describe("ui envelope parsing", () => {
       parseUiEnvelope({
         type: "ui:error",
         id: "1",
-        error: { reason: "RpcInvalidRequest", message: "nope" },
+        error: {
+          kind: "ArxError",
+          name: "RpcInvalidRequestError",
+          code: "global.rpc.invalid_request",
+          message: "nope",
+        },
       }),
     ).toMatchObject({ type: "ui:error", id: "1" });
 
@@ -305,7 +310,7 @@ describe("ui envelope parsing", () => {
       parseUiEnvelope({
         type: "ui:error",
         id: "1",
-        error: { reason: "X", message: 123 },
+        error: { kind: "ArxError", name: "X", code: "x", message: 123 },
       }),
     ).toThrow();
 
@@ -313,7 +318,7 @@ describe("ui envelope parsing", () => {
       parseUiEnvelope({
         type: "ui:error",
         id: "1",
-        error: { reason: "UnknownReason", message: "nope" },
+        error: { kind: "ArxError", name: "UnknownReason", code: "x", message: "nope", extra: true },
       }),
     ).toThrow();
 

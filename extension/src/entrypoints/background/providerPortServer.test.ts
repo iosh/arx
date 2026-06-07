@@ -1,5 +1,5 @@
 import type { WalletProvider } from "@arx/core/engine";
-import type { JsonRpcResponse } from "@arx/core/rpc";
+import type { ProviderRuntimeRpcResponse } from "@arx/core/runtime";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -82,7 +82,7 @@ const handshake = (port: FakePort, sessionId: string, namespace: string) => {
 const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
   executeRpcRequest?: WalletProvider["executeRpcRequest"];
-  encodeRpcError?: WalletProvider["encodeRpcError"];
+  encodeRuntimeRpcError?: WalletProvider["encodeRuntimeRpcError"];
   cancelRequestScope?: WalletProvider["cancelRequestScope"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
   failFirstProviderBootstrap?: boolean;
@@ -160,15 +160,16 @@ const createServerHarness = (options?: {
           id: request.id,
           jsonrpc: request.jsonrpc,
           result: null,
-        }) satisfies JsonRpcResponse),
+        }) satisfies ProviderRuntimeRpcResponse),
   );
-  const encodeRpcError = vi.fn(
-    options?.encodeRpcError ??
+  const encodeRuntimeRpcError = vi.fn(
+    options?.encodeRuntimeRpcError ??
       ((error: unknown) => {
         const payload = error as { code?: number; message?: string } | undefined;
         return {
-          code: payload?.code ?? 4900,
-          message: payload?.message ?? "Disconnected",
+          kind: "JsonRpcError" as const,
+          code: payload?.code ?? -32603,
+          message: payload?.message ?? "Internal error",
         };
       }),
   );
@@ -178,7 +179,7 @@ const createServerHarness = (options?: {
     buildSnapshot,
     buildConnectionProjection,
     executeRpcRequest,
-    encodeRpcError,
+    encodeRuntimeRpcError,
     connect,
     disconnect,
     disconnectOrigin,
@@ -234,7 +235,7 @@ const createServerHarness = (options?: {
       disconnect,
       disconnectOrigin,
       executeRpcRequest,
-      encodeRpcError,
+      encodeRuntimeRpcError,
       cancelRequestScope,
     },
     setSnapshot(namespace: string, snapshot: ProviderBridgeSnapshot) {
@@ -355,15 +356,15 @@ describe("providerPortServer", () => {
   });
 
   it("rejects pending requests on same-binding session rotation without disconnect or reconnect churn", async () => {
-    let resolveRequest: (value: JsonRpcResponse) => void = () => {
+    let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
       throw new Error("executeRpcRequest resolver not initialized");
     };
     const harness = createServerHarness({
       executeRpcRequest: () =>
-        new Promise<JsonRpcResponse>((resolve) => {
+        new Promise<ProviderRuntimeRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
-      encodeRpcError: () => ({ code: 4900, message: "Disconnected" }),
+      encodeRuntimeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
     });
     const port = new FakePort();
 
@@ -395,7 +396,7 @@ describe("providerPortServer", () => {
           payload: {
             id: "rpc-1",
             jsonrpc: "2.0",
-            error: { code: 4900, message: "Disconnected" },
+            error: { kind: "ArxError", code: "global.transport.disconnected" },
           },
         }),
       ),
@@ -464,15 +465,15 @@ describe("providerPortServer", () => {
   it("finalizes disconnect state and cancels provider-scoped approvals when a port disconnects", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
 
-    let resolveRequest: (value: JsonRpcResponse) => void = () => {
+    let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
       throw new Error("executeRpcRequest resolver not initialized");
     };
     const harness = createServerHarness({
       executeRpcRequest: () =>
-        new Promise<JsonRpcResponse>((resolve) => {
+        new Promise<ProviderRuntimeRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
-      encodeRpcError: () => ({ code: 4900, message: "Disconnected" }),
+      encodeRuntimeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
     });
     const port = new FakePort();
 
@@ -511,7 +512,7 @@ describe("providerPortServer", () => {
           payload: {
             id: "rpc-1",
             jsonrpc: "2.0",
-            error: { code: 4900, message: "Disconnected" },
+            error: { kind: "ArxError", code: "global.transport.disconnected" },
           },
         }),
       ),

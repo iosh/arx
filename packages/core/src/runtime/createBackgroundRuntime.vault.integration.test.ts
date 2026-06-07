@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VaultMetaSnapshot } from "../storage/index.js";
 import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
@@ -67,7 +66,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await context.runtime.services.session.unlock.unlock({ password: "secret" });
 
       await expect(context.runtime.services.session.createVault({ password: "next-secret" })).rejects.toMatchObject({
-        reason: ArxReasons.RpcInvalidRequest,
+        code: "global.rpc.invalid_request",
         message: "createVault requires the session to be locked",
       });
 
@@ -100,7 +99,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await context.runtime.services.session.unlock.unlock({ password: "secret" });
 
       await expect(context.runtime.services.session.importVault(envelope)).rejects.toMatchObject({
-        reason: ArxReasons.RpcInvalidRequest,
+        code: "global.rpc.invalid_request",
         message: "importVault requires the session to be locked",
       });
 

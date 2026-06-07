@@ -1,5 +1,3 @@
-import { ArxReasons, arxError } from "@arx/errors";
-import { ZodError } from "zod";
 import type { AccountSelectionService } from "../accounts/runtime/types.js";
 import type {
   ApprovalAccountSelectionDecision,
@@ -7,6 +5,8 @@ import type {
   ApprovalQueueKind,
   ApprovalRecord,
 } from "../approvals/queue/types.js";
+import { PermissionDeniedError } from "../permissions/errors.js";
+import { RpcInvalidParamsError } from "../rpc/errors.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
 import { ApprovalAccountSelectionDecisionSchema } from "./decision.js";
 
@@ -16,10 +16,8 @@ type DeriveApprovalReviewContextOptions = {
 
 export const parseNoDecision = <K extends ApprovalQueueKind>(kind: K, input: unknown): ApprovalDecision<K> => {
   if (input !== undefined) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: `Approval kind "${kind}" does not accept a decision payload.`,
-      data: { kind, decision: input },
     });
   }
 
@@ -33,11 +31,9 @@ export const parseAccountSelectionDecision = <K extends ApprovalQueueKind>(
   try {
     return ApprovalAccountSelectionDecisionSchema.parse(input) as ApprovalDecision<K>;
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: `Approval kind "${kind}" requires a non-empty accountKeys decision.`,
-      data: { kind, decision: input },
-      ...(error instanceof ZodError ? { cause: error } : {}),
+      cause: error,
     });
   }
 };
@@ -89,17 +85,7 @@ export const resolveApprovalSelectedAccounts = (args: {
   const selected = args.decision.accountKeys.map((accountKey) => {
     const account = byKey.get(accountKey);
     if (!account) {
-      throw arxError({
-        reason: ArxReasons.PermissionDenied,
-        message: `Approval decision contains an unselectable account "${accountKey}"`,
-        data: {
-          origin: args.record.origin,
-          kind: args.record.kind,
-          namespace: args.namespace,
-          chainRef: args.chainRef,
-          accountKey,
-        },
-      });
+      throw new PermissionDeniedError();
     }
     return account;
   });

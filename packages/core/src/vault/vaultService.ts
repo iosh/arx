@@ -1,6 +1,11 @@
-import { ArxReasons, isArxError } from "@arx/errors";
+import { isArxBaseError } from "../error.js";
 import { copyBytes, zeroize } from "../utils/bytes.js";
-import { vaultErrors } from "./errors.js";
+import {
+  VaultInvalidCiphertextError,
+  VaultInvalidPasswordError,
+  VaultLockedError,
+  VaultNotInitializedError,
+} from "./errors.js";
 import type {
   CommitSecretParams,
   ReencryptParams,
@@ -64,9 +69,9 @@ const cloneEnvelope = (envelope: VaultEnvelope): VaultEnvelope => ({
 });
 
 const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
-  if (value.version !== VAULT_VERSION) throw vaultErrors.invalidCiphertext();
-  if (value.kdf.name !== VAULT_KDF.name || value.kdf.hash !== VAULT_KDF.hash) throw vaultErrors.invalidCiphertext();
-  if (value.cipher.name !== VAULT_CIPHER.name) throw vaultErrors.invalidCiphertext();
+  if (value.version !== VAULT_VERSION) throw new VaultInvalidCiphertextError();
+  if (value.kdf.name !== VAULT_KDF.name || value.kdf.hash !== VAULT_KDF.hash) throw new VaultInvalidCiphertextError();
+  if (value.cipher.name !== VAULT_CIPHER.name) throw new VaultInvalidCiphertextError();
 
   try {
     const saltBytes = fromBase64(value.kdf.salt);
@@ -90,7 +95,7 @@ const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
       dataBytes,
     };
   } catch {
-    throw vaultErrors.invalidCiphertext();
+    throw new VaultInvalidCiphertextError();
   }
 };
 
@@ -189,7 +194,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
     async unlock(params: UnlockVaultParams): Promise<void> {
       const sealed = params.envelope ?? envelope;
       if (!sealed) {
-        throw vaultErrors.notInitialized();
+        throw new VaultNotInitializedError();
       }
 
       clearSession();
@@ -202,8 +207,8 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         envelope = cloneEnvelope(sealed);
       } catch (error) {
         clearSession();
-        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
-          throw vaultErrors.invalidPassword();
+        if (isArxBaseError(error) && error.code === "vault.invalid_ciphertext") {
+          throw new VaultInvalidPasswordError();
         }
         throw error;
       }
@@ -215,18 +220,18 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
     exportSecret(): Uint8Array {
       if (!secret || !derivedKey) {
-        throw vaultErrors.locked();
+        throw new VaultLockedError();
       }
       return copyBytes(secret);
     },
 
     async commitSecret(params: CommitSecretParams): Promise<VaultEnvelope> {
       if (!derivedKey || !secret) {
-        throw vaultErrors.locked();
+        throw new VaultLockedError();
       }
       const base = envelope;
       if (!base) {
-        throw vaultErrors.notInitialized();
+        throw new VaultNotInitializedError();
       }
 
       const nextSecret = copyBytes(params.secret);
@@ -241,7 +246,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
     async reencrypt(params: ReencryptParams): Promise<VaultEnvelope> {
       const sealed = envelope;
-      if (!sealed) throw vaultErrors.notInitialized();
+      if (!sealed) throw new VaultNotInitializedError();
 
       const rotateSalt = params.rotateSalt ?? true;
       const wasUnlocked = secret !== null && derivedKey !== null;
@@ -253,7 +258,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         if (wasUnlocked) {
           plain = copyBytes(secret as Uint8Array);
         } else {
-          if (!params.currentPassword) throw vaultErrors.locked();
+          if (!params.currentPassword) throw new VaultLockedError();
           const decoded = decodeEnvelopeOrThrow(sealed);
           const opened = await decryptWithPassword({ password: params.currentPassword, decoded });
           tempKeyMaterial = opened.keyMaterial;
@@ -288,8 +293,8 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
         return cloneEnvelope(envelope);
       } catch (error) {
-        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
-          throw vaultErrors.invalidPassword();
+        if (isArxBaseError(error) && error.code === "vault.invalid_ciphertext") {
+          throw new VaultInvalidPasswordError();
         }
         throw error;
       } finally {
@@ -307,7 +312,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
     async verifyPassword(password: string): Promise<void> {
       const sealed = envelope;
-      if (!sealed) throw vaultErrors.notInitialized();
+      if (!sealed) throw new VaultNotInitializedError();
 
       const decoded = decodeEnvelopeOrThrow(sealed);
       let keyMaterial: Uint8Array | null = null;
@@ -317,8 +322,8 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         keyMaterial = opened.keyMaterial;
         plain = opened.plain;
       } catch (error) {
-        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
-          throw vaultErrors.invalidPassword();
+        if (isArxBaseError(error) && error.code === "vault.invalid_ciphertext") {
+          throw new VaultInvalidPasswordError();
         }
         throw error;
       } finally {

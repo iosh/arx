@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/core/errors";
 import { isUiProtocolError, isUiRemoteError, type UiRemoteError } from "@arx/core/ui";
 
 export type WalletError = UiRemoteError;
@@ -11,16 +10,19 @@ export const isWalletError = (error: unknown): error is WalletError => {
 };
 
 const getRemoteErrorMessage = (error: WalletError): string => {
-  switch (error.reason) {
-    case ArxReasons.ApprovalRejected:
+  switch (error.code) {
+    case "approval.rejected":
+    case "approval.user_dismissed":
       return "Request rejected by user";
-    case ArxReasons.SessionLocked:
-    case ArxReasons.VaultLocked:
+    case "approval.superseded":
+      return "Request was replaced.";
+    case "approval.cancelled":
+      return "Request was cancelled.";
+    case "global.session.locked":
+    case "vault.locked":
       return "Wallet is locked. Please unlock first.";
-    case ArxReasons.PermissionNotConnected:
+    case "global.permission.not_connected":
       return "Not connected. Please connect first.";
-    case ArxReasons.RpcMethodNotFound:
-      return "Unsupported method";
     default:
       return error.message || "An unknown error occurred";
   }
@@ -40,7 +42,7 @@ export const getErrorMessage = (error: unknown): string => {
 };
 
 export const isUserRejection = (error: unknown): boolean => {
-  return isWalletError(error) && error.reason === ArxReasons.ApprovalRejected;
+  return isWalletError(error) && (error.code === "approval.rejected" || error.code === "approval.user_dismissed");
 };
 
 const getMessageText = (value: unknown) => {
@@ -51,7 +53,7 @@ const getMessageText = (value: unknown) => {
 
 export const getUnlockErrorMessage = (error: unknown): string => {
   if (isUiRemoteError(error)) {
-    if (error.reason === ArxReasons.VaultInvalidPassword) {
+    if (error.code === "vault.invalid_password") {
       return "Incorrect password. Please try again.";
     }
     return getErrorMessage(error);

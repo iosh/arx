@@ -25,7 +25,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     deps;
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { id: rpcId, jsonrpc, method } = envelope.payload;
+    const { id: rpcId, jsonrpc } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
     pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
 
@@ -61,12 +61,8 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       sendReply(port, envelope.sessionId, envelope.id, response as ProviderRpcResponse);
     } catch (error) {
       const rpcError = provider
-        ? provider.encodeRpcError(error, {
-            origin,
-            method,
-            context: providerContext,
-          })
-        : ({ code: -32603, message: "Internal error" } as const);
+        ? provider.encodeRuntimeRpcError(error)
+        : ({ kind: "JsonRpcError", code: -32603, message: "Internal error" } as const);
 
       sendReply(port, envelope.sessionId, envelope.id, {
         id: rpcId,

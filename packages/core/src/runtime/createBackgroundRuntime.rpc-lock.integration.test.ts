@@ -79,8 +79,8 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
           params: [{ address: "0xdeadbeef" }] as JsonRpcParams,
         }),
       ).rejects.toMatchObject({
-        code: 4100,
-        message: "Unauthorized",
+        kind: "ArxError",
+        code: "global.session.locked",
       });
 
       expect(getClient).not.toHaveBeenCalled();

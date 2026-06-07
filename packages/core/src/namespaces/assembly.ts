@@ -212,7 +212,6 @@ export const registerRpcModules = (registry: RpcRegistry, modules: readonly RpcN
       registry.registerNamespaceAdapter(module.adapter);
       registered.add(module.namespace);
     }
-    registry.registerNamespaceProtocolAdapter(module.namespace, module.protocolAdapter);
   }
 };
 

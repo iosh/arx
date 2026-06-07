@@ -1,5 +1,5 @@
 import { copyBytes, zeroize } from "../../utils/bytes.js";
-import { keyringErrors } from "../errors.js";
+import { KeyringAccountNotFoundError, KeyringSecretUnavailableError } from "../errors.js";
 import type { KeyringAccount, SimpleKeyring, SimpleKeyringSnapshot } from "../types.js";
 import { canonicalizeEvmAddress, parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";
 
@@ -52,18 +52,18 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
 
   removeAccount(address: string): void {
     if (!this.hasAccount(address)) {
-      throw keyringErrors.accountNotFound();
+      throw new KeyringAccountNotFoundError();
     }
     this.#clearEntry();
   }
 
   exportPrivateKey(address: string): Uint8Array {
     if (!this.hasAccount(address)) {
-      throw keyringErrors.accountNotFound();
+      throw new KeyringAccountNotFoundError();
     }
     const entry = this.#entry;
     if (!entry) {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
     return copyBytes(entry.secret);
   }
@@ -82,11 +82,11 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
       return;
     }
     if (!this.#entry) {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
     const canonical = this.#toCanonicalAddress(snapshot.account.address);
     if (this.#toCanonicalAddress(this.#entry.account.address) !== canonical) {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
     this.#entry = {
       account: { address: canonical, derivationPath: null, derivationIndex: null, source: "imported" },

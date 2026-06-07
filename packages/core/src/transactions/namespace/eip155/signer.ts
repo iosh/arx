@@ -1,4 +1,3 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import * as Hash from "ox/Hash";
 import type { Hex as HexType } from "ox/Hex";
 import * as Hex from "ox/Hex";
@@ -7,6 +6,7 @@ import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
 import { eip155Codec } from "../../../accounts/addressing/codec.js";
+import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
 import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
@@ -30,13 +30,6 @@ type ParsedSignature = {
   bytes: Uint8Array;
 };
 
-const readErrorMessage = (value: unknown) => {
-  if (value instanceof Error && typeof value.message === "string") {
-    return value.message;
-  }
-  return String(value);
-};
-
 const isHexValue = (value: unknown): value is HexType => typeof value === "string" && value.startsWith("0x");
 
 const throwIfSignAborted = (signal?: AbortSignal) => {
@@ -56,8 +49,7 @@ const readHexQuantity = (value: HexType, label: string): bigint => {
   try {
     return Hex.toBigInt(value);
   } catch {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Transaction ${label} is not a valid hex quantity.`,
     });
   }
@@ -67,8 +59,7 @@ const readHexQuantity = (value: HexType, label: string): bigint => {
 const readChainId = (transaction: Eip155UnsignedTransaction): number => {
   const numeric = Number(readHexQuantity(transaction.chainId, "chainId"));
   if (!Number.isSafeInteger(numeric) || numeric <= 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Transaction chainId must be a positive 53-bit integer.",
     });
   }
@@ -146,16 +137,14 @@ const parseTypedDataPayload = (raw: string) => {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Typed data payload must be valid JSON.",
-      data: { error: readErrorMessage(error) },
+      cause: error,
     });
   }
 
   if (!parsed || typeof parsed !== "object") {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Typed data payload must be a JSON object.",
     });
   }
@@ -163,10 +152,9 @@ const parseTypedDataPayload = (raw: string) => {
   try {
     TypedData.assert(parsed as TypedData.Definition<Record<string, unknown>, string>);
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Typed data payload failed validation.",
-      data: { error: readErrorMessage(error) },
+      cause: error,
     });
   }
 
@@ -178,10 +166,8 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
     throwIfSignAborted(options?.signal);
 
     if (transaction.from.toLowerCase() !== context.from.toLowerCase()) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
+      throw new RpcInvalidRequestError({
         message: "Transaction from address does not match approved account.",
-        data: { transactionFrom: transaction.from, approvedFrom: context.from },
       });
     }
 

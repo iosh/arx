@@ -2,7 +2,7 @@ import { PROVIDER_EVENTS, type ProviderEventName } from "../../protocol/events.j
 import type { TransportCodec, TransportCodecResult } from "../../transport/codec.js";
 import { cloneTransportMeta, isTransportMeta } from "../../transport/transportMeta.js";
 import type { TransportMeta } from "../../types/transport.js";
-import { providerErrors } from "./errors.js";
+import { ProviderDisconnectedError } from "./errors.js";
 import {
   applyProviderPatch,
   cloneProviderPatch,
@@ -127,7 +127,7 @@ export const eip155TransportCodec: TransportCodec<ProviderSnapshot, ProviderPatc
           error:
             params[0] && typeof params[0] === "object" && "code" in (params[0] as Record<string, unknown>)
               ? (params[0] as { code: number; message: string; data?: unknown })
-              : providerErrors.disconnected(),
+              : new ProviderDisconnectedError(),
         };
 
       default:

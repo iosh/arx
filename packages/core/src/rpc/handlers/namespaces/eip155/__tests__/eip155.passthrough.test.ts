@@ -46,7 +46,7 @@ describe("eip155 passthrough executor", () => {
           origin: ORIGIN,
           request: { method: "eth_getWork", params: [] as JsonRpcParams },
         }),
-      ).rejects.toMatchObject({ code: 4200 });
+      ).rejects.toMatchObject({ code: "global.rpc.unsupported_method" });
 
       expect(getClient).not.toHaveBeenCalled();
     } finally {
@@ -85,7 +85,6 @@ describe("eip155 passthrough executor", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const chainRef = runtime.services.networkSelection.getSelectedChainRef("eip155") ?? "eip155:1";
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockRejectedValue(new Error("boom")),
     };
@@ -98,9 +97,7 @@ describe("eip155 passthrough executor", () => {
           request: { method: "eth_getBalance", params: [] as JsonRpcParams },
         }),
       ).rejects.toMatchObject({
-        code: -32603,
-        message: "Internal error",
-        data: { namespace: "eip155", chainRef },
+        code: "global.rpc.internal",
       });
     } finally {
       getClient.mockRestore();

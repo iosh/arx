@@ -1,4 +1,4 @@
-import { chainErrors } from "../errors.js";
+import { ChainNotAvailableError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
 import type { RpcEndpoint } from "../metadata.js";
 import { cloneRpcEndpoints, cloneRpcHeaders, fingerprintRpcEndpoints } from "./config.js";
@@ -528,7 +528,7 @@ export class InMemoryRpcRoutingService implements RpcRoutingService {
   #requireRuntime(chainRef: ChainRef): ChainRuntime {
     const runtime = this.#chains.get(chainRef);
     if (!runtime) {
-      throw chainErrors.notAvailable({ chainRef });
+      throw new ChainNotAvailableError();
     }
     if (runtime.endpoints.length === 0) {
       throw new Error(`Chain ${chainRef} has no registered RPC endpoints`);

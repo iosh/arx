@@ -1,11 +1,10 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import {
   type ApprovalChainContextRecord,
   type ApprovalChainContextRequest,
   deriveApprovalReviewContext,
 } from "../../../approvals/chainContext.js";
 import { getChainRefNamespace } from "../../../chains/caip.js";
-import { chainErrors } from "../../../chains/errors.js";
+import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
 import type { SupportedChainsService } from "../../../chains/runtime/supportedChains/types.js";
@@ -79,14 +78,14 @@ class DefaultChainViewsService implements ChainViewsService {
   requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata {
     const entry = this.#supportedChains.getChain(chainRef);
     if (!entry) {
-      throw chainErrors.notFound({ chainRef });
+      throw new ChainNotFoundError();
     }
 
     const isAvailable = this.#network
       .getState()
       .availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
     if (!isAvailable) {
-      throw chainErrors.notAvailable({ chainRef });
+      throw new ChainNotAvailableError();
     }
 
     return cloneChainMetadata(entry.metadata);
@@ -168,10 +167,8 @@ class DefaultChainViewsService implements ChainViewsService {
       return activeChain;
     }
 
-    throw arxError({
-      reason: ArxReasons.ChainNotSupported,
+    throw new ChainNotSupportedError({
       message: `No available chain for namespace "${namespace}"`,
-      data: { namespace },
     });
   }
 
@@ -208,8 +205,7 @@ class DefaultChainViewsService implements ChainViewsService {
   #resolveSelectedNamespace(): string {
     const selectedNamespace = this.#selection.getSelectedNamespace().trim();
     if (selectedNamespace.length === 0) {
-      throw arxError({
-        reason: ArxReasons.ChainNotSupported,
+      throw new ChainNotSupportedError({
         message: "Missing selected namespace",
       });
     }
@@ -219,7 +215,7 @@ class DefaultChainViewsService implements ChainViewsService {
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {
     const metadata = this.#supportedChains.getChain(chainRef)?.metadata;
     if (!metadata) {
-      throw chainErrors.notFound({ chainRef });
+      throw new ChainNotFoundError();
     }
     return cloneChainMetadata(metadata);
   }

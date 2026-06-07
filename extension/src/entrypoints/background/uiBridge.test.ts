@@ -1,4 +1,4 @@
-import type { PermissionsState } from "@arx/core";
+import { type PermissionsState, VaultInvalidPasswordError } from "@arx/core";
 import {
   createAccountCodecRegistry,
   eip155Codec,
@@ -6,10 +6,8 @@ import {
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
 import { ApprovalKinds } from "@arx/core/approvals";
-import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
-import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
-import { createRpcRegistry, type RpcHandlerDeps } from "@arx/core/rpc";
+import type { RpcHandlerDeps } from "@arx/core/rpc";
 import {
   type BackgroundSessionServices,
   KeyringService,
@@ -45,9 +43,6 @@ import type { UiPort } from "./ui/portHub";
 import { createUiActivationExtension } from "./ui/uiActivationExtension";
 import { createUiBridge } from "./uiBridge";
 
-const rpcRegistry = createRpcRegistry();
-registerRpcModulesFromManifests(rpcRegistry, [eip155NamespaceManifest]);
-const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -132,10 +127,7 @@ class FakeVault {
 
   async verifyPassword(password: string) {
     if (password !== this.#password) {
-      throw arxError({
-        reason: ArxReasons.VaultInvalidPassword,
-        message: "Vault password is missing or incorrect",
-      });
+      throw new VaultInvalidPasswordError();
     }
   }
 }
@@ -817,12 +809,6 @@ const createUiAccessForTest = (input: {
         : { extensions: [createUiActivationExtension({ entries: activationEntries })] }),
     },
     bridge: {
-      encodeError: (error, context) =>
-        surfaceErrorEncoder.encodeUi(error, {
-          namespace: context.namespace,
-          chainRef: context.chainRef,
-          method: context.method,
-        }) as never,
       persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
       stateChanged: {
         accounts: input.services.accounts,
@@ -1012,11 +998,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
 
-const expectError = (msg: unknown, reason: string) => {
+const expectError = (msg: unknown, code: string) => {
   if (!isRecord(msg)) throw new Error("Expected ui:error envelope to be an object");
   const error = isRecord(msg.error) ? msg.error : null;
   expect(msg.type).toBe("ui:error");
-  expect(error?.reason).toBe(reason);
+  expect(error?.code).toBe(code);
 };
 
 const expectResponse = <T = unknown>(msg: unknown, id: string): T => {
@@ -1082,7 +1068,7 @@ describe("uiBridge", () => {
       alias: "test",
     });
 
-    expectError(envelope, ArxReasons.SessionLocked);
+    expectError(envelope, "global.session.locked");
   });
 
   it("onboarding.generateMnemonic works when locked", async () => {
@@ -1353,7 +1339,7 @@ describe("uiBridge", () => {
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
     const words = Array.from({ length: 12 }, () => "foo");
     const { envelope } = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "bad" });
-    expectError(envelope, ArxReasons.KeyringInvalidMnemonic);
+    expectError(envelope, "keyring.invalid_mnemonic");
   });
 
   it("maps duplicate mnemonic to keyring/duplicate_account", async () => {
@@ -1362,7 +1348,7 @@ describe("uiBridge", () => {
     expectResponse(first.envelope, first.id);
 
     const second = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "dup" });
-    expectError(second.envelope, ArxReasons.KeyringDuplicateAccount);
+    expectError(second.envelope, "keyring.duplicate_account");
   });
 
   it("happy path: derive, hide/unhide, export", async () => {
@@ -1416,7 +1402,7 @@ describe("uiBridge", () => {
     });
 
     const hideRes = await send("ui.keyrings.hideHdAccount", { accountKey: activeAccountKey });
-    expectError(hideRes.envelope, ArxReasons.PermissionDenied);
+    expectError(hideRes.envelope, "global.permission.denied");
   });
 
   it("requires valid password before exporting mnemonic", async () => {
@@ -1426,7 +1412,7 @@ describe("uiBridge", () => {
 
     const spy = vi.spyOn(vault, "verifyPassword");
     const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: "wrong-password" });
-    expectError(exportAttempt.envelope, ArxReasons.VaultInvalidPassword);
+    expectError(exportAttempt.envelope, "vault.invalid_password");
     expect(spy).toHaveBeenCalledWith("wrong-password");
     spy.mockRestore();
   });
@@ -1441,7 +1427,7 @@ describe("uiBridge", () => {
 
     const spy = vi.spyOn(vault, "verifyPassword");
     const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: PASSWORD });
-    expectError(exportAttempt.envelope, ArxReasons.SessionLocked);
+    expectError(exportAttempt.envelope, "global.session.locked");
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -1617,7 +1603,7 @@ describe("uiBridge", () => {
     });
 
     const message = localPort.messages.find((entry) => isRecord(entry) && entry.id === id);
-    expectError(message, ArxReasons.RpcUnsupportedMethod);
+    expectError(message, "global.rpc.unsupported_method");
   });
 
   it("returns unsupported before validating params when surface activation extension is not installed", async () => {
@@ -1636,6 +1622,6 @@ describe("uiBridge", () => {
     });
 
     const message = localPort.messages.find((entry) => isRecord(entry) && entry.id === id);
-    expectError(message, ArxReasons.RpcUnsupportedMethod);
+    expectError(message, "global.rpc.unsupported_method");
   });
 });

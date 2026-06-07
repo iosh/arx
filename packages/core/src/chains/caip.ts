@@ -1,4 +1,4 @@
-import { chainErrors } from "./errors.js";
+import { ChainInvalidRefError, ChainNamespaceMismatchError } from "./errors.js";
 import type { ChainRef } from "./ids.js";
 
 export const CAIP2_NAMESPACE_PATTERN = /^[a-z0-9]{3,8}$/;
@@ -12,23 +12,23 @@ export type ParsedChainRef = {
 };
 export const parseChainRef = (value: ChainRef): ParsedChainRef => {
   if (typeof value !== "string") {
-    throw chainErrors.invalidChainRef(value, { rule: "type" });
+    throw new ChainInvalidRefError({ rule: "type" });
   }
   const first = value.indexOf(":");
   if (first <= 0 || first === value.length - 1) {
-    throw chainErrors.invalidChainRef(value, { rule: "namespace:reference" });
+    throw new ChainInvalidRefError({ rule: "namespace:reference" });
   }
   // Reject additional ":" segments to avoid silently truncating CAIP-10-like strings.
   if (value.indexOf(":", first + 1) !== -1) {
-    throw chainErrors.invalidChainRef(value, { rule: "single_colon" });
+    throw new ChainInvalidRefError({ rule: "single_colon" });
   }
   const namespace = value.slice(0, first);
   const reference = value.slice(first + 1);
   if (!CAIP2_NAMESPACE_PATTERN.test(namespace)) {
-    throw chainErrors.invalidChainRef(value, { rule: "namespace", namespace });
+    throw new ChainInvalidRefError({ rule: "namespace" });
   }
   if (!CAIP2_REFERENCE_PATTERN.test(reference)) {
-    throw chainErrors.invalidChainRef(value, { rule: "reference", reference });
+    throw new ChainInvalidRefError({ rule: "reference" });
   }
   return { namespace, reference };
 };
@@ -40,7 +40,7 @@ export const getChainRefNamespace = (chainRef: ChainRef): string => {
 export const assertNamespace = (chainRef: ChainRef, expected: string): void => {
   const namespace = getChainRefNamespace(chainRef);
   if (namespace !== expected) {
-    throw chainErrors.namespaceMismatch({ chainRef, expected, actual: namespace });
+    throw new ChainNamespaceMismatchError({ chainRef, expected, actual: namespace });
   }
 };
 
@@ -49,7 +49,7 @@ export const isChainRef = (value: unknown): value is ChainRef =>
 
 export const assertChainRef = (value: unknown): asserts value is ChainRef => {
   if (!isChainRef(value)) {
-    throw chainErrors.invalidChainRef(value, { rule: "pattern" });
+    throw new ChainInvalidRefError({ rule: "pattern" });
   }
 };
 

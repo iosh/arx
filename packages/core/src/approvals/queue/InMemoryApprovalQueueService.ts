@@ -1,5 +1,14 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../chains/caip.js";
+import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
+import { TransportDisconnectedError } from "../../runtime/provider/errors.js";
+import { SessionLockedError } from "../../runtime/session/errors.js";
+import {
+  ApprovalCancelledError,
+  ApprovalRejectedError,
+  ApprovalSupersededError,
+  ApprovalTimeoutError,
+  ApprovalUserDismissedError,
+} from "../errors.js";
 import type { ApprovalExecutor } from "../types.js";
 import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
 import type {
@@ -26,7 +35,7 @@ import {
   cloneState,
   createDeferred,
   deriveApprovalFinalStatus,
-  toSimpleError,
+  serializeApprovalFinishedError,
 } from "./utils.js";
 
 type CreateInMemoryApprovalQueueServiceOptions = {
@@ -48,10 +57,9 @@ const getApprovalRequestChainRef = (request: ApprovalCreateParams): ApprovalCrea
 const assertApprovalContext = (request: ApprovalCreateParams) => {
   const recordChain = parseChainRef(request.chainRef);
   if (recordChain.namespace !== request.namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Approval record namespace must match its chainRef.",
-      data: {
+      details: {
         approvalId: request.approvalId,
         kind: request.kind,
         namespace: request.namespace,
@@ -62,10 +70,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
 
   const requestChainRef = getApprovalRequestChainRef(request);
   if (requestChainRef !== request.chainRef) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Approval request chainRef must match the approval record chainRef.",
-      data: {
+      details: {
         approvalId: request.approvalId,
         kind: request.kind,
         recordChainRef: request.chainRef,
@@ -76,10 +83,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
 
   const requestChain = parseChainRef(requestChainRef);
   if (requestChain.namespace !== request.namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Approval request namespace must match the approval record namespace.",
-      data: {
+      details: {
         approvalId: request.approvalId,
         kind: request.kind,
         namespace: request.namespace,
@@ -90,10 +96,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
 
   if ("requestedGrants" in request.request) {
     if (request.request.requestedGrants.length === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "Request-permissions approval must include at least one requested grant.",
-        data: {
+        details: {
           approvalId: request.approvalId,
           kind: request.kind,
           chainRef: request.chainRef,
@@ -104,10 +109,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
 
     for (const descriptor of request.request.requestedGrants) {
       if (descriptor.chainRefs.length === 0) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "Request-permissions approval descriptors must include explicit chainRefs.",
-          data: {
+          details: {
             approvalId: request.approvalId,
             kind: request.kind,
             chainRef: request.chainRef,
@@ -120,10 +124,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
       for (const targetChainRef of descriptor.chainRefs) {
         const targetChain = parseChainRef(targetChainRef);
         if (targetChain.namespace !== request.namespace) {
-          throw arxError({
-            reason: ArxReasons.RpcInvalidParams,
+          throw new RpcInvalidParamsError({
             message: "Request-permissions approval chainRefs must match the approval record namespace.",
-            data: {
+            details: {
               approvalId: request.approvalId,
               kind: request.kind,
               namespace: request.namespace,
@@ -137,10 +140,9 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
   }
 
   if ("metadata" in request.request && request.request.metadata.namespace !== request.namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Add-chain approval metadata namespace must match the approval record namespace.",
-      data: {
+      details: {
         approvalId: request.approvalId,
         kind: request.kind,
         namespace: request.namespace,
@@ -283,7 +285,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
         status: "rejected",
         terminalReason: "user_reject",
         ...this.#recordMeta(entry.record),
-        error: toSimpleError(error),
+        error: serializeApprovalFinishedError(error),
       });
 
       return { approvalId: input.approvalId, status: "rejected", terminalReason: "user_reject" };
@@ -315,7 +317,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
         status: "failed",
         terminalReason: "internal_error",
         ...this.#recordMeta(entry.record),
-        error: toSimpleError(err),
+        error: serializeApprovalFinishedError(err),
       });
 
       this.#rejectPendingApproval(entry, err);
@@ -353,7 +355,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       status: deriveApprovalFinalStatus(input.reason),
       terminalReason: input.reason,
       ...this.#recordMeta(entry.record),
-      error: toSimpleError(error),
+      error: serializeApprovalFinishedError(error),
     });
   }
 
@@ -456,11 +458,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   #getRejectionError(params: { approvalId: string; provided?: Error | undefined; message: string }): Error {
     if (params.provided) return params.provided;
 
-    return arxError({
-      reason: ArxReasons.ApprovalRejected,
-      message: params.message || "User rejected the request.",
-      data: { approvalId: params.approvalId },
-    });
+    return new ApprovalRejectedError({ message: params.message });
   }
 
   #getTerminalError(params: {
@@ -473,33 +471,31 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       chainRef?: string | undefined;
     };
   }): Error {
-    const data = { approvalId: params.approvalId, terminalReason: params.terminalReason, ...params.meta };
-
     if (params.terminalReason === "caller_disconnected") {
-      return arxError({ reason: ArxReasons.TransportDisconnected, message: "Transport disconnected.", data });
+      return new TransportDisconnectedError();
     }
     if (params.terminalReason === "timeout") {
-      return arxError({ reason: ArxReasons.ApprovalTimeout, message: "Request timed out.", data });
+      return new ApprovalTimeoutError();
     }
     if (params.terminalReason === "locked") {
-      return arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked.", data });
+      return new SessionLockedError();
     }
     if (params.terminalReason === "internal_error") {
-      return arxError({ reason: ArxReasons.RpcInternal, message: "Internal error.", data });
+      return new RpcInternalError();
     }
     if (params.terminalReason === "user_dismissed") {
-      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Approval dismissed.", data });
+      return new ApprovalUserDismissedError();
     }
     if (params.terminalReason === "superseded") {
-      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request superseded.", data });
+      return new ApprovalSupersededError();
     }
     if (params.terminalReason === "runtime_shutdown") {
-      return arxError({ reason: ArxReasons.RpcInternal, message: "Runtime shut down.", data });
+      return new RpcInternalError();
     }
     if (params.terminalReason === "user_approve") {
-      throw new Error(`Unexpected approval cancellation for approved request: ${JSON.stringify(data)}`);
+      throw new Error(`Unexpected approval cancellation for approved request "${params.approvalId}"`);
     }
 
-    return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request cancelled.", data });
+    return new ApprovalCancelledError();
   }
 }

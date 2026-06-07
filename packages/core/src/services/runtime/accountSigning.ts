@@ -1,6 +1,6 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AccountKey } from "../../runtime/keyring/types.js";
+import { SessionLockedError } from "../../runtime/session/errors.js";
 
 type SignDigestResult = Awaited<ReturnType<KeyringService["signDigestByAccountKey"]>>;
 
@@ -18,11 +18,7 @@ export const createAccountSigningService = ({ keyring }: CreateAccountSigningSer
     await keyring.waitForReady();
 
     if (!keyring.hasAccountKey(accountKey)) {
-      throw arxError({
-        reason: ArxReasons.SessionLocked,
-        message: `Account ${accountKey} is not unlocked.`,
-        data: { accountKey },
-      });
+      throw new SessionLockedError();
     }
   };
 

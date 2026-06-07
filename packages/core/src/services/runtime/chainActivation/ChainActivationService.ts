@@ -1,8 +1,8 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../../chains/caip.js";
-import { chainErrors } from "../../../chains/errors.js";
+import { ChainNotAvailableError, ChainNotCompatibleError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcRoutingService } from "../../../chains/runtime/types.js";
+import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
 import type { ActivateNamespaceChainParams, ChainActivationService } from "./types.js";
 
@@ -22,35 +22,30 @@ export const createChainActivationService = ({
 
   const assertAvailableChainRef = (chainRef: ChainRef): void => {
     if (!isAvailableChainRef(chainRef)) {
-      throw chainErrors.notAvailable({ chainRef });
+      throw new ChainNotAvailableError();
     }
   };
 
   const resolveAvailableActiveChainRefForNamespace = (namespace: string): ChainRef => {
     const normalizedNamespace = namespace.trim();
     if (normalizedNamespace.length === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "Invalid namespace identifier",
-        data: { namespace },
+        details: { namespace },
       });
     }
 
     const activeChainRef = networkSelection.getSelectedChainRef(normalizedNamespace);
     if (!activeChainRef) {
-      throw arxError({
-        reason: ArxReasons.ChainNotSupported,
+      throw new ChainNotSupportedError({
         message: `No active chain configured for namespace "${normalizedNamespace}"`,
-        data: { namespace: normalizedNamespace },
       });
     }
 
     const parsed = parseChainRef(activeChainRef);
     if (parsed.namespace !== normalizedNamespace) {
-      throw arxError({
-        reason: ArxReasons.ChainNotCompatible,
+      throw new ChainNotCompatibleError({
         message: `Active chain "${activeChainRef}" does not belong to namespace "${normalizedNamespace}"`,
-        data: { namespace: normalizedNamespace, chainRef: activeChainRef, actualNamespace: parsed.namespace },
       });
     }
 
@@ -84,10 +79,8 @@ export const createChainActivationService = ({
   }: ActivateNamespaceChainParams): Promise<void> => {
     const parsed = parseChainRef(chainRef);
     if (parsed.namespace !== namespace) {
-      throw arxError({
-        reason: ArxReasons.ChainNotCompatible,
+      throw new ChainNotCompatibleError({
         message: `Chain activation namespace mismatch for reason "${reason}"`,
-        data: { reason, expectedNamespace: namespace, actualNamespace: parsed.namespace, chainRef },
       });
     }
 

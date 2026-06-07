@@ -1,4 +1,4 @@
-import { keyringErrors } from "../../keyring/errors.js";
+import { KeyringDuplicateAccountError, KeyringSecretUnavailableError } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
@@ -447,7 +447,7 @@ export class RuntimeKeyringState {
     const { entry, config, instance, accounts } = params;
     const hdPayload = entry.payload as { mnemonic?: string[]; passphrase?: string };
     if (!Array.isArray(hdPayload.mnemonic)) {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
 
     instance.loadFromMnemonic(
@@ -483,7 +483,7 @@ export class RuntimeKeyringState {
     const { entry, config, instance, accounts } = params;
     const privateKeyPayload = entry.payload as { privateKey?: string };
     if (typeof privateKeyPayload.privateKey !== "string") {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
 
     instance.loadFromPrivateKey(privateKeyPayload.privateKey);
@@ -501,7 +501,7 @@ export class RuntimeKeyringState {
 
     const [runtimeAccount] = instance.getAccounts();
     if (!runtimeAccount) {
-      throw keyringErrors.secretUnavailable();
+      throw new KeyringSecretUnavailableError();
     }
 
     const canonical = config.codec.toCanonicalAddress({
@@ -571,7 +571,7 @@ export class RuntimeKeyringState {
 
       if (this.#addressIndex.has(account.accountKey)) {
         if (strict) {
-          throw keyringErrors.duplicateAccount();
+          throw new KeyringDuplicateAccountError();
         }
         this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${account.accountKey}`);
         continue;

@@ -1,5 +1,4 @@
-import type { NamespaceProtocolAdapter } from "@arx/errors";
-import { ArxReasons, arxError } from "@arx/errors";
+import { RpcInternalError } from "./errors.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import type { MethodDefinition, Namespace } from "./handlers/types.js";
 
@@ -15,7 +14,6 @@ export class RpcRegistry {
   private readonly namespacePrefixes = new Map<string, Namespace>();
   private readonly namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
   private readonly passthroughByNamespace = new Map<Namespace, RpcPassthroughPolicy>();
-  private readonly protocolAdapters = new Map<string, NamespaceProtocolAdapter>();
 
   getRegisteredNamespaceAdapters(): NamespaceAdapter[] {
     return [...this.namespaceAdapters.values()];
@@ -35,10 +33,8 @@ export class RpcRegistry {
 
       for (const method of allowWhenLocked) {
         if (!allowedMethods.has(method)) {
-          throw arxError({
-            reason: ArxReasons.RpcInternal,
+          throw new RpcInternalError({
             message: `[rpc] invalid passthrough config for namespace "${adapter.namespace}": allowWhenLocked contains "${method}" but it is not listed in allowedMethods`,
-            data: { namespace: adapter.namespace, method },
           });
         }
       }
@@ -53,40 +49,6 @@ export class RpcRegistry {
     this.namespaceAdapters.delete(namespace);
     this.passthroughByNamespace.delete(namespace);
     this.unregisterNamespaceDefinitions(namespace);
-  }
-
-  registerNamespaceProtocolAdapter(namespace: string, adapter: NamespaceProtocolAdapter): void {
-    if (!namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: '[rpc] registerNamespaceProtocolAdapter requires a non-empty "namespace"',
-      });
-    }
-    this.protocolAdapters.set(namespace, adapter);
-  }
-
-  getNamespaceProtocolAdapter(namespace: string): NamespaceProtocolAdapter {
-    if (!namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: '[rpc] getNamespaceProtocolAdapter requires a non-empty "namespace"',
-      });
-    }
-
-    const direct = this.protocolAdapters.get(namespace);
-    if (direct) return direct;
-
-    const [prefix] = namespace.split(":");
-    if (prefix) {
-      const byPrefix = this.protocolAdapters.get(prefix);
-      if (byPrefix) return byPrefix;
-    }
-
-    throw arxError({
-      reason: ArxReasons.RpcInternal,
-      message: `[rpc] protocol adapter not registered for namespace "${namespace}"`,
-      data: { namespace },
-    });
   }
 
   private cloneDefinitions(definitions: NamespaceDefinitions): NamespaceDefinitions {
@@ -158,10 +120,8 @@ export class RpcRegistry {
 
       const existing = this.namespacePrefixes.get(prefix);
       if (existing && existing !== namespace) {
-        throw arxError({
-          reason: ArxReasons.RpcInternal,
+        throw new RpcInternalError({
           message: `[rpc] method prefix "${prefix}" already registered for namespace "${existing}"`,
-          data: { prefix, existingNamespace: existing, namespace },
         });
       }
 

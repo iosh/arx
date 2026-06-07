@@ -1,3 +1,4 @@
+export * from "./errors.js";
 export type { EvmKeyringAccount } from "./evm/EvmHdKeyring.js";
 export { EvmHdKeyring } from "./evm/EvmHdKeyring.js";
 export { EvmPrivateKeyKeyring } from "./evm/EvmPrivateKeyKeyring.js";

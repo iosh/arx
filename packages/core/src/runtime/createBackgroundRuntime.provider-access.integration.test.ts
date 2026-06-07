@@ -1,4 +1,3 @@
-import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
@@ -168,10 +167,6 @@ const buildProviderExecutionContext = (input: { origin?: string; portId?: string
   };
 };
 
-const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
-  encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
-});
-
 const createTestAccountCodec = (namespace: string): AccountCodec => ({
   namespace,
   toCanonicalAddress: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
@@ -196,7 +191,6 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
     methodPrefixes: ["sol_"],
     definitions: {},
   },
-  protocolAdapter: createProtocolAdapter(namespace),
 });
 
 const solanaNamespaceManifest = (() => {
@@ -232,11 +226,9 @@ const setupNamespaceAwareProviderRuntime = async () => {
     namespaces: {
       manifests: [eip155NamespaceManifest, solanaNamespaceManifest],
     },
-    rpcEngine: {
-      env: {
-        isInternalOrigin: () => false,
-        shouldRequestUnlockAttention: () => false,
-      },
+    rpcAccessPolicy: {
+      isInternalOrigin: () => false,
+      shouldRequestUnlockAttention: () => false,
     },
     networkSelection: { port: new MemoryNetworkSelectionPort() },
     store: {
@@ -494,7 +486,8 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-2",
         jsonrpc: "2.0",
         error: {
-          code: 4900,
+          kind: "ArxError",
+          code: "global.transport.disconnected",
         },
       });
       expect(background.runtime.services.approvals.getState().pending).toHaveLength(0);
@@ -585,7 +578,8 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-3",
         jsonrpc: "2.0",
         error: {
-          code: 4900,
+          kind: "ArxError",
+          code: "global.transport.disconnected",
         },
       });
       expect(background.runtime.transactions.getTransactionApproval(capturedApprovalId ?? "")).toBeNull();
@@ -807,7 +801,8 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-send-broadcast-cancelled",
         jsonrpc: "2.0",
         error: {
-          code: 4900,
+          kind: "ArxError",
+          code: "global.transport.disconnected",
         },
       });
       await vi.waitFor(async () => {
@@ -915,15 +910,18 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-send-sign-cancelled",
         jsonrpc: "2.0",
         error: {
-          code: 4900,
+          kind: "ArxError",
+          code: "global.transport.disconnected",
         },
       });
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-      await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([
-        expect.objectContaining({
-          status: "submitted",
-        }),
-      ]);
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () => {
+        await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([
+          expect.objectContaining({
+            status: "submitted",
+          }),
+        ]);
+      });
     } finally {
       releaseSign?.();
       unsubscribeAutoApproval();
@@ -988,7 +986,8 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-send-broadcast-fail",
         jsonrpc: "2.0",
         error: {
-          code: -32603,
+          kind: "ArxError",
+          code: "global.rpc.internal",
         },
       });
 
@@ -1010,29 +1009,7 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
-  it("encodes namespace-aware provider errors directly", async () => {
-    const runtime = await setupNamespaceAwareProviderRuntime();
-
-    try {
-      expect(
-        runtime.providerAccess.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
-          origin: ORIGIN,
-          method: "sol_getBalance",
-          context: buildProviderContext({
-            namespace: "solana",
-            chainRef: SOLANA_CHAIN.chainRef,
-          }),
-        }),
-      ).toEqual({
-        code: -32603,
-        message: "solana:dapp",
-      });
-    } finally {
-      runtime.lifecycle.shutdown();
-    }
-  });
-
-  it("returns namespace-aware error responses when provider requests fail", async () => {
+  it("returns internal core error envelopes when provider requests fail", async () => {
     const runtime = await setupNamespaceAwareProviderRuntime();
 
     try {
@@ -1052,8 +1029,8 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-sol-1",
         jsonrpc: "2.0",
         error: {
-          code: -32603,
-          message: "solana:dapp",
+          kind: "ArxError",
+          code: "global.rpc.unsupported_method",
         },
       });
     } finally {

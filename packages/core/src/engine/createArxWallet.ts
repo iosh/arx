@@ -1,23 +1,16 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
 import type { ViolationMode } from "../messenger/Messenger.js";
 import {
   createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
   createRpcRegistry,
-  type JsonRpcError,
   type RpcHandlerDeps,
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
 } from "../rpc/index.js";
 import type { BackgroundStateServices } from "../runtime/background/backgroundStateServices.js";
-import type { EngineOptions } from "../runtime/background/engine.js";
-import {
-  type BackgroundRpcEnvHooks,
-  type BackgroundRpcRuntime,
-  createRpcEngineForBackground,
-} from "../runtime/background/rpcEngineAssembly.js";
+import type { BackgroundRpcAccessPolicyHooks } from "../runtime/background/rpcAccessPolicy.js";
 import type { RpcLayerOptions } from "../runtime/background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
 import {
@@ -36,7 +29,6 @@ import {
   createTransactionServices,
   TransactionAggregateStore,
 } from "../transactions/index.js";
-import type { UiError } from "../ui/protocol/envelopes.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
@@ -65,10 +57,10 @@ type BackgroundSessionScope = ReturnType<typeof createBackgroundSessionScope>;
 type BackgroundSupportScope = ReturnType<typeof createBackgroundSupportScope>;
 type RuntimeLifecycle = ReturnType<typeof createBackgroundRuntimeLifecycle>;
 
-const DEFAULT_RPC_ENV_HOOKS = {
+const DEFAULT_RPC_ACCESS_POLICY = {
   isInternalOrigin: () => false,
   shouldRequestUnlockAttention: () => false,
-} satisfies BackgroundRpcEnvHooks;
+} satisfies BackgroundRpcAccessPolicyHooks;
 
 type WalletRuntimeServices = Readonly<
   BackgroundStateServices & {
@@ -93,7 +85,6 @@ type ArxWalletRuntimeCore = Readonly<{
   bus: BackgroundBootstrapScope["bus"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   services: WalletRuntimeServices;
-  surfaceErrors: SurfaceErrorEncoder;
 }>;
 
 type CreateArxWalletRuntimeInput = CreateArxWalletInput &
@@ -105,12 +96,8 @@ type CreateArxWalletRuntimeInput = CreateArxWalletInput &
         violationMode?: ViolationMode;
       }>;
       assemblyOptions?: BackgroundAssemblyOptions;
-      engine?: EngineOptions;
       rpcClients?: RpcLayerOptions;
-      rpcEngine?: Readonly<{
-        env?: BackgroundRpcEnvHooks;
-        assemble?: boolean;
-      }>;
+      rpcAccessPolicy?: BackgroundRpcAccessPolicyHooks;
       session?: SessionOptions;
     }>;
   }>;
@@ -123,7 +110,6 @@ type ArxWalletRuntime = Readonly<{
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
-    engine: BackgroundSessionScope["engine"];
     namespaceIndex: BackgroundBootstrapScope["rpcRegistry"];
     clients: BackgroundSupportScope["rpcClientRegistry"];
     resolveHintNamespace: ReturnType<typeof createRpcHintNamespaceResolver>;
@@ -142,7 +128,6 @@ type ArxWalletRuntime = Readonly<{
   providerAccess: ProviderRuntimeAccess;
   createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
   getApprovalDetail(approvalId: string): Promise<ApprovalDetail | null>;
-  surfaceErrors: SurfaceErrorEncoder;
 }>;
 
 const buildStorageOptions = (
@@ -257,12 +242,6 @@ const createWalletUiDeps = (
       ...(options.extensions ? { extensions: options.extensions } : {}),
     },
     bridge: {
-      encodeError: (error, context) =>
-        runtime.surfaceErrors.encodeUi(error, {
-          namespace: context.namespace,
-          chainRef: context.chainRef,
-          method: context.method,
-        }) as UiError,
       persistVaultMeta: runtime.services.session.persistVaultMeta,
       stateChanged: {
         accounts: runtime.services.accounts,
@@ -312,7 +291,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
 
   const assemblyOptions = input.runtime?.assemblyOptions;
   const runtimeSessionOptions = buildRuntimeSessionOptions(input);
-  const runtimeRpcEnv = input.runtime?.rpcEngine?.env ?? DEFAULT_RPC_ENV_HOOKS;
+  const runtimeRpcAccessPolicy = input.runtime?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY;
   const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const bootstrapScope: BackgroundBootstrapScope = createBackgroundBootstrapScope({
@@ -341,7 +320,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       keyringMetas: input.storage.ports.keyringMetas,
       permissions: input.storage.ports.permissions,
     },
-    ...(input.runtime?.engine ? { engineOptions: input.runtime.engine } : {}),
     ...(input.storage.vaultMetaPort ? { vaultMetaPort: input.storage.vaultMetaPort } : {}),
     ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
   });
@@ -393,7 +371,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     networkBootstrap: backgroundSupportScope.networkBootstrap,
     sessionLayer: sessionScope.sessionLayer,
     rpcClientRegistry: backgroundSupportScope.rpcClientRegistry,
-    engine: sessionScope.engine,
     bus: bootstrapScope.bus,
     logger: bootstrapScope.storageLogger,
   });
@@ -422,29 +399,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       transactions: transactionServices.transactions,
     },
   });
-  const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
-  const engineRuntime: BackgroundRpcRuntime = {
-    services: {
-      attention: sessionScope.attention,
-      permissionViews: backgroundSupportScope.permissionViews,
-      sessionStatus: sessionScope.sessionStatus,
-    },
-    rpc: {
-      engine: sessionScope.engine,
-      resolveMethodNamespace,
-      resolveInvocationDetails,
-      executeRequest,
-    },
-    surfaceErrors: surfaceErrorEncoder,
-    lifecycle,
-  };
-
-  if (input.runtime?.rpcEngine?.assemble !== false) {
-    // Keep request middleware assembly shared so provider execution and error
-    // handling stay on the same path.
-    createRpcEngineForBackground(engineRuntime, runtimeRpcEnv);
-  }
-
   const providerRequests = createProviderRequests({
     generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
     now: bootstrapScope.storageNow,
@@ -468,6 +422,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     },
   });
   const providerAccess = createProviderRuntimeAccess({
+    getIsInitialized: () => lifecycle.getIsInitialized(),
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
     getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
     buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
@@ -475,9 +430,25 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     listPermittedAccountsView: (origin, options) =>
       backgroundSupportScope.permissionViews.listPermittedAccounts(origin, options),
     formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
-    resolveMethodNamespace,
-    handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
-    encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
+    resolveInvocationDetails,
+    executeRequest,
+    isInternalOrigin: runtimeRpcAccessPolicy.isInternalOrigin,
+    ...(runtimeRpcAccessPolicy.shouldRequestUnlockAttention
+      ? { shouldRequestUnlockAttention: runtimeRpcAccessPolicy.shouldRequestUnlockAttention }
+      : {}),
+    requestUnlockAttention: (args) => {
+      sessionScope.attention.requestAttention({
+        reason: "unlock_required",
+        origin: args.origin,
+        method: args.method,
+        chainRef: args.chainRef,
+        namespace: args.namespace,
+      });
+    },
+    isAuthorized: (origin, options) =>
+      backgroundSupportScope.permissionViews.getAuthorizationSnapshot(origin, {
+        chainRef: options.chainRef,
+      }).isAuthorized,
     providerRequests,
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
@@ -583,7 +554,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     bus: bootstrapScope.bus,
     transactions: transactionServices.transactions,
     services,
-    surfaceErrors: surfaceErrorEncoder,
   };
   const provider = createWalletProvider({
     runtimeAccess: providerAccess,
@@ -635,7 +605,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     services,
     lifecycle,
     rpc: {
-      engine: sessionScope.engine,
       namespaceIndex: rpcRegistry,
       clients: backgroundSupportScope.rpcClientRegistry,
       resolveHintNamespace,
@@ -648,7 +617,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     providerAccess,
     createUiAccess,
     getApprovalDetail: async (approvalId) => await approvalReadService.getDetail(approvalId),
-    surfaceErrors: surfaceErrorEncoder,
   };
 
   return runtime;

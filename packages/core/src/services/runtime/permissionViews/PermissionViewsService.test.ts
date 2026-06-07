@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { createPermissionViewsService } from "./PermissionViewsService.js";
 
@@ -88,7 +87,7 @@ describe("createPermissionViewsService", () => {
     });
 
     await expect(service.assertAuthorized(ORIGIN, { chainRef: "eip155:10" })).rejects.toMatchObject({
-      reason: ArxReasons.PermissionNotConnected,
+      code: "global.permission.not_connected",
     });
 
     expect(service.buildUiPermissionsSnapshot()).toEqual({

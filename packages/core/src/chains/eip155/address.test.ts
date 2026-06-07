@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { createEip155AddressModule } from "./address.js";
 
@@ -27,7 +26,7 @@ describe("eip155 address module", () => {
       module.canonicalize({ chainRef, value: "0x123" });
       throw new Error("Expected normalize to throw");
     } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainInvalidAddress });
+      expect(error).toMatchObject({ code: "eip155.address.invalid" });
     }
   });
 
@@ -51,7 +50,7 @@ describe("eip155 address module", () => {
       module.validate?.({ chainRef, canonical: "0xzz00000000000000000000000000000000000000" });
       throw new Error("Expected validate to throw");
     } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainInvalidAddress });
+      expect(error).toMatchObject({ code: "eip155.address.invalid" });
     }
   });
 });

@@ -1,9 +1,16 @@
-import { ArxReasons, isArxError } from "@arx/errors";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import { keyringErrors } from "../../keyring/errors.js";
+import { isArxBaseError } from "../../error.js";
+import {
+  KeyringAccountNotFoundError,
+  KeyringDuplicateAccountError,
+  KeyringIndexOutOfRangeError,
+  KeyringInvalidAddressError,
+  KeyringInvalidMnemonicError,
+  KeyringSecretUnavailableError,
+} from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
 import {
@@ -13,7 +20,7 @@ import {
   KeyringMetaRecordSchema,
 } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
-import { vaultErrors } from "../../vault/errors.js";
+import { VaultLockedError } from "../../vault/errors.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 import { RuntimeKeyringState } from "./RuntimeKeyringState.js";
 import type {
@@ -117,7 +124,7 @@ export class KeyringService {
     const instance = factory();
     instance.loadFromPrivateKey(params.privateKey);
     const [account] = instance.getAccounts();
-    if (!account) throw keyringErrors.secretUnavailable();
+    if (!account) throw new KeyringSecretUnavailableError();
 
     const canonical = this.#toCanonicalString(namespace, account.address);
     const accountKey = this.#toAccountKey(namespace, canonical);
@@ -174,7 +181,7 @@ export class KeyringService {
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(keyringId);
     if (!runtime) throw new Error(`Keyring "${keyringId}" not found`);
-    if (runtime.kind !== "hd") throw keyringErrors.indexOutOfRange();
+    if (runtime.kind !== "hd") throw new KeyringIndexOutOfRangeError();
 
     const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
     if (!meta) throw new Error(`Keyring metadata missing for ${keyringId}`);
@@ -256,7 +263,7 @@ export class KeyringService {
 
     if (!runtime && !meta) return;
     if (runtime?.kind !== "private-key" && meta?.type !== "private-key") {
-      throw keyringErrors.indexOutOfRange();
+      throw new KeyringIndexOutOfRangeError();
     }
 
     await this.#removeKeyring({ keyringId });
@@ -268,7 +275,7 @@ export class KeyringService {
     const canonical = this.#toCanonicalString(namespace, address);
     const accountKey = this.#toAccountKey(namespace, canonical);
     const record = this.#runtimeKeyringState.getAccount(accountKey);
-    if (!record) throw keyringErrors.accountNotFound();
+    if (!record) throw new KeyringAccountNotFoundError();
 
     const meta = this.#runtimeKeyringState.getKeyringMeta(record.keyringId);
     if (!meta) {
@@ -292,7 +299,7 @@ export class KeyringService {
     await this.#verifyPassword(password);
 
     const entry = this.#runtimeKeyringState.getPayloadEntry(keyringId);
-    if (!entry || entry.type !== "hd") throw keyringErrors.accountNotFound();
+    if (!entry || entry.type !== "hd") throw new KeyringAccountNotFoundError();
     const payload = entry.payload as { mnemonic: string[]; passphrase?: string };
     return payload.mnemonic.join(" ");
   }
@@ -354,7 +361,7 @@ export class KeyringService {
 
   #assertUnlocked(): void {
     if (!this.#options.unlock.isUnlocked()) {
-      throw vaultErrors.locked();
+      throw new VaultLockedError();
     }
   }
 
@@ -362,7 +369,7 @@ export class KeyringService {
     try {
       await this.#options.vault.verifyPassword(password);
     } catch (error) {
-      if (isArxError(error) && error.reason === ArxReasons.VaultInvalidPassword) throw error;
+      if (isArxBaseError(error) && error.code === "vault.invalid_password") throw error;
       throw error;
     }
   }
@@ -372,7 +379,7 @@ export class KeyringService {
 
     const normalized = params.mnemonic.trim().replace(/\s+/g, " ");
     if (!validateMnemonic(normalized, wordlist)) {
-      throw keyringErrors.invalidMnemonic();
+      throw new KeyringInvalidMnemonicError();
     }
 
     const namespace = params.namespace ?? this.#defaultNamespace();
@@ -387,7 +394,7 @@ export class KeyringService {
     );
 
     if (existingHd) {
-      throw keyringErrors.duplicateAccount();
+      throw new KeyringDuplicateAccountError();
     }
 
     const words = normalized.split(" ");
@@ -478,13 +485,13 @@ export class KeyringService {
     const canonical = this.#toCanonicalString(namespace, address);
     const accountKey = this.#toAccountKey(namespace, canonical);
     const record = this.#runtimeKeyringState.getAccount(accountKey);
-    if (!record) throw keyringErrors.accountNotFound();
+    if (!record) throw new KeyringAccountNotFoundError();
 
     const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
-    if (!indexed) throw keyringErrors.secretUnavailable();
+    if (!indexed) throw new KeyringSecretUnavailableError();
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
-    if (!runtime) throw keyringErrors.secretUnavailable();
+    if (!runtime) throw new KeyringSecretUnavailableError();
 
     return runtime.instance.exportPrivateKey(canonical);
   }
@@ -493,13 +500,13 @@ export class KeyringService {
     await this.#waitForHydration();
 
     const record = this.#runtimeKeyringState.getAccount(accountKey);
-    if (!record) throw keyringErrors.accountNotFound();
+    if (!record) throw new KeyringAccountNotFoundError();
 
     const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
-    if (!indexed) throw keyringErrors.secretUnavailable();
+    if (!indexed) throw new KeyringSecretUnavailableError();
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
-    if (!runtime) throw keyringErrors.secretUnavailable();
+    if (!runtime) throw new KeyringSecretUnavailableError();
 
     const config = this.#getConfig(indexed.namespace);
     const canonical = config.codec.fromAccountKey(accountKey);
@@ -536,7 +543,7 @@ export class KeyringService {
 
   #assertNoDuplicate(accountKey: AccountKey): void {
     if (this.#runtimeKeyringState.getAccount(accountKey)) {
-      throw keyringErrors.duplicateAccount();
+      throw new KeyringDuplicateAccountError();
     }
   }
 
@@ -567,7 +574,7 @@ export class KeyringService {
     try {
       return config.codec.toCanonicalAddress({ chainRef: config.defaultChainRef, value: address });
     } catch {
-      throw keyringErrors.invalidAddress();
+      throw new KeyringInvalidAddressError();
     }
   }
 

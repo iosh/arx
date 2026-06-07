@@ -1,4 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ApprovalRejectedError } from "../../../../approvals/errors.js";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -11,7 +11,7 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
-  handler: async ({ origin, deps, executionContext, invocation }) => {
+  handler: async ({ deps, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
     const suggested = deps.accounts
       .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
@@ -31,10 +31,8 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
       return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.ApprovalRejected,
+      throw new ApprovalRejectedError({
         message: "User rejected account access",
-        data: { origin },
         cause: error,
       });
     }

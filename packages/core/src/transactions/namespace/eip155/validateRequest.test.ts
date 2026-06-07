@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { eip155AddressCodec } from "../../../chains/eip155/addressCodec.js";
 import { ChainAddressCodecRegistry } from "../../../chains/registry.js";
@@ -52,8 +51,8 @@ describe("eip155 validateRequest", () => {
       expect.unreachable("expected request validation to throw");
     } catch (error) {
       expect(error).toMatchObject({
-        reason: ArxReasons.RpcInvalidParams,
-        data: expect.objectContaining({ code: "transaction.prepare.fee_conflict" }),
+        code: "global.rpc.invalid_params",
+        details: expect.objectContaining({ code: "transaction.prepare.fee_conflict" }),
       });
     }
   });
@@ -80,8 +79,8 @@ describe("eip155 validateRequest", () => {
       expect.unreachable("expected request validation to throw");
     } catch (error) {
       expect(error).toMatchObject({
-        reason: ArxReasons.RpcInvalidParams,
-        data: expect.objectContaining({ code: "transaction.validation.gas_too_low" }),
+        code: "global.rpc.invalid_params",
+        details: expect.objectContaining({ code: "transaction.validation.gas_too_low" }),
       });
     }
   });
@@ -108,8 +107,8 @@ describe("eip155 validateRequest", () => {
       expect.unreachable("expected request validation to throw");
     } catch (error) {
       expect(error).toMatchObject({
-        reason: ArxReasons.RpcInvalidParams,
-        data: expect.objectContaining({ code: "transaction.prepare.chain_id_mismatch" }),
+        code: "global.rpc.invalid_params",
+        details: expect.objectContaining({ code: "transaction.prepare.chain_id_mismatch" }),
       });
     }
   });

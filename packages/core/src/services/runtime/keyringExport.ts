@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { SessionStatusService } from "./sessionStatus.js";
 
 export type KeyringExportService = {
@@ -14,10 +14,7 @@ type CreateKeyringExportServiceDeps = {
 
 const assertSessionUnlocked = (sessionStatus: Pick<SessionStatusService, "isUnlocked">) => {
   if (!sessionStatus.isUnlocked()) {
-    throw arxError({
-      reason: ArxReasons.SessionLocked,
-      message: "Wallet is locked",
-    });
+    throw new SessionLockedError();
   }
 };
 

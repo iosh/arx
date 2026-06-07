@@ -1,10 +1,10 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type {
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
 } from "../../../../transactions/namespace/eip155/transactionTypes.js";
 import type { TransactionRequest } from "../../../../transactions/types.js";
+import { RpcInvalidParamsError } from "../../../errors.js";
 
 const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
@@ -15,20 +15,20 @@ export const buildEip155TransactionRequest = (
   const [raw] = params;
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "eth_sendTransaction expects params[0] to be a transaction object",
-      data: { params },
     });
   }
 
   const tx = raw as Record<string, unknown>;
 
   if (typeof tx.from !== "string" || !HEX_ADDRESS_PATTERN.test(tx.from)) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "eth_sendTransaction requires a valid from address",
-      data: { params },
+      details: {
+        field: "from",
+        expected: "hex address",
+      },
     });
   }
 
@@ -38,10 +38,12 @@ export const buildEip155TransactionRequest = (
     if (tx.to === null || (typeof tx.to === "string" && tx.to.startsWith("0x"))) {
       payload.to = tx.to as string | null;
     } else {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "Transaction 'to' must be null or a 0x-prefixed string",
-        data: { params },
+        details: {
+          field: "to",
+          expected: "null or 0x-prefixed string",
+        },
       });
     }
   }
@@ -61,10 +63,12 @@ export const buildEip155TransactionRequest = (
     const value = tx[key];
     if (value === undefined) continue;
     if (typeof value !== "string" || !value.startsWith("0x")) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: `Transaction '${key}' must be a 0x-prefixed string`,
-        data: { params },
+        details: {
+          field: key,
+          expected: "0x-prefixed string",
+        },
       });
     }
     payload[key] = value as `0x${string}`;

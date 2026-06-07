@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../../../chains/metadata.js";
 import { resolveSwitchEthereumChainTarget } from "./resolveSwitchEthereumChainTarget.js";
@@ -68,7 +67,7 @@ describe("resolveSwitchEthereumChainTarget", () => {
       }),
     ).toThrowError(
       expect.objectContaining({
-        reason: ArxReasons.ChainNotFound,
+        code: "chain.not_found",
       }),
     );
 
@@ -79,7 +78,7 @@ describe("resolveSwitchEthereumChainTarget", () => {
       });
       throw new Error("Expected namespace mismatch to throw");
     } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainNotCompatible });
+      expect(error).toMatchObject({ code: "chain.not_compatible" });
     }
   });
 });

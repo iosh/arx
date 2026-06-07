@@ -1,7 +1,7 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { AccountSelectionService } from "../../../accounts/runtime/types.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
+import { PermissionNotConnectedError } from "../../../permissions/errors.js";
 import type { PermissionsReader } from "../../../permissions/service/types.js";
 import type { AccountKey } from "../../../storage/records.js";
 import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
@@ -67,15 +67,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
       return;
     }
 
-    throw arxError({
-      reason: ArxReasons.PermissionNotConnected,
-      message: `Origin "${origin}" is not connected`,
-      data: {
-        origin,
-        namespace: snapshot.namespace,
-        chainRef: snapshot.chainRef,
-      },
-    });
+    throw new PermissionNotConnectedError();
   }
 
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[] {

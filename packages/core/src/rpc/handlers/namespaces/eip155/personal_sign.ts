@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../../../approvals/index.js";
+import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -17,28 +17,22 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);
     if (paramsArray.length < 2) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "personal_sign requires message and account parameters",
-        data: { params },
       });
     }
 
     const { address, message } = parseEip155PersonalSignParams(paramsArray);
 
     if (!address) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "personal_sign expects an account address parameter",
-        data: { params },
       });
     }
 
     if (!message) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "personal_sign expects a message parameter",
-        data: { params },
       });
     }
 
@@ -52,7 +46,7 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, deps, executionContext, invocation }) => {
+  executeAuthorizedRequest: async ({ prepared, account, deps, executionContext, invocation }) => {
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
@@ -70,10 +64,8 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
       return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: "Failed to sign personal message",
-        data: { origin },
         cause: error,
       });
     }

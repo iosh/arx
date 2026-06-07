@@ -1,5 +1,7 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
+import { ChainNotSupportedError } from "../../../chains/errors.js";
+import { PermissionDeniedError } from "../../../permissions/errors.js";
+import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { JsonValue } from "../../../transactions/aggregate/index.js";
 import type { ListTransactionsQuery } from "../../../transactions/TransactionsService.js";
 import type { TransactionRequest } from "../../../transactions/types.js";
@@ -65,10 +67,8 @@ export const createTransactionsHandlers = (deps: {
       const sendSupported =
         Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);
       if (!sendSupported || !uiBindings?.createSendTransactionRequest) {
-        throw arxError({
-          reason: ArxReasons.ChainNotSupported,
+        throw new ChainNotSupportedError({
           message: `Send transaction is not supported for namespace "${chain.namespace}" yet.`,
-          data: { chainRef: resolvedChainRef, namespace: chain.namespace },
         });
       }
 
@@ -77,11 +77,7 @@ export const createTransactionsHandlers = (deps: {
         chainRef: resolvedChainRef,
       });
       if (!activeAccount) {
-        throw arxError({
-          reason: ArxReasons.PermissionDenied,
-          message: "No active account is available to send this transaction.",
-          data: { chainRef: resolvedChainRef, namespace: chain.namespace },
-        });
+        throw new PermissionDeniedError();
       }
 
       const trimmedValue = valueEther.trim();
@@ -89,10 +85,9 @@ export const createTransactionsHandlers = (deps: {
       try {
         wei = Value.fromEther(trimmedValue);
       } catch (error) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "Invalid amount",
-          data: { valueEther: trimmedValue, error: error instanceof Error ? error.message : String(error) },
+          cause: error,
         });
       }
 
@@ -122,10 +117,9 @@ export const createTransactionsHandlers = (deps: {
       assertUnlocked(deps.session);
       const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
       if (!approval) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "Transaction approval was not found.",
-          data: { transactionId },
+          details: { transactionId },
         });
       }
       await deps.transactions.rerunApprovalPrepare({ approvalId: approval.approvalId });
@@ -135,10 +129,9 @@ export const createTransactionsHandlers = (deps: {
       assertUnlocked(deps.session);
       const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
       if (!approval) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "Transaction approval was not found.",
-          data: { transactionId },
+          details: { transactionId },
         });
       }
       await deps.transactions.updateApprovalDraft({

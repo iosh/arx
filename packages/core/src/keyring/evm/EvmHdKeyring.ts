@@ -2,7 +2,14 @@ import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { copyBytes, zeroize } from "../../utils/bytes.js";
-import { keyringErrors } from "../errors.js";
+import {
+  KeyringAccountNotFoundError,
+  KeyringDuplicateAccountError,
+  KeyringIndexOutOfRangeError,
+  KeyringInvalidMnemonicError,
+  KeyringNotInitializedError,
+  KeyringSecretUnavailableError,
+} from "../errors.js";
 import type {
   HierarchicalDeterministicKeyring,
   HierarchicalDeterministicKeyringSnapshot,
@@ -32,7 +39,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
 
   loadFromMnemonic(mnemonic: string, options?: { passphrase?: string }): void {
     if (!validateMnemonic(mnemonic, wordlist)) {
-      throw keyringErrors.invalidMnemonic();
+      throw new KeyringInvalidMnemonicError();
     }
 
     this.clear();
@@ -50,7 +57,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     this.#assertHasSecret();
     this.#assertValidIndex(index);
     if (this.#derivedIndices.has(index)) {
-      throw keyringErrors.duplicateAccount();
+      throw new KeyringDuplicateAccountError();
     }
 
     const { account } = this.#deriveAndStore(index);
@@ -88,7 +95,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     const canonical = canonicalizeEvmAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
-      throw keyringErrors.accountNotFound();
+      throw new KeyringAccountNotFoundError();
     }
 
     this.#accounts.delete(canonical);
@@ -106,7 +113,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     const canonical = canonicalizeEvmAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
-      throw keyringErrors.accountNotFound();
+      throw new KeyringAccountNotFoundError();
     }
     return copyBytes(entry.secret);
   }
@@ -126,11 +133,11 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     for (const account of snapshot.accounts) {
       // Only derived accounts can be hydrated because secrets come from mnemonic
       if (account.source !== "derived" || account.derivationIndex == null) {
-        throw keyringErrors.secretUnavailable();
+        throw new KeyringSecretUnavailableError();
       }
       const derived = this.#deriveAndStore(account.derivationIndex);
       if (derived.account.address !== this.#toCanonicalAddress(account.address)) {
-        throw keyringErrors.secretUnavailable();
+        throw new KeyringSecretUnavailableError();
       }
     }
 
@@ -148,7 +155,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
 
   #deriveAndStore(index: number): StoredAccount {
     if (!this.#root) {
-      throw keyringErrors.notInitialized();
+      throw new KeyringNotInitializedError();
     }
 
     const node = this.#root.derive(`${DERIVATION_PREFIX}/${index}`);
@@ -157,12 +164,12 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     try {
       privateKey = node.privateKey;
       if (!privateKey) {
-        throw keyringErrors.secretUnavailable();
+        throw new KeyringSecretUnavailableError();
       }
 
       const address = privateKeyToEvmAddress(privateKey);
       if (this.#accounts.has(address)) {
-        throw keyringErrors.duplicateAccount();
+        throw new KeyringDuplicateAccountError();
       }
 
       const account: EvmKeyringAccount = {
@@ -210,13 +217,13 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
 
   #assertHasSecret(): void {
     if (!this.hasSecret()) {
-      throw keyringErrors.notInitialized();
+      throw new KeyringNotInitializedError();
     }
   }
 
   #assertValidIndex(index: number): void {
     if (!Number.isInteger(index) || index < 0) {
-      throw keyringErrors.indexOutOfRange();
+      throw new KeyringIndexOutOfRangeError();
     }
   }
 }

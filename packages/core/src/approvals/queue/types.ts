@@ -117,6 +117,12 @@ export type ApprovalCreatedEvent = {
   record: ApprovalRecord;
 };
 
+export type ApprovalFinishedErrorSummary = {
+  name: string;
+  message: string;
+  code?: string | undefined;
+};
+
 export type ApprovalFinishedEvent<T = unknown> = {
   approvalId: string;
   status: ApprovalFinalStatus;
@@ -128,7 +134,7 @@ export type ApprovalFinishedEvent<T = unknown> = {
   chainRef?: ChainRef | undefined;
 
   value?: T | undefined;
-  error?: { name: string; message: string } | undefined;
+  error?: ApprovalFinishedErrorSummary | undefined;
 };
 
 export type ApprovalState = {

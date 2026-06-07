@@ -223,7 +223,6 @@ export const createProviderPortServer = ({
     extensionOrigin,
     getProvider: getCachedProvider,
     getSessionIdForPort: (port) => sessionRegistry.readSessionId(port),
-    getPortContext: (port) => sessionRegistry.readPortContext(port),
     getSessionContext: (port) => sessionRegistry.readSessionContext(port),
     getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
     clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),

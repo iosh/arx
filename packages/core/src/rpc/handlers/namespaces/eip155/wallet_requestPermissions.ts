@@ -1,13 +1,14 @@
-import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import type { ChainRef } from "../../../../chains/ids.js";
+import { isArxBaseError } from "../../../../error.js";
 import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
 import {
   type ConnectionGrantKind,
   ConnectionGrantKinds,
   type ConnectionGrantRequest,
 } from "../../../../permissions/index.js";
+import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -45,8 +46,7 @@ const WalletRequestPermissionsParamsSchema = z
   .transform((value): WalletRequestPermissionsParams => {
     const entries = Object.keys(value);
     if (entries.length === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
+      throw new RpcInvalidParamsError({
         message: "wallet_requestPermissions requires at least one capability",
       });
     }
@@ -54,17 +54,13 @@ const WalletRequestPermissionsParamsSchema = z
     const out: ConnectionGrantKind[] = [];
     for (const capability of new Set<string>(entries)) {
       if (!isConnectionGrantKind(capability)) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: `wallet_requestPermissions does not support capability "${capability}"`,
-          data: { capability },
         });
       }
       if (capability !== ConnectionGrantKinds.Accounts) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: `wallet_requestPermissions only supports "${ConnectionGrantKinds.Accounts}"`,
-          data: { capability },
         });
       }
       out.push(capability);
@@ -83,10 +79,8 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       return WalletRequestPermissionsParamsSchema.parse(params);
     } catch (error) {
       if (error instanceof ZodError) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "wallet_requestPermissions expects a single object parameter",
-          data: { params },
           cause: error,
         });
       }
@@ -107,11 +101,9 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       });
       await approval.settled;
     } catch (error) {
-      if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      if (isDomainError(error) || isRpcError(error) || isArxBaseError(error)) throw error;
+      throw new RpcInternalError({
         message: "Failed to request permissions approval",
-        data: { origin },
         cause: error,
       });
     }

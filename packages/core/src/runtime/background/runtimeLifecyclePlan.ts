@@ -32,7 +32,6 @@ export const createBackgroundRuntimeLifecycle = ({
   networkBootstrap,
   sessionLayer,
   rpcClientRegistry,
-  engine,
   bus,
   logger,
 }: {
@@ -45,7 +44,6 @@ export const createBackgroundRuntimeLifecycle = ({
   networkBootstrap: NetworkBootstrap;
   sessionLayer: SessionLayerResult;
   rpcClientRegistry: Destroyable;
-  engine: Destroyable;
   bus: Messenger;
   logger: (message: string, error?: unknown) => void;
 }): BackgroundLifecycleHandle => {
@@ -127,11 +125,6 @@ export const createBackgroundRuntimeLifecycle = ({
     destroy: () => rpcClientRegistry.destroy(),
   };
 
-  const enginePlugin: RuntimePlugin = {
-    name: "rpcEngine",
-    destroy: () => engine.destroy(),
-  };
-
   const busPlugin: RuntimePlugin = {
     name: "messenger",
     destroy: () => bus.clear(),
@@ -146,7 +139,6 @@ export const createBackgroundRuntimeLifecycle = ({
     networkBootstrapPlugin,
     accountSelectionServicePlugin,
     rpcClientsPlugin,
-    enginePlugin,
     busPlugin,
   ] as const;
 

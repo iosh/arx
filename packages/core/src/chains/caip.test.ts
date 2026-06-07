@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { getChainRefNamespace, parseChainRef } from "./caip.js";
 
@@ -17,8 +16,8 @@ describe("parseChainRef", () => {
       throw new Error("Expected parseChainRef to throw");
     } catch (error) {
       expect(error).toMatchObject({
-        reason: ArxReasons.RpcInvalidParams,
-        data: { rule: "single_colon" },
+        code: "chain.invalid_ref",
+        details: { rule: "single_colon" },
       });
     }
   });

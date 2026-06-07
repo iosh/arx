@@ -1,6 +1,6 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
+import { RpcInvalidRequestError } from "./errors.js";
 import type { MethodDefinition, Namespace, RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 
@@ -58,31 +58,19 @@ const resolveInvocationNamespace = (
     return namespace;
   }
 
-  throw arxError({
-    reason: ArxReasons.RpcInvalidRequest,
+  throw new RpcInvalidRequestError({
     message: method ? `Missing namespace context for "${method}"` : "Missing namespace context",
-    data: {
-      ...(method ? { method } : {}),
-      ...(hint?.namespace !== undefined ? { contextNamespace: hint.namespace } : {}),
-      ...(hint?.chainRef !== undefined ? { chainRef: hint.chainRef } : {}),
-    },
   });
 };
 
-const parseOptionalInvocationChainRef = (
-  method: string,
-  namespace: Namespace,
-  raw: unknown,
-): { kind: "present"; value: ChainRef } | { kind: "absent" } => {
+const parseOptionalInvocationChainRef = (raw: unknown): { kind: "present"; value: ChainRef } | { kind: "absent" } => {
   if (raw === undefined) {
     return { kind: "absent" };
   }
 
   if (typeof raw !== "string") {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
-      data: { method, namespace, chainRef: raw },
     });
   }
 
@@ -90,16 +78,14 @@ const parseOptionalInvocationChainRef = (
   try {
     return { kind: "present", value: normalizeChainRef(trimmed as ChainRef) };
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
-      data: { method, namespace, chainRef: raw },
       cause: error,
     });
   }
 };
 
-const assertInvocationHintConsistency = (method: string, hint?: RpcInvocationHint) => {
+const assertInvocationHintConsistency = (hint?: RpcInvocationHint) => {
   const contextNamespace = hint?.namespace;
   const contextChainRef = hint?.chainRef;
   let contextChainNamespace: string | null = null;
@@ -107,24 +93,16 @@ const assertInvocationHintConsistency = (method: string, hint?: RpcInvocationHin
     try {
       contextChainNamespace = getChainRefNamespace(contextChainRef);
     } catch (error) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
+      throw new RpcInvalidRequestError({
         message: "Invalid chainRef identifier",
-        data: { method, chainRef: contextChainRef },
         cause: error,
       });
     }
   }
 
   if (contextNamespace && contextChainNamespace && contextNamespace !== contextChainNamespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Namespace mismatch: namespace="${contextNamespace}" chainRef="${contextChainRef ?? ""}"`,
-      data: {
-        method,
-        namespace: contextNamespace,
-        chainRef: contextChainRef ?? null,
-      },
     });
   }
 };
@@ -135,16 +113,14 @@ const resolveInvocationChainRef = (args: {
   contextChainRef: unknown;
   namespaceActiveChainRef: ChainRef | null;
 }): ChainRef => {
-  const parsed = parseOptionalInvocationChainRef(args.method, args.namespace, args.contextChainRef);
+  const parsed = parseOptionalInvocationChainRef(args.contextChainRef);
   if (parsed.kind === "present") {
     return parsed.value;
   }
 
   if (!args.namespaceActiveChainRef) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Missing chainRef for namespace "${args.namespace}"`,
-      data: { method: args.method, namespace: args.namespace, namespaceActiveChainRef: null },
     });
   }
 
@@ -155,20 +131,16 @@ const assertInvocationChainRefMatchesNamespace = (method: string, namespace: Nam
   try {
     parseChainRef(chainRef);
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
-      data: { method, namespace, chainRef },
       cause: error,
     });
   }
 
   const chainNamespace = getChainRefNamespace(chainRef);
   if (chainNamespace !== namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Namespace mismatch for "${method}"`,
-      data: { method, namespace, chainRef },
     });
   }
 };
@@ -191,7 +163,7 @@ export const resolveRpcInvocation = (
   method: string,
   hint?: RpcInvocationHint,
 ): ResolvedRpcInvocation => {
-  assertInvocationHintConsistency(method, hint);
+  assertInvocationHintConsistency(hint);
 
   const namespace = resolveInvocationNamespace(catalog, method, hint);
   const namespaceActiveChainRef = handlerDeps.networkSelection.getSelectedChainRef(namespace);

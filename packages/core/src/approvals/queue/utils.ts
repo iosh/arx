@@ -1,6 +1,7 @@
 import type {
   ApprovalCreatedEvent,
   ApprovalFinalStatus,
+  ApprovalFinishedErrorSummary,
   ApprovalFinishedEvent,
   ApprovalQueueKind,
   ApprovalRecord,
@@ -71,9 +72,14 @@ export const cloneFinishEvent = <T>(event: ApprovalFinishedEvent<T>): ApprovalFi
   ...(event.error ? { error: { ...event.error } } : {}),
 });
 
-export const toSimpleError = (error: unknown): { name: string; message: string } => {
+export const serializeApprovalFinishedError = (error: unknown): ApprovalFinishedErrorSummary => {
   const err = error instanceof Error ? error : new Error(String(error));
-  return { name: err.name || "Error", message: err.message || "Unknown error" };
+  const code = "code" in err && typeof err.code === "string" ? err.code : undefined;
+  return {
+    name: err.name || "Error",
+    message: err.message || "Unknown error",
+    ...(code !== undefined ? { code } : {}),
+  };
 };
 
 export const deriveApprovalFinalStatus = (terminalReason: ApprovalTerminalReason): ApprovalFinalStatus => {

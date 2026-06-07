@@ -1,15 +1,15 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
-import { keyringErrors } from "../../../keyring/errors.js";
+import { KeyringInvalidMnemonicError, KeyringInvalidPrivateKeyError } from "../../../keyring/errors.js";
+import { SessionLockedError } from "../../../runtime/session/errors.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../../storage/records.js";
 import { zeroize } from "../../../utils/bytes.js";
 import type { UiAccountCodecsAccess, UiChainsAccess, UiSessionAccess } from "../types.js";
 
 export const assertUnlocked = (session: Pick<UiSessionAccess, "isUnlocked">) => {
   if (!session.isUnlocked()) {
-    throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
+    throw new SessionLockedError();
   }
 };
 
@@ -36,7 +36,7 @@ export const sanitizeMnemonicPhraseFromWords = (words: string[]): string =>
 
 export const validateBip39Mnemonic = (mnemonic: string): void => {
   if (!validateMnemonic(mnemonic, wordlist)) {
-    throw keyringErrors.invalidMnemonic();
+    throw new KeyringInvalidMnemonicError();
   }
 };
 
@@ -44,7 +44,7 @@ export const parsePrivateKeyHex = (value: string): string => {
   const trimmed = value.trim();
   const normalized = trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(normalized)) {
-    throw keyringErrors.invalidPrivateKey();
+    throw new KeyringInvalidPrivateKeyError();
   }
   return normalized;
 };

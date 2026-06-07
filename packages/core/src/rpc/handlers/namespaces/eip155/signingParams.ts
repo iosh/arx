@@ -1,4 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { RpcInvalidParamsError } from "../../../errors.js";
 
 const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
@@ -24,10 +24,8 @@ export const parseEip155TypedDataParams = (params: readonly unknown[]) => {
   }
 
   if (!address || payload === undefined) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "eth_signTypedData_v4 expects an address and typed data payload",
-      data: { params },
     });
   }
 
@@ -38,10 +36,8 @@ export const parseEip155TypedDataParams = (params: readonly unknown[]) => {
   try {
     return { address, typedData: JSON.stringify(payload) };
   } catch (error) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
+    throw new RpcInvalidParamsError({
       message: "Failed to serialise typed data payload",
-      data: { params, error: error instanceof Error ? error.message : String(error) },
       cause: error,
     });
   }

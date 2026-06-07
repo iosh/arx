@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../../../approvals/index.js";
+import { RpcInternalError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
@@ -16,11 +16,10 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params) => parseWalletSwitchEthereumChainParams(params),
-  handler: async ({ origin: _origin, params, deps, executionContext, invocation }) => {
+  handler: async ({ params, deps, executionContext, invocation }) => {
     const supportedChains = deps.supportedChains;
     if (!supportedChains) {
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: "Missing supported chains service",
       });
     }

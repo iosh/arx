@@ -49,7 +49,7 @@ export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0))
 export const createCustomChainsPort = () => new MemoryCustomChainsPort();
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
-  const { supportedChains, session, networkSelection, rpcEngine, store, ...rest } = overrides ?? {};
+  const { supportedChains, session, networkSelection, rpcAccessPolicy, store, ...rest } = overrides ?? {};
   const customChainsPort = supportedChains?.port ?? store?.ports.customChains ?? createCustomChainsPort();
   const runtime = createBackgroundRuntime({
     supportedChains: {
@@ -59,13 +59,11 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
     },
-    rpcEngine:
-      rpcEngine ??
+    rpcAccessPolicy:
+      rpcAccessPolicy ??
       ({
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
+        isInternalOrigin: () => false,
+        shouldRequestUnlockAttention: () => false,
       } as const),
     networkSelection: networkSelection ?? { port: new MemoryNetworkSelectionPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -182,10 +180,6 @@ export const connectOrigin = async (args: {
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   const executeRequest = runtime.rpc.executeRequest;
   return async (args: Parameters<typeof executeRequest>[0]) => {
-    const chainRef =
-      args.context?.chainRef ??
-      runtime.services.networkSelection.getSelectedChainRef("eip155") ??
-      runtime.services.chainViews.getSelectedChainView().chainRef;
     const requestContext = {
       transport: "provider",
       portId: "test-port",
@@ -222,18 +216,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           getTerminalError: () => null,
         } as const,
       } as const);
-    const result = await runtime.surfaceErrors.executeWithEncoding(
-      {
-        surface: "dapp",
-        namespace: "eip155",
-        chainRef,
-        origin: args.origin,
-        method: args.request.method,
-      },
-      () => executeRequest({ ...args, executionContext }),
-    );
-    if (result.ok) return result.result;
-    throw result.error;
+    return await executeRequest({ ...args, executionContext });
   };
 };
 

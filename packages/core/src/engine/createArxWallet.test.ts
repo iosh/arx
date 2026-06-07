@@ -1,4 +1,3 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
@@ -482,7 +481,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes engine-owned provider, UI, and surface error contracts", async () => {
+  it("exposes engine-owned provider and UI contracts", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -526,27 +525,6 @@ describe("createArxWallet", () => {
         result: [],
       });
 
-      expect(
-        provider.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
-          origin: ORIGIN,
-          method: "eth_sendTransaction",
-          context: createProviderContext(),
-        }),
-      ).toMatchObject({
-        code: 4100,
-      });
-
-      expect(
-        runtime.surfaceErrors.encodeUi(arxError({ reason: ArxReasons.RpcInternal, message: "boom" }), {
-          namespace: EIP155_NAMESPACE,
-          chainRef: EIP155_CHAIN_REF,
-          method: "ui.test",
-        }),
-      ).toEqual({
-        reason: ArxReasons.RpcInternal,
-        message: "boom",
-      });
-
       unsubscribe();
     } finally {
       await runtime.shutdown();
@@ -570,7 +548,7 @@ describe("createArxWallet", () => {
           method: "ui.onboarding.openTab",
           params: {} as never,
         }),
-      ).rejects.toMatchObject({ reason: ArxReasons.RpcUnsupportedMethod });
+      ).rejects.toMatchObject({ code: "global.rpc.unsupported_method" });
     } finally {
       await runtime.shutdown();
     }

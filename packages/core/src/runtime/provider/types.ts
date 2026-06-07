@@ -1,9 +1,8 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { JsonValue } from "../../error.js";
 import type {
-  JsonRpcError,
   JsonRpcParams,
   JsonRpcRequest,
-  JsonRpcResponse,
   RpcProviderExecutionContext,
   RpcProviderRequestContext,
 } from "../../rpc/index.js";
@@ -57,11 +56,29 @@ export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
   execution: ProviderRuntimeRequestExecution;
 };
 
-export type ProviderRuntimeErrorContext = {
-  origin: string;
-  method: string;
-  context: ProviderRuntimeRpcContext;
-};
+export type ProviderRuntimeRpcError =
+  | {
+      kind: "ArxError";
+      code: string;
+    }
+  | {
+      kind: "JsonRpcError";
+      code: number;
+      message: string;
+      data?: JsonValue;
+    };
+
+export type ProviderRuntimeRpcResponse =
+  | {
+      id: ProviderRuntimeRpcRequest["id"];
+      jsonrpc: "2.0";
+      result: unknown;
+    }
+  | {
+      id: ProviderRuntimeRpcRequest["id"];
+      jsonrpc: "2.0";
+      error: ProviderRuntimeRpcError;
+    };
 
 export type ProviderRuntimeAccountsQuery = {
   origin: string;
@@ -78,8 +95,8 @@ export type ProviderRuntimeAccess = {
   subscribeNetworkSelectionChanged: StateChangeSubscription;
   subscribeAccountsStateChanged(listener: () => void): () => void;
   subscribePermissionsStateChanged(listener: () => void): () => void;
-  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse>;
-  encodeRpcError(error: unknown, context: ProviderRuntimeErrorContext): JsonRpcError;
+  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
+  encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   listPermittedAccounts(input: ProviderRuntimeAccountsQuery): Promise<string[]>;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
 };

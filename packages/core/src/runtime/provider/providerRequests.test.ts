@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { createProviderRequests } from "./providerRequests.js";
 
@@ -46,7 +45,7 @@ describe("createProviderRequests", () => {
     expect(providerRequests.has("request-1")).toBe(false);
     expect(providerRequests.has("request-2")).toBe(true);
     expect(targetHandle.getTerminalError()).toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
     expect(siblingHandle.getTerminalError()).toBeNull();
   });
@@ -70,7 +69,7 @@ describe("createProviderRequests", () => {
     expect(handle.fulfill()).toBe(false);
     expect(handle.reject()).toBe(false);
     expect(handle.getTerminalError()).toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
   });
 
@@ -93,7 +92,7 @@ describe("createProviderRequests", () => {
 
     expect(handle.signal.aborted).toBe(true);
     expect(handle.signal.reason).toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
     expect(providerRequests.has("request-4")).toBe(false);
   });
@@ -116,7 +115,7 @@ describe("createProviderRequests", () => {
 
     expect(handle.reject()).toBe(false);
     expect(handle.getTerminalError()).toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
     expect(providerRequests.has("request-5")).toBe(false);
   });
@@ -152,7 +151,7 @@ describe("createProviderRequests", () => {
         };
       }),
     ).rejects.toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
 
     await expect(cancelPromise).resolves.toBe(true);
@@ -169,7 +168,7 @@ describe("createProviderRequests", () => {
     expect(providerRequests.get("request-3")).toBeUndefined();
     expect(providerRequests.listPending()).toEqual([]);
     expect(handle.getTerminalError()).toMatchObject({
-      reason: ArxReasons.TransportDisconnected,
+      code: "global.transport.disconnected",
     });
   });
 });

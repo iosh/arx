@@ -125,7 +125,6 @@ const createUiAccess = () =>
       uiOrigin: "chrome-extension://arx",
     },
     bridge: {
-      encodeError: () => ({ reason: "rpc_internal", message: "err" }) as never,
       persistVaultMeta: async () => {},
       stateChanged: {
         accounts: { onStateChanged: () => () => {} },

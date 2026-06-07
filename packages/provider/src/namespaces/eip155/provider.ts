@@ -13,7 +13,16 @@ import {
   DEFAULT_READY_TIMEOUT_MS,
   REQUEST_VALIDATION_MESSAGES,
 } from "./constants.js";
-import { providerErrors, rpcErrors } from "./errors.js";
+import {
+  JsonRpcInternalError,
+  JsonRpcInvalidParamsError,
+  JsonRpcInvalidRequestError,
+  ProviderCustomError,
+  ProviderDisconnectedError,
+  ProviderUnauthorizedError,
+  ProviderUnsupportedMethodError,
+  ProviderUserRejectedRequestError,
+} from "./errors.js";
 import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot } from "./state.js";
 
 type LegacyResponse = {
@@ -37,6 +46,42 @@ type LegacyPayload = {
 
 type ApplyOptions = { emit?: boolean };
 type LockedMethod = (...args: never[]) => unknown;
+
+type ArxProviderError = {
+  kind: "ArxError";
+  code: string;
+};
+
+type JsonRpcProviderError = {
+  kind: "JsonRpcError";
+  code: number;
+  message: string;
+  data?: unknown;
+};
+
+const EIP155_UNRECOGNIZED_CHAIN_CODES = new Set([
+  "chain.not_found",
+  "chain.not_available",
+  "chain.not_compatible",
+  "chain.not_supported",
+  "chain.namespace_mismatch",
+]);
+
+const EIP155_INVALID_PARAMS_CODES = new Set([
+  "chain.invalid_ref",
+  "chain.address_namespace_not_supported",
+  "chain.address.invalid",
+  "chain.invalid_address",
+  "eip155.address.invalid",
+  "chain.definition_conflict",
+  "global.rpc.invalid_params",
+]);
+
+const isProviderRuntimeError = (value: unknown): value is ArxProviderError | JsonRpcProviderError => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return candidate.kind === "ArxError" || candidate.kind === "JsonRpcError";
+};
 
 /**
  * Request timeout overrides for different RPC buckets.
@@ -155,7 +200,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
       if (this.chainId) return this.chainId;
       await this.#waitReady();
       if (this.chainId) return this.chainId;
-      throw providerErrors.disconnected();
+      throw new ProviderDisconnectedError();
     }
 
     if (!this.#initialized) {
@@ -175,9 +220,8 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   async enable(): Promise<string[]> {
     const result = await this.request({ method: "eth_requestAccounts" });
     if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
-      throw rpcErrors.internal({
+      throw new JsonRpcInternalError({
         message: "eth_requestAccounts did not return an array of accounts",
-        data: { result },
       });
     }
     return result;
@@ -354,34 +398,75 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     if (isTransportFailure(error)) {
       return this.#mapTransportFailure(error);
     }
+    if (isProviderRuntimeError(error)) {
+      return this.#mapProviderRuntimeError(error);
+    }
     if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
       return error as EIP1193ProviderRpcError;
     }
-    return rpcErrors.internal({
-      message: error instanceof Error ? error.message : String(error),
-      data: { originalError: error },
-    });
+    return new JsonRpcInternalError();
+  }
+
+  #mapProviderRuntimeError(error: ArxProviderError | JsonRpcProviderError): EIP1193ProviderRpcError {
+    if (error.kind === "JsonRpcError") {
+      return new ProviderCustomError({
+        code: error.code,
+        message: error.message,
+      });
+    }
+
+    if (EIP155_UNRECOGNIZED_CHAIN_CODES.has(error.code)) {
+      return new ProviderCustomError({ code: 4902, message: "Unrecognized chain" });
+    }
+
+    if (EIP155_INVALID_PARAMS_CODES.has(error.code)) {
+      return new JsonRpcInvalidParamsError({ message: "Invalid params" });
+    }
+
+    switch (error.code) {
+      case "global.permission.not_connected":
+      case "global.permission.denied":
+      case "global.session.locked":
+      case "keyring.secret_unavailable":
+        return new ProviderUnauthorizedError({ message: "Unauthorized" });
+      case "approval.rejected":
+      case "approval.user_dismissed":
+        return new ProviderUserRejectedRequestError({ message: "User rejected the request" });
+      case "approval.timeout":
+        return new JsonRpcInternalError({ message: "Request timed out" });
+      case "approval.cancelled":
+        return new JsonRpcInternalError({ message: "Request cancelled" });
+      case "approval.superseded":
+        return new JsonRpcInternalError({ message: "Request superseded" });
+      case "global.transport.disconnected":
+        return new ProviderDisconnectedError({ message: "Disconnected" });
+      case "global.rpc.invalid_request":
+        return new JsonRpcInvalidRequestError({ message: "Invalid request" });
+      case "global.rpc.unsupported_method":
+        return new ProviderUnsupportedMethodError({ message: "Unsupported method" });
+      case "global.rpc.internal":
+        return new JsonRpcInternalError({ message: "Internal error" });
+      default:
+        return new JsonRpcInternalError();
+    }
   }
 
   #parseRequest(args: RequestArguments): { method: string; params: RequestArguments["params"] | undefined } {
     if (!args || typeof args !== "object" || Array.isArray(args)) {
-      throw rpcErrors.invalidRequest({
+      throw new JsonRpcInvalidRequestError({
         message: REQUEST_VALIDATION_MESSAGES.invalidArgs,
-        data: args,
       });
     }
 
     const { method, params } = args;
     if (typeof method !== "string" || method.length === 0) {
-      throw rpcErrors.invalidRequest({
+      throw new JsonRpcInvalidRequestError({
         message: REQUEST_VALIDATION_MESSAGES.invalidMethod,
-        data: args,
       });
     }
     if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
-      throw rpcErrors.invalidRequest({
+      throw new JsonRpcInvalidRequestError({
         message: REQUEST_VALIDATION_MESSAGES.invalidParams,
-        data: args,
       });
     }
 
@@ -391,26 +476,25 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #mapTransportFailure(error: TransportFailure): EIP1193ProviderRpcError {
     switch (error.reason) {
       case "disconnected":
-        return providerErrors.disconnected();
+        return new ProviderDisconnectedError();
 
       case "handshake_timeout":
-        return providerErrors.custom({
+        return new ProviderCustomError({
           code: 4900,
           message: error.message,
         });
 
       case "protocol_version_mismatch":
-        return providerErrors.custom({
+        return new ProviderCustomError({
           code: 4900,
           message: error.message,
-          ...(error.data === undefined ? {} : { data: error.data }),
         });
 
       case "request_timeout":
-        return rpcErrors.internal({ message: error.message });
+        return new JsonRpcInternalError({ message: error.message });
 
       default:
-        return rpcErrors.internal({ message: error.message });
+        return new JsonRpcInternalError({ message: error.message });
     }
   }
 
@@ -502,7 +586,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #resetSession(error?: unknown) {
     this.#state.reset();
     this.#initialized = false;
-    const reason = error ?? providerErrors.disconnected();
+    const reason = error ?? new ProviderDisconnectedError();
     this.#initializedReject?.(reason);
     this.#createReadyPromise();
   }
@@ -516,7 +600,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    const eip1193Error = this.#toEip1193Error(error ?? providerErrors.disconnected());
+    const eip1193Error = this.#toEip1193Error(error ?? new ProviderDisconnectedError());
     this.#resetSession(eip1193Error);
     this.emit("disconnect", eip1193Error);
   };
@@ -556,7 +640,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         new Promise<void>((_, reject) => {
           timer = setTimeout(() => {
             reject(
-              providerErrors.custom({
+              new ProviderCustomError({
                 code: 4900,
                 message: "Provider is initializing. Try again later.",
               }),

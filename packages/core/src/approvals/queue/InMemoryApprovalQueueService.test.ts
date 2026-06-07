@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { ApprovalExecutor } from "../types.js";
@@ -180,7 +179,7 @@ describe("InMemoryApprovalQueueService", () => {
     await queue.cancel({ approvalId: request.approvalId, reason: "caller_disconnected" });
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
 
-    await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.TransportDisconnected });
+    await expect(handle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
   });
 
   it("resolve(reject) preserves caller-provided Error instance", async () => {
@@ -191,7 +190,7 @@ describe("InMemoryApprovalQueueService", () => {
     const handle = queue.create(request, requester);
 
     const custom = new Error("custom rejection");
-    (custom as Error & { code?: number }).code = 4001;
+    (custom as Error & { code?: string }).code = "approval.custom";
 
     await expect(queue.resolve({ approvalId: request.approvalId, action: "reject", error: custom })).resolves.toEqual({
       approvalId: request.approvalId,
@@ -236,7 +235,7 @@ describe("InMemoryApprovalQueueService", () => {
       const cancelledRequest = createRequest({ approvalId: "abababab-abab-4aba-8aba-abababababab" });
       const cancelledHandle = queue.create(cancelledRequest, requester);
       await queue.cancel({ approvalId: cancelledRequest.approvalId, reason: "locked" });
-      await expect(cancelledHandle.settled).rejects.toMatchObject({ reason: ArxReasons.SessionLocked });
+      await expect(cancelledHandle.settled).rejects.toMatchObject({ code: "global.session.locked" });
 
       expect(createdEvents.map((event) => event.record.approvalId)).toEqual([
         approvedRequest.approvalId,
@@ -262,7 +261,7 @@ describe("InMemoryApprovalQueueService", () => {
             origin: cancelledRequest.origin,
             namespace: cancelledRequest.namespace,
             chainRef: cancelledRequest.chainRef,
-            error: expect.objectContaining({ message: "Wallet is locked." }),
+            error: expect.objectContaining({ code: "global.session.locked" }),
           }),
         ]),
       );
@@ -287,7 +286,7 @@ describe("InMemoryApprovalQueueService", () => {
 
     vi.advanceTimersByTime(1_000);
 
-    await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.ApprovalTimeout });
+    await expect(handle.settled).rejects.toMatchObject({ code: "approval.timeout" });
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
   });
 });

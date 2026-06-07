@@ -1,11 +1,12 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import type { ApprovalTerminalReason } from "../../approvals/queue/types.js";
+import { RpcInternalError } from "../../rpc/errors.js";
 import type {
   RpcBlockingApprovalReservation,
   RpcProviderRequestCancellationReason,
   RpcProviderRequestHandle,
 } from "../../rpc/executionContext.js";
+import { TransportDisconnectedError } from "./errors.js";
 
 export type ProviderRuntimeRequestScope = {
   transport: "provider";
@@ -76,29 +77,15 @@ const reserveBlockingApproval = (
 });
 
 const createTerminalRequestError = (
-  record: ProviderRequestRecord,
+  _record: ProviderRequestRecord,
   terminalState: ProviderRequestTerminalState,
 ): Error => {
-  const data = {
-    id: record.id,
-    method: record.method,
-    origin: record.scope.origin,
-    providerNamespace: record.providerNamespace,
-    ...(terminalState.status === "cancelled" ? { terminalReason: terminalState.reason } : {}),
-  };
-
   if (terminalState.status === "cancelled" && terminalState.reason === "caller_disconnected") {
-    return arxError({
-      reason: ArxReasons.TransportDisconnected,
-      message: "Transport disconnected.",
-      data,
-    });
+    return new TransportDisconnectedError();
   }
 
-  return arxError({
-    reason: ArxReasons.RpcInternal,
+  return new RpcInternalError({
     message: "Provider request is no longer pending.",
-    data,
   });
 };
 

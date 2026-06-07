@@ -1,4 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { Eip155TransactionDraftChange } from "./transactionTypes.js";
 import type { Eip155DraftEditContext } from "./types.js";
@@ -68,10 +68,9 @@ export const applyEip155TransactionDraftEdit = (context: Eip155DraftEditContext)
       parsed = parseOptionalHexQuantity(value, field);
     } catch (error) {
       if (error instanceof Eip155FieldParseError) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: error.message,
-          data: {
+          details: {
             code: error.reason,
             details: {
               field: error.field,

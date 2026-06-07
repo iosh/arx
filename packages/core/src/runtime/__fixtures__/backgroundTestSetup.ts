@@ -1,5 +1,4 @@
-import type { JsonRpcEngine } from "@metamask/json-rpc-engine";
-import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
+import type { JsonRpcParams } from "@metamask/utils";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
@@ -7,7 +6,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
-import { type RpcExecutionContext, RpcExecutionContextKinds, type RpcInvocationHint } from "../../rpc/index.js";
+import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
@@ -41,9 +40,9 @@ import type {
   TransactionConflictKey,
   TransactionsStoragePort,
 } from "../../transactions/storage/index.js";
-import { vaultErrors } from "../../vault/errors.js";
+import { VaultInvalidPasswordError, VaultLockedError, VaultNotInitializedError } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
-import type { BackgroundRpcEnvHooks } from "../background/rpcEngineAssembly.js";
+import type { BackgroundRpcAccessPolicyHooks } from "../background/rpcAccessPolicy.js";
 import { type CreateBackgroundRuntimeOptions, createBackgroundRuntime } from "../createBackgroundRuntime.js";
 
 // Test constants
@@ -512,13 +511,13 @@ export class FakeVault implements VaultService {
 
   async unlock(params: { password: string; envelope?: VaultEnvelope }): Promise<void> {
     if (!this.#password || params.password !== this.#password) {
-      throw vaultErrors.invalidPassword();
+      throw new VaultInvalidPasswordError();
     }
 
     if (params.envelope) {
       this.#envelope = structuredClone(params.envelope);
     } else if (!this.#envelope) {
-      throw vaultErrors.notInitialized();
+      throw new VaultNotInitializedError();
     }
 
     this.#unlocked = true;
@@ -535,27 +534,27 @@ export class FakeVault implements VaultService {
 
   exportSecret(): Uint8Array {
     if (!this.#unlocked || !this.#secret) {
-      throw vaultErrors.locked();
+      throw new VaultLockedError();
     }
     return new Uint8Array(this.#secret);
   }
 
   verifyPassword(password: string): Promise<void> {
     if (!this.#password || password !== this.#password) {
-      throw vaultErrors.invalidPassword();
+      throw new VaultInvalidPasswordError();
     }
     return Promise.resolve();
   }
 
   async commitSecret(params: { secret: Uint8Array }): Promise<VaultEnvelope> {
-    if (!this.#unlocked) throw vaultErrors.locked();
+    if (!this.#unlocked) throw new VaultLockedError();
     this.#envelope = this.createEnvelope();
     this.#secret = new Uint8Array(params.secret);
     return structuredClone(this.#envelope);
   }
 
   async reencrypt(params: { newPassword: string }): Promise<VaultEnvelope> {
-    if (!this.#unlocked) throw vaultErrors.locked();
+    if (!this.#unlocked) throw new VaultLockedError();
     this.#password = params.newPassword;
     this.#envelope = this.createEnvelope();
     return structuredClone(this.#envelope);
@@ -613,7 +612,7 @@ export type SetupBackgroundOptions = {
   persistDebounceMs?: number;
   transactions?: CreateBackgroundRuntimeOptions["transactions"];
   storageLogger?: (message: string, error: unknown) => void;
-  rpcEngine?: CreateBackgroundRuntimeOptions["rpcEngine"];
+  rpcAccessPolicy?: CreateBackgroundRuntimeOptions["rpcAccessPolicy"];
 };
 
 /**
@@ -657,8 +656,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       }
     : undefined;
 
-  const defaultEnv: BackgroundRpcEnvHooks = {
-    // Tests treat all origins as external; individual tests can override via options.rpcEngine.env.
+  const defaultRpcAccessPolicy: BackgroundRpcAccessPolicyHooks = {
+    // Tests treat all origins as external; individual tests can override via options.rpcAccessPolicy.
     isInternalOrigin: () => false,
     shouldRequestUnlockAttention: () => false,
   };
@@ -671,7 +670,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
     },
-    rpcEngine: options.rpcEngine ?? { env: defaultEnv },
+    rpcAccessPolicy: options.rpcAccessPolicy ?? defaultRpcAccessPolicy,
     networkSelection: {
       port: networkSelectionPort,
     },
@@ -758,11 +757,9 @@ type RpcCallOptions = {
   params?: JsonRpcParams;
   origin?: string;
   rpcHint?: Partial<RpcInvocationHint>;
-  executionContext?: RpcExecutionContext;
 };
 
 export type RpcHarness = TestBackgroundContext & {
-  engine: JsonRpcEngine;
   callRpc(options: RpcCallOptions): Promise<unknown>;
   origins: { internal: string; external: string };
 };
@@ -781,20 +778,17 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const clock = setupOptions.now ?? Date.now;
   const background = await setupBackground({
     ...setupOptions,
-    rpcEngine:
-      setupOptions.rpcEngine ??
+    rpcAccessPolicy:
+      setupOptions.rpcAccessPolicy ??
       ({
-        env: {
-          isInternalOrigin: (origin) => origin === internalOrigin,
-          shouldRequestUnlockAttention: () => false,
-        },
+        isInternalOrigin: (origin) => origin === internalOrigin,
+        shouldRequestUnlockAttention: () => false,
       } as const),
     ...(setupOptions.vault === undefined ? { vault: () => new FakeVault(clock) } : {}),
   });
   const { runtime } = background;
 
   const deriveMethodNamespace = runtime.rpc.resolveMethodNamespace;
-  const engine = runtime.rpc.engine;
 
   const buildRpcHint = (overrides?: Partial<RpcInvocationHint>): RpcInvocationHint => {
     const chain = requireActiveChainMetadata(runtime);
@@ -807,113 +801,45 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     };
   };
 
-  const buildProviderExecutionContext = (args: {
-    namespace: string;
-    requestContext: {
-      transport: "provider";
-      portId: string;
-      sessionId: string;
-      requestId: string;
-      origin: string;
-    };
-  }): RpcExecutionContext => {
-    const { namespace, requestContext } = args;
-
-    return {
-      kind: RpcExecutionContextKinds.Provider,
-      requestContext,
-      providerRequestHandle: {
-        id: requestContext.requestId,
-        providerNamespace: namespace,
-        signal: new AbortController().signal,
-        attachBlockingApproval: async <T extends object>(
-          createApproval: (reservation: { approvalId: string; createdAt: number }) => T | Promise<T>,
-          reservation?: Partial<{ approvalId: string; createdAt: number }>,
-        ) => {
-          const approvalIdentity = {
-            approvalId: reservation?.approvalId ?? `${requestContext.requestId}-approval`,
-            createdAt: reservation?.createdAt ?? 0,
-          };
-          const approval = await createApproval(approvalIdentity);
-          return {
-            ...approval,
-            ...approvalIdentity,
-          };
-        },
-        fulfill: () => true,
-        reject: () => true,
-        cancel: async () => true,
-        getTerminalError: () => null,
-      },
-    };
-  };
-
   let nextRequestId = 0;
   const sessionId = crypto.randomUUID();
   const portId = "test-port";
-  const callRpc = async ({ method, params, origin = externalOrigin, rpcHint, executionContext }: RpcCallOptions) => {
+  const callRpc = async ({ method, params, origin = externalOrigin, rpcHint }: RpcCallOptions) => {
     const requestId = `${++nextRequestId}`;
     const hintPayload = buildRpcHint(rpcHint);
     const namespace = deriveMethodNamespace(method, hintPayload);
-    const requestContext = {
-      transport: "provider",
-      portId,
-      sessionId,
-      requestId,
-      origin,
-    } as const;
-    const executionPayload =
-      executionContext ??
-      buildProviderExecutionContext({
-        namespace: namespace ?? hintPayload.namespace ?? "eip155",
-        requestContext,
-      });
     const resolvedChainRef =
       hintPayload.chainRef ?? (namespace ? runtime.services.networkSelection.getSelectedChainRef(namespace) : null);
-    return new Promise<unknown>((resolve, reject) => {
-      engine.handle(
-        {
-          id: requestId,
-          jsonrpc: "2.0",
-          method,
-          params,
+
+    const response = await runtime.providerAccess.executeRpcRequest({
+      id: requestId,
+      jsonrpc: "2.0",
+      method,
+      ...(params !== undefined ? { params } : {}),
+      origin,
+      context: {
+        providerNamespace: namespace ?? hintPayload.namespace ?? "eip155",
+        ...(resolvedChainRef ? { chainRef: resolvedChainRef } : {}),
+      },
+      execution: {
+        requestScope: {
+          transport: "provider",
           origin,
-          arx: hintPayload,
-          arxExecution: executionPayload,
-        } as JsonRpcRequest,
-        (error, response) => {
-          if (error) {
-            reject(
-              runtime.surfaceErrors.encodeDapp(error, {
-                namespace,
-                chainRef: resolvedChainRef,
-                origin,
-                method,
-              }),
-            );
-            return;
-          }
-          if (!response) {
-            reject(new Error("Missing JSON-RPC response"));
-            return;
-          }
-          if ("error" in response && response.error) {
-            reject(response.error);
-            return;
-          }
-          if ("result" in response) {
-            resolve(response.result);
-            return;
-          }
-          reject(new Error("Invalid JSON-RPC response payload"));
+          portId,
+          sessionId,
         },
-      );
+      },
     });
+
+    if ("error" in response) {
+      throw response.error;
+    }
+
+    return response.result;
   };
 
   return {
     ...background,
-    engine,
     callRpc,
     origins: { internal: internalOrigin, external: externalOrigin },
   };

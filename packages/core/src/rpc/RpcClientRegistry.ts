@@ -1,8 +1,8 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams } from "@metamask/utils";
 import { getChainRefNamespace, normalizeChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { RpcEndpointInfo, RpcOutcomeReport, RpcRoutingService } from "../chains/runtime/types.js";
+import { RpcInternalError } from "./errors.js";
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 type AbortFactory = () => AbortController;
@@ -138,10 +138,10 @@ const buildInternalError = (
   message: string,
   detail?: unknown,
 ) => {
-  const data: Record<string, unknown> = { namespace, method };
-  if (endpoint) data.endpoint = endpoint.url;
-  if (detail !== undefined) data.detail = detail;
-  return arxError({ reason: ArxReasons.RpcInternal, message, data });
+  const details: Record<string, string> = { namespace, method };
+  if (endpoint) details.endpoint = endpoint.url;
+  if (detail !== undefined) details.detail = detail instanceof Error ? detail.message : String(detail);
+  return new RpcInternalError({ message, details, cause: detail });
 };
 
 class RpcTransportFailure extends Error {

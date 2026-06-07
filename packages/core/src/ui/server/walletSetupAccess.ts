@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
+import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -60,7 +60,7 @@ export const createUiWalletSetupAccess = ({
     return await session.withVaultMetaPersistHold(async () => {
       const status = session.vault.getStatus();
       if (status.hasEnvelope && hasAnyOwnedAccounts(accounts)) {
-        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+        throw new RpcInvalidRequestError({ message: "Vault already initialized" });
       }
 
       if (!status.hasEnvelope) {

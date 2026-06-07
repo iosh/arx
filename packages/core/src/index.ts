@@ -1,6 +1,3 @@
-export type { ArxReason } from "@arx/errors";
-export { ArxError, ArxReasons, arxError, isArxError } from "@arx/errors";
-export { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 export type {
   Json,
   JsonRpcError,
@@ -13,6 +10,13 @@ export type {
 export * from "./accounts/index.js";
 export * from "./chains/index.js";
 export * from "./engine/index.js";
+export type { ArxErrorDetails, ErrorCause, JsonValue, SerializedArxError } from "./error.js";
+export {
+  ARX_ERROR_KIND,
+  ArxBaseError,
+  isArxBaseError,
+  serializeArxError,
+} from "./error.js";
 export * from "./messenger/index.js";
 export * from "./namespaces/index.js";
 export * from "./permissions/index.js";

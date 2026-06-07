@@ -1,5 +1,5 @@
-import { isArxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { isArxBaseError } from "../../error.js";
 import type { JsonValue, TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
 import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
@@ -169,14 +169,14 @@ export class TransactionSubmissionExecutor {
 
   #buildFailureReason(params: { error: unknown; phase: "create_broadcast_input" | "broadcast"; namespace: string }) {
     const details =
-      isArxError(params.error) && params.error.data && typeof params.error.data === "object"
-        ? (structuredClone(params.error.data) as JsonValue)
+      isArxBaseError(params.error) && params.error.details && typeof params.error.details === "object"
+        ? (structuredClone(params.error.details) as JsonValue)
         : null;
 
     return buildTransactionTerminalReason({
       kind: params.phase === "broadcast" ? "broadcast_failed" : "signing_failed",
       namespace: params.namespace,
-      code: isArxError(params.error) ? params.error.reason : `${params.namespace}.${params.phase}`,
+      code: isArxBaseError(params.error) ? params.error.code : `${params.namespace}.${params.phase}`,
       message: params.error instanceof Error ? params.error.message : `${params.phase} failed`,
       details,
     });

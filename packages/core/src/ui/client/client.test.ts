@@ -167,13 +167,19 @@ describe("ui client runtime", () => {
       transport.emit({
         type: "ui:error",
         id: "id1",
-        error: { reason: "RpcInvalidRequest", message: "nope" },
+        error: {
+          kind: "ArxError",
+          name: "RpcInvalidRequestError",
+          code: "global.rpc.invalid_request",
+          message: "nope",
+        },
         context: { namespace: "eip155", chainRef: "eip155:1" },
       });
 
       await expect(p).rejects.toMatchObject({
         name: "UiRemoteError",
-        reason: "RpcInvalidRequest",
+        remoteName: "RpcInvalidRequestError",
+        code: "global.rpc.invalid_request",
         message: "nope",
         context: { namespace: "eip155", chainRef: "eip155:1" },
       });

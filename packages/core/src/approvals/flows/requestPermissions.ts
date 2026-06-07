@@ -1,7 +1,8 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../approvals/queue/types.js";
 import { ConnectionGrantKinds } from "../../permissions/connectionGrantKinds.js";
+import { PermissionDeniedError } from "../../permissions/errors.js";
 import type { ConnectionGrantRequest } from "../../permissions/service/types.js";
+import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
 import {
   deriveApprovalReviewContext,
   getApprovalSelectableAccounts,
@@ -24,10 +25,8 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
 
     for (const descriptor of grantedGrants) {
       if (descriptor.grantKind !== ConnectionGrantKinds.Accounts) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: `Unsupported connection grant kind "${descriptor.grantKind}"`,
-          data: { origin: record.origin, grantKind: descriptor.grantKind },
         });
       }
 
@@ -41,10 +40,8 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     }
 
     if (!namespace || requestedChainRefs.size === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: "Permission request approval is missing connection context",
-        data: { origin: record.origin },
       });
     }
 
@@ -57,11 +54,7 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     });
 
     if (selectableAccounts.length === 0) {
-      throw arxError({
-        reason: ArxReasons.PermissionDenied,
-        message: "No selectable account available for permission request",
-        data: { origin: record.origin, chainRef: reviewChainRef, namespace },
-      });
+      throw new PermissionDeniedError();
     }
 
     const selectedAccounts = resolveApprovalSelectedAccounts({

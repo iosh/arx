@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { WalletUi, WalletUiDispatchInput } from "../../engine/types.js";
+import { RpcUnsupportedMethodError } from "../../rpc/errors.js";
 import { createLogger, extendLogger } from "../../utils/logger.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
@@ -26,8 +26,7 @@ const requireUiHandler = <M extends UiMethodName>(
 ): UiHandlerFn<M> => {
   const handler = handlers[method];
   if (!handler) {
-    throw arxError({
-      reason: ArxReasons.RpcUnsupportedMethod,
+    throw new RpcUnsupportedMethodError({
       message: `Unsupported UI method: ${method}`,
     });
   }
@@ -188,7 +187,6 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
   const dispatcher = createUiDispatcher({
     handlers: uiRuntime.handlers,
     getUiContext: uiRuntime.getUiContext,
-    encodeError: bridge.encodeError,
   });
 
   const dispatchRequest: UiRuntimeAccess["dispatchRequest"] = async (raw) => {

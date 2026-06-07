@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { createChainActivationService } from "./ChainActivationService.js";
 import { NamespaceChainActivationReasons } from "./types.js";
@@ -44,7 +43,7 @@ describe("ChainActivationService", () => {
     const { service } = createService({ availableChainRefs: ["eip155:1"] });
 
     await expect(service.selectWalletChain("eip155:999")).rejects.toMatchObject({
-      reason: ArxReasons.ChainNotSupported,
+      code: "chain.not_available",
     });
   });
 
@@ -73,8 +72,7 @@ describe("ChainActivationService", () => {
     });
 
     await expect(service.selectWalletNamespace("solana")).rejects.toMatchObject({
-      reason: ArxReasons.ChainNotSupported,
-      data: { namespace: "solana" },
+      code: "chain.not_supported",
     });
   });
 
@@ -85,8 +83,7 @@ describe("ChainActivationService", () => {
     });
 
     await expect(service.selectWalletNamespace("solana")).rejects.toMatchObject({
-      reason: ArxReasons.ChainNotSupported,
-      data: { chainRef: "solana:101" },
+      code: "chain.not_available",
     });
   });
 
@@ -115,12 +112,7 @@ describe("ChainActivationService", () => {
         reason: NamespaceChainActivationReasons.SwitchChain,
       }),
     ).rejects.toMatchObject({
-      reason: ArxReasons.ChainNotCompatible,
-      data: {
-        expectedNamespace: "eip155",
-        actualNamespace: "solana",
-        chainRef: "solana:101",
-      },
+      code: "chain.not_compatible",
     });
   });
 
@@ -136,8 +128,7 @@ describe("ChainActivationService", () => {
         reason: NamespaceChainActivationReasons.SwitchChain,
       }),
     ).rejects.toMatchObject({
-      reason: ArxReasons.ChainNotSupported,
-      data: { chainRef: "eip155:999" },
+      code: "chain.not_available",
     });
     expect(selectChain).not.toHaveBeenCalled();
   });

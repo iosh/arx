@@ -1,7 +1,9 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
+import { KeyringAccountNotFoundError } from "../../keyring/errors.js";
+import { PermissionDeniedError } from "../../permissions/errors.js";
+import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { AccountKey } from "../../storage/records.js";
@@ -134,18 +136,10 @@ export class StoreAccountSelectionService implements AccountSelectionService {
 
       const record = await this.#accounts.get(accountKey);
       if (!record) {
-        throw arxError({
-          reason: ArxReasons.KeyringAccountNotFound,
-          message: `Unknown account "${accountKey}" for namespace "${namespace}"`,
-          data: { chainRef, namespace, accountKey },
-        });
+        throw new KeyringAccountNotFoundError();
       }
       if (record.hidden) {
-        throw arxError({
-          reason: ArxReasons.PermissionDenied,
-          message: `Account "${accountKey}" is hidden for namespace "${namespace}"`,
-          data: { chainRef, namespace, accountKey },
-        });
+        throw new PermissionDeniedError();
       }
     }
 
@@ -166,10 +160,9 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #assertNamespaceChainContext(params: NamespaceChainContext): NamespaceChainContext {
     const parsed = parseChainRef(params.chainRef);
     if (parsed.namespace !== params.namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
+      throw new RpcInvalidRequestError({
         message: `Account namespace mismatch: chainRef "${params.chainRef}" belongs to namespace "${parsed.namespace}" but "${params.namespace}" was provided`,
-        data: { chainRef: params.chainRef, namespace: params.namespace, expectedNamespace: parsed.namespace },
+        details: { chainRef: params.chainRef, namespace: params.namespace, expectedNamespace: parsed.namespace },
       });
     }
 
@@ -179,10 +172,9 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #assertAccountKeyNamespace(accountKey: AccountKey, namespace: ChainNamespace): void {
     const accountNamespace = getAccountKeyNamespace(accountKey);
     if (accountNamespace !== namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: `Account "${accountKey}" does not belong to namespace "${namespace}"`,
-        data: { accountKey, namespace, accountNamespace },
+      throw new RpcInvalidParamsError({
+        message: `Account does not belong to namespace "${namespace}"`,
+        details: { namespace, accountNamespace },
       });
     }
   }

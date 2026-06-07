@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../../../approvals/index.js";
+import { RpcInternalError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -23,7 +23,7 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, deps, executionContext, invocation }) => {
+  executeAuthorizedRequest: async ({ prepared, account, deps, executionContext, invocation }) => {
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
     try {
@@ -41,10 +41,8 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
       return await approval.settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: "Failed to sign typed data",
-        data: { origin },
         cause: error,
       });
     }

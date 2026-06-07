@@ -19,7 +19,7 @@ import {
 } from "./eip155.test.helpers.js";
 
 describe("eip155 handlers - core error paths", () => {
-  it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
+  it("returns chain.not_found for wallet_switchEthereumChain when the chain is unknown", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -35,8 +35,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: 4902,
-        message: "Unrecognized chain",
+        code: "chain.not_found",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -118,7 +117,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -142,7 +141,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -166,7 +165,7 @@ describe("eip155 handlers - core error paths", () => {
             params: [{ chainId: "not-hex" }] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
 
       await expect(
         execute({
@@ -176,7 +175,7 @@ describe("eip155 handlers - core error paths", () => {
             params: [{ chainId: "0xGG" }] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
     } finally {
       runtime.lifecycle.shutdown();
     }
@@ -199,7 +198,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -223,7 +222,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
 
       await expect(
@@ -235,7 +234,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -283,8 +282,7 @@ describe("eip155 handlers - core error paths", () => {
           request: { method: "eth_sendTransaction", params: [] as JsonRpcParams },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
-        message: "Invalid params",
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
@@ -353,27 +351,26 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: -32602,
+        code: "global.rpc.invalid_params",
       });
     } finally {
       runtime.lifecycle.shutdown();
     }
   });
 
-  it("maps approval rejection to 4001 for wallet_addEthereumChain", async () => {
+  it("maps approval rejection to an owner-local approval error for wallet_addEthereumChain", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
 
-    const rejectionError = Object.assign(new Error("user denied"), { code: 4001 });
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
         void runtime.services.approvals.resolve({
           approvalId: task.approvalId,
           action: "reject",
-          error: rejectionError,
+          reason: "user denied",
         });
         return true;
       }
@@ -390,7 +387,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: 4001,
+        code: "approval.rejected",
       });
     } finally {
       teardownApprovalResponder();
@@ -419,7 +416,7 @@ describe("eip155 handlers - core error paths", () => {
             ] as unknown as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
     } finally {
       runtime.lifecycle.shutdown();
     }
@@ -446,7 +443,7 @@ describe("eip155 handlers - core error paths", () => {
             ] as unknown as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
     } finally {
       runtime.lifecycle.shutdown();
     }
@@ -614,7 +611,7 @@ describe("eip155 handlers - core error paths", () => {
             ] as unknown as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4902 });
+      ).rejects.toMatchObject({ code: "chain.not_supported" });
 
       expect(approvalRequested).toBe(false);
     } finally {
@@ -644,7 +641,7 @@ describe("eip155 handlers - core error paths", () => {
             ] as unknown as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
     } finally {
       runtime.lifecycle.shutdown();
     }
@@ -818,7 +815,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: { method: "wallet_requestPermissions", params: [{ wallet_basic: {} }] as JsonRpcParams },
         }),
-      ).rejects.toMatchObject({ code: -32602 });
+      ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
     } finally {
       runtime.lifecycle.shutdown();
     }
@@ -857,7 +854,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: { method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] as JsonRpcParams },
         }),
-      ).rejects.toMatchObject({ code: 4100 });
+      ).rejects.toMatchObject({ code: "global.permission.denied" });
 
       const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
       expect(authorization).toBeNull();
@@ -962,7 +959,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
         }),
-      ).rejects.toMatchObject({ code: 4100 });
+      ).rejects.toMatchObject({ code: "global.permission.denied" });
 
       const authorization = runtime.services.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
       expect(authorization).toBeNull();
@@ -1054,7 +1051,7 @@ describe("eip155 handlers - core error paths", () => {
             params: ["0xdeadbeef", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4100 });
+      ).rejects.toMatchObject({ code: "global.permission.denied" });
       expect(requestApprovalSpy).not.toHaveBeenCalled();
     } finally {
       runtime.lifecycle.shutdown();
@@ -1094,7 +1091,7 @@ describe("eip155 handlers - core error paths", () => {
             params: ["0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", JSON.stringify(typedData)] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4100 });
+      ).rejects.toMatchObject({ code: "global.permission.denied" });
       expect(requestApprovalSpy).not.toHaveBeenCalled();
     } finally {
       runtime.lifecycle.shutdown();
@@ -1131,7 +1128,7 @@ describe("eip155 handlers - core error paths", () => {
             ] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4100 });
+      ).rejects.toMatchObject({ code: "global.permission.denied" });
       expect(txSpy).not.toHaveBeenCalled();
     } finally {
       runtime.lifecycle.shutdown();

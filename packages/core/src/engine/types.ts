@@ -31,7 +31,6 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
-import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -43,9 +42,10 @@ import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
-  ProviderRuntimeErrorContext,
   ProviderRuntimeRequestScope,
+  ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
+  ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type {
@@ -340,8 +340,8 @@ export type WalletProviderConnectionProjection = DappConnectionProjection;
 export type WalletProvider = Readonly<{
   buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
   buildConnectionProjection(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionProjection;
-  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse>;
-  encodeRpcError(error: unknown, context: ProviderRuntimeErrorContext): JsonRpcError;
+  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
+  encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   connect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
   disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
   disconnectOrigin(origin: string): number;

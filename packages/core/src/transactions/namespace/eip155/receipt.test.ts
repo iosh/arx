@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
@@ -35,7 +34,7 @@ describe("createEip155ReceiptService", () => {
     });
 
     await expect(service.inspectSubmittedTransaction(BASE_CONTEXT)).rejects.toMatchObject({
-      reason: ArxReasons.RpcInternal,
+      code: "global.rpc.internal",
       message: expect.stringContaining("mismatched"),
     });
   });

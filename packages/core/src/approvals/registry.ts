@@ -1,5 +1,5 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ApprovalQueueKind, ApprovalRecord } from "../approvals/queue/types.js";
+import { RpcUnsupportedMethodError } from "../rpc/errors.js";
 import { addChainApprovalFlow } from "./flows/addChain.js";
 import { requestAccountsApprovalFlow } from "./flows/requestAccounts.js";
 import { requestPermissionsApprovalFlow } from "./flows/requestPermissions.js";
@@ -23,10 +23,8 @@ const getRequiredFlow = <K extends ApprovalQueueKind>(
 ) => {
   const flow = registry.get(record.kind);
   if (!flow) {
-    throw arxError({
-      reason: ArxReasons.RpcUnsupportedMethod,
+    throw new RpcUnsupportedMethodError({
       message: `Unsupported approval kind: ${record.kind}`,
-      data: { approvalId: record.approvalId, kind: record.kind },
     });
   }
 

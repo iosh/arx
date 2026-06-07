@@ -1,13 +1,14 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { requestApproval } from "../../../../approvals/creation.js";
 import type { ApprovalQueueKind, ApprovalRequest, ApprovalRequester } from "../../../../approvals/queue/types.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
+import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type {
   PermissionViewsService,
   PermittedAccountView,
 } from "../../../../services/runtime/permissionViews/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
+import { RpcInvalidRequestError } from "../../../errors.js";
 import {
   ApprovalRequirements,
   AuthorizationRequirements,
@@ -23,10 +24,8 @@ import {
 
 export const requireRequestContext = (executionContext: RpcExecutionContext, method: string) => {
   if (executionContext.kind !== RpcExecutionContextKinds.Provider) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Missing request context for ${method}.`,
-      data: { method },
     });
   }
   return executionContext.requestContext;
@@ -34,10 +33,8 @@ export const requireRequestContext = (executionContext: RpcExecutionContext, met
 
 export const requireProviderRequestHandle = (executionContext: RpcExecutionContext, method: string) => {
   if (executionContext.kind !== RpcExecutionContextKinds.Provider) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
+    throw new RpcInvalidRequestError({
       message: `Missing provider request lifecycle for ${method}.`,
-      data: { method },
     });
   }
   return executionContext.providerRequestHandle;
@@ -95,25 +92,21 @@ export const assertPermittedEip155Account = (args: {
   address: string;
   deps: PermittedAccountDeps;
 }) => {
-  const { origin, method, chainRef, address, deps } = args;
+  const { origin, chainRef, address, deps } = args;
 
   const canonical = deps.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
   const permittedAccounts = deps.permissionViews.listPermittedAccounts(origin, { chainRef });
 
   if (permittedAccounts.length === 0) {
-    throw arxError({
-      reason: ArxReasons.PermissionNotConnected,
+    throw new PermissionNotConnectedError({
       message: `Origin "${origin}" is not connected`,
-      data: { origin, method, chainRef },
     });
   }
 
   const account = permittedAccounts.find((entry) => entry.canonicalAddress === canonical);
   if (!account) {
-    throw arxError({
-      reason: ArxReasons.PermissionDenied,
+    throw new PermissionDeniedError({
       message: `Account is not permitted for origin "${origin}"`,
-      data: { origin, method, chainRef, from: canonical },
     });
   }
 

@@ -1,4 +1,3 @@
-import type { NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
@@ -35,10 +34,6 @@ const SOLANA_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
 
-const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
-  encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
-});
-
 const createTestAccountCodec = (namespace: string): AccountCodec => ({
   namespace,
   toCanonicalAddress: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
@@ -63,7 +58,6 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
     methodPrefixes: ["sol_"],
     definitions: {},
   },
-  protocolAdapter: createProtocolAdapter(namespace),
 });
 
 const solanaNamespaceManifest = (() => {
@@ -99,11 +93,9 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       namespaces: {
         manifests: [eip155NamespaceManifest, solanaNamespaceManifest],
       },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
+      rpcAccessPolicy: {
+        isInternalOrigin: () => false,
+        shouldRequestUnlockAttention: () => false,
       },
       networkSelection: { port: new MemoryNetworkSelectionPort() },
       store: {

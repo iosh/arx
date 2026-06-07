@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
 import { resolveRpcInvocation } from "./invocation.js";
@@ -13,10 +12,8 @@ const makeRpcHandlerDeps = (activeChainByNamespace?: Record<string, string>): Rp
   } as unknown as RpcHandlerDeps;
 };
 
-const getErrorReason = (error: unknown) => {
-  return typeof error === "object" && error !== null && "reason" in error
-    ? (error as { reason?: unknown }).reason
-    : null;
+const getErrorCode = (error: unknown) => {
+  return typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : null;
 };
 
 describe("resolveRpcInvocation", () => {
@@ -30,7 +27,7 @@ describe("resolveRpcInvocation", () => {
       resolveRpcInvocation(registry, handlerDeps, "custom_ping", undefined);
       throw new Error("Expected resolveRpcInvocation to throw");
     } catch (error) {
-      expect(getErrorReason(error)).toBe(ArxReasons.RpcInvalidRequest);
+      expect(getErrorCode(error)).toBe("global.rpc.invalid_request");
       expect((error as Error).message).toMatch(/Missing namespace context/);
     }
   });
@@ -104,7 +101,7 @@ describe("resolveRpcInvocation", () => {
       resolveRpcInvocation(registry, handlerDeps, "eth_chainId", context);
       throw new Error("Expected resolveRpcInvocation to throw");
     } catch (error) {
-      expect(getErrorReason(error)).toBe(ArxReasons.RpcInvalidRequest);
+      expect(getErrorCode(error)).toBe("global.rpc.invalid_request");
     }
   });
 

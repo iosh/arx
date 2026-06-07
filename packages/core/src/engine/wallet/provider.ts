@@ -15,7 +15,7 @@ export const createWalletProvider = (deps: {
     buildSnapshot: (namespace) => snapshots.buildProviderSnapshot(namespace),
     buildConnectionProjection: (input) => dappConnections.buildConnectionProjection(input),
     executeRpcRequest: (request) => runtimeAccess.executeRpcRequest(request),
-    encodeRpcError: (error, context) => runtimeAccess.encodeRpcError(error, context),
+    encodeRuntimeRpcError: (error) => runtimeAccess.encodeRuntimeRpcError(error),
     connect: (input) => {
       dappConnections.connect(input);
       return dappConnections.buildConnectionProjection(input);

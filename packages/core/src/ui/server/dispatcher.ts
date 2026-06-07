@@ -1,24 +1,24 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { RpcInvalidRequestError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
 import type { UiError, UiPortEnvelope } from "../protocol/envelopes.js";
 import { parseUiMethodParams, parseUiMethodResult, type UiMethodName } from "../protocol/index.js";
+import { encodeUiError } from "./errorEncoding.js";
 import {
   EMPTY_UI_REQUEST_EXECUTION_PLAN,
   parseUiRequestMetadata,
   type UiRequestExecutionPlan,
 } from "./requestMetadata.js";
-import type { UiHandlerFn, UiRuntimeBridgeAccess, UiServerRuntime } from "./types.js";
+import type { UiHandlerFn, UiServerRuntime } from "./types.js";
 
 export type UiDispatchOutput = {
   reply: UiPortEnvelope;
   plan: UiRequestExecutionPlan;
 };
-type UiDispatcherDeps = Pick<UiRuntimeBridgeAccess, "encodeError"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
+type UiDispatcherDeps = Pick<UiServerRuntime, "getUiContext" | "handlers">;
 
 const requireUiHandler = <M extends UiMethodName>(handlers: UiServerRuntime["handlers"], method: M): UiHandlerFn<M> => {
   const handler = handlers[method];
   if (!handler) {
-    throw arxError({
-      reason: ArxReasons.RpcUnsupportedMethod,
+    throw new RpcUnsupportedMethodError({
       message: `Unsupported UI method: ${method}`,
     });
   }
@@ -27,7 +27,7 @@ const requireUiHandler = <M extends UiMethodName>(handlers: UiServerRuntime["han
 };
 
 export const createUiDispatcher = (deps: UiDispatcherDeps) => {
-  const { handlers, getUiContext, encodeError } = deps;
+  const { handlers, getUiContext } = deps;
 
   const dispatch = async (raw: unknown): Promise<UiDispatchOutput | null> => {
     const requestMeta = parseUiRequestMetadata(raw);
@@ -37,10 +37,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
     const { request, method, plan } = requestMeta;
 
     if (!method) {
-      const encoded = encodeError(
-        arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Unknown UI method: ${request.method}` }),
-        { namespace: ctx.namespace, chainRef: ctx.chainRef, method: request.method },
-      );
+      const encoded = encodeUiError(new RpcInvalidRequestError({ message: `Unknown UI method: ${request.method}` }));
       return {
         reply: { type: "ui:error", id: request.id, error: encoded as unknown as UiError, context: ctx },
         plan: EMPTY_UI_REQUEST_EXECUTION_PLAN,
@@ -57,7 +54,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
         plan,
       };
     } catch (error) {
-      const encoded = encodeError(error, { namespace: ctx.namespace, chainRef: ctx.chainRef, method });
+      const encoded = encodeUiError(error);
       return {
         reply: { type: "ui:error", id: request.id, error: encoded as unknown as UiError, context: ctx },
         plan: EMPTY_UI_REQUEST_EXECUTION_PLAN,

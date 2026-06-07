@@ -35,7 +35,6 @@ import {
   type BackgroundStateServices,
   initBackgroundStateServices,
 } from "./backgroundStateServices.js";
-import { type EngineOptions, initEngine } from "./engine.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
 import { buildRuntimeNetworkPlan, type RuntimeNetworkPlan } from "./networkDefaults.js";
 import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
@@ -92,7 +91,6 @@ export type BackgroundSessionScope = {
   keyringExport: KeyringExportService;
   keyringService: KeyringService;
   runtimeLifecycle: ReturnType<typeof createRuntimeLifecycle>;
-  engine: ReturnType<typeof initEngine>;
 };
 
 export type BackgroundSupportScope = {
@@ -181,7 +179,6 @@ export const createBackgroundSessionScope = ({
   networkSelectionPort,
   customRpcPort,
   storePorts,
-  engineOptions,
   vaultMetaPort,
   sessionOptions,
 }: {
@@ -196,7 +193,6 @@ export const createBackgroundSessionScope = ({
     keyringMetas: KeyringMetasPort;
     permissions: PermissionsPort;
   };
-  engineOptions?: EngineOptions;
   vaultMetaPort?: VaultMetaPort;
   sessionOptions?: SessionOptions;
 }): BackgroundSessionScope => {
@@ -273,8 +269,6 @@ export const createBackgroundSessionScope = ({
     keyring: sessionLayer.keyringService,
   });
 
-  const engine = initEngine(engineOptions);
-
   return {
     namespaceSession,
     stateServices,
@@ -292,7 +286,6 @@ export const createBackgroundSessionScope = ({
     keyringExport,
     keyringService: sessionLayer.keyringService,
     runtimeLifecycle,
-    engine,
   };
 };
 

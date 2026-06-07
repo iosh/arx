@@ -1,7 +1,8 @@
-import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
+import { isArxBaseError } from "../error.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
+import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
   HandlerRuntimeServices,
   MethodDefinition,
@@ -83,25 +84,17 @@ export const createRpcMethodExecutor = ({
       }
       return definition.paramsSchema.parse(args.params);
     } catch (error) {
-      if (isArxError(error)) throw error;
+      if (isArxBaseError(error)) throw error;
 
       if (error instanceof ZodError) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
+        throw new RpcInvalidParamsError({
           message: "Invalid params",
-          data: { namespace: args.namespace, method: args.method },
           cause: error,
         });
       }
 
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: `Failed to parse params for "${args.method}"`,
-        data: {
-          namespace: args.namespace,
-          method: args.method,
-          errorName: error instanceof Error ? error.name : typeof error,
-        },
         cause: error,
       });
     }
@@ -138,10 +131,8 @@ export const createRpcMethodExecutor = ({
   const assertPassthroughAllowed = (namespace: Namespace, method: string): void => {
     const passthrough = registry.getPassthroughPolicy(namespace);
     if (!passthrough?.allowedMethods.has(method)) {
-      throw arxError({
-        reason: ArxReasons.RpcUnsupportedMethod,
+      throw new RpcUnsupportedMethodError({
         message: `Method "${method}" is not supported`,
-        data: { namespace, method },
       });
     }
   };
@@ -201,12 +192,10 @@ export const createRpcMethodExecutor = ({
 
       const sanitized = sanitizeNodeRpcError(error);
       if (sanitized) throw sanitized;
-      if (isArxError(error)) throw error;
+      if (isArxBaseError(error)) throw error;
 
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
+      throw new RpcInternalError({
         message: `Failed to execute "${args.request.method}"`,
-        data: { namespace: args.namespace, chainRef: args.chainRef },
         cause: error,
       });
     }

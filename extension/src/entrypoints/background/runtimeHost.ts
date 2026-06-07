@@ -156,11 +156,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         },
         runtime: {
           lifecycleLabel: "createBackgroundRuntimeHost",
-          rpcEngine: {
-            env: {
-              isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
-              shouldRequestUnlockAttention: () => true,
-            },
+          rpcAccessPolicy: {
+            isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
+            shouldRequestUnlockAttention: () => true,
           },
         },
       });

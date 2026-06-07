@@ -1,4 +1,3 @@
-import type { NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
@@ -7,10 +6,6 @@ import type { ChainAddressCodec } from "../chains/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceManifest } from "./types.js";
 import { assertValidNamespaceManifest, defineNamespaceManifest } from "./validation.js";
-
-const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
-  encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
-});
 
 const createTestAccountCodec = (namespace: string): AccountCodec => ({
   namespace,
@@ -36,7 +31,6 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
     methodPrefixes: [`${namespace}_`],
     definitions: {},
   },
-  protocolAdapter: createProtocolAdapter(namespace),
 });
 
 const createTestChainMetadata = (namespace: string, chainRef: ChainRef): ChainMetadata => ({

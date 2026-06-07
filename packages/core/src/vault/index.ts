@@ -1,3 +1,9 @@
+export {
+  VaultInvalidCiphertextError,
+  VaultInvalidPasswordError,
+  VaultLockedError,
+  VaultNotInitializedError,
+} from "./errors.js";
 export type {
   CommitSecretParams,
   CreateVaultParams,

@@ -105,7 +105,8 @@ describe("NetworkPreferencesService", () => {
     });
 
     await expect(service.setActiveChainRef("eip155" as never)).rejects.toMatchObject({
-      message: "Invalid CAIP-2 chainRef: eip155",
+      code: "chain.invalid_ref",
+      details: { rule: "namespace:reference" },
     });
   });
 });

@@ -119,7 +119,7 @@ const makeRuntime = () => {
     })),
     disconnectOrigin: vi.fn(() => 0),
     executeRpcRequest: vi.fn(),
-    encodeRpcError: vi.fn(),
+    encodeRuntimeRpcError: vi.fn(),
     cancelRequestScope: vi.fn(async () => 0),
   };
   const createUiAccess = vi.fn();
@@ -209,12 +209,6 @@ const makeRuntime = () => {
       resolveInvocation: vi.fn(),
       resolveInvocationDetails: vi.fn(),
       executeRequest: vi.fn(),
-    },
-    surfaceErrors: {
-      encodeUi: vi.fn(),
-      encodeDapp: vi.fn(),
-      encodeSurfaceError: vi.fn(),
-      executeWithEncoding: vi.fn(),
     },
     wallet: {
       createProvider,

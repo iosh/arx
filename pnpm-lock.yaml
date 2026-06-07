@@ -126,12 +126,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@arx/errors':
-        specifier: workspace:*
-        version: link:../errors
-      '@metamask/json-rpc-engine':
-        specifier: 10.0.3
-        version: 10.0.3
       '@metamask/utils':
         specifier: 11.8.0
         version: 11.8.0
@@ -169,15 +163,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
-
-  packages/errors:
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.6(@types/node@25.6.0)(jsdom@27.2.0)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
 
   packages/provider:
     dependencies:
@@ -881,18 +866,6 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
-
-  '@metamask/json-rpc-engine@10.0.3':
-    resolution: {integrity: sha512-p01QhlLIiTFXivEJCRx0LXEvPUaUPCedI9A8qV9jcLGGNSj1UTWM9GeifoeTweOMdmpIk5Rxg10H9f0JPUC9Ig==}
-    engines: {node: ^18.18 || >=20}
-
-  '@metamask/rpc-errors@7.0.3':
-    resolution: {integrity: sha512-nrEaeBawm8yFU7hetJKok/CUs0tQsWtTqp3OLbFhPUMXYqU7uI5LAV5vi9o7rTjFkUyof7Nzbw5bea5+1ou+dg==}
-    engines: {node: ^18.20 || ^20.17 || >=22}
-
-  '@metamask/safe-event-emitter@3.1.2':
-    resolution: {integrity: sha512-5yb2gMI1BDm0JybZezeoX/3XhPDOtTbcFvpTXM9kxsoZjPZFh4XciqRbpD6N86HYZqWDhEaKUDuOyR0sQHEjMA==}
-    engines: {node: '>=12.0.0'}
 
   '@metamask/superstruct@3.2.1':
     resolution: {integrity: sha512-fLgJnDOXFmuVlB38rUN5SmU7hAFQcCjrg3Vrxz67KTY7YHFnSNEKvX4avmEBdOI0yTCxZjwMCFEqsC8k2+Wd3g==}
@@ -2542,9 +2515,6 @@ packages:
   fast-redact@3.5.0:
     resolution: {integrity: sha512-dwsoQlS7h9hMeYUq1W++23NDcBLV4KqONnITDV9DjfS3q1SgDGVrBdvvTLUotWtPSD7asWDV9/CmsZPy8Hf70A==}
     engines: {node: '>=6'}
-
-  fast-safe-stringify@2.1.1:
-    resolution: {integrity: sha512-W+KJc2dmILlPplD/H4K9l9LcAHAfPtP6BY84uVLXQ6Evcz9Lcg33Y2z1IVblT6xdY54PXYVHEv+0Wpq8Io6zkA==}
 
   fb-dotslash@0.5.8:
     resolution: {integrity: sha512-XHYLKk9J4BupDxi9bSEhkfss0m+Vr9ChTrjhf9l2iw3jB5C7BnY4GVPoMcqbrTutsKJso6yj2nAB6BI/F2oZaA==}
@@ -5167,23 +5137,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@metamask/json-rpc-engine@10.0.3':
-    dependencies:
-      '@metamask/rpc-errors': 7.0.3
-      '@metamask/safe-event-emitter': 3.1.2
-      '@metamask/utils': 11.8.0
-    transitivePeerDependencies:
-      - supports-color
-
-  '@metamask/rpc-errors@7.0.3':
-    dependencies:
-      '@metamask/utils': 11.8.0
-      fast-safe-stringify: 2.1.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@metamask/safe-event-emitter@3.1.2': {}
-
   '@metamask/superstruct@3.2.1': {}
 
   '@metamask/utils@11.8.0':
@@ -7360,8 +7313,6 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-redact@3.5.0: {}
-
-  fast-safe-stringify@2.1.1: {}
 
   fb-dotslash@0.5.8: {}
 

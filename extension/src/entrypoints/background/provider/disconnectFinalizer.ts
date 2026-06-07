@@ -1,11 +1,9 @@
 import type { WalletProvider } from "@arx/core/engine";
-import { ArxReasons, arxError } from "@arx/core/errors";
-import type { JsonRpcError } from "@arx/core/rpc";
+import { type ProviderRuntimeRpcError, TransportDisconnectedError } from "@arx/core/runtime";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
-import { buildProviderRpcContext } from "../rpc";
-import type { PortContext, ProviderSessionContext } from "../types";
+import type { ProviderSessionContext } from "../types";
 import type { ProviderBinding } from "./bindingRegistry";
 import type { PendingEntry } from "./types";
 
@@ -13,7 +11,6 @@ type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
   getProvider: () => WalletProvider | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
-  getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getSessionContext: (port: Runtime.Port) => ProviderSessionContext | null;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;
@@ -30,7 +27,6 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     extensionOrigin,
     getProvider,
     getSessionIdForPort,
-    getPortContext,
     getSessionContext,
     getPendingRequestMap,
     clearPendingForPort,
@@ -42,26 +38,19 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     portLog,
   } = deps;
 
-  const encodeDisconnectError = (port: Runtime.Port, overrideError?: JsonRpcError): JsonRpcError => {
+  const encodeDisconnectError = (overrideError?: ProviderRuntimeRpcError): ProviderRuntimeRpcError => {
     if (overrideError) {
       return overrideError;
     }
 
-    const sessionContext = getSessionContext(port);
-    const origin = sessionContext?.origin ?? getPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
     const provider = getProvider();
-    const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
+    const disconnectError = new TransportDisconnectedError({ message: "Disconnected" });
 
-    if (!provider || !sessionContext) {
-      return { code: 4900, message: "Disconnected" } as const;
+    if (!provider) {
+      return { kind: "ArxError", code: TransportDisconnectedError.code };
     }
 
-    const providerContext = buildProviderRpcContext(sessionContext);
-    return provider.encodeRpcError(disconnectError, {
-      origin,
-      method: PROVIDER_EVENTS.disconnect,
-      context: providerContext,
-    }) as JsonRpcError;
+    return provider.encodeRuntimeRpcError(disconnectError);
   };
 
   const disconnectPort = (port: Runtime.Port) => {
@@ -75,12 +64,12 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const rejectPendingWithDisconnectForSession = (
     port: Runtime.Port,
     sessionId: string,
-    overrideError?: JsonRpcError,
+    overrideError?: ProviderRuntimeRpcError,
   ) => {
     const requestMap = getPendingRequestMap(port);
     if (!requestMap) return;
 
-    const error = encodeDisconnectError(port, overrideError);
+    const error = encodeDisconnectError(overrideError);
     for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
       postEnvelope(port, {
         channel: CHANNEL,
@@ -98,7 +87,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     clearPendingForPort(port);
   };
 
-  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
+  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: ProviderRuntimeRpcError) => {
     const sessionId = getSessionIdForPort(port);
     if (!sessionId) {
       clearPendingForPort(port);
@@ -162,7 +151,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) continue;
 
-      const error = encodeDisconnectError(port);
+      const error = encodeDisconnectError();
       const sessionContext = getSessionContext(port);
       const origin = getPortOrigin(port, extensionOrigin);
       const namespace = sessionContext?.providerNamespace ?? null;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RequestArguments } from "../../types/eip1193.js";
 import { REQUEST_VALIDATION_MESSAGES } from "./constants.js";
 import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
-import { providerErrors, rpcErrors } from "./errors.js";
+import { JsonRpcInternalError, ProviderDisconnectedError } from "./errors.js";
 import { Eip155Provider } from "./provider.js";
 import type { ProviderSnapshot } from "./state.js";
 
@@ -68,24 +68,18 @@ const restorePrototypeProperty = (property: string, prev: PropertyDescriptor | u
 
 describe("Eip155Provider: request() argument validation", () => {
   it.each([
-    { label: "undefined", args: undefined, expectData: false },
-    { label: "null", args: null, expectData: true },
-    { label: "array", args: [], expectData: true },
-    { label: "string", args: "foo", expectData: true },
-  ])("rejects non-object args ($label)", async ({ args, expectData }) => {
+    { label: "undefined", args: undefined },
+    { label: "null", args: null },
+    { label: "array", args: [] },
+    { label: "string", args: "foo" },
+  ])("rejects non-object args ($label)", async ({ args }) => {
     const { provider } = createProvider();
 
     const error = (await provider
       .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
       .catch((err) => err)) as unknown;
     expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidArgs });
-
-    if (expectData) {
-      expect(isRecord(error)).toBe(true);
-      if (!isRecord(error)) throw new Error("Expected error to be an object");
-      expect("data" in error).toBe(true);
-      expect(error.data).toEqual(args);
-    } else if (isRecord(error)) {
+    if (isRecord(error)) {
       expect("data" in error).toBe(false);
     }
   });
@@ -100,7 +94,8 @@ describe("Eip155Provider: request() argument validation", () => {
     const error = await provider
       .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
       .catch((err) => err);
-    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidMethod, data: args });
+    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidMethod });
+    expect("data" in error).toBe(false);
   });
 
   it.each([
@@ -114,7 +109,8 @@ describe("Eip155Provider: request() argument validation", () => {
     const error = await provider
       .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
       .catch((err) => err);
-    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidParams, data: args });
+    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidParams });
+    expect("data" in error).toBe(false);
   });
 });
 
@@ -123,7 +119,7 @@ describe("Eip155Provider: request() state errors", () => {
     const { transport, provider } = createProvider();
 
     transport.setRequestHandler(async () => {
-      throw providerErrors.disconnected();
+      throw new ProviderDisconnectedError();
     });
 
     const error = (await provider.request({ method: "eth_blockNumber" }).catch((err) => err)) as unknown;
@@ -161,7 +157,7 @@ describe("Eip155Provider: request() state errors", () => {
     const { transport, provider } = createProvider();
 
     transport.setRequestHandler(async () => {
-      throw rpcErrors.internal({ message: "Request timed out" });
+      throw new JsonRpcInternalError({ message: "Request timed out" });
     });
 
     await expect(provider.request({ method: "eth_blockNumber" })).rejects.toMatchObject({
@@ -562,8 +558,53 @@ describe("Eip155Provider: error normalization", () => {
 
     await expect(provider.request({ method: "eth_blockNumber" })).rejects.toMatchObject({
       code: -32603,
-      message: "upstream failure",
-      data: { originalError: expect.objectContaining({ message: "upstream failure" }) },
+      message: "Internal JSON-RPC error.",
     });
+  });
+
+  it("maps internal core errors at the EIP-155 provider boundary", async () => {
+    const cases = [
+      ["global.permission.denied", 4100, "Unauthorized"],
+      ["approval.user_dismissed", 4001, "User rejected the request"],
+      ["approval.superseded", -32603, "Request superseded"],
+      ["global.transport.disconnected", 4900, "Disconnected"],
+      ["chain.not_found", 4902, "Unrecognized chain"],
+      ["global.rpc.unsupported_method", 4200, "Unsupported method"],
+      ["global.rpc.invalid_params", -32602, "Invalid params"],
+    ] as const;
+
+    for (const [coreCode, publicCode, message] of cases) {
+      const { transport, provider } = createProvider();
+
+      transport.setRequestHandler(async () => {
+        throw { kind: "ArxError", code: coreCode };
+      });
+
+      const error = (await provider.request({ method: "eth_blockNumber" }).catch((err) => err)) as unknown;
+      expect(error).toMatchObject({ code: publicCode, message });
+      if (isRecord(error)) {
+        expect("data" in error).toBe(false);
+        expect("details" in error).toBe(false);
+      }
+    }
+  });
+
+  it("keeps JSON-RPC provider runtime errors as explicit public JSON-RPC errors", async () => {
+    const { transport, provider } = createProvider();
+
+    transport.setRequestHandler(async () => {
+      throw {
+        kind: "JsonRpcError",
+        code: -32099,
+        message: "Custom upstream failure",
+        data: { internal: "redacted by provider surface" },
+      };
+    });
+
+    const error = (await provider.request({ method: "eth_blockNumber" }).catch((err) => err)) as unknown;
+    expect(error).toMatchObject({ code: -32099, message: "Custom upstream failure" });
+    if (isRecord(error)) {
+      expect("data" in error).toBe(false);
+    }
   });
 });

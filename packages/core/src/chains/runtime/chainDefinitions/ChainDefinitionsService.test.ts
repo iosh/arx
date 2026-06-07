@@ -1,4 +1,3 @@
-import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../../messenger/Messenger.js";
 import {
@@ -204,7 +203,7 @@ describe("InMemoryChainDefinitionsService", () => {
         ...mainnet,
         rpcEndpoints: [{ url: "https://malicious.example", type: "public" }],
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.ChainNotSupported });
+    ).rejects.toMatchObject({ code: "chain.definition_conflict" });
   });
 
   it("removes only custom chains", async () => {

@@ -26,8 +26,7 @@ import type { CustomRpcRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { BackgroundStateServices } from "./background/backgroundStateServices.js";
-import type { EngineOptions, initEngine } from "./background/engine.js";
-import type { BackgroundRpcEnvHooks } from "./background/rpcEngineAssembly.js";
+import type { BackgroundRpcAccessPolicyHooks } from "./background/rpcAccessPolicy.js";
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
 import type { BackgroundAssemblyOptions } from "./background/runtimeScopes.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
@@ -43,11 +42,7 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
   messenger?: {
     violationMode?: ViolationMode;
   };
-  engine?: EngineOptions;
-  rpcEngine: {
-    env: BackgroundRpcEnvHooks;
-    assemble?: boolean;
-  };
+  rpcAccessPolicy: BackgroundRpcAccessPolicyHooks;
   networkSelection: {
     port: NetworkSelectionPort;
   };
@@ -101,7 +96,6 @@ export type BackgroundRuntime = {
     keyring: KeyringService;
   };
   rpc: {
-    engine: ReturnType<typeof initEngine>;
     registry: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["namespaceIndex"];
     clients: ReturnType<typeof initRpcLayer>;
     resolveHintNamespace: (hint?: RpcInvocationHint) => Namespace | null;
@@ -113,7 +107,6 @@ export type BackgroundRuntime = {
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
     executeRequest: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["executeRequest"];
   };
-  surfaceErrors: ReturnType<typeof assembleArxWalletRuntime>["surfaceErrors"];
   lifecycle: ReturnType<typeof assembleArxWalletRuntime>["lifecycle"];
   providerAccess: ProviderRuntimeAccess;
   createUiAccess: (options: BackgroundRuntimeUiAccessOptions) => UiRuntimeAccess;
@@ -189,9 +182,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         ...(options.transactions ? { transactions: options.transactions } : {}),
         supportedChains,
       },
-      ...(options.engine ? { engine: options.engine } : {}),
       ...(options.rpcClients ? { rpcClients: options.rpcClients } : {}),
-      rpcEngine: options.rpcEngine,
+      rpcAccessPolicy: options.rpcAccessPolicy,
       ...(options.session ? { session: options.session } : {}),
     },
   });
@@ -201,7 +193,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     transactions: runtime.transactions,
     services: runtime.services,
     rpc: {
-      engine: runtime.rpc.engine,
       registry: runtime.rpc.namespaceIndex,
       clients: runtime.rpc.clients,
       resolveHintNamespace: runtime.rpc.resolveHintNamespace,
@@ -210,7 +201,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       resolveInvocationDetails: runtime.rpc.resolveInvocationDetails,
       executeRequest: runtime.rpc.executeRequest,
     },
-    surfaceErrors: runtime.surfaceErrors,
     lifecycle: runtime.lifecycle,
     providerAccess: runtime.providerAccess,
     createUiAccess: runtime.createUiAccess,

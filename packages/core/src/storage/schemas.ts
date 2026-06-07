@@ -1,34 +1,14 @@
 export const DOMAIN_SCHEMA_VERSION = 1;
 
 export type { ChainDefinitionEntity, ChainDefinitionSource } from "./schemas/chainDefinition.js";
-export {
-  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
-  ChainDefinitionEntitySchema,
-  ChainDefinitionSourceSchema,
-} from "./schemas/chainDefinition.js";
-export {
-  RpcEndpointHealthSchema,
-  RpcEndpointInfoSchema,
-  RpcEndpointStateSchema,
-  RpcErrorSnapshotSchema,
-  RpcStrategySchema,
+export { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, CHAIN_DEFINITION_SOURCES } from "./schemas/chainDefinition.js";
+export type {
+  RpcEndpointHealth,
+  RpcEndpointInfo,
+  RpcEndpointState,
+  RpcEndpointType,
+  RpcErrorSnapshot,
+  RpcStrategy,
 } from "./schemas/rpc.js";
-export {
-  Eip155SubmittedTransactionSchema,
-  Eip155TransactionPayloadSchema,
-  Eip155TransactionReceiptSchema,
-  Eip155TransactionRequestSchema,
-  Eip155UnsignedEip1559TransactionSchema,
-  Eip155UnsignedLegacyTransactionSchema,
-  Eip155UnsignedTransactionDraftSchema,
-  Eip155UnsignedTransactionSchema,
-  TransactionErrorSchema,
-  TransactionPayloadSchema,
-  TransactionPreparedSchema,
-  TransactionReceiptSchema,
-  TransactionReplacementRelationSchema,
-  TransactionRequestSchema,
-  TransactionSubmittedSchema,
-} from "./schemas/transactions.js";
-export type { VaultMetaSnapshot } from "./schemas/vaultMeta.js";
-export { VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "./schemas/vaultMeta.js";
+export type { VaultEnvelope, VaultMetaSnapshot } from "./schemas/vaultMeta.js";
+export { VAULT_META_SNAPSHOT_VERSION } from "./schemas/vaultMeta.js";

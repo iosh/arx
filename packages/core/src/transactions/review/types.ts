@@ -1,46 +1,34 @@
-import { z } from "zod";
 import type { TransactionReviewDetails } from "../review.js";
-import { TransactionReviewDetailsSchema } from "../review.js";
 
-export const TransactionReviewErrorSchema = z.strictObject({
-  reason: z.string().min(1),
-  message: z.string().min(1),
-  data: z.unknown().optional(),
-});
+export type TransactionReviewError = {
+  reason: string;
+  message: string;
+  data?: unknown | undefined;
+};
 
 // User-resolvable review stop: visible review, but approval is not allowed.
-export const TransactionReviewBlockerSchema = z.strictObject({
-  reason: z.string().min(1),
-  message: z.string().min(1),
-  data: z.unknown().optional(),
-});
+export type TransactionReviewBlocker = {
+  reason: string;
+  message: string;
+  data?: unknown | undefined;
+};
 
-export const TransactionReviewPrepareSchema = z.discriminatedUnion("state", [
-  z.strictObject({
-    state: z.literal("preparing"),
-  }),
-  z.strictObject({
-    state: z.literal("ready"),
-  }),
-  z.strictObject({
-    state: z.literal("blocked"),
-    blocker: TransactionReviewBlockerSchema,
-  }),
-  z.strictObject({
-    state: z.literal("failed"),
-    error: TransactionReviewErrorSchema,
-  }),
-]);
+export type TransactionReviewPrepare =
+  | {
+      state: "preparing";
+    }
+  | {
+      state: "ready";
+    }
+  | {
+      state: "blocked";
+      blocker: TransactionReviewBlocker;
+    }
+  | {
+      state: "failed";
+      error: TransactionReviewError;
+    };
 
-export const SendTransactionApprovalReviewSchema = z.strictObject({
-  updatedAt: z.number().int(),
-  details: TransactionReviewDetailsSchema.nullable(),
-  prepare: TransactionReviewPrepareSchema,
-});
-
-export type TransactionReviewBlocker = z.infer<typeof TransactionReviewBlockerSchema>;
-export type TransactionReviewError = z.infer<typeof TransactionReviewErrorSchema>;
-export type TransactionReviewPrepare = z.infer<typeof TransactionReviewPrepareSchema>;
 export type SendTransactionApprovalReview = {
   updatedAt: number;
   details: TransactionReviewDetails | null;

@@ -1,5 +1,4 @@
-import { VaultKeyringPayloadSchema } from "../../storage/keyringSchemas.js";
-import { zeroize } from "../../utils/bytes.js";
+import { KeyringInvalidVaultPayloadError } from "../../keyring/errors.js";
 import type { Payload } from "./types.js";
 
 const encoder = new TextEncoder();
@@ -8,26 +7,31 @@ const decoder = new TextDecoder();
 // Encode payload to bytes for vault storage
 export const encodePayload = (payload: Payload): Uint8Array => encoder.encode(JSON.stringify(payload));
 
-// Decode and validate payload from vault bytes (pure).
-export const decodePayload = (bytes: Uint8Array | null, logger?: (m: string, e?: unknown) => void): Payload => {
-  if (!bytes || bytes.length === 0) return { keyrings: [] };
+const invalidPayload = (reason: string, cause?: unknown): never => {
+  throw new KeyringInvalidVaultPayloadError({
+    details: { path: "$", reason },
+    cause,
+  });
+};
+
+const parseJsonPayload = (bytes: Uint8Array): Payload => {
   try {
-    const parsed = JSON.parse(decoder.decode(bytes)) as unknown;
-    return VaultKeyringPayloadSchema.parse(parsed);
+    return JSON.parse(decoder.decode(bytes)) as Payload;
   } catch (error) {
-    logger?.("keyring: failed to decode vault payload", error);
-    throw error;
+    return invalidPayload("Payload is not valid JSON.", error);
   }
 };
 
-// Decode and validate payload from vault bytes, then zeroize input (consume semantics).
-export const decodePayloadAndZeroize = (
-  bytes: Uint8Array | null,
-  logger?: (m: string, e?: unknown) => void,
-): Payload => {
+// Decode payload from vault bytes (pure). Shape is an internal durable contract.
+export const decodePayload = (bytes: Uint8Array, logger?: (m: string, e?: unknown) => void): Payload => {
   try {
-    return decodePayload(bytes, logger);
-  } finally {
-    if (bytes) zeroize(bytes);
+    if (bytes.length === 0) {
+      invalidPayload("Payload bytes are empty.");
+    }
+
+    return parseJsonPayload(bytes);
+  } catch (error) {
+    logger?.("keyring: failed to decode vault payload", error);
+    throw error;
   }
 };

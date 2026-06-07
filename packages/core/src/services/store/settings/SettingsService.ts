@@ -1,4 +1,4 @@
-import { type SettingsRecord, SettingsRecordSchema } from "../../../storage/records.js";
+import type { SettingsRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
 import type { SettingsPort } from "./port.js";
@@ -15,20 +15,15 @@ export const createSettingsService = ({ port, now }: CreateSettingsServiceOption
   const run = createSerialQueue();
 
   const get = async (): Promise<SettingsRecord | null> => {
-    const record = await port.get();
-    if (!record) return null;
-    const parsed = SettingsRecordSchema.safeParse(record);
-    return parsed.success ? parsed.data : null;
+    return await port.get();
   };
 
   const update = async (params: UpdateSettingsParams): Promise<SettingsRecord> => {
     return await run(async () => {
       const current = await port.get();
-      const baseParsed = current ? SettingsRecordSchema.safeParse(current) : null;
-      const base = baseParsed?.success ? baseParsed.data : null;
 
       const selectedAccountKeysByNamespace: Record<string, string> = {
-        ...(base?.selectedAccountKeysByNamespace ?? {}),
+        ...(current?.selectedAccountKeysByNamespace ?? {}),
       };
 
       if (params.selectedAccountKeysByNamespace) {
@@ -43,11 +38,11 @@ export const createSettingsService = ({ port, now }: CreateSettingsServiceOption
         }
       }
 
-      const next: SettingsRecord = SettingsRecordSchema.parse({
+      const next: SettingsRecord = {
         id: "settings",
         ...(Object.keys(selectedAccountKeysByNamespace).length > 0 ? { selectedAccountKeysByNamespace } : {}),
         updatedAt: clock(),
-      });
+      };
 
       await port.put(next);
       changed.emit({ next });

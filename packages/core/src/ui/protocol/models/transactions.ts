@@ -1,18 +1,13 @@
 import { z } from "zod";
-import { ChainRefSchema } from "../../../chains/ids.js";
-import { AccountKeySchema } from "../../../storage/records.js";
-import { TRANSACTION_TERMINAL_REASON_KINDS } from "../../../transactions/aggregate/index.js";
-
-const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValueSchema),
-    z.record(z.string(), JsonValueSchema),
-  ]),
-);
+import { type ChainRef, ChainRefSchema } from "../../../chains/ids.js";
+import { type AccountKey, AccountKeySchema } from "../../../storage/records.js";
+import type {
+  JsonValue,
+  TransactionReplacementType,
+  TransactionSource,
+  TransactionStatus,
+  TransactionTerminalReason,
+} from "../../../transactions/aggregate/index.js";
 
 const TransactionStatusSchema = z.enum([
   "awaiting_approval",
@@ -26,17 +21,6 @@ const TransactionStatusSchema = z.enum([
   "replaced",
   "dropped",
 ]);
-
-const TransactionSourceSchema = z.enum(["dapp", "wallet"]);
-
-const TransactionTerminalReasonSchema = z.strictObject({
-  kind: z.enum(TRANSACTION_TERMINAL_REASON_KINDS),
-  message: z.string().min(1),
-  namespace: z.string().min(1).nullable(),
-  code: z.string().min(1),
-  details: JsonValueSchema.nullable(),
-  retryable: z.boolean(),
-});
 
 export const ListTransactionsQuerySchema = z
   .strictObject({
@@ -54,39 +38,32 @@ export const ListTransactionsQuerySchema = z
   })
   .optional();
 
-export const TransactionSchema = z.strictObject({
-  id: z.string().min(1),
-  status: TransactionStatusSchema,
-  namespace: z.string().min(1),
-  chainRef: ChainRefSchema,
-  source: TransactionSourceSchema,
-  origin: z.string().min(1),
-  account: z.strictObject({
-    accountKey: AccountKeySchema,
-    address: z.string().min(1),
-  }),
-  requestKind: z.string().min(1),
-  submitted: JsonValueSchema.nullable(),
-  receipt: JsonValueSchema.nullable(),
-  replacement: z
-    .strictObject({
-      replaces: z
-        .strictObject({
-          transactionId: z.string().min(1),
-          type: z.enum(["speed_up", "cancel"]),
-        })
-        .nullable(),
-      replacedBy: z
-        .strictObject({
-          transactionId: z.string().min(1),
-        })
-        .nullable(),
-    })
-    .nullable(),
-  terminalReason: TransactionTerminalReasonSchema.nullable(),
-  createdAt: z.number().int().min(0),
-  updatedAt: z.number().int().min(0),
-});
-
 export type ListTransactionsQuery = z.infer<typeof ListTransactionsQuerySchema>;
-export type UiTransaction = z.infer<typeof TransactionSchema>;
+
+export type UiTransaction = {
+  id: string;
+  status: TransactionStatus;
+  namespace: string;
+  chainRef: ChainRef;
+  source: TransactionSource;
+  origin: string;
+  account: {
+    accountKey: AccountKey;
+    address: string;
+  };
+  requestKind: string;
+  submitted: JsonValue | null;
+  receipt: JsonValue | null;
+  replacement: {
+    replaces: {
+      transactionId: string;
+      type: TransactionReplacementType;
+    } | null;
+    replacedBy: {
+      transactionId: string;
+    } | null;
+  } | null;
+  terminalReason: TransactionTerminalReason | null;
+  createdAt: number;
+  updatedAt: number;
+};

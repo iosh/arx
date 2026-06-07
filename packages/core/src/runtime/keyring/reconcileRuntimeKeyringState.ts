@@ -1,4 +1,4 @@
-import { type AccountRecord, type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../storage/records.js";
+import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { Payload, VaultKeyringEntry } from "./types.js";
 
 export type RuntimeKeyringReconciliationResult = {
@@ -8,13 +8,12 @@ export type RuntimeKeyringReconciliationResult = {
   prunedKeyringIds: string[];
 };
 
-const buildMinimalKeyringMeta = (entry: VaultKeyringEntry): KeyringMetaRecord =>
-  KeyringMetaRecordSchema.parse({
-    id: entry.keyringId,
-    type: entry.type,
-    createdAt: entry.createdAt,
-    ...(entry.type === "hd" ? { needsBackup: true } : {}),
-  });
+const buildMinimalKeyringMeta = (entry: VaultKeyringEntry): KeyringMetaRecord => ({
+  id: entry.keyringId,
+  type: entry.type,
+  createdAt: entry.createdAt,
+  ...(entry.type === "hd" ? { needsBackup: true } : {}),
+});
 
 export const reconcileRuntimeKeyringState = ({
   payload,

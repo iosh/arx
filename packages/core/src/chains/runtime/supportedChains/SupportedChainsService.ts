@@ -1,5 +1,5 @@
 import type { CustomChainsPort } from "../../../services/store/customChains/port.js";
-import { type CustomChainRecord, CustomChainRecordSchema } from "../../../storage/records.js";
+import type { CustomChainRecord } from "../../../storage/records.js";
 import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
 import { type ChainMetadata, isSameAddChainComparableMetadata } from "../../metadata.js";
@@ -186,29 +186,23 @@ export class InMemorySupportedChainsService implements SupportedChainsService {
   }
 
   #parseCustomChainRecord(record: CustomChainRecord): CustomChainRecord | null {
-    const parsed = CustomChainRecordSchema.safeParse(record);
-    if (!parsed.success) {
-      this.#logger("[supportedChains] dropping invalid custom chain", parsed.error);
-      return null;
-    }
-
-    return CustomChainRecordSchema.parse({
-      chainRef: parsed.data.chainRef,
-      namespace: parsed.data.namespace,
-      metadata: prepareChainMetadataForStorage(parsed.data.metadata),
-      ...(parsed.data.createdByOrigin ? { createdByOrigin: parsed.data.createdByOrigin } : {}),
-      updatedAt: parsed.data.updatedAt,
-    });
+    return {
+      chainRef: record.chainRef,
+      namespace: record.namespace,
+      metadata: prepareChainMetadataForStorage(record.metadata),
+      ...(record.createdByOrigin ? { createdByOrigin: record.createdByOrigin } : {}),
+      updatedAt: record.updatedAt,
+    };
   }
 
   #toCustomChainRecord(chain: SupportedChainEntity): CustomChainRecord {
-    return CustomChainRecordSchema.parse({
+    return {
       chainRef: chain.chainRef,
       namespace: chain.namespace,
       metadata: chain.metadata,
       ...(chain.createdByOrigin ? { createdByOrigin: chain.createdByOrigin } : {}),
       updatedAt: this.#now(),
-    });
+    };
   }
 
   #publishState() {

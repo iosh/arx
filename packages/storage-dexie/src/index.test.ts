@@ -1,15 +1,12 @@
 import "fake-indexeddb/auto";
 
-import { NetworkSelectionRecordSchema, VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "@arx/core/storage";
+import { type NetworkSelectionRecord, VAULT_META_SNAPSHOT_VERSION, type VaultMetaSnapshot } from "@arx/core/storage";
 import { Dexie } from "dexie";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createDexieStorage } from "./createDexieStorage.js";
 
 const DB_NAME = "arx-storage-index-test";
 const storages: Array<ReturnType<typeof createDexieStorage>> = [];
-
-const originalWarn = console.warn.bind(console);
-let warnSpy: ReturnType<typeof vi.spyOn>;
 
 const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   const storage = createDexieStorage({ databaseName: DB_NAME });
@@ -17,18 +14,9 @@ const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   return storage;
 };
 
-beforeEach(() => {
-  warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-    const first = args[0];
-    if (typeof first === "string" && first.startsWith("[storage-dexie]")) return;
-    originalWarn(...args);
-  });
-});
-
 afterEach(async () => {
   for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
-  warnSpy.mockRestore();
 });
 
 describe("@arx/storage-dexie", () => {
@@ -36,37 +24,22 @@ describe("@arx/storage-dexie", () => {
     const storage = createTestStorage();
     const port = storage.ports.networkSelection;
 
-    const record = NetworkSelectionRecordSchema.parse({
+    const record = {
       id: "network-selection",
       selectedNamespace: "eip155",
       chainRefByNamespace: { eip155: "eip155:1" },
       updatedAt: 1_000,
-    });
+    } satisfies NetworkSelectionRecord;
 
     await port.put(record);
     expect(await port.get()).toEqual(record);
-  });
-
-  it("VaultMetaPort drops invalid vault meta on load", async () => {
-    const storage = createTestStorage();
-    const port = storage.ports.vaultMeta;
-
-    await storage.__debug.ctx.ready;
-    await storage.__debug.db.vaultMeta.put({ id: "vault-meta", version: 1, updatedAt: 0, payload: { bad: true } });
-
-    const loaded = await port.loadVaultMeta();
-    expect(loaded).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[storage-dexie] invalid vault meta, dropping"),
-      expect.anything(),
-    );
   });
 
   it("VaultMetaPort roundtrips", async () => {
     const storage = createTestStorage();
     const port = storage.ports.vaultMeta;
 
-    const snapshot = VaultMetaSnapshotSchema.parse({
+    const snapshot = {
       version: VAULT_META_SNAPSHOT_VERSION,
       updatedAt: 1_000,
       payload: {
@@ -74,7 +47,7 @@ describe("@arx/storage-dexie", () => {
         autoLockDurationMs: 900_000,
         initializedAt: 1_000,
       },
-    });
+    } satisfies VaultMetaSnapshot;
 
     await port.saveVaultMeta(snapshot);
     expect(await port.loadVaultMeta()).toEqual(snapshot);

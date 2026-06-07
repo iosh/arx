@@ -1,10 +1,6 @@
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import {
-  type NetworkPreferencesRecord,
-  NetworkPreferencesRecordSchema,
-  type NetworkRpcPreference,
-} from "../../../storage/records.js";
+import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
 import type { NetworkPreferencesPort } from "./port.js";
@@ -36,11 +32,6 @@ export const createNetworkPreferencesService = ({
   const getDefaultSelectedNamespace = () => defaults.selectedNamespace;
   const getDefaultActiveChainByNamespace = () => ({ ...defaults.activeChainByNamespace });
 
-  const safeParse = (value: unknown): NetworkPreferencesRecord | null => {
-    const parsed = NetworkPreferencesRecordSchema.safeParse(value);
-    return parsed.success ? parsed.data : null;
-  };
-
   const emitChanged = (next: NetworkPreferencesRecord) => {
     cached = next;
     changed.emit({ next });
@@ -48,13 +39,8 @@ export const createNetworkPreferencesService = ({
 
   const get = async (): Promise<NetworkPreferencesRecord | null> => {
     const record = await port.get();
-    if (!record) {
-      cached = null;
-      return null;
-    }
-    const parsed = safeParse(record);
-    cached = parsed;
-    return parsed;
+    cached = record;
+    return record;
   };
 
   const getSnapshot = (): NetworkPreferencesRecord | null => cached;
@@ -78,7 +64,7 @@ export const createNetworkPreferencesService = ({
 
   const update = async (params: UpdateNetworkPreferencesParams): Promise<NetworkPreferencesRecord> => {
     return await run(async () => {
-      const base = safeParse(await port.get());
+      const base = await port.get();
       cached = base;
 
       const nextActiveBase =
@@ -120,13 +106,13 @@ export const createNetworkPreferencesService = ({
         }
       }
 
-      const next: NetworkPreferencesRecord = NetworkPreferencesRecordSchema.parse({
+      const next: NetworkPreferencesRecord = {
         id: "network-preferences",
         selectedNamespace: nextSelectedNamespace,
         activeChainByNamespace: nextActiveChainByNamespace,
         rpc: nextRpc,
         updatedAt: clock(),
-      });
+      };
 
       await port.put(next);
       emitChanged(next);

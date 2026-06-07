@@ -1,6 +1,6 @@
 import { RpcInvalidRequestError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
 import type { UiError, UiPortEnvelope } from "../protocol/envelopes.js";
-import { parseUiMethodParams, parseUiMethodResult, type UiMethodName } from "../protocol/index.js";
+import { parseUiMethodParams, type UiMethodName } from "../protocol/index.js";
 import { encodeUiError } from "./errorEncoding.js";
 import {
   EMPTY_UI_REQUEST_EXECUTION_PLAN,
@@ -48,9 +48,8 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
       const handler = requireUiHandler(handlers, method);
       const params = parseUiMethodParams(method, request.params);
       const result = await handler(params);
-      const parsed = parseUiMethodResult(method, result);
       return {
-        reply: { type: "ui:response", id: request.id, result: parsed, context: ctx },
+        reply: { type: "ui:response", id: request.id, result, context: ctx },
         plan,
       };
     } catch (error) {

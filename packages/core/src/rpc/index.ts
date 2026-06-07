@@ -55,7 +55,7 @@ export {
 } from "./RpcClientRegistry.js";
 export type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 export { RpcRegistry } from "./RpcRegistry.js";
-export { type RequestContext, RequestContextSchema } from "./requestContext.js";
+export type { RequestContext } from "./requestContext.js";
 export type { RpcRequestKind } from "./requestKind.js";
 export { RpcRequestKinds } from "./requestKind.js";
 

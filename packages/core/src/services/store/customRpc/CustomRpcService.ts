@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../../chains/ids.js";
-import { type RpcEndpoint, rpcEndpointSchema } from "../../../chains/metadata.js";
-import { type CustomRpcRecord, CustomRpcRecordSchema } from "../../../storage/records.js";
+import type { RpcEndpoint } from "../../../chains/metadata.js";
+import type { CustomRpcRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
 import type { CustomRpcPort } from "./port.js";
@@ -31,20 +31,15 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
   const cache = new Map<ChainRef, CustomRpcRecord>();
 
   const toRecord = (record: CustomRpcRecord): CustomRpcRecord => {
-    return CustomRpcRecordSchema.parse({
+    return {
       chainRef: record.chainRef,
       rpcEndpoints: cloneRpcEndpoints(record.rpcEndpoints),
       updatedAt: record.updatedAt,
-    });
-  };
-
-  const parseRecord = (value: unknown): CustomRpcRecord | null => {
-    const parsed = CustomRpcRecordSchema.safeParse(value);
-    return parsed.success ? toRecord(parsed.data) : null;
+    };
   };
 
   const get = async (chainRef: ChainRef): Promise<CustomRpcRecord | null> => {
-    const record = parseRecord(await port.get(chainRef));
+    const record = await port.get(chainRef);
     if (!record) {
       cache.delete(chainRef);
       return null;
@@ -54,7 +49,7 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
   };
 
   const getAll = async (): Promise<CustomRpcRecord[]> => {
-    const records = (await port.list()).map((record) => parseRecord(record)).filter((record) => record !== null);
+    const records = await port.list();
     cache.clear();
     for (const record of records) {
       cache.set(record.chainRef, record);
@@ -69,19 +64,12 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
 
   const set = async (chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<CustomRpcRecord> => {
     return await run(async () => {
-      const previous = parseRecord(await port.get(chainRef));
-      const next = CustomRpcRecordSchema.parse({
+      const previous = await port.get(chainRef);
+      const next: CustomRpcRecord = {
         chainRef,
-        rpcEndpoints: rpcEndpoints.map((endpoint) =>
-          rpcEndpointSchema.parse({
-            url: endpoint.url,
-            type: endpoint.type,
-            weight: endpoint.weight,
-            headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-          }),
-        ),
+        rpcEndpoints: cloneRpcEndpoints(rpcEndpoints),
         updatedAt: clock(),
-      });
+      };
 
       await port.upsert(next);
       const clonedNext = toRecord(next);
@@ -97,7 +85,7 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
 
   const clear = async (chainRef: ChainRef): Promise<void> => {
     await run(async () => {
-      const previous = parseRecord(await port.get(chainRef));
+      const previous = await port.get(chainRef);
       if (!previous) {
         cache.delete(chainRef);
         return;

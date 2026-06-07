@@ -1,160 +1,110 @@
 import { z } from "zod";
 import { ApprovalAccountSelectionDecisionSchema } from "../../../approvals/decision.js";
-import { type ApprovalKind, ApprovalKinds } from "../../../approvals/queue/types.js";
-import { ChainRefSchema } from "../../../chains/ids.js";
-import { AccountKeySchema } from "../../../storage/records.js";
-import {
-  type SendTransactionApprovalReview,
-  SendTransactionApprovalReviewSchema,
-} from "../../../transactions/review/types.js";
+import type { ApprovalKind, ApprovalKinds } from "../../../approvals/queue/types.js";
+import type { ChainRef } from "../../../chains/ids.js";
+import type { AccountKey } from "../../../storage/records.js";
+import type { SendTransactionApprovalReview } from "../../../transactions/review/types.js";
 
-const APPROVAL_KIND_VALUES = [
-  ApprovalKinds.RequestAccounts,
-  ApprovalKinds.RequestPermissions,
-  ApprovalKinds.SignMessage,
-  ApprovalKinds.SignTypedData,
-  ApprovalKinds.SendTransaction,
-  ApprovalKinds.SwitchChain,
-  ApprovalKinds.AddChain,
-] as const satisfies readonly [ApprovalKind, ...ApprovalKind[]];
+export type ApprovalSelectableAccount = {
+  accountKey: AccountKey;
+  canonicalAddress: string;
+  displayAddress: string;
+};
 
-const ApprovalKindSchema = z.enum(APPROVAL_KIND_VALUES);
+export type ApprovalListEntry = {
+  approvalId: string;
+  kind: ApprovalKind;
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef;
+  createdAt: number;
+};
 
-export const ApprovalSelectableAccountSchema = z.strictObject({
-  accountKey: AccountKeySchema,
-  canonicalAddress: z.string().min(1),
-  displayAddress: z.string().min(1),
-});
+type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
+  approvalId: string;
+  kind: K;
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef;
+  createdAt: number;
+  actions: {
+    canApprove: boolean;
+    canReject: boolean;
+  };
+  request: Request;
+  review: Review;
+};
 
-export const ApprovalListEntrySchema = z.strictObject({
-  approvalId: z.string().min(1),
-  kind: ApprovalKindSchema,
-  origin: z.string().min(1),
-  namespace: z.string().min(1),
-  chainRef: ChainRefSchema,
-  createdAt: z.number().int(),
-});
+type RequestAccountsRequest = {
+  selectableAccounts: ApprovalSelectableAccount[];
+  recommendedAccountKey: AccountKey | null;
+};
 
-const ApprovalDetailBaseSchema = z.strictObject({
-  approvalId: z.string().min(1),
-  kind: ApprovalKindSchema,
-  origin: z.string().min(1),
-  namespace: z.string().min(1),
-  chainRef: ChainRefSchema,
-  createdAt: z.number().int(),
-  actions: z.strictObject({
-    canApprove: z.boolean(),
-    canReject: z.boolean(),
-  }),
-});
+type RequestPermissionsRequest = {
+  selectableAccounts: ApprovalSelectableAccount[];
+  recommendedAccountKey: AccountKey | null;
+  requestedGrants: Array<{
+    grantKind: string;
+    chainRef: ChainRef;
+  }>;
+};
 
-const RequestAccountsRequestSchema = z.strictObject({
-  selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-  recommendedAccountKey: AccountKeySchema.nullable(),
-});
+type SignMessageRequest = {
+  from: string;
+  message: string;
+};
 
-const RequestPermissionsRequestSchema = z.strictObject({
-  selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-  recommendedAccountKey: AccountKeySchema.nullable(),
-  requestedGrants: z
-    .array(
-      z.strictObject({
-        grantKind: z.string().min(1),
-        chainRef: ChainRefSchema,
-      }),
-    )
-    .min(1),
-});
+type SignTypedDataRequest = {
+  from: string;
+  typedData: string;
+};
 
-const SignMessageRequestSchema = z.strictObject({
-  from: z.string().min(1),
-  message: z.string().min(1),
-});
+type SwitchChainRequest = {
+  chainRef: ChainRef;
+  chainId?: string | undefined;
+  displayName?: string | undefined;
+};
 
-const SignTypedDataRequestSchema = z.strictObject({
-  from: z.string().min(1),
-  typedData: z.string().min(1),
-});
+type AddChainRequest = {
+  chainRef: ChainRef;
+  chainId: string;
+  displayName: string;
+  rpcUrls: string[];
+  nativeCurrency?:
+    | {
+        name: string;
+        symbol: string;
+        decimals: number;
+      }
+    | undefined;
+  blockExplorerUrl?: string | undefined;
+  isUpdate: boolean;
+};
 
-const SwitchChainRequestSchema = z.strictObject({
-  chainRef: ChainRefSchema,
-  chainId: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]+$/)
-    .optional(),
-  displayName: z.string().min(1).optional(),
-});
+type SendTransactionRequest = {
+  transactionId: string;
+  chainRef: ChainRef;
+  origin: string;
+  prepareId: string | null;
+};
 
-const AddChainRequestSchema = z.strictObject({
-  chainRef: ChainRefSchema,
-  chainId: z.string().regex(/^0x[a-fA-F0-9]+$/),
-  displayName: z.string().min(1),
-  rpcUrls: z.array(z.url()).min(1),
-  nativeCurrency: z
-    .strictObject({
-      name: z.string().min(1),
-      symbol: z.string().min(1),
-      decimals: z.number().int().nonnegative(),
-    })
-    .optional(),
-  blockExplorerUrl: z.url().optional(),
-  isUpdate: z.boolean(),
-});
+export type ApprovalAccountSelectionDetail =
+  | ApprovalDetailBase<typeof ApprovalKinds.RequestAccounts, RequestAccountsRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.RequestPermissions, RequestPermissionsRequest, null>;
 
-const SendTransactionRequestSchema = z.strictObject({
-  transactionId: z.string().min(1),
-  chainRef: ChainRefSchema,
-  origin: z.string().min(1),
-  prepareId: z.string().min(1).nullable(),
-});
+export type ApprovalStaticDetail =
+  | ApprovalDetailBase<typeof ApprovalKinds.SignMessage, SignMessageRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.SignTypedData, SignTypedDataRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.SwitchChain, SwitchChainRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.AddChain, AddChainRequest, null>;
 
-export const ApprovalAccountSelectionDetailSchema = z.discriminatedUnion("kind", [
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.RequestAccounts),
-    request: RequestAccountsRequestSchema,
-    review: z.null(),
-  }),
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.RequestPermissions),
-    request: RequestPermissionsRequestSchema,
-    review: z.null(),
-  }),
-]);
+export type ApprovalSendTransactionDetail = ApprovalDetailBase<
+  typeof ApprovalKinds.SendTransaction,
+  SendTransactionRequest,
+  SendTransactionApprovalReview
+>;
 
-export const ApprovalStaticDetailSchema = z.discriminatedUnion("kind", [
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.SignMessage),
-    request: SignMessageRequestSchema,
-    review: z.null(),
-  }),
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.SignTypedData),
-    request: SignTypedDataRequestSchema,
-    review: z.null(),
-  }),
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.SwitchChain),
-    request: SwitchChainRequestSchema,
-    review: z.null(),
-  }),
-  ApprovalDetailBaseSchema.extend({
-    kind: z.literal(ApprovalKinds.AddChain),
-    request: AddChainRequestSchema,
-    review: z.null(),
-  }),
-]);
-
-export const ApprovalSendTransactionDetailSchema = ApprovalDetailBaseSchema.extend({
-  kind: z.literal(ApprovalKinds.SendTransaction),
-  request: SendTransactionRequestSchema,
-  review: SendTransactionApprovalReviewSchema,
-});
-
-export const ApprovalDetailSchema = z.discriminatedUnion("kind", [
-  ...ApprovalAccountSelectionDetailSchema.options,
-  ...ApprovalStaticDetailSchema.options,
-  ApprovalSendTransactionDetailSchema,
-]);
+export type ApprovalDetail = ApprovalAccountSelectionDetail | ApprovalStaticDetail | ApprovalSendTransactionDetail;
 
 export const ApprovalResolveRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
@@ -170,14 +120,6 @@ export const ApprovalResolveRequestSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-export const ApprovalResolveResultSchema = z.null();
-
-export type ApprovalListEntry = z.infer<typeof ApprovalListEntrySchema>;
-export type ApprovalSelectableAccount = z.infer<typeof ApprovalSelectableAccountSchema>;
-export type ApprovalDetail = z.infer<typeof ApprovalDetailSchema>;
-export type ApprovalAccountSelectionDetail = z.infer<typeof ApprovalAccountSelectionDetailSchema>;
-export type ApprovalStaticDetail = z.infer<typeof ApprovalStaticDetailSchema>;
-export type ApprovalSendTransactionDetail = z.infer<typeof ApprovalSendTransactionDetailSchema>;
 export type ApprovalResolveRequest = z.infer<typeof ApprovalResolveRequestSchema>;
-export type ApprovalResolveResult = z.infer<typeof ApprovalResolveResultSchema>;
+export type ApprovalResolveResult = null;
 export type { SendTransactionApprovalReview };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
-import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
+import type { PermissionRecord } from "../../storage/records.js";
 import { PermissionsService } from "./PermissionsService.js";
 import { PERMISSION_TOPICS } from "./topics.js";
 
@@ -20,11 +20,11 @@ const createRecord = (args: {
   namespace?: string;
   chains: Array<{ chainRef: string; accountKeys: string[] }>;
 }) =>
-  PermissionRecordSchema.parse({
+  ({
     origin: args.origin ?? ORIGIN,
     namespace: args.namespace ?? NAMESPACE,
     chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
-  });
+  }) satisfies PermissionRecord;
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
   const toKey = (record: PermissionRecord) => `${record.origin}::${record.namespace}`;
@@ -41,8 +41,7 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
       return [...store.values()].filter((record) => record.origin === origin);
     },
     async upsert(record) {
-      const checked = PermissionRecordSchema.parse(record);
-      store.set(toKey(checked), checked);
+      store.set(toKey(record), record);
     },
     async remove({ origin, namespace }) {
       store.delete(`${origin}::${namespace}`);

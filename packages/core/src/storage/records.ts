@@ -1,268 +1,86 @@
 import { z } from "zod";
-import { getChainRefNamespace } from "../chains/caip.js";
-import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
-import { KeyringTypeSchema } from "./keyringSchemas.js";
-import { RpcStrategySchema } from "./schemas.js";
-import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
+import type { ChainRef } from "../chains/ids.js";
+import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
+import type { KeyringType } from "./keyringSchemas.js";
+import type { RpcStrategy } from "./schemas/rpc.js";
 
-// Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
-// Keep validation loose here; chain-specific rules live in codecs/modules.
-export const AccountNamespaceSchema = z.string().min(1);
-export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
+export type AccountNamespace = string;
 
-// Deterministic account key: <namespace>:<hex bytes>. Used for dedupe and references.
+// External input parser for account keys. Storage records themselves are typed
+// values and are not runtime-validated through zod.
 export const AccountKeySchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
   error: "accountKey must be <namespace>:<even-length lowercase hex bytes>",
 });
-export type AccountKey = z.infer<typeof AccountKeySchema>;
+export type AccountKey = string;
 
-export const SettingsRecordSchema = z.strictObject({
-  id: z.literal("settings"),
-  // Per-namespace selection: only store present selections (absence => null).
-  selectedAccountKeysByNamespace: z.record(z.string().min(1), AccountKeySchema).optional(),
-  updatedAt: epochMillisecondsSchema,
-});
-export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;
-
-export const NetworkRpcPreferenceSchema = z.strictObject({
-  activeIndex: z.number().int().min(0),
-  strategy: RpcStrategySchema,
-});
-export type NetworkRpcPreference = z.infer<typeof NetworkRpcPreferenceSchema>;
-
-export const CustomChainRecordSchema = z
-  .strictObject({
-    chainRef: chainRefSchema,
-    namespace: z.string().min(1),
-    metadata: chainMetadataSchema,
-    createdByOrigin: originStringSchema.optional(),
-    updatedAt: epochMillisecondsSchema,
-  })
-  .refine((value) => value.metadata.chainRef === value.chainRef, {
-    error: "metadata.chainRef must match the record chainRef",
-    path: ["metadata", "chainRef"],
-  })
-  .refine((value) => value.metadata.namespace === value.namespace, {
-    error: "metadata.namespace must match the record namespace",
-    path: ["metadata", "namespace"],
-  });
-export type CustomChainRecord = z.infer<typeof CustomChainRecordSchema>;
-
-const validateRpcEndpoints = (
-  value: {
-    rpcEndpoints: readonly { url: string }[];
-  },
-  ctx: z.RefinementCtx,
-): void => {
-  const urls = new Set<string>();
-  for (const [index, endpoint] of value.rpcEndpoints.entries()) {
-    if (urls.has(endpoint.url)) {
-      ctx.addIssue({
-        code: "custom",
-        message: `rpcEndpoints[${index}] duplicates URL "${endpoint.url}"`,
-        path: ["rpcEndpoints", index, "url"],
-      });
-      continue;
-    }
-    urls.add(endpoint.url);
-  }
+export type SettingsRecord = {
+  id: "settings";
+  selectedAccountKeysByNamespace?: Record<string, AccountKey> | undefined;
+  updatedAt: number;
 };
 
-export const CustomRpcRecordSchema = z
-  .strictObject({
-    chainRef: chainRefSchema,
-    rpcEndpoints: z.array(rpcEndpointSchema).min(1),
-    updatedAt: epochMillisecondsSchema,
-  })
-  .superRefine(validateRpcEndpoints);
-export type CustomRpcRecord = z.infer<typeof CustomRpcRecordSchema>;
+export type NetworkRpcPreference = {
+  activeIndex: number;
+  strategy: RpcStrategy;
+};
 
-const ChainRefByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
+export type CustomChainRecord = {
+  chainRef: ChainRef;
+  namespace: string;
+  metadata: ChainMetadata;
+  createdByOrigin?: string | undefined;
+  updatedAt: number;
+};
 
-export const NetworkSelectionRecordSchema = z
-  .strictObject({
-    id: z.literal("network-selection"),
-    selectedNamespace: z.string().min(1),
-    chainRefByNamespace: ChainRefByNamespaceSchema.default({}),
-    updatedAt: epochMillisecondsSchema,
-  })
-  .superRefine((value, ctx) => {
-    for (const [namespace, chainRef] of Object.entries(value.chainRefByNamespace)) {
-      const chainNamespace = getChainRefNamespace(chainRef);
-      if (chainNamespace !== namespace) {
-        ctx.addIssue({
-          code: "custom",
-          message: `chainRefByNamespace[${namespace}] must point to the same namespace`,
-          path: ["chainRefByNamespace", namespace],
-        });
-      }
-    }
+export type CustomRpcRecord = {
+  chainRef: ChainRef;
+  rpcEndpoints: RpcEndpoint[];
+  updatedAt: number;
+};
 
-    const selectedNamespaceChainRef = value.chainRefByNamespace[value.selectedNamespace] ?? null;
-    if (!selectedNamespaceChainRef) {
-      ctx.addIssue({
-        code: "custom",
-        message: `chainRefByNamespace must include the selected namespace "${value.selectedNamespace}"`,
-        path: ["chainRefByNamespace", value.selectedNamespace],
-      });
-      return;
-    }
+export type NetworkSelectionRecord = {
+  id: "network-selection";
+  selectedNamespace: string;
+  chainRefByNamespace: Record<string, ChainRef>;
+  updatedAt: number;
+};
 
-    if (getChainRefNamespace(selectedNamespaceChainRef) !== value.selectedNamespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: "selected namespace must resolve to a chain in the same namespace",
-        path: ["selectedNamespace"],
-      });
-    }
-  });
-export type NetworkSelectionRecord = z.infer<typeof NetworkSelectionRecordSchema>;
+export type NetworkPreferencesRecord = {
+  id: "network-preferences";
+  selectedNamespace: string;
+  activeChainByNamespace: Record<string, ChainRef>;
+  rpc: Record<ChainRef, NetworkRpcPreference>;
+  updatedAt: number;
+};
 
-const ActiveChainByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
-
-const NetworkPreferencesRecordInputSchema = z
-  .strictObject({
-    id: z.literal("network-preferences"),
-    selectedNamespace: z.string().min(1),
-    activeChainByNamespace: ActiveChainByNamespaceSchema.default({}),
-    // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
-    rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
-    updatedAt: epochMillisecondsSchema,
-  })
-  .superRefine((value, ctx) => {
-    for (const [namespace, chainRef] of Object.entries(value.activeChainByNamespace)) {
-      const chainNamespace = getChainRefNamespace(chainRef);
-      if (chainNamespace !== namespace) {
-        ctx.addIssue({
-          code: "custom",
-          message: `activeChainByNamespace[${namespace}] must point to the same namespace`,
-          path: ["activeChainByNamespace", namespace],
-        });
-      }
-    }
-
-    const selectedNamespaceChainRef = value.activeChainByNamespace[value.selectedNamespace] ?? null;
-    if (!selectedNamespaceChainRef) {
-      ctx.addIssue({
-        code: "custom",
-        message: `activeChainByNamespace must include the selected namespace "${value.selectedNamespace}"`,
-        path: ["activeChainByNamespace", value.selectedNamespace],
-      });
-      return;
-    }
-
-    if (getChainRefNamespace(selectedNamespaceChainRef) !== value.selectedNamespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: "selected namespace must resolve to a chain in the same namespace",
-        path: ["selectedNamespace"],
-      });
-    }
-  });
-
-export const NetworkPreferencesRecordSchema = NetworkPreferencesRecordInputSchema;
-export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
-
-export const KeyringMetaRecordSchema = z.strictObject({
-  id: z.string().uuid(),
-  type: KeyringTypeSchema,
-  alias: nonEmptyStringSchema.optional(),
-  needsBackup: z.boolean().optional(),
+export type KeyringMetaRecord = {
+  id: string;
+  type: KeyringType;
+  alias?: string | undefined;
+  needsBackup?: boolean | undefined;
   // HD only: the next derivation index to use (monotonic, even if accounts are removed/hidden).
-  nextDerivationIndex: z.number().int().min(0).optional(),
-  createdAt: epochMillisecondsSchema,
-});
-export type KeyringMetaRecord = z.infer<typeof KeyringMetaRecordSchema>;
+  nextDerivationIndex?: number | undefined;
+  createdAt: number;
+};
 
-export const AccountRecordSchema = z
-  .strictObject({
-    accountKey: AccountKeySchema,
-    namespace: AccountNamespaceSchema,
-    keyringId: z.string().uuid(),
-    derivationIndex: z.number().int().min(0).optional(),
-    alias: nonEmptyStringSchema.optional(),
-    hidden: z.boolean().optional(),
-    createdAt: epochMillisecondsSchema,
-  })
-  .superRefine((value, ctx) => {
-    const separatorIndex = value.accountKey.indexOf(":");
-    const accountNamespace = separatorIndex >= 0 ? value.accountKey.slice(0, separatorIndex) : null;
-    if (accountNamespace !== value.namespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: `accountKey namespace must equal "${value.namespace}"`,
-        path: ["accountKey"],
-      });
-    }
-  });
-export type AccountRecord = z.infer<typeof AccountRecordSchema>;
+export type AccountRecord = {
+  accountKey: AccountKey;
+  namespace: AccountNamespace;
+  keyringId: string;
+  derivationIndex?: number | undefined;
+  alias?: string | undefined;
+  hidden?: boolean | undefined;
+  createdAt: number;
+};
 
 // Empty means the origin is connected to the chain but has no account access on it.
-export const PermissionChainAccountKeysSchema = z.array(AccountKeySchema);
-export type PermissionChainAccountKeys = z.infer<typeof PermissionChainAccountKeysSchema>;
+export type PermissionChainAccountKeys = AccountKey[];
+export type PermissionChainScopes = Record<ChainRef, PermissionChainAccountKeys>;
 
-export const PermissionChainScopesSchema = z.record(chainRefSchema, PermissionChainAccountKeysSchema);
-export type PermissionChainScopes = z.infer<typeof PermissionChainScopesSchema>;
-
-const getAccountKeyNamespace = (accountKey: AccountKey): string | null => {
-  const separatorIndex = accountKey.indexOf(":");
-  return separatorIndex >= 0 ? accountKey.slice(0, separatorIndex) : null;
+export type PermissionRecord = {
+  origin: string;
+  namespace: string;
+  // One persistent connection-authorization record per (origin, namespace).
+  // Request-level signing and transaction approvals remain runtime state.
+  chainScopes: PermissionChainScopes;
 };
-
-const validatePermissionRecord = (
-  value: {
-    namespace: string;
-    chainScopes: PermissionChainScopes;
-  },
-  ctx: z.RefinementCtx,
-): void => {
-  const chainEntries = Object.entries(value.chainScopes);
-  if (chainEntries.length === 0) {
-    ctx.addIssue({
-      code: "custom",
-      message: "chainScopes must not be empty",
-      path: ["chainScopes"],
-    });
-  }
-
-  for (const [chainRef, accountKeys] of chainEntries) {
-    const chainNamespace = getChainRefNamespace(chainRef);
-    if (chainNamespace !== value.namespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: `chainScopes[${chainRef}] must belong to namespace "${value.namespace}"`,
-        path: ["chainScopes", chainRef],
-      });
-    }
-
-    const uniqueAccounts = new Set(accountKeys);
-    if (uniqueAccounts.size !== accountKeys.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: `chainScopes[${chainRef}] must not contain duplicate accountKeys`,
-        path: ["chainScopes", chainRef],
-      });
-    }
-
-    for (const [accountIndex, accountKey] of accountKeys.entries()) {
-      if (getAccountKeyNamespace(accountKey) !== value.namespace) {
-        ctx.addIssue({
-          code: "custom",
-          message: `chainScopes[${chainRef}][${accountIndex}] must belong to namespace "${value.namespace}"`,
-          path: ["chainScopes", chainRef, accountIndex],
-        });
-      }
-    }
-  }
-};
-
-export const PermissionRecordSchema = z
-  .strictObject({
-    origin: originStringSchema,
-    namespace: z.string().min(1),
-    // One persistent connection-authorization record per (origin, namespace).
-    // Request-level signing and transaction approvals remain runtime state.
-    chainScopes: PermissionChainScopesSchema,
-  })
-  .superRefine(validatePermissionRecord);
-export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;

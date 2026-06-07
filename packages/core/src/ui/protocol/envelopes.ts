@@ -75,7 +75,16 @@ const UiResponseEnvelopeSchema = z
     result: z.unknown(),
     context: UiContextSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!Object.hasOwn(value, "result")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["result"],
+        message: "Response envelope must include result.",
+      });
+    }
+  });
 
 const UiErrorEnvelopeSchema = z
   .object({
@@ -93,7 +102,16 @@ const UiEventEnvelopeSchema = z
     payload: z.unknown(),
     context: UiContextSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!Object.hasOwn(value, "payload")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["payload"],
+        message: "Event envelope must include payload.",
+      });
+    }
+  });
 
 const UiPortEnvelopeSchema = z.union([
   UiRequestEnvelopeSchema,

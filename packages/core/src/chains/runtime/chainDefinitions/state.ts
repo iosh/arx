@@ -1,4 +1,4 @@
-import { type ChainDefinitionEntity, ChainDefinitionEntitySchema } from "../../../storage/index.js";
+import type { ChainDefinitionEntity } from "../../../storage/index.js";
 import type { ChainRef } from "../../ids.js";
 import {
   type ChainMetadata,
@@ -75,13 +75,13 @@ export const parseEntity = (params: {
   source: ChainDefinitionEntity["source"];
   createdByOrigin?: string;
 }): ChainDefinitionEntity => {
-  return ChainDefinitionEntitySchema.parse({
+  return {
     chainRef: params.chainRef,
     namespace: params.namespace,
     metadata: params.metadata,
-    schemaVersion: params.schemaVersion,
+    schemaVersion: params.schemaVersion as ChainDefinitionEntity["schemaVersion"],
     updatedAt: params.updatedAt,
     source: params.source,
     ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
-  });
+  };
 };

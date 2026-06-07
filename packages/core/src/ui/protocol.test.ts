@@ -1,19 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseUiEnvelope } from "./protocol/envelopes.js";
-import {
-  UI_EVENT_APPROVAL_DETAIL_CHANGED,
-  UI_EVENT_APPROVALS_CHANGED,
-  UI_EVENT_ENTRY_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
-  UI_EVENT_TRANSACTIONS_CHANGED,
-} from "./protocol/events.js";
-import {
-  isUiEventName,
-  isUiMethodName,
-  parseUiEventPayload,
-  parseUiMethodParams,
-  parseUiMethodResult,
-} from "./protocol/index.js";
+import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
+import { isUiEventName, isUiMethodName, parseUiMethodParams } from "./protocol/index.js";
 
 const SNAPSHOT_FIXTURE = {
   chain: {
@@ -140,108 +128,6 @@ describe("ui protocol registry", () => {
     });
     expect(parseUiMethodParams("ui.entry.getBootstrap", { environment: "notification" })).toEqual({
       environment: "notification",
-    });
-  });
-
-  it("validates method results (strict)", () => {
-    const okPk = parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: "f".repeat(64) });
-    expect(okPk.privateKey.length).toBe(64);
-    expect(() => parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: `0x${"f".repeat(64)}` })).toThrow();
-
-    const okOnboardingMnemonic = parseUiMethodResult("ui.onboarding.generateMnemonic", {
-      words: Array.from<string>({ length: 12 }).fill("word"),
-    });
-    expect(okOnboardingMnemonic.words).toHaveLength(12);
-
-    const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", null);
-    expect(okApprovalResolve).toBeNull();
-
-    const okTransaction = parseUiMethodResult("ui.transactions.getDetail", {
-      id: "tx-1",
-      status: "submitted",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      source: "wallet",
-      origin: "chrome-extension://arx",
-      account: {
-        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      },
-      requestKind: "eip155.wallet.native_transfer",
-      submitted: { hash: "0xdeadbeef" },
-      receipt: null,
-      replacement: null,
-      terminalReason: null,
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    expect(okTransaction?.id).toBe("tx-1");
-    expect(() =>
-      parseUiMethodResult("ui.transactions.getDetail", {
-        ...okTransaction,
-        request: { payload: {} },
-      }),
-    ).toThrow();
-
-    const okEntryBootstrap = parseUiMethodResult("ui.entry.getBootstrap", {
-      entry: {
-        environment: "notification",
-        reason: "approval_created",
-        context: {
-          approvalId: "approval-1",
-          origin: "https://dapp.example",
-          method: "eth_requestAccounts",
-          chainRef: "eip155:1",
-          namespace: "eip155",
-        },
-      },
-      requestedApproval: {
-        approvalId: "approval-1",
-        initialDetail: {
-          approvalId: "approval-1",
-          kind: "requestAccounts",
-          origin: "https://dapp.example",
-          namespace: "eip155",
-          chainRef: "eip155:1",
-          createdAt: 1,
-          actions: {
-            canApprove: true,
-            canReject: true,
-          },
-          request: {
-            selectableAccounts: [],
-            recommendedAccountKey: null,
-          },
-          review: null,
-        },
-      },
-    });
-    expect(okEntryBootstrap.requestedApproval?.approvalId).toBe("approval-1");
-  });
-
-  it("validates event payloads (strict)", () => {
-    const payload = parseUiEventPayload(UI_EVENT_SNAPSHOT_CHANGED, SNAPSHOT_FIXTURE);
-    expect(payload.chain.chainId).toBe("0x1");
-
-    const entryPayload = parseUiEventPayload(UI_EVENT_ENTRY_CHANGED, {
-      environment: "notification",
-      reason: "approval_created",
-      context: {
-        approvalId: "approval-1",
-        origin: "https://dapp.example",
-        method: "eth_requestAccounts",
-        chainRef: "eip155:1",
-        namespace: "eip155",
-      },
-    });
-    expect(entryPayload.context.approvalId).toBe("approval-1");
-
-    expect(parseUiEventPayload(UI_EVENT_APPROVALS_CHANGED, { reason: "changed" })).toEqual({ reason: "changed" });
-    expect(parseUiEventPayload(UI_EVENT_APPROVAL_DETAIL_CHANGED, { approvalId: "approval-1" })).toEqual({
-      approvalId: "approval-1",
-    });
-    expect(parseUiEventPayload(UI_EVENT_TRANSACTIONS_CHANGED, { transactionIds: ["tx-1"] })).toEqual({
-      transactionIds: ["tx-1"],
     });
   });
 });

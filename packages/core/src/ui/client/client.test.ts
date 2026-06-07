@@ -125,7 +125,7 @@ const createMockTransport = () => {
 };
 
 describe("ui client runtime", () => {
-  it("matches request/response and validates result", async () => {
+  it("matches request/response", async () => {
     const transport = createMockTransport();
     const client = createUiClient({
       transport,

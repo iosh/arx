@@ -40,19 +40,10 @@ export type {
   VaultMetaSnapshot,
 } from "./storage/index.js";
 export {
-  AccountNamespaceSchema,
-  AccountRecordSchema,
   DOMAIN_SCHEMA_VERSION,
   KEYRING_TYPES,
   KEYRING_VAULT_ENTRY_VERSION,
-  KeyringMetaRecordSchema,
-  KeyringTypeSchema,
-  PermissionRecordSchema,
-  SettingsRecordSchema,
   VAULT_META_SNAPSHOT_VERSION,
-  VaultKeyringEntrySchema,
-  VaultKeyringPayloadSchema,
-  VaultMetaSnapshotSchema,
 } from "./storage/index.js";
 export * from "./utils/logger.js";
 export * from "./vault/index.js";

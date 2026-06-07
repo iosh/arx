@@ -22,9 +22,7 @@ export {
 export {
   isUiEventName,
   isUiMethodName,
-  parseUiEventPayload,
   parseUiMethodParams,
-  parseUiMethodResult,
   type UiEventName,
   type UiEventPayload,
   type UiMethodName,
@@ -34,7 +32,7 @@ export {
 } from "./protocol/index.js";
 export { uiMethods } from "./protocol/methods.js";
 export type { ListTransactionsQuery, UiTransaction } from "./protocol/models/transactions.js";
-export { ListTransactionsQuerySchema, TransactionSchema } from "./protocol/models/transactions.js";
+export { ListTransactionsQuerySchema } from "./protocol/models/transactions.js";
 export type {
   AccountsSnapshot,
   ApprovalDetail,
@@ -42,22 +40,9 @@ export type {
   ChainSnapshot,
   NetworkListSnapshot,
   SessionSnapshot,
-  UiAccountMetaSchema,
+  UiAccountMeta,
   UiBackupStatus,
-  UiKeyringMetaSchema,
+  UiKeyringMeta,
   UiSnapshot,
   VaultSnapshot,
-} from "./protocol/schemas.js";
-export {
-  AccountsSnapshotSchema,
-  ApprovalDetailSchema,
-  ApprovalListEntrySchema,
-  ChainSnapshotSchema,
-  NetworkListSchema,
-  SessionSnapshotSchema,
-  type UiAccountMeta,
-  UiBackupStatusSchema,
-  type UiKeyringMeta,
-  UiSnapshotSchema,
-  VaultSnapshotSchema,
 } from "./protocol/schemas.js";

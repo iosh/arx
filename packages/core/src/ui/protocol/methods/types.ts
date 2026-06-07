@@ -11,18 +11,15 @@ export type UiMethodEffects = {
 export type UiMethodDefinition = {
   kind: UiMethodKind;
   paramsSchema: z.ZodTypeAny;
-  resultSchema: z.ZodTypeAny;
   effects?: UiMethodEffects;
 };
 
-export const defineMethod = <P extends z.ZodTypeAny, R extends z.ZodTypeAny>(
+export const defineMethod = <P extends z.ZodTypeAny>(
   kind: UiMethodKind,
   paramsSchema: P,
-  resultSchema: R,
   effects?: UiMethodEffects,
 ) => ({
   kind,
   paramsSchema,
-  resultSchema,
   ...(effects ? { effects } : {}),
 });

@@ -4,18 +4,6 @@ import { defineMethod } from "./types.js";
 
 const UnlockReasonSchema = z.enum(["manual", "timeout", "blur", "suspend", "reload"]);
 
-export const UnlockStateSchema = z.strictObject({
-  isUnlocked: z.boolean(),
-  timeoutMs: z.number().int().positive(),
-  nextAutoLockAt: z.number().int().nullable(),
-  lastUnlockedAt: z.number().int().nullable(),
-});
-
-const SetAutoLockDurationResultSchema = z.strictObject({
-  autoLockDurationMs: z.number().int().positive(),
-  nextAutoLockAt: z.number().int().nullable(),
-});
-
 const AutoLockDurationMsSchema = z
   .number()
   .transform((value) => Math.round(value))
@@ -24,28 +12,24 @@ const AutoLockDurationMsSchema = z
   });
 
 export const sessionMethods = {
-  "ui.session.unlock": defineMethod("command", z.strictObject({ password: z.string().min(1) }), UnlockStateSchema, {
+  "ui.session.unlock": defineMethod("command", z.strictObject({ password: z.string().min(1) }), {
     broadcastSnapshot: true,
     persistVaultMeta: true,
     holdBroadcast: true,
   }),
 
-  "ui.session.lock": defineMethod(
-    "command",
-    z.strictObject({ reason: UnlockReasonSchema.optional() }).optional(),
-    UnlockStateSchema,
-    { broadcastSnapshot: true, persistVaultMeta: true },
-  ),
-
-  "ui.session.resetAutoLockTimer": defineMethod("command", z.undefined(), UnlockStateSchema, {
+  "ui.session.lock": defineMethod("command", z.strictObject({ reason: UnlockReasonSchema.optional() }).optional(), {
     broadcastSnapshot: true,
     persistVaultMeta: true,
   }),
 
-  "ui.session.setAutoLockDuration": defineMethod(
-    "command",
-    z.strictObject({ durationMs: AutoLockDurationMsSchema }),
-    SetAutoLockDurationResultSchema,
-    { broadcastSnapshot: true, persistVaultMeta: true },
-  ),
+  "ui.session.resetAutoLockTimer": defineMethod("command", z.undefined(), {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+  }),
+
+  "ui.session.setAutoLockDuration": defineMethod("command", z.strictObject({ durationMs: AutoLockDurationMsSchema }), {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+  }),
 } as const;

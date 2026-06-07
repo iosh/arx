@@ -1,4 +1,4 @@
-import { type UiSnapshot, UiSnapshotSchema } from "../protocol/schemas.js";
+import type { UiSnapshot } from "../protocol/schemas.js";
 import type {
   UiAccountsAccess,
   UiAttentionAccess,
@@ -104,5 +104,5 @@ export const buildUiSnapshot = (deps: {
     },
   };
 
-  return UiSnapshotSchema.parse(snapshot);
+  return snapshot;
 };

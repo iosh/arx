@@ -77,6 +77,23 @@ export class KeyringInvalidPrivateKeyError extends ArxBaseError {
   }
 }
 
+export type KeyringInvalidVaultPayloadDetails = {
+  path: string;
+  reason: string;
+};
+
+export class KeyringInvalidVaultPayloadError extends ArxBaseError {
+  static readonly code = "keyring.invalid_vault_payload";
+
+  constructor(input: ErrorCause & { details?: KeyringInvalidVaultPayloadDetails | undefined } = {}) {
+    super("Keyring vault payload is invalid.", {
+      code: KeyringInvalidVaultPayloadError.code,
+      details: input.details,
+      cause: input.cause,
+    });
+  }
+}
+
 export class KeyringInvalidAddressError extends ArxBaseError {
   static readonly code = "keyring.invalid_address";
 

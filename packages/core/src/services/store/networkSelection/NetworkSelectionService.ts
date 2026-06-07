@@ -1,6 +1,6 @@
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import { type NetworkSelectionRecord, NetworkSelectionRecordSchema } from "../../../storage/records.js";
+import type { NetworkSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
 import type { NetworkSelectionPort } from "./port.js";
@@ -28,11 +28,6 @@ export const createNetworkSelectionService = ({
   const getDefaultSelectedNamespace = () => defaults.selectedNamespace;
   const getDefaultChainRefByNamespace = () => ({ ...defaults.chainRefByNamespace });
 
-  const safeParse = (value: unknown): NetworkSelectionRecord | null => {
-    const parsed = NetworkSelectionRecordSchema.safeParse(value);
-    return parsed.success ? parsed.data : null;
-  };
-
   const emitChanged = (previous: NetworkSelectionRecord | null, next: NetworkSelectionRecord) => {
     cached = next;
     changed.emit({
@@ -42,7 +37,7 @@ export const createNetworkSelectionService = ({
   };
 
   const get = async (): Promise<NetworkSelectionRecord | null> => {
-    const record = safeParse(await port.get());
+    const record = await port.get();
     cached = record;
     return record ? structuredClone(record) : null;
   };
@@ -68,7 +63,7 @@ export const createNetworkSelectionService = ({
 
   const update = async (params: UpdateNetworkSelectionParams): Promise<NetworkSelectionRecord> => {
     return await run(async () => {
-      const previous = safeParse(await port.get());
+      const previous = await port.get();
       cached = previous;
 
       const nextBase =
@@ -94,12 +89,12 @@ export const createNetworkSelectionService = ({
       const nextSelectedNamespace =
         params.selectedNamespace?.trim() || previous?.selectedNamespace || getDefaultSelectedNamespace();
 
-      const next = NetworkSelectionRecordSchema.parse({
+      const next: NetworkSelectionRecord = {
         id: "network-selection",
         selectedNamespace: nextSelectedNamespace,
         chainRefByNamespace: nextChainRefByNamespace,
         updatedAt: clock(),
-      });
+      };
 
       await port.put(next);
       emitChanged(previous, next);

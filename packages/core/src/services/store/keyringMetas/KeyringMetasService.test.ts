@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../../storage/records.js";
+import type { KeyringMetaRecord } from "../../../storage/records.js";
 import { createKeyringMetasService } from "./KeyringMetasService.js";
 import type { KeyringMetasPort } from "./port.js";
 
@@ -15,9 +15,8 @@ const createInMemoryPort = (seed: KeyringMetaRecord[] = []) => {
       return [...store.values()];
     },
     async upsert(record) {
-      const checked = KeyringMetaRecordSchema.parse(record);
-      store.set(checked.id, checked);
-      writes.push({ type: "upsert", id: checked.id });
+      store.set(record.id, record);
+      writes.push({ type: "upsert", id: record.id });
     },
     async remove(id) {
       store.delete(id);
@@ -29,7 +28,7 @@ const createInMemoryPort = (seed: KeyringMetaRecord[] = []) => {
 };
 
 describe("KeyringMetasService", () => {
-  it("upsert() and get() validate with schema and emit changed", async () => {
+  it("upsert() and get() roundtrip and emit changed", async () => {
     const { port } = createInMemoryPort();
     const service = createKeyringMetasService({ port });
 
@@ -38,13 +37,13 @@ describe("KeyringMetasService", () => {
       changed += 1;
     });
 
-    const record = KeyringMetaRecordSchema.parse({
+    const record = {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       type: "hd",
       alias: "Main",
       needsBackup: true,
       createdAt: 1000,
-    });
+    } satisfies KeyringMetaRecord;
 
     await service.upsert(record);
     expect(changed).toBe(1);
@@ -54,17 +53,17 @@ describe("KeyringMetasService", () => {
   });
 
   it("list() returns all records", async () => {
-    const seed = [
-      KeyringMetaRecordSchema.parse({
+    const seed: KeyringMetaRecord[] = [
+      {
         id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         type: "hd",
         createdAt: 1000,
-      }),
-      KeyringMetaRecordSchema.parse({
+      },
+      {
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         type: "private-key",
         createdAt: 2000,
-      }),
+      },
     ];
 
     const { port } = createInMemoryPort(seed);
@@ -76,12 +75,12 @@ describe("KeyringMetasService", () => {
   });
 
   it("remove() deletes record and emits changed", async () => {
-    const seed = [
-      KeyringMetaRecordSchema.parse({
+    const seed: KeyringMetaRecord[] = [
+      {
         id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         type: "hd",
         createdAt: 1000,
-      }),
+      },
     ];
 
     const { port } = createInMemoryPort(seed);

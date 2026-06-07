@@ -8,7 +8,7 @@ import {
   UI_EVENT_TRANSACTIONS_CHANGED,
 } from "../protocol/events.js";
 import type { UiMethodName } from "../protocol/index.js";
-import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
+import { parseUiMethodParams } from "../protocol/index.js";
 import { createUiDispatcher } from "./dispatcher.js";
 import { getUiRequestBroadcastPolicy } from "./requestMetadata.js";
 import { createUiServerRuntime } from "./runtime.js";
@@ -159,7 +159,7 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
     const handler = requireUiHandler(uiRuntime.handlers, input.method);
     const params = parseUiMethodParams(input.method, input.params);
     const result = await handler(params);
-    return parseUiMethodResult(input.method, result);
+    return result;
   }) satisfies WalletUi["dispatch"];
 
   return {

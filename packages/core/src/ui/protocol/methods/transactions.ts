@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
-import { ListTransactionsQuerySchema, TransactionSchema } from "../models/transactions.js";
+import { ListTransactionsQuerySchema } from "../models/transactions.js";
 import { defineMethod } from "./types.js";
 
 const Eip155TransactionDraftChangeSchema = z.strictObject({
@@ -16,7 +16,7 @@ const NamespaceTransactionDraftEditSchema = z.discriminatedUnion("namespace", [
 ]);
 
 export const transactionsMethods = {
-  "ui.transactions.listHistory": defineMethod("query", ListTransactionsQuerySchema, z.array(TransactionSchema), {
+  "ui.transactions.listHistory": defineMethod("query", ListTransactionsQuerySchema, {
     broadcastSnapshot: false,
   }),
   "ui.transactions.getDetail": defineMethod(
@@ -24,7 +24,6 @@ export const transactionsMethods = {
     z.strictObject({
       transactionId: z.string().min(1),
     }),
-    TransactionSchema.nullable(),
     { broadcastSnapshot: false },
   ),
   "ui.transactions.requestSendTransactionApproval": defineMethod(
@@ -34,9 +33,6 @@ export const transactionsMethods = {
       valueEther: z.string().min(1),
       chainRef: ChainRefSchema.optional(),
     }),
-    z.strictObject({
-      approvalId: z.string().uuid(),
-    }),
     { broadcastSnapshot: true },
   ),
   "ui.transactions.rerunPrepare": defineMethod(
@@ -44,7 +40,6 @@ export const transactionsMethods = {
     z.strictObject({
       transactionId: z.string().min(1),
     }),
-    z.null(),
     { broadcastSnapshot: false },
   ),
   "ui.transactions.applyDraftEdit": defineMethod(
@@ -54,7 +49,6 @@ export const transactionsMethods = {
       edit: NamespaceTransactionDraftEditSchema,
       mode: z.string().min(1).optional(),
     }),
-    z.null(),
     { broadcastSnapshot: false },
   ),
 } as const;

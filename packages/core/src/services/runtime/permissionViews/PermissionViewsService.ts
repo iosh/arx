@@ -4,7 +4,7 @@ import type { ChainRef } from "../../../chains/ids.js";
 import { PermissionNotConnectedError } from "../../../permissions/errors.js";
 import type { PermissionsReader } from "../../../permissions/service/types.js";
 import type { AccountKey } from "../../../storage/records.js";
-import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
+import type { UiPermissionsSnapshot } from "../../../ui/protocol/schemas.js";
 import type { AuthorizationSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
@@ -110,7 +110,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
       origins[origin] = namespaces;
     }
 
-    return UiPermissionsSnapshotSchema.parse({ origins });
+    return { origins };
   }
 
   #resolveAccounts(namespace: string, chainRef: ChainRef, accountKeys: readonly AccountKey[]): PermittedAccountView[] {

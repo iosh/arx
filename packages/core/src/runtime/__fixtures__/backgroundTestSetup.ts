@@ -24,14 +24,6 @@ import type {
   PermissionRecord,
   SettingsRecord,
 } from "../../storage/records.js";
-import {
-  AccountRecordSchema,
-  CustomChainRecordSchema,
-  CustomRpcRecordSchema,
-  KeyringMetaRecordSchema,
-  NetworkSelectionRecordSchema,
-  PermissionRecordSchema,
-} from "../../storage/records.js";
 import type {
   TransactionRecord as AggregateTransactionRecord,
   ListRecoverableTransactionAggregatesQuery,
@@ -89,8 +81,7 @@ export class MemoryPermissionsPort implements PermissionsPort {
 
   constructor(seed: PermissionRecord[] = []) {
     for (const record of seed) {
-      const checked = PermissionRecordSchema.parse(record);
-      this.#records.set(`${checked.origin}::${checked.namespace}`, clone(checked));
+      this.#records.set(`${record.origin}::${record.namespace}`, clone(record));
     }
   }
 
@@ -110,8 +101,7 @@ export class MemoryPermissionsPort implements PermissionsPort {
   }
 
   async upsert(record: PermissionRecord): Promise<void> {
-    const checked = PermissionRecordSchema.parse(record);
-    this.#records.set(`${checked.origin}::${checked.namespace}`, clone(checked));
+    this.#records.set(`${record.origin}::${record.namespace}`, clone(record));
   }
 
   async remove(params: { origin: string; namespace: string }): Promise<void> {
@@ -195,8 +185,7 @@ export class MemoryAccountsPort implements AccountsPort {
 
   constructor(seed: AccountRecord[] = []) {
     for (const record of seed) {
-      const checked = AccountRecordSchema.parse(record);
-      this.#records.set(checked.accountKey, clone(checked));
+      this.#records.set(record.accountKey, clone(record));
     }
   }
 
@@ -212,8 +201,7 @@ export class MemoryAccountsPort implements AccountsPort {
   }
 
   async upsert(record: AccountRecord): Promise<void> {
-    const checked = AccountRecordSchema.parse(record);
-    this.#records.set(checked.accountKey, clone(checked));
+    this.#records.set(record.accountKey, clone(record));
   }
 
   async remove(accountKey: string): Promise<void> {
@@ -234,8 +222,7 @@ export class MemoryKeyringMetasPort implements KeyringMetasPort {
 
   constructor(seed: KeyringMetaRecord[] = []) {
     for (const record of seed) {
-      const checked = KeyringMetaRecordSchema.parse(record);
-      this.#records.set(checked.id, clone(checked));
+      this.#records.set(record.id, clone(record));
     }
   }
 
@@ -251,8 +238,7 @@ export class MemoryKeyringMetasPort implements KeyringMetasPort {
   }
 
   async upsert(record: KeyringMetaRecord): Promise<void> {
-    const checked = KeyringMetaRecordSchema.parse(record);
-    this.#records.set(checked.id, clone(checked));
+    this.#records.set(record.id, clone(record));
   }
 
   async remove(id: string): Promise<void> {
@@ -363,7 +349,7 @@ export class MemoryNetworkSelectionPort implements NetworkSelectionPort {
   public readonly saved: NetworkSelectionRecord[] = [];
 
   constructor(seed: NetworkSelectionRecord | null = null) {
-    this.#record = seed ? NetworkSelectionRecordSchema.parse(clone(seed)) : null;
+    this.#record = seed ? clone(seed) : null;
   }
 
   async get(): Promise<NetworkSelectionRecord | null> {
@@ -371,9 +357,8 @@ export class MemoryNetworkSelectionPort implements NetworkSelectionPort {
   }
 
   async put(record: NetworkSelectionRecord): Promise<void> {
-    const checked = NetworkSelectionRecordSchema.parse(record);
-    this.#record = clone(checked);
-    this.saved.push(clone(checked));
+    this.#record = clone(record);
+    this.saved.push(clone(record));
   }
 }
 
@@ -384,8 +369,7 @@ export class MemoryCustomRpcPort implements CustomRpcPort {
 
   constructor(seed: CustomRpcRecord[] = []) {
     for (const record of seed) {
-      const checked = CustomRpcRecordSchema.parse(record);
-      this.#records.set(checked.chainRef, clone(checked));
+      this.#records.set(record.chainRef, clone(record));
     }
   }
 
@@ -399,9 +383,8 @@ export class MemoryCustomRpcPort implements CustomRpcPort {
   }
 
   async upsert(record: CustomRpcRecord): Promise<void> {
-    const checked = CustomRpcRecordSchema.parse(record);
-    this.#records.set(checked.chainRef, clone(checked));
-    this.upserted.push(clone(checked));
+    this.#records.set(record.chainRef, clone(record));
+    this.upserted.push(clone(record));
   }
 
   async remove(chainRef: ChainRef): Promise<void> {
@@ -443,8 +426,7 @@ export class MemoryCustomChainsPort implements CustomChainsPort {
 
   constructor(seed: CustomChainRecord[] = []) {
     for (const record of seed) {
-      const checked = CustomChainRecordSchema.parse(record);
-      this.#records.set(checked.chainRef, clone(checked));
+      this.#records.set(record.chainRef, clone(record));
     }
   }
 
@@ -458,8 +440,7 @@ export class MemoryCustomChainsPort implements CustomChainsPort {
   }
 
   async upsert(record: CustomChainRecord): Promise<void> {
-    const checked = CustomChainRecordSchema.parse(record);
-    this.#records.set(checked.chainRef, clone(checked));
+    this.#records.set(record.chainRef, clone(record));
   }
 
   async remove(chainRef: ChainRef): Promise<void> {

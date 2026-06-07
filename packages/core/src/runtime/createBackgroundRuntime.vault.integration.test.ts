@@ -257,6 +257,105 @@ describe("createBackgroundRuntime (vault integration)", () => {
     }
   });
 
+  it("fails closed without deleting projections when persisted keyrings exist but vault secret bytes are empty", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      const sessionAccess = createUiSessionAccess({
+        session: context.runtime.services.session,
+        sessionStatus: context.runtime.services.sessionStatus,
+        keyring: context.runtime.services.keyring,
+      });
+
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await sessionAccess.unlock({ password: "secret" });
+      await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+
+      const accountsBefore = await context.accountsPort.list();
+      const keyringMetasBefore = await context.keyringMetasPort.list();
+
+      await context.runtime.services.session.vault.commitSecret({ secret: new Uint8Array() });
+      sessionAccess.lock("manual");
+
+      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
+      expect(sessionAccess.isUnlocked()).toBe(false);
+      await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
+      await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("reseeds an empty keyring payload when vault secret bytes are empty and no projections exist", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      const sessionAccess = createUiSessionAccess({
+        session: context.runtime.services.session,
+        sessionStatus: context.runtime.services.sessionStatus,
+        keyring: context.runtime.services.keyring,
+      });
+
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await sessionAccess.unlock({ password: "secret" });
+      await context.runtime.services.session.vault.commitSecret({ secret: new Uint8Array() });
+      sessionAccess.lock("manual");
+
+      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ isUnlocked: true });
+      expect(decodePayload(context.runtime.services.session.vault.exportSecret())).toEqual({ keyrings: [] });
+      await expect(context.accountsPort.list()).resolves.toEqual([]);
+      await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("clears stale projections after a valid empty keyring payload hydrates", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      const sessionAccess = createUiSessionAccess({
+        session: context.runtime.services.session,
+        sessionStatus: context.runtime.services.sessionStatus,
+        keyring: context.runtime.services.keyring,
+      });
+
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await sessionAccess.unlock({ password: "secret" });
+      await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+
+      await expect(context.accountsPort.list()).resolves.toHaveLength(1);
+      await expect(context.keyringMetasPort.list()).resolves.toHaveLength(1);
+
+      await context.runtime.services.session.vault.commitSecret({ secret: encodePayload({ keyrings: [] }) });
+      sessionAccess.lock("manual");
+
+      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ isUnlocked: true });
+      await expect(context.accountsPort.list()).resolves.toEqual([]);
+      await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
+    } finally {
+      context.destroy();
+    }
+  });
+
   it("fails closed when unlock hydration cannot materialize a persisted keyring", async () => {
     const chain = createChainMetadata();
     const clock = () => TEST_INITIAL_TIME;
@@ -277,6 +376,9 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await sessionAccess.unlock({ password: "secret" });
       await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
+      const accountsBefore = await context.accountsPort.list();
+      const keyringMetasBefore = await context.keyringMetasPort.list();
+
       const payload = decodePayload(context.runtime.services.session.vault.exportSecret());
       const [entry] = payload.keyrings;
       if (!entry || entry.type !== "hd") {
@@ -290,6 +392,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
       expect(sessionAccess.isUnlocked()).toBe(false);
       expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+      await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
+      await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
     } finally {
       context.destroy();
     }
@@ -315,6 +419,9 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await sessionAccess.unlock({ password: "secret" });
       await context.runtime.services.keyring.importPrivateKey({ privateKey: TEST_PRIVATE_KEY });
 
+      const accountsBefore = await context.accountsPort.list();
+      const keyringMetasBefore = await context.keyringMetasPort.list();
+
       const payload = decodePayload(context.runtime.services.session.vault.exportSecret());
       const [entry] = payload.keyrings;
       if (!entry || entry.type !== "private-key") {
@@ -328,6 +435,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
       expect(sessionAccess.isUnlocked()).toBe(false);
       expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+      await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
+      await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
     } finally {
       context.destroy();
     }

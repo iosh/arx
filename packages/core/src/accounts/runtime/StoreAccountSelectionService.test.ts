@@ -4,7 +4,7 @@ import { Messenger } from "../../messenger/index.js";
 import { MemoryAccountsPort, MemorySettingsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createAccountsService } from "../../services/store/accounts/index.js";
 import { createSettingsService } from "../../services/store/settings/index.js";
-import { type AccountRecord, AccountRecordSchema, type SettingsRecord } from "../../storage/records.js";
+import type { AccountRecord, SettingsRecord } from "../../storage/records.js";
 import { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
 import { ACCOUNTS_TOPICS } from "./topics.js";
 
@@ -13,13 +13,13 @@ const namespace = "eip155" as const;
 const keyringId = "11111111-1111-4111-8111-111111111111";
 
 const makeAccount = (payloadHex: string, createdAt: number, extra?: Partial<AccountRecord>): AccountRecord =>
-  AccountRecordSchema.parse({
+  ({
     accountKey: `eip155:${payloadHex}`,
     namespace,
     keyringId,
     createdAt,
     ...extra,
-  });
+  }) satisfies AccountRecord;
 
 const addressOf = (payloadHex: string) => `0x${payloadHex}`;
 

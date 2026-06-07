@@ -1,10 +1,9 @@
 import { parseUiEnvelope, type UiPortEnvelope } from "../protocol/envelopes.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import {
-  parseUiEventPayload,
   parseUiMethodParams,
-  parseUiMethodResult,
   type UiEventName,
+  type UiEventPayload,
   type UiMethodName,
   type UiMethodParams,
   type UiMethodResult,
@@ -209,24 +208,11 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
       const req = pending.get(envelope.id);
       if (!req) return;
 
-      try {
-        const parsed = parseUiMethodResult(req.method, envelope.result);
+      clearTimeout(req.timeout);
+      req.abortUnsubscribe?.();
+      pending.delete(envelope.id);
 
-        clearTimeout(req.timeout);
-        req.abortUnsubscribe?.();
-        pending.delete(envelope.id);
-
-        req.resolve(parsed);
-      } catch (error) {
-        clearTimeout(req.timeout);
-        req.abortUnsubscribe?.();
-        pending.delete(envelope.id);
-
-        const err = new UiProtocolError("UI protocol error: Invalid method result");
-        (err as { cause?: unknown }).cause = error;
-
-        req.reject(err);
-      }
+      req.resolve(envelope.result);
       return;
     }
 
@@ -243,26 +229,22 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     }
 
     if (envelope.type === "ui:event") {
-      try {
-        const payload = parseUiEventPayload(envelope.event, envelope.payload);
+      const payload = envelope.payload as UiEventPayload<typeof envelope.event>;
 
-        if (envelope.event === UI_EVENT_SNAPSHOT_CHANGED) {
-          lastSnapshot = payload as UiSnapshot;
-          reconnectAttempts = 0;
+      if (envelope.event === UI_EVENT_SNAPSHOT_CHANGED) {
+        lastSnapshot = payload as UiSnapshot;
+        reconnectAttempts = 0;
+      }
+
+      const set = listeners.get(envelope.event);
+      if (!set || set.size === 0) return;
+
+      for (const fn of set) {
+        try {
+          fn(payload);
+        } catch (error) {
+          logger?.error?.("[uiClient] event listener threw", error);
         }
-
-        const set = listeners.get(envelope.event);
-        if (!set || set.size === 0) return;
-
-        for (const fn of set) {
-          try {
-            fn(payload);
-          } catch (error) {
-            logger?.error?.("[uiClient] event listener threw", error);
-          }
-        }
-      } catch (error) {
-        logger?.warn?.("[uiClient] invalid event payload (ignored)", error);
       }
     }
   });

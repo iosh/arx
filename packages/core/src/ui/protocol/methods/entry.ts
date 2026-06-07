@@ -1,47 +1,50 @@
 import { z } from "zod";
-import { ChainRefSchema } from "../../../chains/ids.js";
-import { ApprovalDetailSchema } from "../models/approvals.js";
+import type { ChainRef } from "../../../chains/ids.js";
+import type { ApprovalDetail } from "../models/approvals.js";
 import { defineMethod } from "./types.js";
 
-const UiEnvironmentSchema = z.enum(["popup", "notification", "onboarding"]);
-const UiEntryReasonSchema = z.enum([
+const UI_ENVIRONMENTS = ["popup", "notification", "onboarding"] as const;
+const UI_ENTRY_REASONS = [
   "idle",
   "manual_open",
   "install",
   "onboarding_required",
   "approval_created",
   "unlock_required",
-]);
+] as const;
 
-const UiEntryContextSchema = z.strictObject({
-  approvalId: z.string().min(1).nullable(),
-  origin: z.string().min(1).nullable(),
-  method: z.string().min(1).nullable(),
-  chainRef: ChainRefSchema.nullable(),
-  namespace: z.string().min(1).nullable(),
-});
+export type UiEnvironment = (typeof UI_ENVIRONMENTS)[number];
+export type UiEntryReason = (typeof UI_ENTRY_REASONS)[number];
+
+export type UiEntryContext = {
+  approvalId: string | null;
+  origin: string | null;
+  method: string | null;
+  chainRef: ChainRef | null;
+  namespace: string | null;
+};
+
+export type UiEntryLaunchContext = {
+  environment: UiEnvironment;
+  reason: UiEntryReason;
+  context: UiEntryContext;
+};
+
+export type UiEntryBootstrap = {
+  entry: UiEntryLaunchContext;
+  requestedApproval: {
+    approvalId: string;
+    initialDetail: ApprovalDetail;
+  } | null;
+};
+
+const UiEnvironmentSchema = z.enum(UI_ENVIRONMENTS);
 
 const UiEntryLaunchContextParamsSchema = z.strictObject({
   environment: UiEnvironmentSchema,
 });
 
-export const UiEntryLaunchContextSchema = z.strictObject({
-  environment: UiEnvironmentSchema,
-  reason: UiEntryReasonSchema,
-  context: UiEntryContextSchema,
-});
-
-export const UiEntryBootstrapSchema = z.strictObject({
-  entry: UiEntryLaunchContextSchema,
-  requestedApproval: z
-    .strictObject({
-      approvalId: z.string().min(1),
-      initialDetail: ApprovalDetailSchema,
-    })
-    .nullable(),
-});
-
 export const entryMethods = {
-  "ui.entry.getLaunchContext": defineMethod("query", UiEntryLaunchContextParamsSchema, UiEntryLaunchContextSchema),
-  "ui.entry.getBootstrap": defineMethod("query", UiEntryLaunchContextParamsSchema, UiEntryBootstrapSchema),
+  "ui.entry.getLaunchContext": defineMethod("query", UiEntryLaunchContextParamsSchema),
+  "ui.entry.getBootstrap": defineMethod("query", UiEntryLaunchContextParamsSchema),
 } as const;

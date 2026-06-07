@@ -1,4 +1,4 @@
-import { type AccountKey, type AccountRecord, AccountRecordSchema } from "../../../storage/records.js";
+import type { AccountKey, AccountRecord } from "../../../storage/records.js";
 import { createSignal } from "../_shared/signal.js";
 import type { AccountsPort } from "./port.js";
 import type { AccountsChangedPayload, AccountsService, ListAccountsParams } from "./types.js";
@@ -11,30 +11,21 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
   const changed = createSignal<AccountsChangedPayload>();
 
   const get = async (accountKey: AccountKey) => {
-    const record = await port.get(accountKey);
-    if (!record) return null;
-    const parsed = AccountRecordSchema.safeParse(record);
-    return parsed.success ? parsed.data : null;
+    return await port.get(accountKey);
   };
 
   const list = async (params?: ListAccountsParams) => {
     const includeHidden = params?.includeHidden ?? false;
 
     const records = await port.list();
-    const parsed = records.flatMap((r) => {
-      const out = AccountRecordSchema.safeParse(r);
-      return out.success ? [out.data] : [];
-    });
-
-    const filtered = includeHidden ? parsed : parsed.filter((r) => !r.hidden);
+    const filtered = includeHidden ? records : records.filter((r) => !r.hidden);
     filtered.sort((a, b) => a.createdAt - b.createdAt || a.accountKey.localeCompare(b.accountKey));
 
     return filtered;
   };
   const upsert = async (record: AccountRecord) => {
-    const checked = AccountRecordSchema.parse(record);
-    await port.upsert(checked);
-    changed.emit({ kind: "upsert", accountKey: checked.accountKey });
+    await port.upsert(record);
+    changed.emit({ kind: "upsert", accountKey: record.accountKey });
   };
 
   const remove = async (accountKey: AccountKey) => {
@@ -51,14 +42,10 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     const existing = await port.get(params.accountKey);
     if (!existing) return;
 
-    const currentParsed = AccountRecordSchema.safeParse(existing);
-    if (!currentParsed.success) return;
-    const current = currentParsed.data;
-
-    const next: AccountRecord = AccountRecordSchema.parse({
-      ...current,
+    const next: AccountRecord = {
+      ...existing,
       ...(params.hidden ? { hidden: true } : { hidden: undefined }),
-    });
+    };
 
     await port.upsert(next);
     changed.emit({ kind: "setHidden", accountKey: next.accountKey });

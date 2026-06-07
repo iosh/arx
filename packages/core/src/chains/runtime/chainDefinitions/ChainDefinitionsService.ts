@@ -1,9 +1,5 @@
 import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
-import {
-  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
-  type ChainDefinitionEntity,
-  ChainDefinitionEntitySchema,
-} from "../../../storage/index.js";
+import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
 import { type ChainMetadata, isSameAddChainComparableMetadata, isSameChainMetadata } from "../../metadata.js";
@@ -128,9 +124,8 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
   async #initialize(seed: readonly ChainMetadata[]): Promise<void> {
     try {
       const persisted = await this.#port.getAll();
-      const sanitized = await this.#sanitizePersisted(persisted);
 
-      for (const entity of sanitized) {
+      for (const entity of persisted) {
         this.#chains.set(entity.chainRef, entity);
       }
 
@@ -145,22 +140,6 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
       this.#logger("[chainDefinitions] failed to initialize registry", error);
       throw error;
     }
-  }
-
-  async #sanitizePersisted(entries: ChainDefinitionEntity[]): Promise<ChainDefinitionEntity[]> {
-    const valid: ChainDefinitionEntity[] = [];
-
-    for (const entry of entries) {
-      const parsed = ChainDefinitionEntitySchema.safeParse(entry);
-      if (!parsed.success) {
-        this.#logger("[chainDefinitions] dropping invalid entry", parsed.error);
-        await this.#port.delete(entry.chainRef);
-        continue;
-      }
-      valid.push(parsed.data);
-    }
-
-    return valid;
   }
 
   async #reconcileBuiltinChains(seed: readonly ChainMetadata[], options: ReconcileOptions): Promise<void> {

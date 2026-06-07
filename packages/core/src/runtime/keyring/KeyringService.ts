@@ -13,12 +13,7 @@ import {
 } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
-import {
-  AccountKeySchema,
-  type AccountRecord,
-  AccountRecordSchema,
-  KeyringMetaRecordSchema,
-} from "../../storage/records.js";
+import { AccountKeySchema, type AccountRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
 import { VaultLockedError } from "../../vault/errors.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
@@ -147,12 +142,12 @@ export class KeyringService {
       payload: { privateKey: secretHex },
     };
 
-    const meta: KeyringMetaRecord = KeyringMetaRecordSchema.parse({
+    const meta: KeyringMetaRecord = {
       id: keyringId,
       type: "private-key",
       alias: params.alias,
       createdAt: now,
-    });
+    };
 
     const record = this.#buildAccountRecord({
       namespace,
@@ -204,10 +199,10 @@ export class KeyringService {
       derivationIndex: index,
     });
 
-    const nextMeta: KeyringMetaRecord = KeyringMetaRecordSchema.parse({
+    const nextMeta: KeyringMetaRecord = {
       ...meta,
       nextDerivationIndex: index + 1,
-    });
+    };
 
     // Persist metadata first; the vault payload is already present.
     await this.#options.accountsStore.upsert(record);
@@ -231,7 +226,7 @@ export class KeyringService {
     const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
     if (!meta) return;
 
-    const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, alias });
+    const next: KeyringMetaRecord = { ...meta, alias };
     await this.#options.keyringMetas.upsert(next);
     this.#runtimeKeyringState.replaceKeyringMeta(next);
   }
@@ -240,7 +235,7 @@ export class KeyringService {
     const record = this.#runtimeKeyringState.getAccount(accountKey);
     if (!record) return;
 
-    const next: AccountRecord = AccountRecordSchema.parse({ ...record, alias });
+    const next: AccountRecord = { ...record, alias };
     await this.#options.accountsStore.upsert(next);
     this.#runtimeKeyringState.replaceAccountRecord(next, false);
   }
@@ -250,7 +245,7 @@ export class KeyringService {
     if (!meta) return;
     if (meta.type !== "hd") return;
 
-    const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, needsBackup: false });
+    const next: KeyringMetaRecord = { ...meta, needsBackup: false };
     await this.#options.keyringMetas.upsert(next);
     this.#runtimeKeyringState.replaceKeyringMeta(next);
   }
@@ -422,14 +417,14 @@ export class KeyringService {
       payload: { mnemonic: words, passphrase: undefined },
     };
 
-    const meta: KeyringMetaRecord = KeyringMetaRecordSchema.parse({
+    const meta: KeyringMetaRecord = {
       id: keyringId,
       type: "hd",
       alias: params.alias,
       needsBackup: !params.skipBackup,
       nextDerivationIndex: 1,
       createdAt: now,
-    });
+    };
 
     const record = this.#buildAccountRecord({
       namespace,
@@ -524,10 +519,10 @@ export class KeyringService {
       return;
     }
 
-    const next: AccountRecord = AccountRecordSchema.parse({
+    const next: AccountRecord = {
       ...record,
       hidden: hidden ? true : undefined,
-    });
+    };
 
     await this.#options.accountsStore.upsert(next);
     this.#runtimeKeyringState.replaceAccountRecord(next, false);
@@ -559,14 +554,14 @@ export class KeyringService {
     const canonical = this.#toCanonicalAddress(params.namespace, params.address);
     const accountKey = AccountKeySchema.parse(config.codec.toAccountKey(canonical));
 
-    return AccountRecordSchema.parse({
+    return {
       accountKey,
       namespace: params.namespace,
       keyringId: params.keyringId,
       derivationIndex: params.derivationIndex,
       alias: params.alias,
       createdAt: params.createdAt,
-    });
+    };
   }
 
   #toCanonicalAddress(namespace: string, address: string) {

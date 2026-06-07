@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type AccountKey, type AccountRecord, AccountRecordSchema } from "../../../storage/records.js";
+import type { AccountKey, AccountRecord } from "../../../storage/records.js";
 import { createAccountsService } from "./AccountsService.js";
 import type { AccountsPort } from "./port.js";
 
@@ -15,9 +15,8 @@ const createInMemoryPort = (seed: AccountRecord[] = []) => {
       return [...store.values()];
     },
     async upsert(record) {
-      const checked = AccountRecordSchema.parse(record);
-      store.set(checked.accountKey, checked);
-      writes.push(checked);
+      store.set(record.accountKey, record);
+      writes.push(record);
     },
     async remove(accountKey) {
       store.delete(accountKey);
@@ -36,26 +35,26 @@ const createInMemoryPort = (seed: AccountRecord[] = []) => {
 
 describe("AccountsService", () => {
   it("list() filters hidden by default and sorts by createdAt asc", async () => {
-    const seed = [
-      AccountRecordSchema.parse({
+    const seed: AccountRecord[] = [
+      {
         accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 2000,
         hidden: true,
-      }),
-      AccountRecordSchema.parse({
+      },
+      {
         accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
-      }),
-      AccountRecordSchema.parse({
+      },
+      {
         accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1500,
-      }),
+      },
     ];
 
     const { port } = createInMemoryPort(seed);
@@ -94,13 +93,13 @@ describe("AccountsService", () => {
   });
 
   it("setHidden(true) sets hidden=true; setHidden(false) omits hidden field", async () => {
-    const seed = [
-      AccountRecordSchema.parse({
+    const seed: AccountRecord[] = [
+      {
         accountKey: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
-      }),
+      },
     ];
 
     const { port } = createInMemoryPort(seed);

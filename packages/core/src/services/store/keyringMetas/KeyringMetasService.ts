@@ -1,4 +1,4 @@
-import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../../storage/records.js";
+import type { KeyringMetaRecord } from "../../../storage/records.js";
 import { createSignal } from "../_shared/signal.js";
 import type { KeyringMetasPort } from "./port.js";
 import type { KeyringMetasChangedPayload, KeyringMetasService } from "./types.js";
@@ -10,24 +10,16 @@ export type CreateKeyringMetasServiceOptions = {
 export const createKeyringMetasService = ({ port }: CreateKeyringMetasServiceOptions): KeyringMetasService => {
   const changed = createSignal<KeyringMetasChangedPayload>();
   const get = async (id: KeyringMetaRecord["id"]) => {
-    const record = await port.get(id);
-    if (!record) return null;
-    const parsed = KeyringMetaRecordSchema.safeParse(record);
-    return parsed.success ? parsed.data : null;
+    return await port.get(id);
   };
 
   const list = async () => {
-    const records = await port.list();
-    return records.flatMap((r) => {
-      const parsed = KeyringMetaRecordSchema.safeParse(r);
-      return parsed.success ? [parsed.data] : [];
-    });
+    return await port.list();
   };
 
   const upsert = async (record: KeyringMetaRecord) => {
-    const checked = KeyringMetaRecordSchema.parse(record);
-    await port.upsert(checked);
-    changed.emit({ kind: "upsert", id: checked.id });
+    await port.upsert(record);
+    changed.emit({ kind: "upsert", id: record.id });
   };
 
   const remove = async (id: KeyringMetaRecord["id"]) => {

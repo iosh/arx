@@ -3,7 +3,7 @@ import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyr
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
-import { decodePayloadAndZeroize, encodePayload } from "./keyring-utils.js";
+import { decodePayload, encodePayload } from "./keyring-utils.js";
 import type { NamespaceConfig } from "./namespaces.js";
 import {
   type RuntimeKeyringReconciliationResult,
@@ -305,8 +305,9 @@ export class RuntimeKeyringState {
     let payload: Payload;
     let shouldResealPayload = false;
 
+    const secret = this.#options.vault.exportSecret();
     try {
-      payload = decodePayloadAndZeroize(this.#options.vault.exportSecret(), this.#options.logger);
+      payload = decodePayload(secret, this.#options.logger);
     } catch (error) {
       if (storedMetas.length === 0 && storedAccounts.length === 0) {
         this.#options.logger?.("keyring: invalid vault secret detected; reseeding empty keyring payload", error);
@@ -315,6 +316,8 @@ export class RuntimeKeyringState {
       } else {
         throw error;
       }
+    } finally {
+      zeroize(secret);
     }
 
     const reconciliation = reconcileRuntimeKeyringState({
@@ -323,25 +326,6 @@ export class RuntimeKeyringState {
       accounts: storedAccounts,
       ...(this.#options.logger ? { logger: this.#options.logger } : {}),
     });
-
-    for (const keyringId of reconciliation.prunedKeyringIds) {
-      try {
-        await Promise.all([
-          this.#options.keyringMetas.remove(keyringId),
-          this.#options.accountsStore.removeByKeyringId(keyringId),
-        ]);
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to remove orphaned store entries for ${keyringId}`, error);
-      }
-    }
-
-    for (const meta of reconciliation.repairedMetas) {
-      try {
-        await this.#options.keyringMetas.upsert(meta);
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to recreate meta for ${meta.id}`, error);
-      }
-    }
 
     return {
       payload,
@@ -370,10 +354,32 @@ export class RuntimeKeyringState {
     }
 
     this.#reindexHydratedAccounts(false);
+    await this.#commitHydrationProjectionChanges(snapshot.reconciliation);
     await this.#reconcileNextDerivationIndex();
 
     if (snapshot.shouldResealPayload) {
       await this.#notifyPayloadUpdated();
+    }
+  }
+
+  async #commitHydrationProjectionChanges(reconciliation: RuntimeKeyringReconciliationResult): Promise<void> {
+    for (const keyringId of reconciliation.prunedKeyringIds) {
+      try {
+        await Promise.all([
+          this.#options.keyringMetas.remove(keyringId),
+          this.#options.accountsStore.removeByKeyringId(keyringId),
+        ]);
+      } catch (error) {
+        this.#options.logger?.(`keyring: failed to remove orphaned store entries for ${keyringId}`, error);
+      }
+    }
+
+    for (const meta of reconciliation.repairedMetas) {
+      try {
+        await this.#options.keyringMetas.upsert(meta);
+      } catch (error) {
+        this.#options.logger?.(`keyring: failed to recreate meta for ${meta.id}`, error);
+      }
     }
   }
 
@@ -541,7 +547,13 @@ export class RuntimeKeyringState {
       );
     }
 
-    await Promise.all(updates.map((meta) => this.#options.keyringMetas.upsert(meta)));
+    for (const meta of updates) {
+      try {
+        await this.#options.keyringMetas.upsert(meta);
+      } catch (error) {
+        this.#options.logger?.(`keyring: failed to persist nextDerivationIndex repair for ${meta.id}`, error);
+      }
+    }
   }
 
   async #notifyPayloadUpdated(): Promise<void> {

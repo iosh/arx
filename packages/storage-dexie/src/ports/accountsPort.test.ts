@@ -1,15 +1,12 @@
 import "fake-indexeddb/auto";
 
-import { AccountRecordSchema } from "@arx/core/storage";
+import type { AccountRecord } from "@arx/core/storage";
 import { Dexie } from "dexie";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createDexieStorage } from "../createDexieStorage.js";
 
 const DB_NAME = "arx-accounts-port-test";
 const storages: Array<ReturnType<typeof createDexieStorage>> = [];
-
-const originalWarn = console.warn.bind(console);
-let warnSpy: ReturnType<typeof vi.spyOn>;
 
 const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   const storage = createDexieStorage({ databaseName: DB_NAME });
@@ -17,18 +14,9 @@ const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   return storage;
 };
 
-beforeEach(() => {
-  warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-    const first = args[0];
-    if (typeof first === "string" && first.startsWith("[storage-dexie]")) return;
-    originalWarn(...args);
-  });
-});
-
 afterEach(async () => {
   for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
-  warnSpy.mockRestore();
 });
 
 describe("DexieAccountsPort", () => {
@@ -36,13 +24,13 @@ describe("DexieAccountsPort", () => {
     const storage = createTestStorage();
     const port = storage.ports.accounts;
 
-    const record = AccountRecordSchema.parse({
+    const record = {
       accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
       alias: "A",
-    });
+    } satisfies AccountRecord;
 
     await port.upsert(record);
     const loaded = await port.get(record.accountKey);
@@ -53,46 +41,26 @@ describe("DexieAccountsPort", () => {
     const storage = createTestStorage();
     const port = storage.ports.accounts;
 
-    const a = AccountRecordSchema.parse({
+    const a = {
       accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
-    });
+    } satisfies AccountRecord;
 
-    const b = AccountRecordSchema.parse({
+    const b = {
       accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 2000,
       hidden: true,
-    });
+    } satisfies AccountRecord;
 
     await port.upsert(a);
     await port.upsert(b);
 
     const list = await port.list();
     expect(list.map((r) => r.accountKey).sort()).toEqual([a.accountKey, b.accountKey].sort());
-  });
-
-  it("drops invalid rows on read (warn + delete)", async () => {
-    const storage = createTestStorage();
-    await storage.__debug.ctx.ready;
-
-    await storage.__debug.db
-      .table("accounts")
-      .put({ accountKey: "eip155:dddddddddddddddddddddddddddddddddddddddd" } as unknown as Record<string, unknown>);
-
-    const loaded = await storage.ports.accounts.get("eip155:dddddddddddddddddddddddddddddddddddddddd");
-    expect(loaded).toBeNull();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[storage-dexie] invalid account record, dropping"),
-      expect.anything(),
-    );
-
-    const after = await storage.__debug.db.table("accounts").get("eip155:dddddddddddddddddddddddddddddddddddddddd");
-    expect(after).toBeUndefined();
   });
 
   it("remove() deletes by accountKey; removeByKeyringId() deletes all accounts for a keyring", async () => {
@@ -102,24 +70,24 @@ describe("DexieAccountsPort", () => {
     const keyringA = "11111111-1111-4111-8111-111111111111";
     const keyringB = "22222222-2222-4222-8222-222222222222";
 
-    const a1 = AccountRecordSchema.parse({
+    const a1 = {
       accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 1000,
-    });
-    const a2 = AccountRecordSchema.parse({
+    } satisfies AccountRecord;
+    const a2 = {
       accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 2000,
-    });
-    const b1 = AccountRecordSchema.parse({
+    } satisfies AccountRecord;
+    const b1 = {
       accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: keyringB,
       createdAt: 3000,
-    });
+    } satisfies AccountRecord;
 
     await port.upsert(a1);
     await port.upsert(a2);

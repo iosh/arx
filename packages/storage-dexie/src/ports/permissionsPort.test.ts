@@ -1,16 +1,13 @@
 import "fake-indexeddb/auto";
 
-import { PermissionRecordSchema } from "@arx/core/storage";
+import type { PermissionRecord } from "@arx/core/storage";
 import { Dexie } from "dexie";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { createDexieStorage } from "../createDexieStorage.js";
 
 const DB_NAME = "arx-permissions-port-test";
 const storages: Array<ReturnType<typeof createDexieStorage>> = [];
-
-const originalWarn = console.warn.bind(console);
-let warnSpy: ReturnType<typeof vi.spyOn>;
 
 const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   const storage = createDexieStorage({ databaseName: DB_NAME });
@@ -18,27 +15,18 @@ const createTestStorage = (): ReturnType<typeof createDexieStorage> => {
   return storage;
 };
 
-beforeEach(() => {
-  warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-    const first = args[0];
-    if (typeof first === "string" && first.startsWith("[storage-dexie]")) return;
-    originalWarn(...args);
-  });
-});
-
 afterEach(async () => {
   for (const storage of storages.splice(0)) storage.close();
   await Dexie.delete(DB_NAME);
-  warnSpy.mockRestore();
 });
 
 describe("DexiePermissionsPort", () => {
   const createRecord = (args: { origin?: string; chains: Array<{ chainRef: string; accountKeys: string[] }> }) =>
-    PermissionRecordSchema.parse({
+    ({
       origin: args.origin ?? "https://dapp.example",
       namespace: "eip155",
       chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
-    });
+    }) satisfies PermissionRecord;
 
   it("upsert() + get() roundtrip", async () => {
     const storage = createTestStorage();
@@ -120,27 +108,5 @@ describe("DexiePermissionsPort", () => {
 
     expect(await port.listByOrigin("https://dapp.example")).toEqual([]);
     expect((await port.listByOrigin("https://other.example")).map((r) => r.namespace)).toEqual([b1.namespace]);
-  });
-
-  it("drops invalid rows on read (warn + delete)", async () => {
-    const storage = createTestStorage();
-    await storage.__debug.ctx.ready;
-
-    await storage.__debug.db.table("permissions").put({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      // missing required fields on purpose (chainScopes)
-    } as unknown as Record<string, unknown>);
-
-    const loaded = await storage.ports.permissions.get({ origin: "https://dapp.example", namespace: "eip155" });
-    expect(loaded).toBeNull();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[storage-dexie] invalid permission record, dropping"),
-      expect.anything(),
-    );
-
-    const after = await storage.__debug.db.table("permissions").get(["https://dapp.example", "eip155"]);
-    expect(after).toBeUndefined();
   });
 });

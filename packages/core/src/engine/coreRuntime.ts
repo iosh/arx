@@ -25,7 +25,7 @@ export type CoreRuntimeEnvironment = Readonly<{
 
 export type CoreRuntimeBootOptions = Readonly<{
   hydrate?: boolean;
-  recoverSubmittedTransactions?: boolean;
+  transactionRestartRecovery?: "run" | "skip";
 }>;
 
 export type CoreStorageInput = Readonly<{

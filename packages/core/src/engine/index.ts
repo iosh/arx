@@ -39,6 +39,7 @@ export type {
   CreateCoreRuntimeInput,
 } from "./coreRuntime.js";
 export { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
+export { createCoreRuntime } from "./createCoreRuntime.js";
 export { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 export { createNamespaceManifestFromWalletNamespaceModule } from "./modules/manifestInterop.js";
 export type {

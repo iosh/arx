@@ -87,7 +87,7 @@ type ArxWalletRuntimeCore = Readonly<{
   services: WalletRuntimeServices;
 }>;
 
-type CreateArxWalletRuntimeInput = CreateArxWalletInput &
+export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
   Readonly<{
     runtime?: Readonly<{
       boot?: boolean;
@@ -99,6 +99,7 @@ type CreateArxWalletRuntimeInput = CreateArxWalletInput &
       rpcClients?: RpcLayerOptions;
       rpcAccessPolicy?: BackgroundRpcAccessPolicyHooks;
       session?: SessionOptions;
+      transactionRestartRecovery?: "run" | "skip";
     }>;
   }>;
 
@@ -368,6 +369,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
     transactionRecovery: transactionServices.recovery,
+    transactionRestartRecovery: input.runtime?.transactionRestartRecovery ?? "run",
     networkBootstrap: backgroundSupportScope.networkBootstrap,
     sessionLayer: sessionScope.sessionLayer,
     rpcClientRegistry: backgroundSupportScope.rpcClientRegistry,

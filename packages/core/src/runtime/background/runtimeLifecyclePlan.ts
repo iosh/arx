@@ -29,6 +29,7 @@ export const createBackgroundRuntimeLifecycle = ({
   deferredNetworkInitialState,
   registeredNamespaces,
   transactionRecovery,
+  transactionRestartRecovery,
   networkBootstrap,
   sessionLayer,
   rpcClientRegistry,
@@ -41,6 +42,7 @@ export const createBackgroundRuntimeLifecycle = ({
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
   transactionRecovery: RestartRecovery;
+  transactionRestartRecovery?: "run" | "skip";
   networkBootstrap: NetworkBootstrap;
   sessionLayer: SessionLayerResult;
   rpcClientRegistry: Destroyable;
@@ -130,7 +132,10 @@ export const createBackgroundRuntimeLifecycle = ({
     destroy: () => bus.clear(),
   };
 
-  const initializeOrder = [coreReadyPlugin, transactionRecoveryPlugin, networkBootstrapPlugin] as const;
+  const initializeOrder =
+    transactionRestartRecovery === "skip"
+      ? ([coreReadyPlugin, networkBootstrapPlugin] as const)
+      : ([coreReadyPlugin, transactionRecoveryPlugin, networkBootstrapPlugin] as const);
   const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [networkBootstrapPlugin] as const;
   const startOrder = [networkBootstrapPlugin, sessionPlugin] as const;

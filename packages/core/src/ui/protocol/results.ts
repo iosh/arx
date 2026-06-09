@@ -1,6 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { UnlockState } from "../../runtime/session/unlock/types.js";
-import type { AccountKey } from "../../storage/records.js";
 import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
@@ -11,14 +10,7 @@ import type {
 import type { UiEntryBootstrap, UiEntryLaunchContext } from "./methods/entry.js";
 import type { ApprovalDetail, ApprovalListEntry, ApprovalResolveResult } from "./models/approvals.js";
 import type { UiTransaction } from "./models/transactions.js";
-import type {
-  ChainSnapshot,
-  NetworkListSnapshot,
-  UiAccountMeta,
-  UiKeyringMeta,
-  UiOwnedAccountSummary,
-  UiSnapshot,
-} from "./schemas.js";
+import type { ChainSnapshot, UiAccountMeta, UiKeyringMeta, UiOwnedAccountSummary, UiSnapshot } from "./schemas.js";
 
 export type UiNativeBalanceResult = {
   chainRef: ChainRef;

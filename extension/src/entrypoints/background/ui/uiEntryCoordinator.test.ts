@@ -3,7 +3,7 @@ import { ATTENTION_REQUESTED } from "@arx/core/services";
 import type { ApprovalDetail } from "@arx/core/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryPlatform } from "../platform/uiPlatform";
-import type { BackgroundRuntimeHost } from "../runtimeHost";
+import type { BackgroundUiEntryAccess } from "../runtimeHost";
 import { createUiEntryCoordinator } from "./uiEntryCoordinator";
 
 type ApprovalRecordLike = Pick<
@@ -17,6 +17,9 @@ type ApprovalQueueItemLike = Pick<
 >;
 type NotificationOpenResult = Awaited<ReturnType<UiEntryPlatform["openNotificationPopup"]>>;
 type OnboardingOpenResult = Awaited<ReturnType<UiEntryPlatform["openOnboardingTab"]>>;
+type UiEntryRuntimeHost = {
+  getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
+};
 
 class FakeBus {
   #handlers = new Map<unknown, Set<(payload: unknown) => void>>();
@@ -202,14 +205,7 @@ const buildHarness = (
     teardown: vi.fn(),
   };
 
-  const runtimeHost: BackgroundRuntimeHost = {
-    initializeRuntime: vi.fn(async () => {}),
-    getOrInitProvider: vi.fn(async () => {
-      throw new Error("Provider bridge access should not be requested in uiEntryCoordinator tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitProvider"],
-    getOrInitUiAccess: vi.fn(async () => {
-      throw new Error("UI bridge access should not be requested in uiEntryCoordinator tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
+  const runtimeHost: UiEntryRuntimeHost = {
     getOrInitUiEntryAccess: vi.fn(async () => {
       if (shouldFailFirstUiEntryAccess) {
         shouldFailFirstUiEntryAccess = false;
@@ -233,9 +229,7 @@ const buildHarness = (
         getApprovalDetail: async (approvalId: string) => approvalDetails.get(approvalId) ?? null,
         hasInitializedVault: () => true,
       };
-    }) as unknown as BackgroundRuntimeHost["getOrInitUiEntryAccess"],
-    shutdown: vi.fn(async () => {}),
-    applyDebugNamespacesFromEnv: vi.fn(),
+    }) as unknown as UiEntryRuntimeHost["getOrInitUiEntryAccess"],
   };
 
   return {

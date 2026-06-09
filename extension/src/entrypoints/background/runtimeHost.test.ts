@@ -2,13 +2,23 @@ import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
-const { createArxWalletRuntimeMock, getExtensionStorageMock, disableDebugNamespacesMock, enableDebugNamespacesMock } =
-  vi.hoisted(() => ({
-    createArxWalletRuntimeMock: vi.fn(),
-    getExtensionStorageMock: vi.fn(),
-    disableDebugNamespacesMock: vi.fn(),
-    enableDebugNamespacesMock: vi.fn(),
-  }));
+const {
+  createArxWalletRuntimeMock,
+  createCoreRuntimeFromArxWalletRuntimeMock,
+  getExtensionStorageMock,
+  disableDebugNamespacesMock,
+  enableDebugNamespacesMock,
+} = vi.hoisted(() => ({
+  createArxWalletRuntimeMock: vi.fn(),
+  createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
+    provider: runtime.provider,
+    ui: {},
+    read: {},
+  })),
+  getExtensionStorageMock: vi.fn(),
+  disableDebugNamespacesMock: vi.fn(),
+  enableDebugNamespacesMock: vi.fn(),
+}));
 
 const { installedNamespaces } = vi.hoisted(() => ({
   installedNamespaces: {
@@ -20,6 +30,7 @@ const { installedNamespaces } = vi.hoisted(() => ({
 
 vi.mock("@arx/core/engine", () => ({
   createArxWalletRuntime: createArxWalletRuntimeMock,
+  createCoreRuntimeFromArxWalletRuntime: createCoreRuntimeFromArxWalletRuntimeMock,
 }));
 
 vi.mock("@/platform/namespaces/installed", () => ({
@@ -210,6 +221,7 @@ const makeRuntime = () => {
       resolveInvocationDetails: vi.fn(),
       executeRequest: vi.fn(),
     },
+    provider,
     wallet: {
       createProvider,
     },
@@ -338,13 +350,15 @@ describe("runtimeHost", () => {
         namespaces: installedNamespaces.engine,
       }),
     );
+    expect(createCoreRuntimeFromArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
+    expect(createCoreRuntimeFromArxWalletRuntimeMock).toHaveBeenCalledWith(runtimeHarness.runtime);
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
       extensions: [expect.objectContaining({ id: "extension.uiActivation" })],
     });
-    expect(runtimeHarness.createProvider).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.createProvider).not.toHaveBeenCalled();
     expect(provider).toBe(runtimeHarness.provider);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);

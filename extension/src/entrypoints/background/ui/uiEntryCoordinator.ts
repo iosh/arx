@@ -4,14 +4,14 @@ import type { UiMethodParams, UiMethodResult } from "@arx/core/ui";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { OnboardingOpenResult, UiEntryPlatform } from "../platform/uiPlatform";
-import type {
-  BackgroundRuntimeHost,
-  BackgroundUiEntryAccess,
-  BackgroundUnlockAttentionRequestedPayload,
-} from "../runtimeHost";
+import type { BackgroundUiEntryAccess, BackgroundUnlockAttentionRequestedPayload } from "../runtimeHost";
+
+type BackgroundUiEntryAccessOwner = {
+  getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
+};
 
 type UiEntryCoordinatorDeps = {
-  runtimeHost: BackgroundRuntimeHost;
+  runtimeHost: BackgroundUiEntryAccessOwner;
   platform: UiEntryPlatform;
   onEntryChanged?: (entry: UiEntryLaunchContext) => void;
 };

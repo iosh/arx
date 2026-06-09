@@ -1,4 +1,4 @@
-import type { WalletProvider } from "@arx/core/engine";
+import type { CoreProviderApi } from "@arx/core/engine";
 import { createLogger, extendLogger } from "@arx/core/logger";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS, type ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
@@ -14,7 +14,7 @@ import type { ProviderBridgeSnapshot, ProviderSessionContext } from "./types";
 
 type ProviderPortServerDeps = {
   extensionOrigin: string;
-  getOrInitProvider: () => Promise<WalletProvider>;
+  getOrInitProvider: () => Promise<CoreProviderApi>;
 };
 
 export type ProviderPortServer = {
@@ -58,8 +58,8 @@ export const createProviderPortServer = ({
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "providerPort");
 
-  let provider: WalletProvider | null = null;
-  let providerPromise: Promise<WalletProvider> | null = null;
+  let provider: CoreProviderApi | null = null;
+  let providerPromise: Promise<CoreProviderApi> | null = null;
   let projectionQueue: Promise<void> = Promise.resolve();
   let started = false;
   let startTask: Promise<void> | null = null;
@@ -75,7 +75,7 @@ export const createProviderPortServer = ({
 
   const getCachedProvider = () => provider;
 
-  const loadProvider = async (): Promise<WalletProvider> => {
+  const loadProvider = async (): Promise<CoreProviderApi> => {
     if (provider) {
       return provider;
     }

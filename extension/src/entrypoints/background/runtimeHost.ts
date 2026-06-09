@@ -4,7 +4,13 @@ import {
   type ApprovalRequester,
   type ApprovalTerminalReason,
 } from "@arx/core/approvals";
-import { type ApprovalDetail, createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
+import {
+  type ApprovalDetail,
+  type CoreProviderApi,
+  type CoreRuntime,
+  createArxWalletRuntime,
+  createCoreRuntimeFromArxWalletRuntime,
+} from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
@@ -16,12 +22,14 @@ import { isInternalOrigin } from "./origin";
 import { createUiActivationExtension, type UiActivationEntries } from "./ui/uiActivationExtension";
 
 type BackgroundRuntimeCache = {
+  core: CoreRuntime;
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>;
 };
 
 export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
-  getOrInitProvider: () => Promise<WalletProvider>;
+  getCoreReady: () => Promise<CoreRuntime>;
+  getOrInitProvider: () => Promise<CoreProviderApi>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
@@ -106,7 +114,7 @@ const buildTransactionApprovalCancelReason = (reason: ApprovalTerminalReason) =>
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
-  let provider: WalletProvider | null = null;
+  let provider: CoreProviderApi | null = null;
   let uiAccess: UiRuntimeAccess | null = null;
   let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
   let uiAccessParams: BackgroundUiAccessParams | null = null;
@@ -168,7 +176,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         throw new Error("Background runtime host was reset during boot");
       }
 
-      const next: BackgroundRuntimeCache = { runtime };
+      const core = createCoreRuntimeFromArxWalletRuntime(runtime);
+      const next: BackgroundRuntimeCache = { core, runtime };
 
       runtimeCache = next;
       hostLog("runtime initialized", { runtimeId: browser.runtime.id });
@@ -180,6 +189,11 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     } finally {
       runtimeCachePromise = null;
     }
+  };
+
+  const getCoreReady = async (): Promise<CoreRuntime> => {
+    const active = await getOrInitRuntimeCache();
+    return active.core;
   };
 
   const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
@@ -232,7 +246,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     }
   };
 
-  const getOrInitProvider = async (): Promise<WalletProvider> => {
+  const getOrInitProvider = async (): Promise<CoreProviderApi> => {
     if (provider) {
       return provider;
     }
@@ -243,7 +257,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       throw new Error("Background runtime host was reset during provider bootstrap");
     }
 
-    provider = active.runtime.wallet.createProvider();
+    provider = active.core.provider;
     return provider;
   };
 
@@ -413,6 +427,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   return {
     initializeRuntime,
+    getCoreReady,
     getOrInitProvider,
     getOrInitUiAccess,
     getOrInitUiEntryAccess,

@@ -177,9 +177,9 @@ const createCoreWalletUiApi = (ui: WalletUi): CoreWalletUiApi => ({
   },
 });
 
-export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
-  const runtime = await createArxWalletRuntime(buildArxWalletRuntimeInput(input));
-
+export const createCoreRuntimeFromArxWalletRuntime = (
+  runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>,
+): CoreRuntime => {
   const ui = runtime.wallet.createUi({
     platform: CORE_UI_NO_HOST_PLATFORM,
     uiOrigin: CORE_UI_ORIGIN,
@@ -190,4 +190,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     ui: createCoreWalletUiApi(ui),
     read: createCoreReadApi(runtime),
   };
+};
+
+export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
+  const runtime = await createArxWalletRuntime(buildArxWalletRuntimeInput(input));
+  return createCoreRuntimeFromArxWalletRuntime(runtime);
 };

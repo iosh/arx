@@ -22,7 +22,7 @@ afterEach(async () => {
 describe("DexieKeyringMetasPort", () => {
   it("upsert() + get() roundtrip", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.keyringMetas;
+    const port = storage.ports.keyrings;
 
     const record = {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -40,7 +40,7 @@ describe("DexieKeyringMetasPort", () => {
 
   it("list() returns all records", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.keyringMetas;
+    const port = storage.ports.keyrings;
 
     const a = {
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -63,7 +63,7 @@ describe("DexieKeyringMetasPort", () => {
 
   it("remove() deletes the record", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.keyringMetas;
+    const port = storage.ports.keyrings;
 
     const record = {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",

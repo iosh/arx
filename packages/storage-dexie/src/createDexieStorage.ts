@@ -1,14 +1,4 @@
-import type {
-  AccountsPort,
-  CustomChainsPort,
-  CustomRpcPort,
-  KeyringMetasPort,
-  NetworkSelectionPort,
-  PermissionsPort,
-  SettingsPort,
-} from "@arx/core/services";
-import type { VaultMetaPort } from "@arx/core/storage";
-import type { TransactionsStoragePort } from "@arx/core/transactions/storage";
+import type { CoreStoragePorts } from "@arx/core/engine";
 
 import { ArxStorageDatabase } from "./db.js";
 import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
@@ -24,18 +14,7 @@ import { DexieVaultMetaPort } from "./ports/vaultMetaPort.js";
 
 export const DEFAULT_DEXIE_DATABASE_NAME = "arx-storage";
 
-export type DexieStoragePorts = {
-  settings: SettingsPort;
-  customChains: CustomChainsPort;
-  customRpc: CustomRpcPort;
-  networkSelection: NetworkSelectionPort;
-  vaultMeta: VaultMetaPort;
-
-  accounts: AccountsPort;
-  permissions: PermissionsPort;
-  keyringMetas: KeyringMetasPort;
-  transactionAggregates: TransactionsStoragePort;
-};
+export type DexieStoragePorts = CoreStoragePorts;
 
 export type DexieStorage = {
   ports: DexieStoragePorts;
@@ -64,16 +43,17 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
 
   return {
     ports: {
-      settings: new DexieSettingsPort(ctx),
-      customChains: new DexieCustomChainsPort(ctx),
-      customRpc: new DexieCustomRpcPort(ctx),
-      networkSelection: new DexieNetworkSelectionPort(ctx),
-      vaultMeta: new DexieVaultMetaPort(ctx),
-
+      vault: new DexieVaultMetaPort(ctx),
+      keyrings: new DexieKeyringMetasPort(ctx),
       accounts: new DexieAccountsPort(ctx),
       permissions: new DexiePermissionsPort(ctx),
-      keyringMetas: new DexieKeyringMetasPort(ctx),
-      transactionAggregates: new DexieTransactionAggregatesPort(ctx),
+      chains: {
+        customChains: new DexieCustomChainsPort(ctx),
+        customRpc: new DexieCustomRpcPort(ctx),
+        networkSelection: new DexieNetworkSelectionPort(ctx),
+      },
+      transactions: new DexieTransactionAggregatesPort(ctx),
+      settings: new DexieSettingsPort(ctx),
     },
     close: () => db.close(),
     __debug: { db, ctx },

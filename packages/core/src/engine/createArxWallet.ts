@@ -305,7 +305,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
     supportedChainsOptions: {
       ...(assemblyOptions?.supportedChains ?? {}),
-      port: input.storage.ports.customChains,
+      port: input.storage.ports.chains.customChains,
     },
   });
 
@@ -314,14 +314,14 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     bootstrapScope,
     namespaceSession: namespaceStages.session,
     settingsPort: input.storage.ports.settings,
-    networkSelectionPort: input.storage.ports.networkSelection,
-    customRpcPort: input.storage.ports.customRpc,
+    networkSelectionPort: input.storage.ports.chains.networkSelection,
+    customRpcPort: input.storage.ports.chains.customRpc,
     storePorts: {
       accounts: input.storage.ports.accounts,
-      keyringMetas: input.storage.ports.keyringMetas,
+      keyringMetas: input.storage.ports.keyrings,
       permissions: input.storage.ports.permissions,
     },
-    ...(input.storage.vaultMetaPort ? { vaultMetaPort: input.storage.vaultMetaPort } : {}),
+    vaultMetaPort: input.storage.ports.vault,
     ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
   });
 
@@ -348,7 +348,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
   const transactionAggregateStore = new TransactionAggregateStore({
-    storage: input.storage.ports.transactionAggregates,
+    storage: input.storage.ports.transactions,
     now: bootstrapScope.storageNow,
     ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
   });

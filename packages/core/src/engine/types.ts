@@ -137,16 +137,22 @@ export type WalletNamespaces = Readonly<{
   listNamespaces(): string[];
 }>;
 
-/** Storage ports required to boot a wallet. */
-export type ArxWalletStoragePorts = Readonly<{
-  accounts: AccountsPort;
+/** Chain storage ports required to boot a wallet. */
+export type CoreChainsStoragePorts = Readonly<{
   customChains: CustomChainsPort;
   customRpc: CustomRpcPort;
-  keyringMetas: KeyringMetasPort;
   networkSelection: NetworkSelectionPort;
+}>;
+
+/** Owner-scoped storage ports required to boot a wallet. */
+export type CoreStoragePorts = Readonly<{
+  vault: VaultMetaPort;
+  keyrings: KeyringMetasPort;
+  accounts: AccountsPort;
   permissions: PermissionsPort;
+  chains: CoreChainsStoragePorts;
+  transactions: TransactionsStoragePort;
   settings: SettingsPort;
-  transactionAggregates: TransactionsStoragePort;
 }>;
 
 /** Arguments for `createArxWallet()`. */
@@ -157,9 +163,7 @@ export type CreateArxWalletInput = Readonly<{
   }>;
   storage: Readonly<{
     /** Required storage ports. */
-    ports: ArxWalletStoragePorts;
-    /** Vault metadata port. */
-    vaultMetaPort?: VaultMetaPort;
+    ports: CoreStoragePorts;
     /** Whether to hydrate persisted state. */
     hydrate?: boolean;
   }>;

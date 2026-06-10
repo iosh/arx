@@ -150,17 +150,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       const runtime = await createArxWalletRuntime({
         namespaces: INSTALLED_NAMESPACES.engine,
         storage: {
-          ports: {
-            accounts: storage.ports.accounts,
-            customChains: storage.ports.customChains,
-            customRpc: storage.ports.customRpc,
-            keyringMetas: storage.ports.keyringMetas,
-            networkSelection: storage.ports.networkSelection,
-            permissions: storage.ports.permissions,
-            transactionAggregates: storage.ports.transactionAggregates,
-            settings: storage.ports.settings,
-          },
-          vaultMetaPort: storage.ports.vaultMeta,
+          ports: storage.ports,
         },
         runtime: {
           lifecycleLabel: "createBackgroundRuntimeHost",

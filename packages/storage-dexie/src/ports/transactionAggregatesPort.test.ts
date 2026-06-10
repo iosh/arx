@@ -137,7 +137,7 @@ const createTerminalReason = (kind: TransactionTerminalReason["kind"]): Transact
 describe("DexieTransactionAggregatesPort", () => {
   it("insertTransactionAggregate() + loadTransactionAggregate() roundtrips all aggregate parts", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const aggregate = createSubmittingAggregate("tx-1");
 
     await port.insertTransactionAggregate(aggregate);
@@ -147,7 +147,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("saveTransactionAggregate() replaces submissions in the same aggregate boundary", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const aggregate = createSubmittingAggregate("tx-1");
     await port.insertTransactionAggregate(aggregate);
 
@@ -178,7 +178,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("saveTransactionAggregate() fails for missing records", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
 
     await expect(port.saveTransactionAggregate(createAwaitingApprovalAggregate("missing-tx"))).rejects.toThrow(
       TransactionAggregateNotFoundError,
@@ -187,7 +187,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("rolls back insertTransactionAggregate() when a later aggregate part fails", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const first = createSubmittingAggregate("tx-1");
     const duplicateSubmissionId = createSubmittingAggregate("tx-2");
     const firstSubmission = getOnlySubmission(first);
@@ -207,7 +207,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("listTransactionHistory() reads only transactionRecords and paginates newest first", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const older = createSubmittingAggregate("tx-older", 1_000);
     const newer = createSubmittingAggregate("tx-newer", 2_000);
     await port.insertTransactionAggregate(older);
@@ -236,7 +236,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("listTransactionHistory() returns all matching records when limit is omitted", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const older = createSubmittingAggregate("tx-older", 1_000);
     const newer = createSubmittingAggregate("tx-newer", 2_000);
 
@@ -252,7 +252,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("findTransactionRecordsByConflictKey() returns matching records newest first", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const conflictKey = {
       kind: "eip155.nonce",
       value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
@@ -286,7 +286,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("commitApprovedTransactionAggregate() rejects conflicting active records atomically", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
 
     const first = createAwaitingApprovalAggregate("tx-1", {
       status: "submitting",
@@ -366,7 +366,7 @@ describe("DexieTransactionAggregatesPort", () => {
 
   it("listRecoverableTransactionAggregates() includes active candidates and excludes terminal records", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.transactionAggregates;
+    const port = storage.ports.transactions;
     const awaiting = createAwaitingApprovalAggregate("tx-awaiting", {
       createdAt: 1_000,
       updatedAt: 1_000,

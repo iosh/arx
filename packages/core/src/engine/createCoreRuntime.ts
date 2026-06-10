@@ -23,7 +23,6 @@ type ArxWalletRuntimeOptions = NonNullable<CreateArxWalletRuntimeInput["runtime"
 
 type MutableArxWalletStorageInput = {
   ports: ArxWalletStorageInput["ports"];
-  vaultMetaPort?: NonNullable<ArxWalletStorageInput["vaultMetaPort"]>;
   hydrate?: NonNullable<ArxWalletStorageInput["hydrate"]>;
 };
 
@@ -42,12 +41,9 @@ type MutableArxWalletRuntimeInput = {
 
 const buildArxWalletStorageInput = (input: CreateCoreRuntimeInput): ArxWalletStorageInput => {
   const storage: MutableArxWalletStorageInput = {
-    ports: input.storage.ports,
+    ports: input.storage,
   };
 
-  if (input.storage.vaultMetaPort) {
-    storage.vaultMetaPort = input.storage.vaultMetaPort;
-  }
   if (input.boot?.hydrate !== undefined) {
     storage.hydrate = input.boot.hydrate;
   }

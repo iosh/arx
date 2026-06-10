@@ -9,6 +9,7 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryVaultMetaPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
@@ -38,16 +39,17 @@ const createCoreRuntimeInput = (params?: {
     modules: [createEip155WalletNamespaceModule()],
   },
   storage: {
-    ports: {
-      accounts: params?.accountsPort ?? new MemoryAccountsPort(),
+    vault: new MemoryVaultMetaPort(),
+    keyrings: new MemoryKeyringMetasPort(),
+    accounts: params?.accountsPort ?? new MemoryAccountsPort(),
+    permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
+    chains: {
       customChains: new MemoryCustomChainsPort(),
       customRpc: new MemoryCustomRpcPort(),
-      keyringMetas: new MemoryKeyringMetasPort(),
       networkSelection: new MemoryNetworkSelectionPort(),
-      permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
-      settings: new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
-      transactionAggregates: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
     },
+    transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
+    settings: new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
   },
   ...(params?.boot ? { boot: params.boot } : {}),
 });

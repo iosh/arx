@@ -22,7 +22,7 @@ afterEach(async () => {
 describe("@arx/storage-dexie", () => {
   it("NetworkSelectionPort roundtrips", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.networkSelection;
+    const port = storage.ports.chains.networkSelection;
 
     const record = {
       id: "network-selection",
@@ -37,7 +37,7 @@ describe("@arx/storage-dexie", () => {
 
   it("VaultMetaPort roundtrips", async () => {
     const storage = createTestStorage();
-    const port = storage.ports.vaultMeta;
+    const port = storage.ports.vault;
 
     const snapshot = {
       version: VAULT_META_SNAPSHOT_VERSION,

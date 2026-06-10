@@ -44,7 +44,8 @@ export { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 export { createNamespaceManifestFromWalletNamespaceModule } from "./modules/manifestInterop.js";
 export type {
   ArxWallet,
-  ArxWalletStoragePorts,
+  CoreChainsStoragePorts,
+  CoreStoragePorts,
   CreateArxWalletInput,
   DappConnectionProjection,
   DappConnectionRecord,

@@ -287,14 +287,16 @@ describe("runtimeHost", () => {
     vi.clearAllMocks();
     getExtensionStorageMock.mockReturnValue({
       ports: {
+        vault: {},
+        keyrings: {},
         accounts: {},
-        keyringMetas: {},
         permissions: {},
-        transactionAggregates: {},
-        customChains: {},
-        customRpc: {},
-        networkSelection: {},
-        vaultMeta: {},
+        transactions: {},
+        chains: {
+          customChains: {},
+          customRpc: {},
+          networkSelection: {},
+        },
         settings: {},
       },
     });

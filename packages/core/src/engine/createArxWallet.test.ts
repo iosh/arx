@@ -11,6 +11,7 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryVaultMetaPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
@@ -50,14 +51,17 @@ const createWalletInput = (params?: {
     },
     storage: {
       ports: {
+        vault: new MemoryVaultMetaPort(),
+        keyrings: params?.keyringMetasPort ?? new MemoryKeyringMetasPort(),
         accounts: params?.accountsPort ?? new MemoryAccountsPort(),
-        customChains: new MemoryCustomChainsPort(),
-        customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
-        keyringMetas: params?.keyringMetasPort ?? new MemoryKeyringMetasPort(),
-        networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
+        chains: {
+          customChains: new MemoryCustomChainsPort(),
+          customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
+          networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
+        },
+        transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
-        transactionAggregates: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
       },
     },
   };

@@ -135,6 +135,14 @@ const createEphemeralCustomRpcPort = (): CustomRpcPort => {
   };
 };
 
+const createNoopVaultMetaPort = (): VaultMetaPort => ({
+  async loadVaultMeta() {
+    return null;
+  },
+  async saveVaultMeta() {},
+  async clearVaultMeta() {},
+});
+
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const customChainsPort = options.store.ports.customChains ?? options.supportedChains?.port;
   if (!customChainsPort) {
@@ -148,6 +156,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const networkSelectionPort = options.networkSelection.port;
   const customRpcPort = options.customRpc?.port ?? createEphemeralCustomRpcPort();
+  const vaultMetaPort = options.storage?.vaultMetaPort ?? createNoopVaultMetaPort();
 
   const modules = options.namespaces.manifests.map((manifest) => createWalletNamespaceModuleFromManifest(manifest));
   const runtime = assembleArxWalletRuntime({
@@ -156,16 +165,18 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     },
     storage: {
       ports: {
+        vault: vaultMetaPort,
+        keyrings: options.store.ports.keyringMetas,
         accounts: options.store.ports.accounts,
-        customChains: customChainsPort,
-        customRpc: customRpcPort,
-        keyringMetas: options.store.ports.keyringMetas,
-        networkSelection: networkSelectionPort,
         permissions: options.store.ports.permissions,
-        transactionAggregates: options.store.ports.transactionAggregates,
+        chains: {
+          customChains: customChainsPort,
+          customRpc: customRpcPort,
+          networkSelection: networkSelectionPort,
+        },
+        transactions: options.store.ports.transactionAggregates,
         settings: options.settings.port,
       },
-      ...(options.storage?.vaultMetaPort ? { vaultMetaPort: options.storage.vaultMetaPort } : {}),
       ...(options.storage?.hydrate !== undefined ? { hydrate: options.storage.hydrate } : {}),
     },
     env: {

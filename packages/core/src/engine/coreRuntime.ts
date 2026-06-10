@@ -8,10 +8,9 @@ import type {
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
-import type { VaultMetaPort } from "../storage/index.js";
 import type { UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
-import type { ArxWalletStoragePorts, WalletNamespaceModule, WalletProviderConnectionProjection } from "./types.js";
+import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionProjection } from "./types.js";
 
 export type CoreUnsubscribe = () => void;
 
@@ -28,10 +27,7 @@ export type CoreRuntimeBootOptions = Readonly<{
   transactionRestartRecovery?: "run" | "skip";
 }>;
 
-export type CoreStorageInput = Readonly<{
-  ports: ArxWalletStoragePorts;
-  vaultMetaPort?: VaultMetaPort;
-}>;
+export type CoreStorageInput = CoreStoragePorts;
 
 export type CreateCoreRuntimeInput = Readonly<{
   namespaces: Readonly<{

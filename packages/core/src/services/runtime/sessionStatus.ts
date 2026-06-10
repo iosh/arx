@@ -1,10 +1,10 @@
 import type { UnlockService } from "../../runtime/session/unlock/types.js";
 import type { VaultService } from "../../vault/types.js";
 
-export type SessionStatusPhase = "uninitialized" | "locked" | "unlocked";
+export type SessionLifecycleStatus = "uninitialized" | "locked" | "unlocked";
 
 export type SessionStatus = {
-  phase: SessionStatusPhase;
+  status: SessionLifecycleStatus;
   vaultInitialized: boolean;
   isUnlocked: boolean;
   autoLockDurationMs: number;
@@ -22,24 +22,17 @@ type CreateSessionStatusServiceDeps = {
   vault: Pick<VaultService, "getStatus">;
 };
 
-const deriveSessionPhase = (params: { vaultInitialized: boolean; isUnlocked: boolean }): SessionStatusPhase => {
-  if (!params.vaultInitialized) {
-    return "uninitialized";
-  }
-
-  return params.isUnlocked ? "unlocked" : "locked";
-};
-
 export const createSessionStatusService = ({ unlock, vault }: CreateSessionStatusServiceDeps): SessionStatusService => {
   const getStatus = (): SessionStatus => {
     const unlockState = unlock.getState();
     const vaultInitialized = vault.getStatus().hasEnvelope;
+    const isUnlocked = unlockState.status === "unlocked";
 
     return {
-      phase: deriveSessionPhase({ vaultInitialized, isUnlocked: unlockState.isUnlocked }),
+      status: unlockState.status,
       vaultInitialized,
-      isUnlocked: unlockState.isUnlocked,
-      autoLockDurationMs: unlockState.timeoutMs,
+      isUnlocked,
+      autoLockDurationMs: unlockState.autoLockDurationMs,
       nextAutoLockAt: unlockState.nextAutoLockAt,
     };
   };

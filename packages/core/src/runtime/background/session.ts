@@ -154,7 +154,7 @@ export const initSessionLayer = ({
       updatedAt: storageNow(),
       payload: {
         envelope: vaultProxy.getEnvelope(),
-        autoLockDurationMs: unlockState.timeoutMs,
+        autoLockDurationMs: unlockState.autoLockDurationMs,
         initializedAt: getOrInitVaultInitializedAt(),
       },
     };
@@ -232,7 +232,6 @@ export const initSessionLayer = ({
       if (!getIsHydrating()) {
         await persistVaultMetaImmediate({ throwOnError: true });
       }
-      notifySessionStateChanged();
       return envelope;
     },
     async unlock(params) {
@@ -262,7 +261,6 @@ export const initSessionLayer = ({
       baseVault.importEnvelope(value);
       assertVaultLockedAfterMutation("importEnvelope");
       scheduleVaultMetaPersist();
-      notifySessionStateChanged();
     },
     getEnvelope() {
       return baseVault.getEnvelope();
@@ -282,7 +280,7 @@ export const initSessionLayer = ({
         await vaultProxy.unlock(params);
       },
       lock: vaultProxy.lock.bind(vaultProxy),
-      isUnlocked: vaultProxy.isUnlocked.bind(vaultProxy),
+      getStatus: vaultProxy.getStatus.bind(vaultProxy),
     },
     autoLockDurationMs: baseAutoLockDurationMs,
     now: storageNow,
@@ -298,7 +296,7 @@ export const initSessionLayer = ({
     const unlockState = unlock.getState();
     const vaultUnlocked = vaultProxy.isUnlocked();
 
-    if (!unlockState.isUnlocked && !vaultUnlocked) {
+    if (unlockState.status !== "unlocked" && !vaultUnlocked) {
       return;
     }
 
@@ -306,7 +304,7 @@ export const initSessionLayer = ({
       message: `${action} requires the session to be locked`,
       details: {
         action,
-        unlockState: unlockState.isUnlocked ? "unlocked" : "locked",
+        unlockState: unlockState.status,
         vaultState: vaultUnlocked ? "unlocked" : "locked",
       },
     });
@@ -314,15 +312,20 @@ export const initSessionLayer = ({
 
   const createSessionVault = async (params: CreateVaultParams): Promise<VaultEnvelope> => {
     assertSessionLockedForVaultLifecycle("createVault");
-    return await vaultProxy.initialize({
+    const envelope = await vaultProxy.initialize({
       password: params.password,
       secret: encodePayload({ keyrings: [] }),
     });
+    unlock.syncVaultStatus();
+    notifySessionStateChanged();
+    return envelope;
   };
 
   const importSessionVault = async (envelope: VaultEnvelope): Promise<VaultEnvelope> => {
     assertSessionLockedForVaultLifecycle("importVault");
     vaultProxy.importEnvelope(envelope);
+    unlock.syncVaultStatus();
+    notifySessionStateChanged();
     vaultInitializedAt = storageNow();
     cleanupVaultPersistTimer();
     if (!getIsHydrating()) {
@@ -377,16 +380,16 @@ export const initSessionLayer = ({
     sessionListenersAttached = true;
     // onStateChanged replays the current snapshot; ignore that initial emission to avoid
     // persisting vault metadata when nothing actually changed.
-    let lastUnlockState = unlock.getState();
+    let lastSessionLockState = unlock.getState();
     sessionSubscriptions.push(
       unlock.onStateChanged(() => {
         const next = unlock.getState();
         const isEqual = UNLOCK_STATE_CHANGED.isEqual ?? Object.is;
-        if (isEqual(lastUnlockState, next)) {
-          lastUnlockState = next;
+        if (isEqual(lastSessionLockState, next)) {
+          lastSessionLockState = next;
           return;
         }
-        lastUnlockState = next;
+        lastSessionLockState = next;
         scheduleVaultMetaPersist();
         notifySessionStateChanged();
       }),
@@ -426,6 +429,7 @@ export const initSessionLayer = ({
       vaultInitializedAt = null;
       lastPersistedVaultMeta = null;
       unlock.setAutoLockDuration(baseAutoLockDurationMs);
+      unlock.syncVaultStatus();
       return;
     }
 
@@ -443,6 +447,8 @@ export const initSessionLayer = ({
           cause: error,
         });
       }
+      unlock.syncVaultStatus();
+      notifySessionStateChanged();
     }
   };
 
@@ -472,7 +478,7 @@ export const initSessionLayer = ({
 
       return {
         envelope: vaultProxy.getEnvelope(),
-        autoLockDurationMs: unlockState.timeoutMs,
+        autoLockDurationMs: unlockState.autoLockDurationMs,
         initializedAt: getOrInitVaultInitializedAt(),
       };
     },

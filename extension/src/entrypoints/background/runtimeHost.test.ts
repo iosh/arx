@@ -101,7 +101,7 @@ const makeRuntime = () => {
   const onPermissionsStateChanged = vi.fn(() => vi.fn());
   const onUnlocked = vi.fn(() => vi.fn());
   const onLocked = vi.fn(() => vi.fn());
-  const onUnlockStateChanged = vi.fn(() => vi.fn());
+  const onSessionLockStateChanged = vi.fn(() => vi.fn());
   const subscribeNetworkSelectionChanged = vi.fn(() => vi.fn());
   const unsubscribeBus = vi.fn();
   const subscribe = vi.fn(() => unsubscribeBus);
@@ -212,7 +212,7 @@ const makeRuntime = () => {
           isUnlocked: () => true,
           onUnlocked,
           onLocked,
-          onStateChanged: onUnlockStateChanged,
+          onStateChanged: onSessionLockStateChanged,
         },
       },
       sessionStatus: {
@@ -263,7 +263,7 @@ const makeRuntime = () => {
     onPermissionsStateChanged,
     onUnlocked,
     onLocked,
-    onUnlockStateChanged,
+    onSessionLockStateChanged,
     subscribeNetworkSelectionChanged,
     addTransactionApproval,
     onTransactionApprovalsChanged,

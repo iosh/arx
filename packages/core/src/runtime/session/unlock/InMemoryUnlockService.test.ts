@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { Messenger } from "../../../messenger/Messenger.js";
 import { InMemoryUnlockService } from "./InMemoryUnlockService.js";
 import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_TOPICS, UNLOCK_UNLOCKED } from "./topics.js";
-import type { UnlockLockedPayload, UnlockState, UnlockUnlockedPayload } from "./types.js";
+import type { SessionLockState, UnlockLockedPayload, UnlockUnlockedPayload } from "./types.js";
 
 const createMessenger = () => new Messenger().scope({ publish: UNLOCK_TOPICS });
 
 describe("InMemoryUnlockService", () => {
   it("unlocks the vault, emits events, and schedules auto lock", async () => {
     const messenger = createMessenger();
-    const stateUpdates: UnlockState[] = [];
+    const stateUpdates: SessionLockState[] = [];
     const lockedEvents: UnlockLockedPayload[] = [];
     const unlockedEvents: UnlockUnlockedPayload[] = [];
 
@@ -34,15 +34,20 @@ describe("InMemoryUnlockService", () => {
       clearTimeout: clearTimeoutSpy as unknown as typeof clearTimeout,
     };
 
-    const vaultUnlock = vi.fn(async () => {});
-    const vaultLock = vi.fn();
+    let vaultUnlocked = false;
+    const vaultUnlock = vi.fn(async () => {
+      vaultUnlocked = true;
+    });
+    const vaultLock = vi.fn(() => {
+      vaultUnlocked = false;
+    });
 
     const unlockService = new InMemoryUnlockService({
       messenger,
       vault: {
         unlock: vaultUnlock,
         lock: vaultLock,
-        isUnlocked: () => false,
+        getStatus: () => ({ isUnlocked: vaultUnlocked, hasEnvelope: true }),
       },
       autoLockDurationMs: 500,
       now: () => now,
@@ -51,9 +56,8 @@ describe("InMemoryUnlockService", () => {
 
     expect(stateUpdates).toEqual([
       {
-        isUnlocked: false,
-        lastUnlockedAt: null,
-        timeoutMs: 500,
+        status: "locked",
+        autoLockDurationMs: 500,
         nextAutoLockAt: null,
       },
     ]);
@@ -64,9 +68,9 @@ describe("InMemoryUnlockService", () => {
     expect(unlockService.isUnlocked()).toBe(true);
     expect(unlockedEvents).toEqual([{ at: 1_000 }]);
     expect(stateUpdates.at(-1)).toMatchObject({
-      isUnlocked: true,
-      lastUnlockedAt: 1_000,
-      timeoutMs: 500,
+      status: "unlocked",
+      unlockedAt: 1_000,
+      autoLockDurationMs: 500,
       nextAutoLockAt: 1_500,
     });
 
@@ -79,16 +83,15 @@ describe("InMemoryUnlockService", () => {
     expect(unlockService.isUnlocked()).toBe(false);
     expect(lockedEvents).toEqual([{ at: 1_500, reason: "timeout" }]);
     expect(stateUpdates.at(-1)).toEqual({
-      isUnlocked: false,
-      lastUnlockedAt: 1_000,
-      timeoutMs: 500,
+      status: "locked",
+      autoLockDurationMs: 500,
       nextAutoLockAt: null,
     });
   });
 
   it("reconfigures auto-lock duration while unlocked", async () => {
     const messenger = createMessenger();
-    const stateUpdates: UnlockState[] = [];
+    const stateUpdates: SessionLockState[] = [];
     messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
 
     const now = 5_000;
@@ -110,7 +113,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vi.fn(async () => {}),
         lock: vi.fn(),
-        isUnlocked: () => false,
+        getStatus: () => ({ isUnlocked: false, hasEnvelope: true }),
       },
       autoLockDurationMs: 600,
       now: () => now,
@@ -124,18 +127,18 @@ describe("InMemoryUnlockService", () => {
 
     unlockService.setAutoLockDuration(1_200);
 
-    expect(unlockService.getState().timeoutMs).toBe(1_200);
+    expect(unlockService.getState().autoLockDurationMs).toBe(1_200);
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1_200);
     expect(stateUpdates.at(-1)).toMatchObject({
-      timeoutMs: 1_200,
+      autoLockDurationMs: 1_200,
       nextAutoLockAt: now + 1_200,
     });
   });
 
   it("stays locked when vault unlock throws", async () => {
     const messenger = createMessenger();
-    const stateUpdates: UnlockState[] = [];
+    const stateUpdates: SessionLockState[] = [];
     messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
 
     const timers = {
@@ -152,7 +155,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vaultUnlock,
         lock: vi.fn(),
-        isUnlocked: () => false,
+        getStatus: () => ({ isUnlocked: false, hasEnvelope: true }),
       },
       autoLockDurationMs: 1_000,
       now: () => 10_000,
@@ -167,8 +170,45 @@ describe("InMemoryUnlockService", () => {
     expect(unlockService.isUnlocked()).toBe(false);
     expect(timers.setTimeout).not.toHaveBeenCalled();
     expect(stateUpdates.at(-1)).toMatchObject({
-      isUnlocked: false,
+      status: "locked",
       nextAutoLockAt: null,
     });
+  });
+
+  it("syncs uninitialized and locked statuses from the vault envelope state", () => {
+    const messenger = createMessenger();
+    const stateUpdates: SessionLockState[] = [];
+    messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
+
+    let hasEnvelope = false;
+    const unlockService = new InMemoryUnlockService({
+      messenger,
+      vault: {
+        unlock: vi.fn(async () => {}),
+        lock: vi.fn(),
+        getStatus: () => ({ isUnlocked: false, hasEnvelope }),
+      },
+      autoLockDurationMs: 1_000,
+      now: () => 10_000,
+      timers: {
+        setTimeout: vi.fn() as unknown as typeof setTimeout,
+        clearTimeout: vi.fn() as unknown as typeof clearTimeout,
+      },
+    });
+
+    expect(unlockService.getState()).toEqual({
+      status: "uninitialized",
+      autoLockDurationMs: 1_000,
+      nextAutoLockAt: null,
+    });
+
+    hasEnvelope = true;
+
+    expect(unlockService.syncVaultStatus()).toEqual({
+      status: "locked",
+      autoLockDurationMs: 1_000,
+      nextAutoLockAt: null,
+    });
+    expect(stateUpdates.at(-1)?.status).toBe("locked");
   });
 });

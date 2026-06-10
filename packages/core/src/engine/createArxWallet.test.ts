@@ -135,7 +135,7 @@ describe("createArxWallet", () => {
       expect(eip155Module.namespace).toBe("eip155");
       expect(eip155Module.engine.facts.chainSeeds?.length).toBeGreaterThan(0);
       expect(eip155Module.engine.factories?.createSigner).toBeTypeOf("function");
-      expect(wallet.session.getStatus().phase).toBe("uninitialized");
+      expect(wallet.session.getStatus().status).toBe("uninitialized");
       expect(wallet.accounts.getWalletSetupState()).toEqual({
         totalAccountCount: 0,
         hasOwnedAccounts: false,
@@ -508,7 +508,7 @@ describe("createArxWallet", () => {
       });
       await expect(ui.dispatch({ method: "ui.session.unlock", params: { password: PASSWORD } })).resolves.toMatchObject(
         {
-          isUnlocked: true,
+          status: "unlocked",
         },
       );
       expect(stateChanged).toHaveBeenCalled();

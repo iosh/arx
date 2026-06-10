@@ -1,22 +1,36 @@
 import type { Unsubscribe } from "../../../messenger/topic.js";
-import type { UnlockVaultParams } from "../../../vault/types.js";
+import type { UnlockVaultParams, VaultStatus } from "../../../vault/types.js";
 import type { UnlockMessenger } from "./topics.js";
 
 export type UnlockReason = "manual" | "timeout" | "blur" | "suspend" | "reload";
 
-export type UnlockState = {
-  isUnlocked: boolean;
-  lastUnlockedAt: number | null;
-  timeoutMs: number;
-  nextAutoLockAt: number | null;
+export type UninitializedSessionLockState = {
+  status: "uninitialized";
+  autoLockDurationMs: number;
+  nextAutoLockAt: null;
 };
+
+export type LockedSessionLockState = {
+  status: "locked";
+  autoLockDurationMs: number;
+  nextAutoLockAt: null;
+};
+
+export type UnlockedSessionLockState = {
+  status: "unlocked";
+  unlockedAt: number;
+  autoLockDurationMs: number;
+  nextAutoLockAt: number;
+};
+
+export type SessionLockState = UninitializedSessionLockState | LockedSessionLockState | UnlockedSessionLockState;
 
 export type UnlockParams = UnlockVaultParams;
 
 export type UnlockVaultPort = {
   unlock(params: UnlockParams): Promise<void>;
   lock(): void;
-  isUnlocked(): boolean;
+  getStatus(): VaultStatus;
 };
 
 export type UnlockLockedPayload = { at: number; reason: UnlockReason };
@@ -34,13 +48,14 @@ export type UnlockServiceOptions = {
 };
 
 export interface UnlockService {
-  getState(): UnlockState;
+  getState(): SessionLockState;
   isUnlocked(): boolean;
   unlock(params: UnlockParams): Promise<void>;
   lock(reason: UnlockReason): void;
+  syncVaultStatus(): SessionLockState;
   scheduleAutoLock(duration?: number): number | null;
   setAutoLockDuration(duration: number): void;
-  onStateChanged(handler: (state: UnlockState) => void): Unsubscribe;
+  onStateChanged(handler: (state: SessionLockState) => void): Unsubscribe;
   onLocked(handler: (payload: UnlockLockedPayload) => void): Unsubscribe;
   onUnlocked(handler: (payload: UnlockUnlockedPayload) => void): Unsubscribe;
 }

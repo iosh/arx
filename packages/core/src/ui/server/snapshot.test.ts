@@ -44,36 +44,33 @@ const createDeps = () => ({
   },
   session: {
     getStatus: () => ({
-      phase: "uninitialized" as const,
+      status: "uninitialized" as const,
       vaultInitialized: false,
       isUnlocked: false,
       autoLockDurationMs: 900_000,
       nextAutoLockAt: null,
     }),
-    getUnlockState: () => ({
-      isUnlocked: false,
-      lastUnlockedAt: null,
-      timeoutMs: 900_000,
+    getSessionLockState: () => ({
+      status: "uninitialized",
+      autoLockDurationMs: 900_000,
       nextAutoLockAt: null,
     }),
     isUnlocked: () => false,
     hasInitializedVault: () => false,
     unlock: async () => ({
-      isUnlocked: true,
-      lastUnlockedAt: 0,
-      timeoutMs: 900_000,
-      nextAutoLockAt: null,
+      status: "unlocked",
+      unlockedAt: 0,
+      autoLockDurationMs: 900_000,
+      nextAutoLockAt: 900_000,
     }),
     lock: () => ({
-      isUnlocked: false,
-      lastUnlockedAt: null,
-      timeoutMs: 900_000,
+      status: "locked",
+      autoLockDurationMs: 900_000,
       nextAutoLockAt: null,
     }),
     resetAutoLockTimer: () => ({
-      isUnlocked: false,
-      lastUnlockedAt: null,
-      timeoutMs: 900_000,
+      status: "locked",
+      autoLockDurationMs: 900_000,
       nextAutoLockAt: null,
     }),
     setAutoLockDuration: () => ({ autoLockDurationMs: 900_000, nextAutoLockAt: null }),
@@ -96,16 +93,16 @@ describe("buildUiSnapshot", () => {
   it("derives session and vault facts from the session status", () => {
     const deps = createDeps();
     deps.session.getStatus = () => ({
-      phase: "locked",
+      status: "locked",
       vaultInitialized: true,
       isUnlocked: false,
       autoLockDurationMs: 123_000,
       nextAutoLockAt: 456_000,
     });
-    deps.session.getUnlockState = () => ({
-      isUnlocked: true,
-      lastUnlockedAt: 999,
-      timeoutMs: 900_000,
+    deps.session.getSessionLockState = () => ({
+      status: "unlocked",
+      unlockedAt: 999,
+      autoLockDurationMs: 900_000,
       nextAutoLockAt: 999_999,
     });
     deps.session.hasInitializedVault = () => false;

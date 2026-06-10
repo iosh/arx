@@ -1,13 +1,21 @@
 import type { ScopedMessenger } from "../../../messenger/Messenger.js";
 import { eventTopic, stateTopic } from "../../../messenger/topic.js";
-import type { UnlockLockedPayload, UnlockState, UnlockUnlockedPayload } from "./types.js";
+import type { SessionLockState, UnlockLockedPayload, UnlockUnlockedPayload } from "./types.js";
 
-export const UNLOCK_STATE_CHANGED = stateTopic<UnlockState>("unlock:stateChanged", {
-  isEqual: (prev, next) =>
-    prev.isUnlocked === next.isUnlocked &&
-    prev.lastUnlockedAt === next.lastUnlockedAt &&
-    prev.timeoutMs === next.timeoutMs &&
-    prev.nextAutoLockAt === next.nextAutoLockAt,
+const areSessionLockStatesEqual = (prev: SessionLockState, next: SessionLockState) => {
+  if (prev.status !== next.status) return false;
+  if (prev.autoLockDurationMs !== next.autoLockDurationMs) return false;
+  if (prev.nextAutoLockAt !== next.nextAutoLockAt) return false;
+
+  if (prev.status === "unlocked" && next.status === "unlocked") {
+    return prev.unlockedAt === next.unlockedAt;
+  }
+
+  return true;
+};
+
+export const UNLOCK_STATE_CHANGED = stateTopic<SessionLockState>("unlock:stateChanged", {
+  isEqual: areSessionLockStatesEqual,
 });
 
 export const UNLOCK_LOCKED = eventTopic<UnlockLockedPayload>("unlock:locked");

@@ -148,7 +148,12 @@ const createUiAccess = (options: { read?: UiWalletSnapshotReadModel } = {}) =>
         },
         session: {
           getStatus: () => ({ initialized: true, isUnlocked: true, isLocked: false, unlockReason: null }),
-          getUnlockState: () => ({ kind: "unlocked" }),
+          getSessionLockState: () => ({
+            status: "unlocked",
+            unlockedAt: 1,
+            autoLockDurationMs: 900_000,
+            nextAutoLockAt: 900_001,
+          }),
           isUnlocked: () => true,
           hasInitializedVault: () => true,
           onStateChanged: () => () => {},

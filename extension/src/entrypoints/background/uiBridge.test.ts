@@ -11,6 +11,7 @@ import type { RpcHandlerDeps } from "@arx/core/rpc";
 import {
   type BackgroundSessionServices,
   KeyringService,
+  type SessionLockState,
   type UnlockLockedPayload,
   type UnlockReason,
   type UnlockUnlockedPayload,
@@ -132,30 +133,30 @@ class FakeVault {
   }
 }
 
-type UnlockState = {
-  isUnlocked: boolean;
-  timeoutMs: number;
-  nextAutoLockAt: number | null;
-  lastUnlockedAt: number | null;
-};
-
 class FakeUnlock {
-  #state: UnlockState;
+  #state: SessionLockState;
   #unlockedHandlers = new Set<(payload: UnlockUnlockedPayload) => void>();
   #lockedHandlers = new Set<(payload: UnlockLockedPayload) => void>();
-  #stateHandlers = new Set<(state: UnlockState) => void>();
+  #stateHandlers = new Set<(state: SessionLockState) => void>();
 
-  constructor(unlocked = true, timeoutMs = 900_000) {
-    this.#state = {
-      isUnlocked: unlocked,
-      timeoutMs,
-      nextAutoLockAt: null,
-      lastUnlockedAt: unlocked ? Date.now() : null,
-    };
+  constructor(unlocked = true, autoLockDurationMs = 900_000) {
+    const now = Date.now();
+    this.#state = unlocked
+      ? {
+          status: "unlocked",
+          unlockedAt: now,
+          autoLockDurationMs,
+          nextAutoLockAt: now + autoLockDurationMs,
+        }
+      : {
+          status: "locked",
+          autoLockDurationMs,
+          nextAutoLockAt: null,
+        };
   }
 
   isUnlocked() {
-    return this.#state.isUnlocked;
+    return this.#state.status === "unlocked";
   }
 
   getState() {
@@ -163,23 +164,44 @@ class FakeUnlock {
   }
 
   async unlock(_params: { password: string }) {
-    this.#state = { ...this.#state, isUnlocked: true, lastUnlockedAt: Date.now(), nextAutoLockAt: null };
-    for (const fn of this.#unlockedHandlers) fn({ at: Date.now() });
+    const now = Date.now();
+    this.#state = {
+      status: "unlocked",
+      unlockedAt: now,
+      autoLockDurationMs: this.#state.autoLockDurationMs,
+      nextAutoLockAt: now + this.#state.autoLockDurationMs,
+    };
+    for (const fn of this.#unlockedHandlers) fn({ at: now });
     for (const fn of this.#stateHandlers) fn(this.getState());
   }
 
   lock(reason: UnlockReason) {
-    this.#state = { ...this.#state, isUnlocked: false, nextAutoLockAt: null };
+    this.#state = { status: "locked", autoLockDurationMs: this.#state.autoLockDurationMs, nextAutoLockAt: null };
     for (const fn of this.#lockedHandlers) fn({ at: Date.now(), reason });
     for (const fn of this.#stateHandlers) fn(this.getState());
   }
 
-  scheduleAutoLock(_ms?: number) {
-    // no-op for tests
+  syncVaultStatus() {
+    return this.getState();
+  }
+
+  scheduleAutoLock(ms?: number) {
+    if (this.#state.status !== "unlocked") {
+      return null;
+    }
+
+    const autoLockDurationMs = ms ?? this.#state.autoLockDurationMs;
+    const deadline = Date.now() + autoLockDurationMs;
+    this.#state = { ...this.#state, nextAutoLockAt: deadline };
+    for (const fn of this.#stateHandlers) fn(this.getState());
+    return deadline;
   }
 
   setAutoLockDuration(durationMs: number) {
-    this.#state = { ...this.#state, timeoutMs: durationMs };
+    this.#state =
+      this.#state.status === "unlocked"
+        ? { ...this.#state, autoLockDurationMs: durationMs, nextAutoLockAt: Date.now() + durationMs }
+        : { ...this.#state, autoLockDurationMs: durationMs };
     for (const fn of this.#stateHandlers) fn(this.getState());
   }
 
@@ -193,7 +215,7 @@ class FakeUnlock {
     return () => this.#lockedHandlers.delete(fn);
   }
 
-  onStateChanged(fn: (state: UnlockState) => void) {
+  onStateChanged(fn: (state: SessionLockState) => void) {
     this.#stateHandlers.add(fn);
     return () => this.#stateHandlers.delete(fn);
   }

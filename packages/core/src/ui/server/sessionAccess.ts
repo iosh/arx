@@ -1,18 +1,18 @@
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { UnlockReason, UnlockState } from "../../runtime/session/unlock/types.js";
+import type { SessionLockState, UnlockReason } from "../../runtime/session/unlock/types.js";
 import type { SessionStatus, SessionStatusService } from "../../services/runtime/sessionStatus.js";
 
 export type UiStateChangeSubscription = (listener: () => void) => () => void;
 
 export type UiSessionAccess = {
   getStatus: () => SessionStatus;
-  getUnlockState: () => UnlockState;
+  getSessionLockState: () => SessionLockState;
   isUnlocked: () => boolean;
   hasInitializedVault: () => boolean;
-  unlock: (params: { password: string }) => Promise<UnlockState>;
-  lock: (reason: UnlockReason) => UnlockState;
-  resetAutoLockTimer: () => UnlockState;
+  unlock: (params: { password: string }) => Promise<SessionLockState>;
+  lock: (reason: UnlockReason) => SessionLockState;
+  resetAutoLockTimer: () => SessionLockState;
   setAutoLockDuration: (durationMs: number) => { autoLockDurationMs: number; nextAutoLockAt: number | null };
   onStateChanged: UiStateChangeSubscription;
 };
@@ -29,7 +29,7 @@ export const createUiSessionAccess = ({
   keyring,
 }: CreateUiSessionAccessDeps): UiSessionAccess => {
   const getStatus: UiSessionAccess["getStatus"] = () => sessionStatus.getStatus();
-  const getUnlockState: UiSessionAccess["getUnlockState"] = () => session.unlock.getState();
+  const getSessionLockState: UiSessionAccess["getSessionLockState"] = () => session.unlock.getState();
 
   const waitForReady = async () => {
     await keyring.waitForReady();
@@ -38,27 +38,27 @@ export const createUiSessionAccess = ({
   const unlock: UiSessionAccess["unlock"] = async ({ password }) => {
     await session.unlock.unlock({ password });
     await waitForReady();
-    return getUnlockState();
+    return getSessionLockState();
   };
 
   return {
     getStatus,
-    getUnlockState,
+    getSessionLockState,
     isUnlocked: () => sessionStatus.isUnlocked(),
     hasInitializedVault: () => sessionStatus.hasInitializedVault(),
     unlock,
     lock: (reason) => {
       session.unlock.lock(reason);
-      return getUnlockState();
+      return getSessionLockState();
     },
     resetAutoLockTimer: () => {
       session.unlock.scheduleAutoLock();
-      return getUnlockState();
+      return getSessionLockState();
     },
     setAutoLockDuration: (durationMs) => {
       session.unlock.setAutoLockDuration(durationMs);
-      const state = getUnlockState();
-      return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
+      const state = getSessionLockState();
+      return { autoLockDurationMs: state.autoLockDurationMs, nextAutoLockAt: state.nextAutoLockAt };
     },
     onStateChanged: (listener) => session.onStateChanged(listener),
   };

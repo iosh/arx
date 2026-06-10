@@ -43,7 +43,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await context.runtime.services.session.importVault(envelope);
 
       expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
-        phase: "locked",
+        status: "locked",
         vaultInitialized: true,
         isUnlocked: false,
       });
@@ -73,7 +73,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       });
 
       expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
-        phase: "unlocked",
+        status: "unlocked",
         vaultInitialized: true,
         isUnlocked: true,
       });
@@ -106,7 +106,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       });
 
       expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
-        phase: "unlocked",
+        status: "unlocked",
         vaultInitialized: true,
         isUnlocked: true,
       });
@@ -164,8 +164,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await first.runtime.services.session.createVault({ password: "secret" });
       await first.runtime.services.session.unlock.unlock({ password: "secret" });
       const unlockedState = first.runtime.services.session.unlock.getState();
-      expect(unlockedState.isUnlocked).toBe(true);
-      expect(unlockedState.nextAutoLockAt).not.toBeNull();
+      expect(unlockedState.status).toBe("unlocked");
+      expect(unlockedState.nextAutoLockAt).toBeGreaterThan(currentTime);
 
       currentTime += 200;
       await first.runtime.services.session.persistVaultMeta();
@@ -195,8 +195,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
       expect(restoredMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
 
       const unlockState = second.runtime.services.session.unlock.getState();
-      expect(unlockState.isUnlocked).toBe(false);
-      expect(unlockState.timeoutMs).toBe(TEST_AUTO_LOCK_DURATION);
+      expect(unlockState.status).toBe("locked");
+      expect(unlockState.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(second.vaultMetaPort.savedVaultMeta).toBeNull();
     } finally {
       second.destroy();
@@ -321,7 +321,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await context.runtime.services.session.vault.commitSecret({ secret: new Uint8Array() });
       sessionAccess.lock("manual");
 
-      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ isUnlocked: true });
+      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ status: "unlocked" });
       expect(decodePayload(context.runtime.services.session.vault.exportSecret())).toEqual({ keyrings: [] });
       await expect(context.accountsPort.list()).resolves.toEqual([]);
       await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
@@ -356,7 +356,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await context.runtime.services.session.vault.commitSecret({ secret: encodePayload({ keyrings: [] }) });
       sessionAccess.lock("manual");
 
-      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ isUnlocked: true });
+      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ status: "unlocked" });
       await expect(context.accountsPort.list()).resolves.toEqual([]);
       await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
     } finally {

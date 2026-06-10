@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { UnlockState } from "../../runtime/session/unlock/types.js";
+import type { SessionLockState } from "../../runtime/session/unlock/types.js";
 import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
@@ -67,9 +67,9 @@ export type UiMethodResultMap = {
   "ui.entry.getLaunchContext": UiEntryLaunchContext;
   "ui.entry.getBootstrap": UiEntryBootstrap;
   "ui.balances.getNative": UiNativeBalanceResult;
-  "ui.session.unlock": UnlockState;
-  "ui.session.lock": UnlockState;
-  "ui.session.resetAutoLockTimer": UnlockState;
+  "ui.session.unlock": SessionLockState;
+  "ui.session.lock": SessionLockState;
+  "ui.session.resetAutoLockTimer": SessionLockState;
   "ui.session.setAutoLockDuration": UiSetAutoLockDurationResult;
   "ui.onboarding.openTab": UiOnboardingOpenTabResult;
   "ui.onboarding.generateMnemonic": UiGenerateMnemonicResult;

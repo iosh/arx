@@ -49,10 +49,10 @@ import type {
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type {
+  SessionLockState,
   UnlockLockedPayload,
   UnlockParams,
   UnlockReason,
-  UnlockState,
   UnlockUnlockedPayload,
 } from "../runtime/session/unlock/types.js";
 import type { AttentionService } from "../services/runtime/attention/types.js";
@@ -180,14 +180,14 @@ export type CreateArxWalletInput = Readonly<{
 /** Vault lifecycle, unlock state, and auto-lock controls. */
 export type WalletSession = Readonly<{
   getStatus(): SessionStatus;
-  getUnlockState(): UnlockState;
+  getSessionLockState(): SessionLockState;
   isUnlocked(): boolean;
   hasInitializedVault(): boolean;
   createVault(params: CreateVaultParams): Promise<VaultEnvelope>;
   importVault(envelope: VaultEnvelope): Promise<VaultEnvelope>;
-  unlock(params: UnlockParams): Promise<UnlockState>;
-  lock(reason: UnlockReason): UnlockState;
-  resetAutoLockTimer(): UnlockState;
+  unlock(params: UnlockParams): Promise<SessionLockState>;
+  lock(reason: UnlockReason): SessionLockState;
+  resetAutoLockTimer(): SessionLockState;
   setAutoLockDuration(durationMs: number): {
     autoLockDurationMs: number;
     nextAutoLockAt: number | null;

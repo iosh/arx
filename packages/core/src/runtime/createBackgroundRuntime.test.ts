@@ -348,7 +348,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const result = await handlers["ui.session.unlock"]({ password: "test" });
 
     expect(result).toMatchObject({
-      isUnlocked: true,
+      status: "unlocked",
     });
     runtime.lifecycle.shutdown();
   });

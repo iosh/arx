@@ -474,4 +474,53 @@ describe("createBackgroundRuntime (vault integration)", () => {
     expect(context.runtime.services.keyring.getKeyrings()).toEqual([]);
     expect(context.runtime.services.keyring.getAccounts(true)).toEqual([]);
   });
+
+  it("rejects key material export and signing while locked", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await context.runtime.services.session.unlock.unlock({ password: "secret" });
+
+      const { keyringId, address } = await context.runtime.services.keyring.confirmNewMnemonic({
+        mnemonic: TEST_MNEMONIC,
+      });
+      const [account] = context.runtime.services.keyring.getAccounts(true);
+      if (!account) {
+        throw new Error("Expected created account");
+      }
+
+      context.runtime.services.session.unlock.lock("manual");
+
+      await expect(context.runtime.services.keyring.exportMnemonic(keyringId, "secret")).rejects.toMatchObject({
+        code: "global.session.locked",
+      });
+      await expect(
+        context.runtime.services.keyring.exportPrivateKey(chain.namespace, address, "secret"),
+      ).rejects.toMatchObject({
+        code: "global.session.locked",
+      });
+      await expect(
+        context.runtime.services.keyring.exportPrivateKeyByAccountKey(account.accountKey, "secret"),
+      ).rejects.toMatchObject({
+        code: "global.session.locked",
+      });
+      await expect(
+        context.runtime.services.keyring.signDigestByAccountKey({
+          accountKey: account.accountKey,
+          digest: new Uint8Array(32),
+        }),
+      ).rejects.toMatchObject({
+        code: "global.session.locked",
+      });
+    } finally {
+      context.destroy();
+    }
+  });
 });

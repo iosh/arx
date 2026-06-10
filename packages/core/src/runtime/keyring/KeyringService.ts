@@ -15,7 +15,7 @@ import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyr
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
 import { AccountKeySchema, type AccountRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
-import { VaultLockedError } from "../../vault/errors.js";
+import { SessionLockedError } from "../session/errors.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 import { RuntimeKeyringState } from "./RuntimeKeyringState.js";
 import type {
@@ -98,18 +98,17 @@ export class KeyringService {
   }
 
   async confirmNewMnemonic(params: ConfirmNewMnemonicParams) {
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
     return this.#createHdKeyringFromMnemonic(params);
   }
 
   async importMnemonic(params: ImportMnemonicParams) {
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
     return this.#createHdKeyringFromMnemonic(params);
   }
 
   async importPrivateKey(params: ImportPrivateKeyParams) {
-    await this.#waitForHydration();
-    this.#assertUnlocked();
+    await this.#waitForUnlockedRuntimeKeyrings();
 
     const namespace = params.namespace ?? this.#defaultNamespace();
     const config = this.#getConfig(namespace);
@@ -171,8 +170,7 @@ export class KeyringService {
   }
 
   async deriveAccount(keyringId: string) {
-    await this.#waitForHydration();
-    this.#assertUnlocked();
+    await this.#waitForUnlockedRuntimeKeyrings();
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(keyringId);
     if (!runtime) throw new Error(`Keyring "${keyringId}" not found`);
@@ -290,8 +288,9 @@ export class KeyringService {
   }
 
   async exportMnemonic(keyringId: string, password: string): Promise<string> {
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
     await this.#verifyPassword(password);
+    this.#requireUnlockedSession();
 
     const entry = this.#runtimeKeyringState.getPayloadEntry(keyringId);
     if (!entry || entry.type !== "hd") throw new KeyringAccountNotFoundError();
@@ -300,9 +299,9 @@ export class KeyringService {
   }
 
   async exportPrivateKey(namespace: string, address: string, password: string): Promise<Uint8Array> {
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
     await this.#verifyPassword(password);
-    return this.#exportPrivateKeyUnsafe(namespace, address);
+    return this.#exportPrivateKeyFromUnlockedRuntime(namespace, address);
   }
 
   hasAccount(namespace: string, address: string): boolean {
@@ -316,9 +315,9 @@ export class KeyringService {
   }
 
   async exportPrivateKeyByAccountKey(accountKey: AccountKey, password: string): Promise<Uint8Array> {
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
     await this.#verifyPassword(password);
-    return this.#exportPrivateKeyByAccountKeyUnsafe(accountKey);
+    return this.#exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey);
   }
 
   async signDigestByAccountKey(params: { accountKey: AccountKey; digest: Uint8Array }): Promise<{
@@ -328,13 +327,13 @@ export class KeyringService {
     bytes: Uint8Array;
   }> {
     const { accountKey, digest } = params;
-    await this.#waitForHydration();
+    await this.#waitForUnlockedRuntimeKeyrings();
 
     if (digest.length !== 32) {
       throw new Error(`signDigestByAccountKey expects a 32-byte digest, got ${digest.length}`);
     }
 
-    const secret = await this.#exportPrivateKeyByAccountKeyUnsafe(accountKey);
+    const secret = this.#exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey);
     try {
       const signature = secp256k1.sign(digest, secret, { lowS: true });
       return {
@@ -354,9 +353,15 @@ export class KeyringService {
     await this.#runtimeKeyringState.waitForReady();
   }
 
-  #assertUnlocked(): void {
+  async #waitForUnlockedRuntimeKeyrings(): Promise<void> {
+    this.#requireUnlockedSession();
+    await this.#waitForHydration();
+    this.#requireUnlockedSession();
+  }
+
+  #requireUnlockedSession(): void {
     if (!this.#options.unlock.isUnlocked()) {
-      throw new VaultLockedError();
+      throw new SessionLockedError();
     }
   }
 
@@ -370,7 +375,7 @@ export class KeyringService {
   }
 
   async #createHdKeyringFromMnemonic(params: ConfirmNewMnemonicParams) {
-    this.#assertUnlocked();
+    this.#requireUnlockedSession();
 
     const normalized = params.mnemonic.trim().replace(/\s+/g, " ");
     if (!validateMnemonic(normalized, wordlist)) {
@@ -474,8 +479,8 @@ export class KeyringService {
     await this.#options.accountsStore.removeByKeyringId(keyringId);
   }
 
-  async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
-    await this.#waitForHydration();
+  #exportPrivateKeyFromUnlockedRuntime(namespace: string, address: string): Uint8Array {
+    this.#requireUnlockedSession();
 
     const canonical = this.#toCanonicalString(namespace, address);
     const accountKey = this.#toAccountKey(namespace, canonical);
@@ -491,8 +496,8 @@ export class KeyringService {
     return runtime.instance.exportPrivateKey(canonical);
   }
 
-  async #exportPrivateKeyByAccountKeyUnsafe(accountKey: AccountKey): Promise<Uint8Array> {
-    await this.#waitForHydration();
+  #exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey: AccountKey): Uint8Array {
+    this.#requireUnlockedSession();
 
     const record = this.#runtimeKeyringState.getAccount(accountKey);
     if (!record) throw new KeyringAccountNotFoundError();

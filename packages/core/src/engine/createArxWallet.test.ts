@@ -341,9 +341,9 @@ describe("createArxWallet", () => {
         namespace: EIP155_NAMESPACE,
         chainRef: EIP155_CHAIN_REF,
       });
-      expect(
-        wallet.dappConnections.buildConnectionProjection({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected,
-      ).toBe(true);
+      expect(wallet.dappConnections.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(
+        true,
+      );
       expect(wallet.dappConnections.getState().count).toBe(1);
 
       await wallet.permissions.revokeOriginPermissions(ORIGIN);
@@ -375,7 +375,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("creates provider contracts with live connection projections", async () => {
+  it("creates provider contracts with live connection state", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -385,7 +385,7 @@ describe("createArxWallet", () => {
       const { wallet } = runtime;
       const provider = wallet.createProvider();
 
-      expect(provider.buildConnectionProjection({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).toMatchObject({
+      expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).toMatchObject({
         connected: false,
         accounts: [],
       });
@@ -403,7 +403,7 @@ describe("createArxWallet", () => {
 
       provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       expect(provider.disconnectOrigin(ORIGIN)).toBe(1);
-      expect(provider.buildConnectionProjection({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(false);
+      expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(false);
     } finally {
       await runtime.shutdown();
     }

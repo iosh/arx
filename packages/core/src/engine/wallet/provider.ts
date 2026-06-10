@@ -3,26 +3,23 @@ import type { WalletDappConnections, WalletProvider, WalletSnapshots } from "../
 
 export const createWalletProvider = (deps: {
   runtimeAccess: ProviderRuntimeAccess;
-  dappConnections: Pick<
-    WalletDappConnections,
-    "buildConnectionProjection" | "connect" | "disconnect" | "disconnectOrigin"
-  >;
+  dappConnections: Pick<WalletDappConnections, "getConnectionState" | "connect" | "disconnect" | "disconnectOrigin">;
   snapshots: Pick<WalletSnapshots, "buildProviderSnapshot">;
 }): WalletProvider => {
   const { runtimeAccess, dappConnections, snapshots } = deps;
 
   return {
     buildSnapshot: (namespace) => snapshots.buildProviderSnapshot(namespace),
-    buildConnectionProjection: (input) => dappConnections.buildConnectionProjection(input),
+    getConnectionState: (input) => dappConnections.getConnectionState(input),
     executeRpcRequest: (request) => runtimeAccess.executeRpcRequest(request),
     encodeRuntimeRpcError: (error) => runtimeAccess.encodeRuntimeRpcError(error),
     connect: (input) => {
       dappConnections.connect(input);
-      return dappConnections.buildConnectionProjection(input);
+      return dappConnections.getConnectionState(input);
     },
     disconnect: (input) => {
       dappConnections.disconnect(input);
-      return dappConnections.buildConnectionProjection(input);
+      return dappConnections.getConnectionState(input);
     },
     disconnectOrigin: (origin) => dappConnections.disconnectOrigin(origin),
     cancelRequestScope: (input) => runtimeAccess.cancelRequestScope(input),

@@ -39,6 +39,8 @@ type MutableArxWalletRuntimeInput = {
   runtime: ArxWalletRuntimeOptions;
 };
 
+type CoreReadStateSubscription = (listener: () => void) => CoreUnsubscribe;
+
 const buildArxWalletStorageInput = (input: CreateCoreRuntimeInput): ArxWalletStorageInput => {
   const storage: MutableArxWalletStorageInput = {
     ports: input.storage,
@@ -96,12 +98,24 @@ const buildArxWalletRuntimeInput = (input: CreateCoreRuntimeInput): CreateArxWal
 const subscribeReadChanges = (
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>,
 ): CoreReadApi["subscribe"] => {
+  const subscribeAfterInitialReplay = (subscribe: CoreReadStateSubscription, listener: () => void) => {
+    let replayingSnapshot = true;
+    const unsubscribe = subscribe(() => {
+      if (replayingSnapshot) {
+        return;
+      }
+      listener();
+    });
+    replayingSnapshot = false;
+    return unsubscribe;
+  };
+
   return (listener) => {
     const notify = () => listener();
     const unsubscribers: CoreUnsubscribe[] = [
-      runtime.services.accounts.onStateChanged(notify),
-      runtime.services.permissions.onStateChanged(notify),
-      runtime.services.network.onStateChanged(notify),
+      subscribeAfterInitialReplay((handler) => runtime.services.accounts.onStateChanged(handler), notify),
+      subscribeAfterInitialReplay((handler) => runtime.services.permissions.onStateChanged(handler), notify),
+      subscribeAfterInitialReplay((handler) => runtime.services.network.onStateChanged(handler), notify),
       runtime.services.networkSelection.subscribeChanged(notify),
       runtime.services.session.onStateChanged(notify),
       runtime.bus.subscribe(ATTENTION_STATE_CHANGED, notify),
@@ -119,8 +133,6 @@ const subscribeReadChanges = (
 
 const createCoreReadApi = (runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>): CoreReadApi => ({
   getWalletSnapshot: () => runtime.wallet.snapshots.buildUiSnapshot(),
-  getProviderSnapshot: (namespace) => runtime.wallet.snapshots.buildProviderSnapshot(namespace),
-  getProviderConnectionState: (input) => runtime.wallet.snapshots.buildProviderConnectionState(input),
   subscribe: subscribeReadChanges(runtime),
 });
 

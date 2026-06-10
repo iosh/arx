@@ -30,7 +30,7 @@ export const createWalletSnapshots = (deps: {
     NamespaceRuntimeBindingsRegistry,
     "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
   >;
-  dappConnections: Pick<WalletDappConnections, "buildConnectionProjection">;
+  dappConnections: Pick<WalletDappConnections, "getConnectionState">;
   providerProjection: ProviderProjectionDeps;
 }): WalletSnapshots => {
   const {
@@ -54,7 +54,7 @@ export const createWalletSnapshots = (deps: {
   return {
     buildProviderSnapshot: (namespace) => buildProviderSnapshot(providerProjection, namespace),
     buildProviderConnectionState: (input) => {
-      const { connected: _connected, ...state } = dappConnections.buildConnectionProjection(input);
+      const { connected: _connected, ...state } = dappConnections.getConnectionState(input);
       return state;
     },
     buildUiSnapshot: () =>

@@ -330,24 +330,24 @@ export type DappConnectionsState = Readonly<{
   count: number;
 }>;
 
-/** Provider-facing connection state plus the live connected bit. */
-export type DappConnectionProjection = Readonly<
+/** Provider-facing connection view plus the live connected bit. */
+export type DappConnectionView = Readonly<
   ProviderRuntimeConnectionState & {
     connected: boolean;
   }
 >;
 
-/** Provider-facing connection projection with live connected state. */
-export type WalletProviderConnectionProjection = DappConnectionProjection;
+/** Provider-facing connection state with the live connected bit. */
+export type WalletProviderConnectionState = DappConnectionView;
 
 /** Engine-owned provider contract for wallet shells. */
 export type WalletProvider = Readonly<{
   buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  buildConnectionProjection(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionProjection;
+  getConnectionState(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionState;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  connect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
-  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
+  connect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
+  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
   disconnectOrigin(origin: string): number;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
@@ -402,7 +402,7 @@ export type WalletDappConnections = Readonly<{
   disconnect(input: { origin: string; namespace: string }): boolean;
   disconnectOrigin(origin: string): number;
   clear(): DappConnectionsState;
-  buildConnectionProjection(input: ProviderRuntimeConnectionQuery): DappConnectionProjection;
+  getConnectionState(input: ProviderRuntimeConnectionQuery): DappConnectionView;
   listPermittedAccounts(input: { origin: string; chainRef: ChainRef }): string[];
   onStateChanged(listener: (state: DappConnectionsState) => void): () => void;
 }>;

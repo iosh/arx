@@ -106,7 +106,7 @@ const createServerHarness = (options?: {
     (({ chainRef }: { origin: string; namespace: string; chainRef: string }) =>
       chainRef === "conflux:1029" ? ["cfx:aatest"] : ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"]);
 
-  const buildProjection = (input: { origin: string; namespace: string }) => {
+  const buildConnectionState = (input: { origin: string; namespace: string }) => {
     const snapshot = snapshots[input.namespace];
     if (!snapshot) {
       throw new Error(`Missing snapshot for ${input.namespace}`);
@@ -134,17 +134,17 @@ const createServerHarness = (options?: {
     }
     return snapshot;
   });
-  const buildConnectionProjection = vi.fn((input: { origin: string; namespace: string }) => buildProjection(input));
+  const getConnectionState = vi.fn((input: { origin: string; namespace: string }) => buildConnectionState(input));
   const connect = vi.fn((input: { origin: string; namespace: string }) => {
-    const projection = buildProjection(input);
-    if (projection.accounts.length > 0) {
+    const connectionState = buildConnectionState(input);
+    if (connectionState.accounts.length > 0) {
       activeBindings.add(buildBindingKey(input));
     }
-    return buildProjection(input);
+    return buildConnectionState(input);
   });
   const disconnect = vi.fn((input: { origin: string; namespace: string }) => {
     activeBindings.delete(buildBindingKey(input));
-    return buildProjection(input);
+    return buildConnectionState(input);
   });
   const disconnectOrigin = vi.fn((origin: string) => {
     const keys = [...activeBindings].filter((key) => JSON.parse(key)[0] === origin);
@@ -177,7 +177,7 @@ const createServerHarness = (options?: {
 
   const provider: WalletProvider = {
     buildSnapshot,
-    buildConnectionProjection,
+    getConnectionState,
     executeRpcRequest,
     encodeRuntimeRpcError,
     connect,
@@ -230,7 +230,7 @@ const createServerHarness = (options?: {
     getOrInitProvider,
     mocks: {
       buildSnapshot,
-      buildConnectionProjection,
+      getConnectionState,
       connect,
       disconnect,
       disconnectOrigin,
@@ -339,7 +339,7 @@ describe("providerPortServer", () => {
     await vi.waitFor(() => expect(secondPort.postMessage).toHaveBeenCalledTimes(1));
 
     expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
-    expect(harness.mocks.buildConnectionProjection).toHaveBeenCalledWith({
+    expect(harness.mocks.getConnectionState).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });

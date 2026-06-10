@@ -206,7 +206,26 @@ describe("createCoreRuntime", () => {
     unsubscribe();
   });
 
-  it("returns provider connection state from the read surface", async () => {
+  it("returns wallet snapshots detached from mutable owner state", async () => {
+    const core = await createCoreRuntime(createCoreRuntimeInput());
+
+    const first = core.read.getWalletSnapshot();
+    const firstKnownNetwork = first.networks.known[0];
+    if (!firstKnownNetwork) {
+      throw new Error("expected default snapshot fixtures to include network state");
+    }
+    const originalNetworkName = firstKnownNetwork.displayName;
+
+    first.accounts.totalCount = 999;
+    firstKnownNetwork.displayName = "mutated network";
+
+    const next = core.read.getWalletSnapshot();
+    expect(next).not.toBe(first);
+    expect(next.accounts.totalCount).toBe(0);
+    expect(next.networks.known[0]?.displayName).toBe(originalNetworkName);
+  });
+
+  it("does not emit read invalidation while subscribing to replaying owner state", async () => {
     const core = await createCoreRuntime(
       createCoreRuntimeInput({
         accountsPort: createSeededAccountsPort(),
@@ -214,13 +233,11 @@ describe("createCoreRuntime", () => {
       }),
     );
 
-    expect(core.read.getProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).toMatchObject({
-      snapshot: {
-        namespace: EIP155_NAMESPACE,
-        chain: { chainRef: EIP155_CHAIN_REF },
-      },
-      accounts: [],
-    });
+    const listener = vi.fn();
+    const unsubscribe = core.read.subscribe(listener);
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
   it("runs transaction restart recovery by default and can skip it explicitly", async () => {

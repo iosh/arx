@@ -6,9 +6,9 @@ import type { PermissionViewsService } from "../../services/runtime/permissionVi
 import type { SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import { createSignal, type StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type {
-  DappConnectionProjection,
   DappConnectionRecord,
   DappConnectionsState,
+  DappConnectionView,
   WalletDappConnections,
 } from "../types.js";
 import {
@@ -248,7 +248,7 @@ export const createWalletDappConnections = (deps: {
       return keys.length;
     },
     clear: () => clearConnections(),
-    buildConnectionProjection: (input): DappConnectionProjection => {
+    getConnectionState: (input): DappConnectionView => {
       const origin = normalizeConnectionOrigin(input.origin);
       const namespace = normalizeConnectionNamespace(input.namespace);
       const state = buildConnectionPreview({ origin, namespace });

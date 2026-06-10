@@ -1,6 +1,5 @@
 import type {
   ProviderRuntimeConnectionQuery,
-  ProviderRuntimeConnectionState,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
@@ -10,7 +9,7 @@ import type {
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
 import type { UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
-import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionProjection } from "./types.js";
+import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionState } from "./types.js";
 
 export type CoreUnsubscribe = () => void;
 
@@ -40,11 +39,11 @@ export type CreateCoreRuntimeInput = Readonly<{
 
 export type CoreProviderApi = Readonly<{
   buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  buildConnectionProjection(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionProjection;
+  getConnectionState(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionState;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  connect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
-  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
+  connect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
+  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
   disconnectOrigin(origin: string): number;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): CoreUnsubscribe;
@@ -147,12 +146,13 @@ export type CoreWalletUiApi = Readonly<{
   }>;
 }>;
 
+/** Payloadless invalidation signal; consumers should re-read the snapshot they need. */
 export type CoreReadChangeListener = () => void;
 
 export type CoreReadApi = Readonly<{
+  /** Wallet UI read model, detached from mutable owner state. */
   getWalletSnapshot(): UiSnapshot;
-  getProviderSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  getProviderConnectionState(input: ProviderRuntimeConnectionQuery): ProviderRuntimeConnectionState;
+  /** Subscribe to post-subscription invalidations; callers read the initial snapshot explicitly. */
   subscribe(listener: CoreReadChangeListener): CoreUnsubscribe;
 }>;
 

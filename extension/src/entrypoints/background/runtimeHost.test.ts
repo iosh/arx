@@ -107,7 +107,7 @@ const makeRuntime = () => {
   };
   const provider = {
     buildSnapshot: vi.fn(() => providerSnapshot),
-    buildConnectionProjection: vi.fn(async () => ({
+    getConnectionState: vi.fn(async () => ({
       snapshot: providerSnapshot,
       accounts: [],
       connected: false,

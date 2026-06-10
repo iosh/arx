@@ -205,7 +205,7 @@ export const createProviderPortServer = ({
     }
   };
 
-  const buildConnectionProjectionForPort = async (port: Runtime.Port, namespace: string) => {
+  const getConnectionStateForPort = async (port: Runtime.Port, namespace: string) => {
     const origin = sessionRegistry.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
     const activeProvider = await loadProvider();
     const mutation = bindingRegistry.bindPort(port, { origin, namespace });
@@ -216,7 +216,7 @@ export const createProviderPortServer = ({
 
     return mutation.bindingBecameActive
       ? activeProvider.connect({ origin, namespace })
-      : activeProvider.buildConnectionProjection({ origin, namespace });
+      : activeProvider.getConnectionState({ origin, namespace });
   };
 
   const disconnectFinalizer = createProviderDisconnectFinalizer({
@@ -257,7 +257,7 @@ export const createProviderPortServer = ({
         return [];
       }
 
-      return activeProvider.buildConnectionProjection({
+      return activeProvider.getConnectionState({
         origin: sessionContext.origin,
         namespace: sessionContext.providerNamespace,
       }).accounts;
@@ -303,10 +303,10 @@ export const createProviderPortServer = ({
     clearSessionId: (port) => sessionRegistry.clearSessionId(port),
     writeSessionId: (port, sessionId) => sessionRegistry.writeSessionId(port, sessionId),
     getProviderConnectionState: async (port, namespace) => {
-      const projection = await buildConnectionProjectionForPort(port, namespace);
+      const connectionState = await getConnectionStateForPort(port, namespace);
       return {
-        snapshot: projection.snapshot,
-        accounts: projection.accounts,
+        snapshot: connectionState.snapshot,
+        accounts: connectionState.accounts,
       };
     },
     syncPortContext: (port, snapshot) => syncPortContext(port, snapshot, portContextStore, extensionOrigin),
@@ -324,8 +324,8 @@ export const createProviderPortServer = ({
 
     for (const binding of bindings) {
       try {
-        const projection = activeProvider.buildConnectionProjection(binding);
-        if (projection.connected || projection.accounts.length === 0) {
+        const connectionState = activeProvider.getConnectionState(binding);
+        if (connectionState.connected || connectionState.accounts.length === 0) {
           continue;
         }
 

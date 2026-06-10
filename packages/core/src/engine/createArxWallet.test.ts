@@ -424,16 +424,23 @@ describe("createArxWallet", () => {
         chainRef: EIP155_CHAIN_REF,
       });
 
-      expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
+      const lockedSnapshot = wallet.snapshots.buildUiSnapshot();
+      expect(lockedSnapshot).toMatchObject({
         vault: { initialized: false },
         session: { isUnlocked: false },
         attention: { count: 1 },
-        accounts: { list: [] },
+        accounts: {
+          totalCount: 1,
+          active: {
+            accountKey: ACCOUNT_KEY,
+          },
+        },
         networks: {
           selectedNamespace: wallet.networks.getSelectedNamespace(),
           active: wallet.networks.getSelectedChainView().chainRef,
         },
       });
+      expect(lockedSnapshot.accounts.list[0]?.accountKey).toBe(ACCOUNT_KEY);
 
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
@@ -514,6 +521,16 @@ describe("createArxWallet", () => {
       expect(stateChanged).toHaveBeenCalled();
       wallet.session.lock("manual");
 
+      await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
+        session: { isUnlocked: false },
+        accounts: {
+          totalCount: 1,
+          active: {
+            accountKey: ACCOUNT_KEY,
+          },
+          list: [expect.objectContaining({ accountKey: ACCOUNT_KEY })],
+        },
+      });
       await expect(
         provider.executeRpcRequest({
           id: "rpc-accounts-locked",

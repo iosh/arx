@@ -30,16 +30,14 @@ export const buildUiSnapshot = (deps: {
   const sessionStatus = session.getStatus();
   const unlocked = sessionStatus.isUnlocked;
 
-  const accountList = unlocked
-    ? accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
-        accountKey: account.accountKey,
-        canonicalAddress: account.canonicalAddress,
-        displayAddress: account.displayAddress,
-      }))
-    : [];
-  const activeAccount = unlocked
-    ? accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
-    : null;
+  const accountList = accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map(
+    (account) => ({
+      accountKey: account.accountKey,
+      canonicalAddress: account.canonicalAddress,
+      displayAddress: account.displayAddress,
+    }),
+  );
+  const activeAccount = accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain });
 
   const accountsState = accounts.getState();
   const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountKeys.length, 0);

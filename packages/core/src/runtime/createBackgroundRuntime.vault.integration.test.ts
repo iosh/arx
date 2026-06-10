@@ -5,7 +5,9 @@ import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   createChainMetadata,
   FakeVault,
-  flushAsync,
+  MemoryAccountsPort,
+  MemoryKeyringMetasPort,
+  MemoryVaultMetaPort,
   setupBackground,
   TEST_AUTO_LOCK_DURATION,
   TEST_INITIAL_TIME,
@@ -201,7 +203,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
     }
   });
 
-  it("clears stale keyring projections when persisted vault metadata is invalid", async () => {
+  it("fails boot without deleting projections when persisted vault metadata is invalid", async () => {
     const chain = createChainMetadata();
     const clock = () => TEST_INITIAL_TIME;
 
@@ -237,24 +239,30 @@ describe("createBackgroundRuntime (vault integration)", () => {
     (corruptedEnvelope as { version: number }).version = 999;
     corruptedMeta.payload.envelope = corruptedEnvelope;
 
-    const second = await setupBackground({
-      chainSeed: [chain],
-      now: clock,
-      persistDebounceMs: 0,
-      accountsSeed,
-      keyringMetasSeed,
-      vaultMeta: corruptedMeta,
+    const accountsPort = new MemoryAccountsPort(accountsSeed);
+    const keyringMetasPort = new MemoryKeyringMetasPort(keyringMetasSeed);
+    const vaultMetaPort = new MemoryVaultMetaPort(corruptedMeta);
+
+    await expect(
+      setupBackground({
+        chainSeed: [chain],
+        now: clock,
+        persistDebounceMs: 0,
+        accountsPort,
+        keyringMetasPort,
+        vaultMetaPort,
+      }),
+    ).rejects.toMatchObject({
+      code: "runtime.hydration_failed",
+      details: {
+        owner: "vault",
+        resource: "vaultEnvelope",
+      },
     });
 
-    try {
-      await flushAsync();
-      expect(second.runtime.services.sessionStatus.hasInitializedVault()).toBe(false);
-      expect(second.runtime.services.accounts.getState().namespaces).toEqual({});
-      await expect(second.accountsPort.list()).resolves.toEqual([]);
-      await expect(second.keyringMetasPort.list()).resolves.toEqual([]);
-    } finally {
-      second.destroy();
-    }
+    expect(vaultMetaPort.clearedVaultMeta).toBe(false);
+    await expect(accountsPort.list()).resolves.toEqual(accountsSeed);
+    await expect(keyringMetasPort.list()).resolves.toEqual(keyringMetasSeed);
   });
 
   it("fails closed without deleting projections when persisted keyrings exist but vault secret bytes are empty", async () => {

@@ -583,6 +583,9 @@ export type SetupBackgroundOptions = {
   settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
   keyringMetasSeed?: KeyringMetaRecord[];
+  accountsPort?: MemoryAccountsPort;
+  keyringMetasPort?: MemoryKeyringMetasPort;
+  vaultMetaPort?: MemoryVaultMetaPort;
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
@@ -605,11 +608,11 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
   const customChainsPort = new MemoryCustomChainsPort();
   const networkSelectionPort = new MemoryNetworkSelectionPort(options.networkSelectionSeed ?? null);
-  const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
+  const vaultMetaPort = options.vaultMetaPort ?? new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
-  const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
-  const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
+  const accountsPort = options.accountsPort ?? new MemoryAccountsPort(options.accountsSeed ?? []);
+  const keyringMetasPort = options.keyringMetasPort ?? new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
 
   const settingsPort =
     options.settingsSeed !== undefined

@@ -6,6 +6,7 @@ import type { NetworkChainConfig, RpcRoutingService, RpcRoutingState } from "../
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
+import { RuntimeHydrationError } from "./errors.js";
 import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
 
 export type CreateNetworkBootstrapOptions = {
@@ -204,20 +205,26 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     if (!selectionLoaded) {
       try {
         await selection.get();
-      } catch (error) {
-        logger("selection: failed to load", error);
-      } finally {
         selectionLoaded = true;
+      } catch (error) {
+        throw new RuntimeHydrationError({
+          owner: "chains",
+          resource: "networkSelection",
+          cause: error,
+        });
       }
     }
 
     if (!customRpcLoaded) {
       try {
         await customRpc.getAll();
-      } catch (error) {
-        logger("customRpc: failed to load", error);
-      } finally {
         customRpcLoaded = true;
+      } catch (error) {
+        throw new RuntimeHydrationError({
+          owner: "chains",
+          resource: "customRpc",
+          cause: error,
+        });
       }
     }
   };

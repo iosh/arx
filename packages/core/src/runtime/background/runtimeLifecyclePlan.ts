@@ -2,6 +2,7 @@ import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
 import type { NetworkStateInput } from "../../chains/runtime/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
+import { RuntimeHydrationError } from "./errors.js";
 import type { NetworkBootstrap } from "./networkBootstrap.js";
 import type { RuntimeLifecycle } from "./runtimeLifecycle.js";
 import { type RuntimePlugin, runPluginHooks, startPlugins } from "./runtimePlugins.js";
@@ -19,7 +20,32 @@ type Destroyable = {
 };
 
 type RestartRecovery = {
-  recoverAfterRestart(): Promise<unknown>;
+  recoverAfterRestart(): Promise<
+    Array<{
+      action: { kind: string };
+      status: "applied" | "deferred" | "failed";
+      error: unknown | null;
+    }>
+  >;
+};
+
+const hydrateCriticalStorage = async (
+  owner: string,
+  resource: string,
+  task: () => Promise<unknown> | undefined,
+): Promise<void> => {
+  try {
+    const pending = task();
+    if (!pending) {
+      return;
+    }
+    await pending;
+  } catch (error) {
+    if (error instanceof RuntimeHydrationError) {
+      throw error;
+    }
+    throw new RuntimeHydrationError({ owner, resource, cause: error });
+  }
 };
 
 export const createBackgroundRuntimeLifecycle = ({
@@ -52,8 +78,8 @@ export const createBackgroundRuntimeLifecycle = ({
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
     initialize: async () => {
-      await stateServices.supportedChains.whenReady();
-      await stateServices.accounts.whenReady?.();
+      await hydrateCriticalStorage("chains", "customChains", () => stateServices.supportedChains.whenReady());
+      await hydrateCriticalStorage("accounts", "accounts", () => stateServices.accounts.whenReady?.());
 
       if (deferredNetworkInitialState) {
         const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
@@ -74,7 +100,7 @@ export const createBackgroundRuntimeLifecycle = ({
           logger("network: skipped deferred initial state with unregistered namespace chain");
         }
       }
-      await permissionsReady;
+      await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
     },
   };
 
@@ -82,9 +108,17 @@ export const createBackgroundRuntimeLifecycle = ({
     name: "transactionRecovery",
     initialize: async () => {
       try {
-        await transactionRecovery.recoverAfterRestart();
+        const results = await transactionRecovery.recoverAfterRestart();
+        const failed = results.find((result) => result.status === "failed") ?? null;
+        if (failed) {
+          throw failed.error ?? new Error(`Failed to apply transaction restart action ${failed.action.kind}`);
+        }
       } catch (error) {
-        logger("transactions: failed to recover aggregate transactions on initialize", error);
+        throw new RuntimeHydrationError({
+          owner: "transactions",
+          resource: "restartRecovery",
+          cause: error,
+        });
       }
     },
   };

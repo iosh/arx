@@ -13,6 +13,8 @@ import {
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
+import type { VaultMetaSnapshot } from "../storage/index.js";
+import type { NetworkSelectionRecord } from "../storage/records.js";
 import type { TransactionAggregate } from "../transactions/storage/index.js";
 import type { CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { createCoreRuntime } from "./createCoreRuntime.js";
@@ -28,31 +30,61 @@ const ACCOUNT_KEY = toAccountKeyFromAddress({
   address: ACCOUNT_ADDRESS,
   accountCodecs: TEST_ACCOUNT_CODECS,
 });
+const HYDRATE_FAILURE = new Error("hydrate storage unavailable");
+type TestCoreStoragePorts = CreateCoreRuntimeInput["storage"];
 
 const createCoreRuntimeInput = (params?: {
-  accountsPort?: MemoryAccountsPort;
-  permissionsPort?: MemoryPermissionsPort;
-  transactionAggregatesPort?: MemoryTransactionAggregatesPort;
+  accountsPort?: TestCoreStoragePorts["accounts"];
+  customRpcPort?: TestCoreStoragePorts["chains"]["customRpc"];
+  networkSelectionPort?: TestCoreStoragePorts["chains"]["networkSelection"];
+  permissionsPort?: TestCoreStoragePorts["permissions"];
+  transactionAggregatesPort?: TestCoreStoragePorts["transactions"];
+  vaultMetaPort?: TestCoreStoragePorts["vault"];
   boot?: CreateCoreRuntimeInput["boot"];
 }): CreateCoreRuntimeInput => ({
   namespaces: {
     modules: [createEip155WalletNamespaceModule()],
   },
   storage: {
-    vault: new MemoryVaultMetaPort(),
+    vault: params?.vaultMetaPort ?? new MemoryVaultMetaPort(),
     keyrings: new MemoryKeyringMetasPort(),
     accounts: params?.accountsPort ?? new MemoryAccountsPort(),
     permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
     chains: {
       customChains: new MemoryCustomChainsPort(),
-      customRpc: new MemoryCustomRpcPort(),
-      networkSelection: new MemoryNetworkSelectionPort(),
+      customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
+      networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
     },
     transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
     settings: new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
   },
   ...(params?.boot ? { boot: params.boot } : {}),
 });
+
+class FailingVaultMetaPort extends MemoryVaultMetaPort {
+  override async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
+    throw HYDRATE_FAILURE;
+  }
+}
+
+class FailingNetworkSelectionPort extends MemoryNetworkSelectionPort {
+  override async get(): Promise<NetworkSelectionRecord | null> {
+    throw HYDRATE_FAILURE;
+  }
+}
+
+class FailingTransactionAggregatesPort extends MemoryTransactionAggregatesPort {
+  override async listRecoverableTransactionAggregates(): Promise<TransactionAggregate[]> {
+    throw HYDRATE_FAILURE;
+  }
+}
+
+const expectHydrationFailure = async (input: CreateCoreRuntimeInput, details: { owner: string; resource: string }) => {
+  await expect(createCoreRuntime(input)).rejects.toMatchObject({
+    code: "runtime.hydration_failed",
+    details,
+  });
+};
 
 const createSeededAccountsPort = () =>
   new MemoryAccountsPort([
@@ -222,5 +254,32 @@ describe("createCoreRuntime", () => {
         terminalReason: null,
       },
     });
+  });
+
+  it("fails boot when correctness-critical vault metadata cannot hydrate", async () => {
+    await expectHydrationFailure(
+      createCoreRuntimeInput({
+        vaultMetaPort: new FailingVaultMetaPort(),
+      }),
+      { owner: "vault", resource: "vaultMeta" },
+    );
+  });
+
+  it("fails boot when correctness-critical chain preferences cannot hydrate", async () => {
+    await expectHydrationFailure(
+      createCoreRuntimeInput({
+        networkSelectionPort: new FailingNetworkSelectionPort(),
+      }),
+      { owner: "chains", resource: "networkSelection" },
+    );
+  });
+
+  it("fails boot when transaction restart recovery cannot read persisted aggregates", async () => {
+    await expectHydrationFailure(
+      createCoreRuntimeInput({
+        transactionAggregatesPort: new FailingTransactionAggregatesPort(),
+      }),
+      { owner: "transactions", resource: "restartRecovery" },
+    );
   });
 });

@@ -5,20 +5,29 @@ import { createBackgroundRuntimeHost } from "./runtimeHost";
 const {
   createArxWalletRuntimeMock,
   createCoreRuntimeFromArxWalletRuntimeMock,
+  coreReadMock,
   getExtensionStorageMock,
   disableDebugNamespacesMock,
   enableDebugNamespacesMock,
-} = vi.hoisted(() => ({
-  createArxWalletRuntimeMock: vi.fn(),
-  createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
-    provider: runtime.provider,
-    ui: {},
-    read: {},
-  })),
-  getExtensionStorageMock: vi.fn(),
-  disableDebugNamespacesMock: vi.fn(),
-  enableDebugNamespacesMock: vi.fn(),
-}));
+} = vi.hoisted(() => {
+  const coreReadMock = {
+    getWalletSnapshot: vi.fn(),
+    subscribe: vi.fn(),
+  };
+
+  return {
+    createArxWalletRuntimeMock: vi.fn(),
+    coreReadMock,
+    createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
+      provider: runtime.provider,
+      ui: {},
+      read: coreReadMock,
+    })),
+    getExtensionStorageMock: vi.fn(),
+    disableDebugNamespacesMock: vi.fn(),
+    enableDebugNamespacesMock: vi.fn(),
+  };
+});
 
 const { installedNamespaces } = vi.hoisted(() => ({
   installedNamespaces: {
@@ -358,6 +367,7 @@ describe("runtimeHost", () => {
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
+      read: coreReadMock,
       extensions: [expect.objectContaining({ id: "extension.uiActivation" })],
     });
     expect(runtimeHarness.createProvider).not.toHaveBeenCalled();

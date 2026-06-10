@@ -50,6 +50,11 @@ export type UiMethodHandlerMap = Partial<UiHandlers>;
 
 export type UiSnapshotBuilder = () => UiSnapshot;
 
+export type UiWalletSnapshotReadModel = {
+  getWalletSnapshot: UiSnapshotBuilder;
+  subscribe: UiStateChangeSubscription;
+};
+
 export type UiResolvedContext = {
   namespace: string;
   chainRef: string;
@@ -173,12 +178,14 @@ export type UiServerRuntimeDeps = {
   access: UiServerAccess;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
+  buildSnapshot?: UiSnapshotBuilder;
   extensions?: readonly UiServerExtension[];
 };
 
 export type UiRuntimeDeps = {
   server: UiRuntimeServerDeps;
   bridge: UiRuntimeBridgeAccess;
+  read?: UiWalletSnapshotReadModel;
 };
 
 export type UiHandlerDeps = {

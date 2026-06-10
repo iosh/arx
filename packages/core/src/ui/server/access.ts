@@ -43,7 +43,12 @@ const createUiSurfaceIdentity = (uiOrigin: string, createId: () => string): UiSu
 
 const createUiStateChangedSubscription = ({
   bridge,
+  read,
 }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeStateChanged"] => {
+  if (read) {
+    return (listener) => read.subscribe(listener);
+  }
+
   return (listener) => {
     const notify = () => listener();
     const unsubs = [
@@ -144,15 +149,16 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
   };
 };
 
-const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
+const createUiRuntimeCore = ({ server, bridge, read }: CreateUiRuntimeAccessOptions) => {
   const surface = createUiSurfaceIdentity(server.uiOrigin, server.createId ?? (() => globalThis.crypto.randomUUID()));
   const uiRuntime = createUiServerRuntime({
     access: server.access,
     platform: server.platform,
     surface,
+    ...(read ? { buildSnapshot: read.getWalletSnapshot } : {}),
     ...(server.extensions ? { extensions: server.extensions } : {}),
   });
-  const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge });
+  const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge, ...(read ? { read } : {}) });
   const subscribeUiEvents = createUiEventSubscription({ server, bridge });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {
@@ -170,8 +176,8 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
   };
 };
 
-export const createUiContract = ({ server, bridge }: CreateUiRuntimeAccessOptions): WalletUi => {
-  const { uiRuntime, subscribeStateChanged, subscribeUiEvents, dispatch } = createUiRuntimeCore({ server, bridge });
+export const createUiContract = (options: CreateUiRuntimeAccessOptions): WalletUi => {
+  const { uiRuntime, subscribeStateChanged, subscribeUiEvents, dispatch } = createUiRuntimeCore(options);
 
   return {
     buildSnapshot: () => uiRuntime.buildSnapshot(),
@@ -181,8 +187,8 @@ export const createUiContract = ({ server, bridge }: CreateUiRuntimeAccessOption
   };
 };
 
-export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessOptions): UiRuntimeAccess => {
-  const { uiRuntime, subscribeStateChanged, subscribeUiEvents } = createUiRuntimeCore({ server, bridge });
+export const createUiRuntimeAccess = (options: CreateUiRuntimeAccessOptions): UiRuntimeAccess => {
+  const { uiRuntime, subscribeStateChanged, subscribeUiEvents } = createUiRuntimeCore(options);
 
   const dispatcher = createUiDispatcher({
     handlers: uiRuntime.handlers,
@@ -195,7 +201,7 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
 
     if (dispatched.reply.type === "ui:response" && dispatched.plan.persistVaultMeta) {
       try {
-        await bridge.persistVaultMeta();
+        await options.bridge.persistVaultMeta();
       } catch (error) {
         accessLog("failed to persist vault meta", error);
       }
@@ -208,12 +214,18 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
   };
 
   return {
-    buildSnapshotEvent: () => ({
-      type: "ui:event",
-      event: UI_EVENT_SNAPSHOT_CHANGED,
-      payload: uiRuntime.buildSnapshot(),
-      context: uiRuntime.getUiContext(),
-    }),
+    buildSnapshotEvent: () => {
+      const snapshot = uiRuntime.buildSnapshot();
+      return {
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: snapshot,
+        context: {
+          namespace: snapshot.chain.namespace,
+          chainRef: snapshot.chain.chainRef,
+        },
+      };
+    },
     dispatchRequest,
     getRequestBroadcastPolicy: (raw) => getUiRequestBroadcastPolicy(raw),
     subscribeStateChanged,

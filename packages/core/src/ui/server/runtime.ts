@@ -33,7 +33,7 @@ const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "access">) => {
 };
 
 export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
-  const buildSnapshot = () =>
+  const buildRuntimeSnapshot = () =>
     buildUiSnapshot({
       accounts: deps.access.accounts,
       chains: deps.access.chains,
@@ -43,6 +43,7 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
       attention: deps.access.attention,
       namespaceBindings: deps.access.namespaceBindings,
     });
+  const buildSnapshot = deps.buildSnapshot ?? buildRuntimeSnapshot;
 
   const handlerDeps = {
     access: deps.access,

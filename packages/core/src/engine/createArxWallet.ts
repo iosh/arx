@@ -259,6 +259,7 @@ const createWalletUiDeps = (
         },
       },
     },
+    ...(options.read ? { read: options.read } : {}),
   };
 };
 

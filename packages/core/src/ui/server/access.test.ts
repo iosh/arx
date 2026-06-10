@@ -1,12 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
+  UI_EVENT_SNAPSHOT_CHANGED,
   UI_EVENT_TRANSACTIONS_CHANGED,
 } from "../protocol/events.js";
+import type { UiSnapshot } from "../protocol/schemas.js";
 import { createUiRuntimeAccess } from "./access.js";
-import type { UiTransactionsAccess } from "./types.js";
+import type { UiTransactionsAccess, UiWalletSnapshotReadModel } from "./types.js";
 
 const createTransactionAccess = () =>
   ({
@@ -39,7 +41,57 @@ const createTransactionAccess = () =>
     },
   }) satisfies UiTransactionsAccess;
 
-const createUiAccess = () =>
+const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSnapshot => ({
+  chain: {
+    chainRef,
+    chainId: chainRef === "eip155:10" ? "0xa" : "0x1",
+    namespace: "eip155",
+    displayName: chainRef === "eip155:10" ? "Optimism" : "Ethereum",
+    shortName: null,
+    icon: null,
+    nativeCurrency: {
+      name: "Ether",
+      symbol: "ETH",
+      decimals: 18,
+    },
+  },
+  chainCapabilities: {
+    nativeBalance: true,
+    sendTransaction: true,
+  },
+  networks: {
+    selectedNamespace: "eip155",
+    active: chainRef,
+    known: [],
+    available: [],
+  },
+  accounts: {
+    totalCount: 0,
+    list: [],
+    active: null,
+  },
+  session: {
+    isUnlocked: true,
+    autoLockDurationMs: 0,
+    nextAutoLockAt: null,
+  },
+  attention: {
+    queue: [],
+    count: 0,
+  },
+  permissions: {
+    origins: {},
+  },
+  backup: {
+    pendingHdKeyringCount: 0,
+    nextHdKeyring: null,
+  },
+  vault: {
+    initialized: true,
+  },
+});
+
+const createUiAccess = (options: { read?: UiWalletSnapshotReadModel } = {}) =>
   createUiRuntimeAccess({
     server: {
       access: {
@@ -137,6 +189,7 @@ const createUiAccess = () =>
         attention: { onStateChanged: () => () => {} },
       },
     },
+    ...(options.read ? { read: options.read } : {}),
   });
 
 const approvalFinishedHandlers = new Set<(event: { approvalId: string }) => void>();
@@ -144,6 +197,53 @@ const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => vo
 const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
+  it("uses injected wallet read model for snapshot query, event, and invalidation", async () => {
+    const snapshot = createUiSnapshot("eip155:10");
+    const listeners = new Set<() => void>();
+    const read = {
+      getWalletSnapshot: vi.fn(() => snapshot),
+      subscribe: vi.fn((listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      }),
+    } satisfies UiWalletSnapshotReadModel;
+    const access = createUiAccess({ read });
+
+    const event = access.buildSnapshotEvent();
+    const dispatched = await access.dispatchRequest({
+      type: "ui:request",
+      id: "snapshot-1",
+      method: "ui.snapshot.get",
+    });
+    const listener = vi.fn();
+    const unsubscribe = access.subscribeStateChanged(listener);
+    for (const emit of listeners) {
+      emit();
+    }
+    unsubscribe();
+
+    expect(event).toEqual({
+      type: "ui:event",
+      event: UI_EVENT_SNAPSHOT_CHANGED,
+      payload: snapshot,
+      context: {
+        namespace: "eip155",
+        chainRef: "eip155:10",
+      },
+    });
+    expect(dispatched?.reply).toMatchObject({
+      type: "ui:response",
+      id: "snapshot-1",
+      result: snapshot,
+    });
+    expect(read.getWalletSnapshot).toHaveBeenCalledTimes(2);
+    expect(read.subscribe).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listeners.size).toBe(0);
+  });
+
   it("emits approval invalidations from generic approval finish", () => {
     approvalFinishedHandlers.clear();
     transactionApprovalChangedHandlers.clear();

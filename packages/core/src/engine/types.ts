@@ -76,7 +76,7 @@ import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
-import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
+import type { UiPlatformAdapter, UiServerExtension, UiWalletSnapshotReadModel } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
@@ -362,6 +362,7 @@ export type WalletProvider = Readonly<{
 export type WalletCreateUiOptions = Readonly<{
   platform: UiPlatformAdapter;
   uiOrigin: string;
+  read?: UiWalletSnapshotReadModel;
   extensions?: readonly UiServerExtension[];
 }>;
 

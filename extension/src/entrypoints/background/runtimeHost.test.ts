@@ -206,7 +206,7 @@ const makeRuntime = () => {
       },
       session: {
         vault: {
-          getStatus: () => ({ hasEnvelope: true }),
+          getStatus: () => ({ status: "locked" }),
         },
         unlock: {
           isUnlocked: () => true,

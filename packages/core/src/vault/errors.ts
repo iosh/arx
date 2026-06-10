@@ -1,5 +1,9 @@
 import { ArxBaseError, type ErrorCause } from "../error.js";
 
+type VaultInvariantViolationInput = ErrorCause & {
+  invariant: string;
+};
+
 export class VaultNotInitializedError extends ArxBaseError {
   static readonly code = "vault.not_initialized";
 
@@ -39,6 +43,18 @@ export class VaultInvalidPasswordError extends ArxBaseError {
   constructor(input: ErrorCause = {}) {
     super("Vault password is missing or incorrect.", {
       code: VaultInvalidPasswordError.code,
+      cause: input.cause,
+    });
+  }
+}
+
+export class VaultInvariantViolationError extends ArxBaseError {
+  static readonly code = "vault.invariant_violation";
+
+  constructor(input: VaultInvariantViolationInput) {
+    super("Vault internal state is inconsistent.", {
+      code: VaultInvariantViolationError.code,
+      details: { invariant: input.invariant },
       cause: input.cause,
     });
   }

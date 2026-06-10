@@ -218,7 +218,7 @@ export const initSessionLayer = ({
   };
 
   const assertVaultLockedAfterMutation = (operation: "initialize" | "importEnvelope") => {
-    if (baseVault.isUnlocked()) {
+    if (baseVault.getStatus().status === "unlocked") {
       throw new Error(`VaultService.${operation}() must keep the vault locked`);
     }
   };
@@ -268,9 +268,6 @@ export const initSessionLayer = ({
     getStatus() {
       return baseVault.getStatus();
     },
-    isUnlocked() {
-      return baseVault.isUnlocked();
-    },
   };
 
   const unlockOptions: UnlockServiceOptions = {
@@ -294,9 +291,9 @@ export const initSessionLayer = ({
 
   const assertSessionLockedForVaultLifecycle = (action: SessionVaultLifecycleAction) => {
     const unlockState = unlock.getState();
-    const vaultUnlocked = vaultProxy.isUnlocked();
+    const vaultStatus = vaultProxy.getStatus().status;
 
-    if (unlockState.status !== "unlocked" && !vaultUnlocked) {
+    if (unlockState.status !== "unlocked" && vaultStatus !== "unlocked") {
       return;
     }
 
@@ -305,7 +302,7 @@ export const initSessionLayer = ({
       details: {
         action,
         unlockState: unlockState.status,
-        vaultState: vaultUnlocked ? "unlocked" : "locked",
+        vaultState: vaultStatus,
       },
     });
   };

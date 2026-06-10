@@ -59,11 +59,11 @@ export const createUiWalletSetupAccess = ({
   const runWalletSetupFlow = async <T>(password: string, run: () => Promise<T>): Promise<T> => {
     return await session.withVaultMetaPersistHold(async () => {
       const status = session.vault.getStatus();
-      if (status.hasEnvelope && hasAnyOwnedAccounts(accounts)) {
+      if (status.status !== "uninitialized" && hasAnyOwnedAccounts(accounts)) {
         throw new RpcInvalidRequestError({ message: "Vault already initialized" });
       }
 
-      if (!status.hasEnvelope) {
+      if (status.status === "uninitialized") {
         await session.createVault({ password });
         await unlockForSetup(password);
       } else if (!session.unlock.isUnlocked()) {

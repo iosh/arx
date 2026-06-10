@@ -1,3 +1,4 @@
+import { SessionLockInvariantError } from "../errors.js";
 import { DEFAULT_AUTO_LOCK_MS } from "./constants.js";
 import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_UNLOCKED } from "./topics.js";
 import type { SessionLockState, UnlockParams, UnlockReason, UnlockService, UnlockServiceOptions } from "./types.js";
@@ -26,8 +27,11 @@ const assertPositiveNumber = (value: number, label: string) => {
   return Math.round(value);
 };
 
-const buildClosedState = (params: { hasEnvelope: boolean; autoLockDurationMs: number }): SessionLockState => ({
-  status: params.hasEnvelope ? "locked" : "uninitialized",
+const buildClosedState = (params: {
+  vaultStatus: "uninitialized" | "locked";
+  autoLockDurationMs: number;
+}): SessionLockState => ({
+  status: params.vaultStatus,
   autoLockDurationMs: params.autoLockDurationMs,
   nextAutoLockAt: null,
 });
@@ -57,7 +61,7 @@ export class InMemoryUnlockService implements UnlockService {
       "Auto-lock duration",
     );
     const vaultStatus = this.#vault.getStatus();
-    if (vaultStatus.isUnlocked) {
+    if (vaultStatus.status === "unlocked") {
       const timestamp = this.#now();
       this.#state = {
         status: "unlocked",
@@ -67,7 +71,7 @@ export class InMemoryUnlockService implements UnlockService {
       };
     } else {
       this.#state = buildClosedState({
-        hasEnvelope: vaultStatus.hasEnvelope,
+        vaultStatus: vaultStatus.status,
         autoLockDurationMs: initialTimeout,
       });
     }
@@ -107,8 +111,15 @@ export class InMemoryUnlockService implements UnlockService {
     this.#vault.lock();
 
     const timestamp = this.#now();
+    const vaultStatus = this.#vault.getStatus().status;
+    if (vaultStatus === "unlocked") {
+      throw new SessionLockInvariantError({
+        invariant: "vault_must_be_closed_after_session_lock",
+      });
+    }
+
     this.#state = buildClosedState({
-      hasEnvelope: this.#vault.getStatus().hasEnvelope,
+      vaultStatus,
       autoLockDurationMs: this.#state.autoLockDurationMs,
     });
 
@@ -120,7 +131,7 @@ export class InMemoryUnlockService implements UnlockService {
     const vaultStatus = this.#vault.getStatus();
     const autoLockDurationMs = this.#state.autoLockDurationMs;
 
-    if (vaultStatus.isUnlocked) {
+    if (vaultStatus.status === "unlocked") {
       if (this.#state.status === "unlocked") {
         return this.getState();
       }
@@ -137,7 +148,7 @@ export class InMemoryUnlockService implements UnlockService {
     }
 
     this.#clearAutoLockTimer();
-    this.#state = buildClosedState({ hasEnvelope: vaultStatus.hasEnvelope, autoLockDurationMs });
+    this.#state = buildClosedState({ vaultStatus: vaultStatus.status, autoLockDurationMs });
     this.#publishState();
     return this.getState();
   }

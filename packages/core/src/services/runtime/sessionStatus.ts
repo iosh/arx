@@ -25,7 +25,7 @@ type CreateSessionStatusServiceDeps = {
 export const createSessionStatusService = ({ unlock, vault }: CreateSessionStatusServiceDeps): SessionStatusService => {
   const getStatus = (): SessionStatus => {
     const unlockState = unlock.getState();
-    const vaultInitialized = vault.getStatus().hasEnvelope;
+    const vaultInitialized = vault.getStatus().status !== "uninitialized";
     const isUnlocked = unlockState.status === "unlocked";
 
     return {
@@ -40,6 +40,6 @@ export const createSessionStatusService = ({ unlock, vault }: CreateSessionStatu
   return {
     getStatus,
     isUnlocked: () => unlock.isUnlocked(),
-    hasInitializedVault: () => vault.getStatus().hasEnvelope,
+    hasInitializedVault: () => vault.getStatus().status !== "uninitialized",
   };
 };

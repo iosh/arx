@@ -251,7 +251,7 @@ export class RuntimeKeyringState {
           return;
         }
 
-        if (!this.#options.vault.isUnlocked()) {
+        if (this.#options.vault.getStatus().status !== "unlocked") {
           this.#clearRuntimeState();
           this.#payload = { keyrings: [] };
           return;

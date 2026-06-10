@@ -9,7 +9,7 @@ import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 export type KeyringServiceOptions = {
   now: () => number;
   uuid: () => string;
-  vault: Pick<VaultService, "exportSecret" | "isUnlocked" | "verifyPassword">;
+  vault: Pick<VaultService, "exportSecret" | "getStatus" | "verifyPassword">;
   unlock: Pick<UnlockService, "onUnlocked" | "onLocked" | "isUnlocked">;
   keyringMetas: {
     get(id: KeyringMetaRecord["id"]): Promise<KeyringMetaRecord | null>;

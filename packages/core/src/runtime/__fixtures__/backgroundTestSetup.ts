@@ -551,14 +551,9 @@ export class FakeVault implements VaultService {
   }
 
   getStatus() {
-    return {
-      isUnlocked: this.#unlocked,
-      hasEnvelope: this.#envelope !== null,
-    };
-  }
-
-  isUnlocked(): boolean {
-    return this.#unlocked;
+    if (this.#unlocked) return { status: "unlocked" as const };
+    if (this.#envelope) return { status: "locked" as const };
+    return { status: "uninitialized" as const };
   }
 }
 

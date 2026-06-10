@@ -24,7 +24,7 @@ describe("vaultService", () => {
     expect(typeof envelope.cipher.iv).toBe("string");
     expect(typeof envelope.cipher.data).toBe("string");
 
-    expect(vault.getStatus()).toEqual({ isUnlocked: false, hasEnvelope: true });
+    expect(vault.getStatus()).toEqual({ status: "locked" });
     try {
       vault.exportSecret();
       throw new Error("Expected exportSecret to throw");
@@ -49,7 +49,7 @@ describe("vaultService", () => {
 
     const vault2 = createVaultService();
     vault2.importEnvelope(envelope1);
-    expect(vault2.getStatus()).toEqual({ isUnlocked: false, hasEnvelope: true });
+    expect(vault2.getStatus()).toEqual({ status: "locked" });
 
     await vault2.unlock({ password: PASSWORD });
     expect(toArray(vault2.exportSecret())).toEqual(toArray(customSecret));
@@ -76,7 +76,7 @@ describe("vaultService", () => {
 
     await vault.unlock({ password: PASSWORD, envelope });
 
-    expect(vault.isUnlocked()).toBe(true);
+    expect(vault.getStatus()).toEqual({ status: "unlocked" });
     expect(toArray(vault.exportSecret())).toEqual(toArray(secret));
   });
 
@@ -105,6 +105,15 @@ describe("vaultService", () => {
   it("throws when commitSecret is called while locked", async () => {
     const vault = createVaultService();
     await expect(vault.commitSecret({ secret: new Uint8Array([1]) })).rejects.toMatchObject({
+      code: "vault.locked",
+    });
+  });
+
+  it("throws when reencrypt is called while locked", async () => {
+    const vault = createVaultService();
+    await vault.initialize({ password: "old-password", secret: SECRET });
+
+    await expect(vault.reencrypt({ newPassword: "new-password" })).rejects.toMatchObject({
       code: "vault.locked",
     });
   });

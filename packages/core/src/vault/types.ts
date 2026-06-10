@@ -17,9 +17,10 @@ export type VaultEnvelope = {
   };
 };
 
+export type VaultLifecycleStatus = "uninitialized" | "locked" | "unlocked";
+
 export type VaultStatus = {
-  isUnlocked: boolean;
-  hasEnvelope: boolean;
+  status: VaultLifecycleStatus;
 };
 
 export type CreateVaultParams = {
@@ -40,10 +41,8 @@ export type CommitSecretParams = {
   secret: Uint8Array;
 };
 
-export type ReencryptParams = {
+export type ReencryptVaultParams = {
   newPassword: string;
-  // Optional: allow reencrypt while locked (decrypt with current password first).
-  currentPassword?: string;
   rotateSalt?: boolean;
 };
 
@@ -54,19 +53,19 @@ export type VaultConfig = {
 };
 
 export interface VaultService {
-  // Creates or reseals the vault envelope and keeps secret material out of the unlocked session.
+  // Creates a locked vault envelope from the provided secret bytes.
   initialize(params: SealVaultParams): Promise<VaultEnvelope>;
   unlock(params: UnlockVaultParams): Promise<void>;
   lock(): void;
 
   exportSecret(): Uint8Array;
-  commitSecret(params: CommitSecretParams): Promise<VaultEnvelope>; // uses current derived key, unlocked only
-  reencrypt(params: ReencryptParams): Promise<VaultEnvelope>;
+  // Uses the current unlocked session key.
+  commitSecret(params: CommitSecretParams): Promise<VaultEnvelope>;
+  reencrypt(params: ReencryptVaultParams): Promise<VaultEnvelope>;
 
   // Imports an existing envelope without reviving an unlocked session.
   importEnvelope(envelope: VaultEnvelope): void;
   verifyPassword(password: string): Promise<void>;
   getEnvelope(): VaultEnvelope | null;
   getStatus(): VaultStatus;
-  isUnlocked(): boolean;
 }

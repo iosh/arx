@@ -3,12 +3,13 @@ import { copyBytes, zeroize } from "../utils/bytes.js";
 import {
   VaultInvalidCiphertextError,
   VaultInvalidPasswordError,
+  VaultInvariantViolationError,
   VaultLockedError,
   VaultNotInitializedError,
 } from "./errors.js";
 import type {
   CommitSecretParams,
-  ReencryptParams,
+  ReencryptVaultParams,
   SealVaultParams,
   UnlockVaultParams,
   VaultConfig,
@@ -122,9 +123,15 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
     decoded: ReturnType<typeof decodeEnvelopeOrThrow>;
   }): Promise<{ keyMaterial: Uint8Array; plain: Uint8Array }> => {
     const passwordKey = await importPasswordKey(params.password);
-    const keyMaterial = await deriveKeyMaterial(passwordKey, params.decoded.saltBytes, params.decoded.iterations);
-    const plain = await aesGcmDecrypt(keyMaterial, params.decoded.dataBytes, params.decoded.ivBytes);
-    return { keyMaterial, plain };
+    let keyMaterial: Uint8Array | null = null;
+    try {
+      keyMaterial = await deriveKeyMaterial(passwordKey, params.decoded.saltBytes, params.decoded.iterations);
+      const plain = await aesGcmDecrypt(keyMaterial, params.decoded.dataBytes, params.decoded.ivBytes);
+      return { keyMaterial, plain };
+    } catch (error) {
+      if (keyMaterial) zeroize(keyMaterial);
+      throw error;
+    }
   };
 
   const encryptWithPassword = async (params: {
@@ -134,26 +141,32 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
     iterations: number;
   }): Promise<{ keyMaterial: Uint8Array; envelope: VaultEnvelope }> => {
     const passwordKey = await importPasswordKey(params.password);
-    const keyMaterial = await deriveKeyMaterial(passwordKey, params.saltBytes, params.iterations);
-    const { cipher, iv } = await aesGcmEncrypt(keyMaterial, params.secret, resolved.ivBytes);
+    let keyMaterial: Uint8Array | null = null;
+    try {
+      keyMaterial = await deriveKeyMaterial(passwordKey, params.saltBytes, params.iterations);
+      const { cipher, iv } = await aesGcmEncrypt(keyMaterial, params.secret, resolved.ivBytes);
 
-    return {
-      keyMaterial,
-      envelope: {
-        version: VAULT_VERSION,
-        kdf: {
-          name: VAULT_KDF.name,
-          hash: VAULT_KDF.hash,
-          salt: toBase64(params.saltBytes),
-          iterations: params.iterations,
+      return {
+        keyMaterial,
+        envelope: {
+          version: VAULT_VERSION,
+          kdf: {
+            name: VAULT_KDF.name,
+            hash: VAULT_KDF.hash,
+            salt: toBase64(params.saltBytes),
+            iterations: params.iterations,
+          },
+          cipher: {
+            name: VAULT_CIPHER.name,
+            iv: toBase64(iv),
+            data: toBase64(cipher),
+          },
         },
-        cipher: {
-          name: VAULT_CIPHER.name,
-          iv: toBase64(iv),
-          data: toBase64(cipher),
-        },
-      },
-    };
+      };
+    } catch (error) {
+      if (keyMaterial) zeroize(keyMaterial);
+      throw error;
+    }
   };
 
   const encryptWithDerivedKey = async (params: {
@@ -177,18 +190,24 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
     async initialize(params: SealVaultParams): Promise<VaultEnvelope> {
       const saltBytes = randomBytes(resolved.saltBytes);
       const sessionSecret = copyBytes(params.secret);
+      let sessionKeyMaterial: Uint8Array | null = null;
 
-      clearSession();
-      const { envelope: next } = await encryptWithPassword({
-        password: params.password,
-        secret: sessionSecret,
-        saltBytes,
-        iterations: resolved.iterations,
-      });
+      try {
+        clearSession();
+        const encrypted = await encryptWithPassword({
+          password: params.password,
+          secret: sessionSecret,
+          saltBytes,
+          iterations: resolved.iterations,
+        });
+        sessionKeyMaterial = encrypted.keyMaterial;
+        envelope = encrypted.envelope;
 
-      envelope = next;
-
-      return cloneEnvelope(next);
+        return cloneEnvelope(encrypted.envelope);
+      } finally {
+        zeroize(sessionSecret);
+        if (sessionKeyMaterial) zeroize(sessionKeyMaterial);
+      }
     },
 
     async unlock(params: UnlockVaultParams): Promise<void> {
@@ -234,40 +253,33 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         throw new VaultNotInitializedError();
       }
 
-      const nextSecret = copyBytes(params.secret);
-      const nextEnvelope = await encryptWithDerivedKey({ keyMaterial: derivedKey, secret: nextSecret, base });
+      let nextSecret: Uint8Array | null = copyBytes(params.secret);
+      try {
+        const nextEnvelope = await encryptWithDerivedKey({ keyMaterial: derivedKey, secret: nextSecret, base });
 
-      zeroize(secret);
-      secret = nextSecret;
-      envelope = nextEnvelope;
+        zeroize(secret);
+        secret = nextSecret;
+        nextSecret = null;
+        envelope = nextEnvelope;
 
-      return cloneEnvelope(nextEnvelope);
+        return cloneEnvelope(nextEnvelope);
+      } finally {
+        if (nextSecret) zeroize(nextSecret);
+      }
     },
 
-    async reencrypt(params: ReencryptParams): Promise<VaultEnvelope> {
+    async reencrypt(params: ReencryptVaultParams): Promise<VaultEnvelope> {
       const sealed = envelope;
       if (!sealed) throw new VaultNotInitializedError();
-
-      const rotateSalt = params.rotateSalt ?? true;
-      const wasUnlocked = secret !== null && derivedKey !== null;
+      if (!secret || !derivedKey) throw new VaultLockedError();
 
       let plain: Uint8Array | null = null;
-      let tempKeyMaterial: Uint8Array | null = null;
 
       try {
-        if (wasUnlocked) {
-          plain = copyBytes(secret as Uint8Array);
-        } else {
-          if (!params.currentPassword) throw new VaultLockedError();
-          const decoded = decodeEnvelopeOrThrow(sealed);
-          const opened = await decryptWithPassword({ password: params.currentPassword, decoded });
-          tempKeyMaterial = opened.keyMaterial;
-          plain = opened.plain;
-        }
-
         const decoded = decodeEnvelopeOrThrow(sealed);
-        const saltBytes = rotateSalt ? randomBytes(resolved.saltBytes) : decoded.saltBytes;
+        const saltBytes = (params.rotateSalt ?? true) ? randomBytes(resolved.saltBytes) : decoded.saltBytes;
         const iterations = resolved.iterations;
+        plain = copyBytes(secret);
 
         const encrypted = await encryptWithPassword({
           password: params.newPassword,
@@ -278,28 +290,17 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
         envelope = encrypted.envelope;
 
-        if (wasUnlocked) {
-          // Keep the vault unlocked, but rotate the in-memory derived key to match the new password.
-          zeroize(derivedKey as Uint8Array);
-          derivedKey = encrypted.keyMaterial;
+        // Keep the vault unlocked, but rotate the in-memory derived key to match the new password.
+        zeroize(derivedKey);
+        derivedKey = encrypted.keyMaterial;
 
-          zeroize(secret as Uint8Array);
-          secret = plain;
-          plain = null;
-        } else {
-          // Keep the vault locked.
-          zeroize(encrypted.keyMaterial);
-        }
+        zeroize(secret);
+        secret = plain;
+        plain = null;
 
         return cloneEnvelope(envelope);
-      } catch (error) {
-        if (isArxBaseError(error) && error.code === "vault.invalid_ciphertext") {
-          throw new VaultInvalidPasswordError();
-        }
-        throw error;
       } finally {
         if (plain) zeroize(plain);
-        if (tempKeyMaterial) zeroize(tempKeyMaterial);
       }
     },
 
@@ -337,14 +338,26 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
     },
 
     getStatus(): VaultStatus {
-      return {
-        isUnlocked: secret !== null,
-        hasEnvelope: envelope !== null,
-      };
-    },
+      const hasEnvelope = envelope !== null;
+      const hasSecret = secret !== null;
+      const hasDerivedKey = derivedKey !== null;
 
-    isUnlocked(): boolean {
-      return secret !== null;
+      if (hasSecret || hasDerivedKey) {
+        if (!hasEnvelope || !hasSecret || !hasDerivedKey) {
+          throw new VaultInvariantViolationError({
+            invariant: "unlocked_requires_envelope_secret_and_derived_key",
+          });
+        }
+        return { status: "unlocked" };
+      }
+
+      if (hasEnvelope) {
+        return { status: "locked" };
+      }
+
+      return {
+        status: "uninitialized",
+      };
     },
   };
 };

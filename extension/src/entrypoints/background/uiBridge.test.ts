@@ -118,7 +118,7 @@ class FakeVault {
     this.#payload = next ? new Uint8Array(next) : new Uint8Array();
   }
 
-  isUnlocked() {
+  hasUnlockedSecret() {
     return this.#unlocked;
   }
 
@@ -891,7 +891,7 @@ const buildBridge = (opts?: {
     uuid: () => crypto.randomUUID(),
     vault: {
       exportSecret: () => vault.exportSecret(),
-      isUnlocked: () => vault.isUnlocked(),
+      getStatus: () => ({ status: vault.hasUnlockedSecret() ? "unlocked" : "locked" }),
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
     unlock,
@@ -943,7 +943,9 @@ const buildBridge = (opts?: {
       return envelope;
     },
     vault: {
-      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasEnvelope }),
+      getStatus: () => ({
+        status: vault.hasUnlockedSecret() ? "unlocked" : hasEnvelope ? "locked" : "uninitialized",
+      }),
       initialize: async (params: { password: string }) => {
         void params;
         hasEnvelope = true;
@@ -1301,7 +1303,7 @@ describe("uiBridge", () => {
         })),
         importVault: vi.fn(async (envelope: Parameters<BackgroundSessionServices["importVault"]>[0]) => envelope),
         vault: {
-          getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
+          getStatus: () => ({ status: "unlocked" }),
         },
       } as unknown as BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> },
       keyring,

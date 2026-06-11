@@ -1,3 +1,4 @@
+import { eip155ChainRefFromChainIdHex } from "../../../../chains/eip155/format.js";
 import { ChainNotCompatibleError, ChainNotFoundError } from "../../../../chains/errors.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../../chains/metadata.js";
@@ -20,38 +21,24 @@ type ResolveSwitchEthereumChainTargetDeps = ResolveSwitchEthereumChainTargetPara
   network: SwitchEthereumChainTargetDeps["network"];
 };
 
-const listAvailableChainMetadata = ({
-  supportedChains,
-  network,
-}: Pick<ResolveSwitchEthereumChainTargetDeps, "supportedChains" | "network">): ChainMetadata[] => {
-  return network.getState().availableChainRefs.map((chainRef) => {
-    const entry = supportedChains.getChain(chainRef);
-    if (!entry) {
-      throw new ChainNotFoundError();
-    }
-    return cloneChainMetadata(entry.metadata);
-  });
-};
-
 export const resolveSwitchEthereumChainTarget = ({
   supportedChains,
   network,
   chainId,
 }: ResolveSwitchEthereumChainTargetDeps): ChainMetadata => {
-  const availableChains = listAvailableChainMetadata({ supportedChains, network });
-  const target = availableChains.find((item) => {
-    const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
-    if (candidateChainId && candidateChainId === chainId) {
-      return true;
-    }
+  const targetChainRef = eip155ChainRefFromChainIdHex(chainId);
+  const isAvailable = network.getState().availableChainRefs.some((chainRef) => chainRef === targetChainRef);
 
-    return false;
-  });
-
-  if (!target) {
+  if (!isAvailable) {
     throw new ChainNotFoundError();
   }
 
+  const entry = supportedChains.getChain(targetChainRef);
+  if (!entry) {
+    throw new ChainNotFoundError();
+  }
+
+  const target = cloneChainMetadata(entry.metadata);
   if (target.namespace !== "eip155") {
     throw new ChainNotCompatibleError({
       message: "Requested chain is not compatible with wallet_switchEthereumChain",

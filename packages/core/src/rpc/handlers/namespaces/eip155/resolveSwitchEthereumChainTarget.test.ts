@@ -21,7 +21,7 @@ const BASE: ChainMetadata = {
 };
 
 const SOLANA: ChainMetadata = {
-  chainRef: "solana:101",
+  chainRef: "eip155:101",
   namespace: "solana",
   chainId: "101",
   displayName: "Solana Mainnet",
@@ -44,21 +44,21 @@ const setup = (available: ChainMetadata[]) => {
 };
 
 describe("resolveSwitchEthereumChainTarget", () => {
-  it("resolves mounted eip155 chains by chainId", () => {
+  it("resolves mounted eip155 chains through the EVM hex chainId projection", () => {
     const deps = setup([MAINNET, BASE]);
 
     expect(
       resolveSwitchEthereumChainTarget({
         ...deps,
-        chainId: BASE.chainId.toLowerCase(),
+        chainId: "0X02105",
       }),
     ).toMatchObject({
       chainRef: BASE.chainRef,
     });
   });
 
-  it("rejects chains that are unavailable or namespace-incompatible", () => {
-    const deps = setup([MAINNET, SOLANA]);
+  it("rejects unavailable EVM chainIds", () => {
+    const deps = setup([MAINNET]);
 
     expect(() =>
       resolveSwitchEthereumChainTarget({
@@ -70,11 +70,15 @@ describe("resolveSwitchEthereumChainTarget", () => {
         code: "chain.not_found",
       }),
     );
+  });
+
+  it("rejects corrupted metadata under the projected eip155 chainRef", () => {
+    const deps = setup([MAINNET, SOLANA]);
 
     try {
       resolveSwitchEthereumChainTarget({
         ...deps,
-        chainId: SOLANA.chainId,
+        chainId: "0x65",
       });
       throw new Error("Expected namespace mismatch to throw");
     } catch (error) {

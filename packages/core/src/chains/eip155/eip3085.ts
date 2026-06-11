@@ -1,7 +1,9 @@
 import { z } from "zod";
+import * as Hex from "../../utils/hex.js";
 import type { ChainMetadata } from "../metadata.js";
 import { validateChainMetadata } from "../metadata.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
+import { eip155ChainRefFromChainIdHex } from "./format.js";
 
 const trimmed = () =>
   z
@@ -31,24 +33,11 @@ const eip3085Schema = z.object({
 
 const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((value) => value.trim())));
 
-const toCanonicalHexChainId = (chainId: string) => {
-  const lower = chainId.toLowerCase();
-  if (!/^0x[0-9a-f]+$/.test(lower)) {
-    throw new Error("chainId must be a 0x-prefixed hexadecimal string");
-  }
-  return lower;
-};
-
-const toChainRef = (hexChainId: string) => {
-  const reference = BigInt(hexChainId).toString(10);
-  return `eip155:${reference}`;
-};
-
 export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata => {
   const payload = eip3085Schema.parse(input);
 
-  const chainId = toCanonicalHexChainId(payload.chainId);
-  const chainRef = toChainRef(chainId);
+  const chainId = Hex.fromNumber(Hex.toBigInt(payload.chainId));
+  const chainRef = eip155ChainRefFromChainIdHex(chainId);
 
   const rpcUrls = dedupe(payload.rpcUrls).filter(Boolean);
   if (rpcUrls.length === 0) {

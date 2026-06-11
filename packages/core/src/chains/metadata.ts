@@ -1,36 +1,28 @@
 import { z } from "zod";
 import { type ParsedChainRef, parseChainRef } from "./caip.js";
+import type { ChainIcon, ExplorerLink, NativeCurrency } from "./definition.js";
+import { eip155ChainRefFromChainIdHex } from "./eip155/format.js";
 import { type ChainRef, ChainRefSchema } from "./ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
+
+export type {
+  ChainDefinition,
+  ChainDefinitionSeed,
+  ChainIcon,
+  ExplorerLink,
+  NativeCurrency,
+} from "./definition.js";
+export { cloneChainDefinition } from "./definition.js";
 
 export type ChainFeature = string;
 
 export type ChainExtensionValue = string | number | boolean | null;
-
-export interface ChainIcon {
-  url: string;
-  width?: number | undefined;
-  height?: number | undefined;
-  format?: "svg" | "png" | "jpg" | "jpeg" | "webp" | undefined;
-}
-
-export interface ExplorerLink {
-  type: string;
-  url: string;
-  title?: string | undefined;
-}
 
 export interface RpcEndpoint {
   url: string;
   type?: "public" | "authenticated" | "private" | undefined;
   weight?: number | undefined;
   headers?: Record<string, string> | undefined;
-}
-
-export interface NativeCurrency {
-  name: string;
-  symbol: string;
-  decimals: number;
 }
 
 export interface ChainMetadata {
@@ -79,17 +71,17 @@ const chainIdSchema = z
   .min(1)
   .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
 
-const nativeCurrencySchema: z.ZodType<NativeCurrency> = z.strictObject({
-  name: trimmedString(),
-  symbol: trimmedString(),
-  decimals: z.number().int().min(0),
-});
-
 export const rpcEndpointSchema: z.ZodType<RpcEndpoint> = z.strictObject({
   url: rpcUrlSchema,
   type: z.enum(["public", "authenticated", "private"]).optional(),
   weight: z.number().positive().optional(),
   headers: z.record(trimmedString(), z.string()).optional(),
+});
+
+const nativeCurrencySchema: z.ZodType<NativeCurrency> = z.strictObject({
+  name: trimmedString(),
+  symbol: trimmedString(),
+  decimals: z.number().int().min(0),
 });
 
 export const explorerLinkSchema: z.ZodType<ExplorerLink> = z.strictObject({
@@ -142,8 +134,10 @@ const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
 
 const defaultNamespaceValidators: Record<string, NamespaceMetadataValidator> = {
   eip155: ({ metadata, parsed, ctx }) => {
-    const hex = metadata.chainId?.toLowerCase();
-    if (!hex || !/^0x[0-9a-f]+$/.test(hex)) {
+    let chainRefFromChainId: ChainRef;
+    try {
+      chainRefFromChainId = eip155ChainRefFromChainIdHex(metadata.chainId);
+    } catch {
       ctx.addIssue({
         code: "custom",
         message: "EIP-155 metadata must include a hex chainId",
@@ -151,19 +145,11 @@ const defaultNamespaceValidators: Record<string, NamespaceMetadataValidator> = {
       });
       return;
     }
-    try {
-      const decimal = BigInt(hex).toString(10);
-      if (decimal !== parsed.reference) {
-        ctx.addIssue({
-          code: "custom",
-          message: `chainId (${metadata.chainId}) does not match CAIP-2 reference (${parsed.reference})`,
-          path: ["chainId"],
-        });
-      }
-    } catch {
+
+    if (chainRefFromChainId !== metadata.chainRef) {
       ctx.addIssue({
         code: "custom",
-        message: "chainId could not be parsed as a number",
+        message: `chainId (${metadata.chainId}) does not match CAIP-2 reference (${parsed.reference})`,
         path: ["chainId"],
       });
     }
@@ -276,6 +262,7 @@ export const validateChainMetadata = (metadata: unknown): ChainMetadata => {
 export const validateChainMetadataList = (metadataList: unknown): ChainMetadata[] => {
   return chainMetadataListSchema.parse(metadataList);
 };
+
 const uniqStrings = (values: readonly string[] | undefined) => {
   if (!values) return undefined;
   const seen = new Set<string>();

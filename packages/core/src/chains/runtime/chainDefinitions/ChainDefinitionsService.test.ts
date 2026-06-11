@@ -165,7 +165,7 @@ describe("InMemoryChainDefinitionsService", () => {
 
     await chainDefinitions.whenReady();
 
-    const optimism = createEip155Metadata(10, { features: ["eip155", "wallet_switchEthereumChain"] });
+    const optimism = createEip155Metadata(10);
     await chainDefinitions.upsertCustomChain(optimism, { createdByOrigin: "https://dapp.example" });
     states.length = 0;
     updates.length = 0;
@@ -178,10 +178,7 @@ describe("InMemoryChainDefinitionsService", () => {
 
   it("returns noop for builtin-equivalent custom upserts and rejects builtin conflicts", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const mainnet = createEip155Metadata(1, {
-      displayName: "Ethereum",
-      features: ["eip155", "wallet_switchEthereumChain"],
-    });
+    const mainnet = createEip155Metadata(1, { displayName: "Ethereum" });
     const chainDefinitions = new InMemoryChainDefinitionsService({
       messenger,
       port: new MemoryChainDefinitionsPort(),
@@ -193,7 +190,6 @@ describe("InMemoryChainDefinitionsService", () => {
 
     const equivalent = await chainDefinitions.upsertCustomChain({
       ...mainnet,
-      features: ["eip155"],
       rpcEndpoints: [{ url: "https://rpc-1.example/", type: "public" }],
     });
     expect(equivalent).toMatchObject({ kind: "noop", chain: { source: "builtin", chainRef: mainnet.chainRef } });

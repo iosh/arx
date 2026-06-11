@@ -26,7 +26,6 @@ export interface ChainDefinition {
   nativeCurrency: NativeCurrency;
   blockExplorers?: readonly ExplorerLink[] | undefined;
   icon?: ChainIcon | undefined;
-  tags?: readonly string[] | undefined;
 }
 
 export type ChainDefinitionSeed<TRpcEndpoint = unknown> = {
@@ -58,5 +57,4 @@ export const cloneChainDefinition = (definition: ChainDefinition): ChainDefiniti
         format: definition.icon.format,
       }
     : undefined,
-  tags: definition.tags ? [...definition.tags] : undefined,
 });

@@ -9,7 +9,6 @@ const baseDefinition: ChainDefinition = {
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   blockExplorers: [{ type: "default", url: "https://etherscan.io", title: "Etherscan" }],
   icon: { url: "https://assets.example.com/ethereum.svg", width: 64, height: 64, format: "svg" },
-  tags: ["mainnet", "production"],
 };
 
 describe("ChainDefinition", () => {
@@ -21,6 +20,5 @@ describe("ChainDefinition", () => {
     expect(clone.blockExplorers).not.toBe(baseDefinition.blockExplorers);
     expect(clone.blockExplorers?.[0]).not.toBe(baseDefinition.blockExplorers?.[0]);
     expect(clone.icon).not.toBe(baseDefinition.icon);
-    expect(clone.tags).not.toBe(baseDefinition.tags);
   });
 });

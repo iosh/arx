@@ -29,7 +29,6 @@ export const ALT_CHAIN = {
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" as const }],
-  features: ["eip155", "wallet_switchEthereumChain"],
 };
 
 export const ADD_CHAIN_PARAMS = {

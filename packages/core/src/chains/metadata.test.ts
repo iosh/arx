@@ -14,7 +14,6 @@ const baseEip155Metadata = {
   chainId: "0x1",
   displayName: "Ethereum Mainnet",
   shortName: "eth",
-  description: "Canonical Ethereum network",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcEndpoints: [
     { url: "https://mainnet.infura.io/v3/123..", type: "public" },
@@ -22,9 +21,6 @@ const baseEip155Metadata = {
   ],
   blockExplorers: [{ type: "default", url: "https://etherscan.io" }],
   icon: { url: "https://assets.example.com/icons/ethereum.svg", width: 64, height: 64, format: "svg" },
-  features: ["eip155", "wallet_switchEthereumChain"],
-  tags: ["mainnet", "production"],
-  extensions: { consensus: "pos" },
 };
 
 describe("metadata", () => {
@@ -165,7 +161,6 @@ describe("metadata", () => {
       chainId: "0X2105",
       displayName: "Base Mainnet",
       shortName: "base",
-      description: "User added chain",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       rpcEndpoints: [
         {
@@ -180,9 +175,6 @@ describe("metadata", () => {
         { type: "default", url: "https://www.base.org" },
       ],
       icon: { url: "https://assets.example.com/base.svg", format: "svg" },
-      features: ["eip155", "wallet_switchEthereumChain"],
-      tags: ["user-added"],
-      extensions: { source: "seed" },
     });
 
     const requested = validateChainMetadata({

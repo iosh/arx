@@ -10,7 +10,6 @@ const MAINNET: ChainMetadata = {
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcEndpoints: [{ url: "https://rpc.ethereum.example", type: "public" }],
-  features: ["eip155", "wallet_switchEthereumChain"],
 };
 
 const OPTIMISM: ChainMetadata = {
@@ -20,7 +19,6 @@ const OPTIMISM: ChainMetadata = {
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
-  features: ["eip155", "wallet_switchEthereumChain"],
 };
 
 const BASE: ChainMetadata = {
@@ -30,7 +28,6 @@ const BASE: ChainMetadata = {
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
-  features: ["eip155"],
 };
 
 const SOLANA: ChainMetadata = {

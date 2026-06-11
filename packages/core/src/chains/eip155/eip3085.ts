@@ -61,11 +61,6 @@ export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata =
     nativeCurrency: payload.nativeCurrency,
     rpcEndpoints: rpcUrls.map((url) => ({ url, type: "public" as const })),
     blockExplorers: explorers,
-    features: ["eip155"],
-    tags: ["user-added"],
-    extensions: {
-      source: "eip3085",
-    },
   };
 
   return validateChainMetadata(metadata);

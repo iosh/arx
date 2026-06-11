@@ -518,7 +518,6 @@ describe("eip155 handlers - core error paths", () => {
       chainId: "0X2105",
       displayName: "Base Mainnet",
       shortName: "base",
-      description: "User added chain",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       rpcEndpoints: [
         {
@@ -533,9 +532,6 @@ describe("eip155 handlers - core error paths", () => {
         { type: "default", url: "https://www.base.org" },
       ],
       icon: { url: "https://assets.example.com/base.svg", format: "svg" },
-      features: ["eip155", "wallet_switchEthereumChain"],
-      tags: ["user-added"],
-      extensions: { source: "seed" },
     };
 
     const runtime = createRuntime({
@@ -575,7 +571,6 @@ describe("eip155 handlers - core error paths", () => {
         metadata: {
           chainRef: existing.chainRef,
           displayName: existing.displayName,
-          features: ["eip155"],
         },
       });
     } finally {

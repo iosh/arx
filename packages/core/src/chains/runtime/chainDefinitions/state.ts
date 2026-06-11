@@ -9,8 +9,6 @@ import {
 } from "../../metadata.js";
 import type { ChainDefinitionsState } from "./types.js";
 
-const WALLET_METHOD_FEATURES = new Set(["wallet_addEthereumChain", "wallet_switchEthereumChain"]);
-
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
   if (
     previous.chainRef !== next.chainRef ||
@@ -56,14 +54,7 @@ export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, ne
 
 export const prepareChainMetadataForStorage = (metadata: ChainMetadata) => {
   const validatedMetadata = validateChainMetadata(metadata);
-  const storedMetadata = normalizeChainMetadata(validatedMetadata);
-  const retainedFeatures = storedMetadata.features?.filter((feature) => !WALLET_METHOD_FEATURES.has(feature));
-
-  return {
-    ...storedMetadata,
-    ...(retainedFeatures && retainedFeatures.length > 0 ? { features: retainedFeatures } : {}),
-    ...(retainedFeatures === undefined ? {} : retainedFeatures.length === 0 ? { features: undefined } : {}),
-  };
+  return normalizeChainMetadata(validatedMetadata);
 };
 
 export const parseEntity = (params: {

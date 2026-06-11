@@ -301,7 +301,6 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
     chainId: overrides.chainId ?? baseChainMetadata.chainId,
     displayName: overrides.displayName ?? baseChainMetadata.displayName,
     shortName: overrides.shortName ?? baseChainMetadata.shortName,
-    description: overrides.description ?? baseChainMetadata.description,
     nativeCurrency: overrides.nativeCurrency ?? clone(baseChainMetadata.nativeCurrency),
     rpcEndpoints: overrides.rpcEndpoints ?? [
       {
@@ -321,24 +320,6 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
     metadata.icon = overrides.icon;
   } else if (baseChainMetadata.icon) {
     metadata.icon = baseChainMetadata.icon;
-  }
-
-  if (overrides.features) {
-    metadata.features = overrides.features;
-  } else if (baseChainMetadata.features) {
-    metadata.features = baseChainMetadata.features;
-  }
-
-  if (overrides.tags) {
-    metadata.tags = overrides.tags;
-  } else if (baseChainMetadata.tags) {
-    metadata.tags = baseChainMetadata.tags;
-  }
-
-  if (overrides.extensions) {
-    metadata.extensions = { ...overrides.extensions };
-  } else if (baseChainMetadata.extensions) {
-    metadata.extensions = clone(baseChainMetadata.extensions);
   }
 
   return metadata;

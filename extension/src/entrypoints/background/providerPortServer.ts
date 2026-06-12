@@ -3,14 +3,14 @@ import { createLogger, extendLogger } from "@arx/core/logger";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS, type ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
-import { syncAllPortContexts, syncPortContext } from "./portContext";
-import { createProviderBindingRegistry, type ProviderBinding } from "./provider/bindingRegistry";
+import { syncPortContext } from "./portContext";
 import { createProviderDisconnectFinalizer } from "./provider/disconnectFinalizer";
 import { createProviderEventBroadcaster } from "./provider/eventBroadcaster";
 import { createProviderHandshakeCoordinator } from "./provider/handshakeCoordinator";
+import { createProviderPortConnections, type ProviderConnectionScope } from "./provider/providerPortConnections";
+import { createProviderPortSessions } from "./provider/providerPortSessions";
 import { createProviderRequestExecutor } from "./provider/requestExecutor";
-import { createProviderSessionRegistry } from "./provider/sessionRegistry";
-import type { ProviderBridgeSnapshot, ProviderSessionContext } from "./types";
+import type { ProviderSessionContext } from "./types";
 
 type ProviderPortServerDeps = {
   extensionOrigin: string;
@@ -22,30 +22,6 @@ export type ProviderPortServer = {
   handleConnect(port: Runtime.Port): void;
 };
 
-const sortEntries = (value: Record<string, string>) => {
-  return Object.entries(value).sort(([left], [right]) => left.localeCompare(right));
-};
-
-const areMetasEqual = (left: ProviderBridgeSnapshot["meta"], right: ProviderBridgeSnapshot["meta"]) => {
-  if (left.supportedChains.length !== right.supportedChains.length) {
-    return false;
-  }
-  if (left.supportedChains.some((chainRef, index) => chainRef !== right.supportedChains[index])) {
-    return false;
-  }
-
-  const leftEntries = sortEntries(left.activeChainByNamespace);
-  const rightEntries = sortEntries(right.activeChainByNamespace);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  return leftEntries.every(([namespace, chainRef], index) => {
-    const [otherNamespace, otherChainRef] = rightEntries[index] ?? [];
-    return namespace === otherNamespace && chainRef === otherChainRef;
-  });
-};
-
 export const createProviderPortServer = ({
   extensionOrigin,
   getOrInitProvider,
@@ -53,24 +29,22 @@ export const createProviderPortServer = ({
   const messageHandlers = new Map<Runtime.Port, (message: unknown) => void>();
   const disconnectHandlers = new Map<Runtime.Port, () => void>();
   const subscriptions: Array<() => void> = [];
-  const snapshotCache = new Map<string, ProviderBridgeSnapshot>();
 
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "providerPort");
 
   let provider: CoreProviderApi | null = null;
   let providerPromise: Promise<CoreProviderApi> | null = null;
-  let projectionQueue: Promise<void> = Promise.resolve();
   let started = false;
   let startTask: Promise<void> | null = null;
 
   const createPortId = () => globalThis.crypto.randomUUID();
-  const sessionRegistry = createProviderSessionRegistry({ createPortId });
-  const bindingRegistry = createProviderBindingRegistry();
+  const providerPortSessions = createProviderPortSessions({ createPortId });
+  const providerPortConnections = createProviderPortConnections();
   const portContextStore = {
-    readPortContext: (port: Runtime.Port) => sessionRegistry.readPortContext(port),
+    readPortContext: (port: Runtime.Port) => providerPortSessions.readPortContext(port),
     writePortContext: (port: Runtime.Port, context: ProviderSessionContext) =>
-      sessionRegistry.writePortContext(port, context),
+      providerPortSessions.writePortContext(port, context),
   };
 
   const getCachedProvider = () => provider;
@@ -132,65 +106,38 @@ export const createProviderPortServer = ({
     }
   };
 
-  const readProviderSnapshot = (namespace: string): ProviderBridgeSnapshot | null => {
-    const activeProvider = getCachedProvider();
-    if (!activeProvider) {
-      return null;
-    }
-
-    try {
-      return activeProvider.buildSnapshot(namespace);
-    } catch (error) {
-      portLog("failed to build provider snapshot", { error, namespace });
-      return null;
-    }
-  };
-
-  const findPortSnapshot = (port: Runtime.Port): ProviderBridgeSnapshot | null => {
-    const sessionContext = sessionRegistry.readSessionContext(port);
-    if (!sessionContext) {
-      return null;
-    }
-
-    return readProviderSnapshot(sessionContext.providerNamespace);
-  };
-
-  const syncPortContextsForPorts = (ports: Runtime.Port[]) => {
-    syncAllPortContexts(ports, findPortSnapshot, portContextStore, extensionOrigin);
-  };
-
-  const disconnectBinding = (binding: ProviderBinding) => {
+  const disconnectConnectionScope = (scope: ProviderConnectionScope) => {
     const activeProvider = getCachedProvider();
     if (!activeProvider) {
       return;
     }
 
     try {
-      activeProvider.disconnect(binding);
+      activeProvider.deactivateConnectionScope(scope);
     } catch (error) {
-      portLog("failed to disconnect provider binding", {
+      portLog("failed to disconnect provider connection scope", {
         error,
-        namespace: binding.namespace,
-        origin: binding.origin,
+        namespace: scope.namespace,
+        origin: scope.origin,
       });
     }
   };
 
-  const releaseBinding = (port: Runtime.Port) => {
-    const released = bindingRegistry.releasePort(port);
-    if (released?.bindingBecameInactive) {
-      disconnectBinding(released.binding);
+  const detachPortFromConnection = (port: Runtime.Port) => {
+    const released = providerPortConnections.detachPort(port);
+    if (released?.scopeBecameInactive) {
+      disconnectConnectionScope(released.scope);
     }
     return released;
   };
 
   const cancelRequestScopeForPort = async (port: Runtime.Port, sessionId: string, logReason: string) => {
-    const portId = sessionRegistry.readPortId(port);
+    const portId = providerPortSessions.readPortId(port);
     if (!portId) {
       return;
     }
 
-    const origin = sessionRegistry.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
+    const origin = providerPortSessions.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
 
     try {
       const activeProvider = await loadProvider();
@@ -206,30 +153,32 @@ export const createProviderPortServer = ({
   };
 
   const getConnectionStateForPort = async (port: Runtime.Port, namespace: string) => {
-    const origin = sessionRegistry.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
+    const origin = providerPortSessions.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
     const activeProvider = await loadProvider();
-    const mutation = bindingRegistry.bindPort(port, { origin, namespace });
+    const scope = { origin, namespace };
+    const change = providerPortConnections.attachPortToConnection(port, scope);
 
-    if (mutation.previousBinding?.bindingBecameInactive) {
-      disconnectBinding(mutation.previousBinding.binding);
+    if (change.previousScope?.scopeBecameInactive) {
+      disconnectConnectionScope(change.previousScope.scope);
     }
 
-    return mutation.bindingBecameActive
-      ? activeProvider.connect({ origin, namespace })
-      : activeProvider.getConnectionState({ origin, namespace });
+    const connectionState = change.scopeBecameActive
+      ? await activeProvider.activateConnectionScope(scope)
+      : activeProvider.getConnectionState(scope);
+    return connectionState;
   };
 
   const disconnectFinalizer = createProviderDisconnectFinalizer({
     extensionOrigin,
     getProvider: getCachedProvider,
-    getSessionIdForPort: (port) => sessionRegistry.readSessionId(port),
-    getSessionContext: (port) => sessionRegistry.readSessionContext(port),
-    getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
-    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
+    getSessionIdForPort: (port) => providerPortSessions.readSessionId(port),
+    getSessionContext: (port) => providerPortSessions.readSessionContext(port),
+    getPendingRequestMap: (port) => providerPortSessions.readPendingRequestMap(port),
+    clearPendingForPort: (port) => providerPortSessions.dropPendingRequests(port),
     detachPortListeners,
     postEnvelope,
-    releaseBinding,
-    removePortState: (port) => sessionRegistry.removePortState(port),
+    detachPortFromConnection,
+    removePortState: (port) => providerPortSessions.removePortState(port),
     cancelRequestScope: cancelRequestScopeForPort,
     portLog,
   });
@@ -243,29 +192,15 @@ export const createProviderPortServer = ({
   };
 
   const eventBroadcaster = createProviderEventBroadcaster({
-    getConnectedPorts: () => sessionRegistry.listConnectedPorts(),
-    getSessionIdForPort: (port) => sessionRegistry.readSessionId(port),
-    getPortsBoundToNamespaces: (namespaces) => bindingRegistry.listPortsBoundToNamespaces(namespaces),
-    findPortSnapshot,
-    syncPortContextsForPorts,
+    getConnectedPorts: () => providerPortSessions.listConnectedPorts(),
+    getSessionIdForPort: (port) => providerPortSessions.readSessionId(port),
+    getPortsForConnectionScopes: (scopes) => providerPortConnections.listPortsForConnectionScopes(scopes),
     postEnvelope,
     dropStalePort: disconnectFinalizer.dropStalePort,
-    getPermittedAccountsForPort: async (port) => {
-      const activeProvider = await loadProvider();
-      const sessionContext = sessionRegistry.readSessionContext(port);
-      if (!sessionContext) {
-        return [];
-      }
-
-      return activeProvider.getConnectionState({
-        origin: sessionContext.origin,
-        namespace: sessionContext.providerNamespace,
-      }).accounts;
-    },
   });
 
   const sendReply = (port: Runtime.Port, sessionId: string, id: string, payload: ProviderRpcResponse) => {
-    const activeSessionId = sessionRegistry.readSessionId(port);
+    const activeSessionId = providerPortSessions.readSessionId(port);
     if (!activeSessionId || activeSessionId !== sessionId) {
       return;
     }
@@ -286,22 +221,22 @@ export const createProviderPortServer = ({
   const requestExecutor = createProviderRequestExecutor({
     getProvider: loadProvider,
     getSessionContext: (port) => {
-      const sessionContext = sessionRegistry.readSessionContext(port);
+      const sessionContext = providerPortSessions.readSessionContext(port);
       if (!sessionContext) {
         throw new Error("Provider request reached executor before session context was established.");
       }
       return sessionContext;
     },
-    getOrCreatePortId: (port) => sessionRegistry.allocatePortId(port),
-    getPendingRequestMap: (port) => sessionRegistry.openPendingRequestMap(port),
-    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
+    getOrCreatePortId: (port) => providerPortSessions.allocatePortId(port),
+    getPendingRequestMap: (port) => providerPortSessions.openPendingRequestMap(port),
+    clearPendingForPort: (port) => providerPortSessions.dropPendingRequests(port),
     sendReply,
   });
 
   const handshakeCoordinator = createProviderHandshakeCoordinator({
-    getExpectedSessionId: (port) => sessionRegistry.readSessionId(port),
-    clearSessionId: (port) => sessionRegistry.clearSessionId(port),
-    writeSessionId: (port, sessionId) => sessionRegistry.writeSessionId(port, sessionId),
+    getExpectedSessionId: (port) => providerPortSessions.readSessionId(port),
+    clearSessionId: (port) => providerPortSessions.clearSessionId(port),
+    writeSessionId: (port, sessionId) => providerPortSessions.writeSessionId(port, sessionId),
     getProviderConnectionState: async (port, namespace) => {
       const connectionState = await getConnectionStateForPort(port, namespace);
       return {
@@ -314,92 +249,6 @@ export const createProviderPortServer = ({
     postEnvelopeOrDrop,
     dropStalePort: disconnectFinalizer.dropStalePort,
   });
-
-  const collectRelevantNamespaces = () => {
-    return new Set([...snapshotCache.keys(), ...bindingRegistry.listActiveNamespaces()]);
-  };
-
-  const reconcileActiveBindings = async (bindings = bindingRegistry.listActiveBindings()) => {
-    const activeProvider = await loadProvider();
-
-    for (const binding of bindings) {
-      try {
-        const connectionState = activeProvider.getConnectionState(binding);
-        if (connectionState.connected || connectionState.accounts.length === 0) {
-          continue;
-        }
-
-        activeProvider.connect(binding);
-      } catch (error) {
-        portLog("failed to reconcile active provider binding", {
-          error,
-          namespace: binding.namespace,
-          origin: binding.origin,
-        });
-      }
-    }
-  };
-
-  const enqueueProjection = (label: string, project: () => void | Promise<void>) => {
-    projectionQueue = projectionQueue
-      .then(async () => {
-        await project();
-      })
-      .catch((error) => {
-        portLog(`failed to project provider event: ${label}`, { error });
-      });
-
-    return projectionQueue;
-  };
-
-  const reconcileNamespaces = async (namespaces: Iterable<string>) => {
-    const chainChanged = new Set<string>();
-    const metaChanged = new Set<string>();
-    const disconnected = new Set<string>();
-
-    for (const namespace of namespaces) {
-      if (!namespace) {
-        continue;
-      }
-
-      const previous = snapshotCache.get(namespace) ?? null;
-      const next = readProviderSnapshot(namespace);
-      if (!next) {
-        if (previous) {
-          snapshotCache.delete(namespace);
-          disconnected.add(namespace);
-        }
-        continue;
-      }
-
-      snapshotCache.set(namespace, next);
-
-      if (
-        !previous ||
-        previous.chain.chainId !== next.chain.chainId ||
-        previous.chain.chainRef !== next.chain.chainRef
-      ) {
-        chainChanged.add(namespace);
-      }
-
-      if (!previous || !areMetasEqual(previous.meta, next.meta)) {
-        metaChanged.add(namespace);
-      }
-    }
-
-    if (chainChanged.size > 0) {
-      eventBroadcaster.broadcastChainChangedForNamespaces(chainChanged);
-      await eventBroadcaster.broadcastAccountsChangedForNamespaces(chainChanged);
-    }
-
-    if (metaChanged.size > 0) {
-      eventBroadcaster.broadcastMetaChangedForNamespaces(metaChanged);
-    }
-
-    if (disconnected.size > 0) {
-      disconnectFinalizer.broadcastDisconnectForPorts(bindingRegistry.listPortsBoundToNamespaces(disconnected));
-    }
-  };
 
   const clearSubscriptions = () => {
     const activeSubscriptions = [...subscriptions];
@@ -414,11 +263,6 @@ export const createProviderPortServer = ({
     }
   };
 
-  const resetDerivedState = () => {
-    snapshotCache.clear();
-    projectionQueue = Promise.resolve();
-  };
-
   const start = () => {
     if (started || startTask) {
       return;
@@ -428,74 +272,27 @@ export const createProviderPortServer = ({
       try {
         const activeProvider = await loadProvider();
 
-        const publishAccountsState = async (namespaces?: Iterable<string>) => {
-          if (namespaces) {
-            await eventBroadcaster.broadcastAccountsChangedForNamespaces(namespaces);
-            return;
-          }
-
-          await eventBroadcaster.broadcastAccountsChanged();
-        };
-
         subscriptions.push(
           activeProvider.subscribeSessionUnlocked((payload) => {
-            void enqueueProjection("session_unlocked", async () => {
-              await reconcileActiveBindings();
-              eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
-              await publishAccountsState();
-            });
+            eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
           }),
         );
 
         subscriptions.push(
           activeProvider.subscribeSessionLocked((payload) => {
-            void enqueueProjection("session_locked", async () => {
-              eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
-              await publishAccountsState();
-            });
+            eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
           }),
         );
 
         subscriptions.push(
-          activeProvider.subscribeNetworkStateChanged(() => {
-            void enqueueProjection("network_state_changed", async () => {
-              await reconcileActiveBindings();
-              await reconcileNamespaces(collectRelevantNamespaces());
-            });
-          }),
-        );
-
-        subscriptions.push(
-          activeProvider.subscribeNetworkSelectionChanged(() => {
-            void enqueueProjection("network_selection_changed", async () => {
-              await reconcileActiveBindings();
-              await reconcileNamespaces(collectRelevantNamespaces());
-            });
-          }),
-        );
-
-        subscriptions.push(
-          activeProvider.subscribeAccountsStateChanged(() => {
-            void enqueueProjection("accounts_state_changed", async () => {
-              await reconcileActiveBindings();
-              await publishAccountsState();
-            });
-          }),
-        );
-
-        subscriptions.push(
-          activeProvider.subscribePermissionsStateChanged(() => {
-            void enqueueProjection("permissions_state_changed", async () => {
-              await reconcileActiveBindings();
-              await publishAccountsState();
-            });
+          activeProvider.subscribeConnectionStateChanged((change) => {
+            eventBroadcaster.broadcastConnectionStateChange(change.scope, change.next, change.changed);
           }),
         );
 
         started = true;
       } catch (error) {
         clearSubscriptions();
-        resetDerivedState();
         portLog("failed to start provider port server", { error });
       } finally {
         startTask = null;
@@ -508,11 +305,13 @@ export const createProviderPortServer = ({
       return;
     }
 
+    start();
+
     const origin = getPortOrigin(port, extensionOrigin);
-    sessionRegistry.registerConnectedPort(port, {
+    providerPortSessions.registerConnectedPort(port, {
       origin,
     });
-    portLog("connect", { origin, portName: port.name, total: sessionRegistry.countConnectedPorts() });
+    portLog("connect", { origin, portName: port.name, total: providerPortSessions.countConnectedPorts() });
 
     const handleMessage = (message: unknown) => {
       const envelope = message as Envelope | undefined;
@@ -527,7 +326,7 @@ export const createProviderPortServer = ({
         }
 
         case "request": {
-          const expectedSessionId = sessionRegistry.readSessionId(port);
+          const expectedSessionId = providerPortSessions.readSessionId(port);
           if (!expectedSessionId) {
             disconnectFinalizer.dropStalePort(port, "request_without_handshake");
             return;
@@ -535,7 +334,7 @@ export const createProviderPortServer = ({
           if (envelope.sessionId !== expectedSessionId) {
             return;
           }
-          if (!sessionRegistry.readSessionContext(port)) {
+          if (!providerPortSessions.readSessionContext(port)) {
             disconnectFinalizer.dropStalePort(port, "request_without_session_context");
             return;
           }

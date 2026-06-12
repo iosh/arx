@@ -66,7 +66,6 @@ export const createProviderHandshakeCoordinator = ({
               chainRef: snapshot.chain.chainRef,
               accounts,
               isUnlocked: snapshot.isUnlocked,
-              meta: snapshot.meta,
             },
           },
         },

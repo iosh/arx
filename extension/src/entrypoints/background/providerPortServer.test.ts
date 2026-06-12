@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createProviderPortServer } from "./providerPortServer";
-import type { ProviderBridgeSnapshot } from "./types";
+import type { ProviderBridgeConnectionState, ProviderBridgeSnapshot } from "./types";
 
 vi.mock("./origin", () => ({
   getPortOrigin: vi.fn(),
@@ -13,6 +13,11 @@ vi.mock("./origin", () => ({
 
 type Listener = (message: unknown) => void;
 type ProviderLifecyclePayload = { reason?: string };
+type ProviderConnectionStateChange = Parameters<WalletProvider["subscribeConnectionStateChanged"]>[0] extends (
+  change: infer T,
+) => void
+  ? T
+  : never;
 
 class FakePort {
   name = CHANNEL;
@@ -58,17 +63,7 @@ const makeSnapshot = (
     ...(overrides?.chain ?? {}),
   },
   isUnlocked,
-  meta: {
-    activeChainByNamespace: {
-      [namespace]: namespace === "conflux" ? "conflux:1029" : `${namespace}:1`,
-    },
-    supportedChains: [namespace === "conflux" ? "conflux:1029" : `${namespace}:1`],
-    ...(overrides?.meta ?? {}),
-  },
 });
-
-const buildBindingKey = (input: { origin: string; namespace: string }) =>
-  JSON.stringify([input.origin, input.namespace]);
 
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
   port.triggerMessage({
@@ -78,6 +73,9 @@ const handshake = (port: FakePort, sessionId: string, namespace: string) => {
     payload: { handshakeId: `h-${sessionId}`, namespace },
   });
 };
+
+const buildTestConnectionScopeKey = ({ origin, namespace }: { origin: string; namespace: string }) =>
+  `${origin}\n${namespace}`;
 
 const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
@@ -89,16 +87,17 @@ const createServerHarness = (options?: {
 }) => {
   const sessionUnlockedHandlers = new Set<(payload: ProviderLifecyclePayload) => void>();
   const sessionLockedHandlers = new Set<(payload: ProviderLifecyclePayload) => void>();
-  const networkStateHandlers = new Set<() => void>();
-  const networkSelectionHandlers = new Set<() => void>();
-  const accountsStateHandlers = new Set<() => void>();
-  const permissionsStateHandlers = new Set<() => void>();
+  const connectionStateChangedHandlers = new Set<(change: ProviderConnectionStateChange) => void>();
 
-  const snapshots = options?.snapshots ?? {
+  const snapshots = new Map<string, ProviderBridgeSnapshot>();
+  const seedSnapshots = options?.snapshots ?? {
     eip155: makeSnapshot("eip155", true),
     conflux: makeSnapshot("conflux", true),
   };
-  const activeBindings = new Set<string>();
+  for (const [namespace, snapshot] of Object.entries(seedSnapshots)) {
+    snapshots.set(namespace, snapshot);
+  }
+  const activeConnectionScopes = new Set<string>();
   let shouldFailFirstProviderBootstrap = options?.failFirstProviderBootstrap ?? false;
 
   const resolveAccounts =
@@ -107,7 +106,7 @@ const createServerHarness = (options?: {
       chainRef === "conflux:1029" ? ["cfx:aatest"] : ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"]);
 
   const buildConnectionState = (input: { origin: string; namespace: string }) => {
-    const snapshot = snapshots[input.namespace];
+    const snapshot = snapshots.get(buildTestConnectionScopeKey(input)) ?? snapshots.get(input.namespace);
     if (!snapshot) {
       throw new Error(`Missing snapshot for ${input.namespace}`);
     }
@@ -123,35 +122,34 @@ const createServerHarness = (options?: {
     return {
       snapshot,
       accounts,
-      connected: activeBindings.has(buildBindingKey(input)) && accounts.length > 0,
+      connected: activeConnectionScopes.has(buildTestConnectionScopeKey(input)) && accounts.length > 0,
+    };
+  };
+  const buildProviderConnectionState = (input: {
+    origin: string;
+    namespace: string;
+  }): ProviderBridgeConnectionState => {
+    const state = buildConnectionState(input);
+    return {
+      snapshot: state.snapshot,
+      accounts: state.accounts,
     };
   };
 
-  const buildSnapshot = vi.fn((namespace: string) => {
-    const snapshot = snapshots[namespace];
+  const buildSnapshot = vi.fn((input: { origin: string; namespace: string }) => {
+    const snapshot = snapshots.get(buildTestConnectionScopeKey(input)) ?? snapshots.get(input.namespace);
     if (!snapshot) {
-      throw new Error(`Missing snapshot for ${namespace}`);
+      throw new Error(`Missing snapshot for ${input.namespace}`);
     }
     return snapshot;
   });
   const getConnectionState = vi.fn((input: { origin: string; namespace: string }) => buildConnectionState(input));
-  const connect = vi.fn((input: { origin: string; namespace: string }) => {
-    const connectionState = buildConnectionState(input);
-    if (connectionState.accounts.length > 0) {
-      activeBindings.add(buildBindingKey(input));
-    }
-    return buildConnectionState(input);
+  const activateConnectionScope = vi.fn(async (input: { origin: string; namespace: string }) => {
+    activeConnectionScopes.add(buildTestConnectionScopeKey(input));
+    return buildProviderConnectionState(input);
   });
-  const disconnect = vi.fn((input: { origin: string; namespace: string }) => {
-    activeBindings.delete(buildBindingKey(input));
-    return buildConnectionState(input);
-  });
-  const disconnectOrigin = vi.fn((origin: string) => {
-    const keys = [...activeBindings].filter((key) => JSON.parse(key)[0] === origin);
-    for (const key of keys) {
-      activeBindings.delete(key);
-    }
-    return keys.length;
+  const deactivateConnectionScope = vi.fn((input: { origin: string; namespace: string }) => {
+    activeConnectionScopes.delete(buildTestConnectionScopeKey(input));
   });
   const executeRpcRequest = vi.fn(
     options?.executeRpcRequest ??
@@ -178,11 +176,14 @@ const createServerHarness = (options?: {
   const provider: WalletProvider = {
     buildSnapshot,
     getConnectionState,
+    activateConnectionScope,
+    deactivateConnectionScope,
+    subscribeConnectionStateChanged: (listener) => {
+      connectionStateChangedHandlers.add(listener);
+      return () => connectionStateChangedHandlers.delete(listener);
+    },
     executeRpcRequest,
     encodeRuntimeRpcError,
-    connect,
-    disconnect,
-    disconnectOrigin,
     cancelRequestScope,
     subscribeSessionUnlocked: (listener) => {
       sessionUnlockedHandlers.add(listener as (payload: ProviderLifecyclePayload) => void);
@@ -191,23 +192,6 @@ const createServerHarness = (options?: {
     subscribeSessionLocked: (listener) => {
       sessionLockedHandlers.add(listener as (payload: ProviderLifecyclePayload) => void);
       return () => sessionLockedHandlers.delete(listener as (payload: ProviderLifecyclePayload) => void);
-    },
-    subscribeNetworkStateChanged: (listener) => {
-      networkStateHandlers.add(listener);
-      return () => networkStateHandlers.delete(listener);
-    },
-    subscribeNetworkSelectionChanged: (listener) => {
-      const nextListener = () => listener();
-      networkSelectionHandlers.add(nextListener);
-      return () => networkSelectionHandlers.delete(nextListener);
-    },
-    subscribeAccountsStateChanged: (listener) => {
-      accountsStateHandlers.add(listener);
-      return () => accountsStateHandlers.delete(listener);
-    },
-    subscribePermissionsStateChanged: (listener) => {
-      permissionsStateHandlers.add(listener);
-      return () => permissionsStateHandlers.delete(listener);
     },
   };
 
@@ -231,31 +215,22 @@ const createServerHarness = (options?: {
     mocks: {
       buildSnapshot,
       getConnectionState,
-      connect,
-      disconnect,
-      disconnectOrigin,
+      activateConnectionScope,
+      deactivateConnectionScope,
       executeRpcRequest,
       encodeRuntimeRpcError,
       cancelRequestScope,
     },
-    setSnapshot(namespace: string, snapshot: ProviderBridgeSnapshot) {
-      snapshots[namespace] = snapshot;
+    setSnapshot(namespaceOrScope: string | { origin: string; namespace: string }, snapshot: ProviderBridgeSnapshot) {
+      const key =
+        typeof namespaceOrScope === "string" ? namespaceOrScope : buildTestConnectionScopeKey(namespaceOrScope);
+      snapshots.set(key, snapshot);
     },
-    getSubscriptionCount(topic: "network" | "sessionLocked") {
-      if (topic === "network") {
-        return networkStateHandlers.size;
+    getSubscriptionCount(topic: "connectionState" | "sessionLocked") {
+      if (topic === "connectionState") {
+        return connectionStateChangedHandlers.size;
       }
       return sessionLockedHandlers.size;
-    },
-    emitNetworkStateChanged() {
-      for (const listener of networkStateHandlers) {
-        listener();
-      }
-    },
-    emitNetworkSelectionChanged() {
-      for (const listener of networkSelectionHandlers) {
-        listener();
-      }
     },
     emitSessionUnlocked(payload: ProviderLifecyclePayload) {
       for (const listener of sessionUnlockedHandlers) {
@@ -267,16 +242,13 @@ const createServerHarness = (options?: {
         listener(payload);
       }
     },
-    emitAccountsStateChanged() {
-      for (const listener of accountsStateHandlers) {
-        listener();
+    emitConnectionStateChanged(change: ProviderConnectionStateChange) {
+      for (const listener of connectionStateChangedHandlers) {
+        listener(change);
       }
     },
-    emitPermissionsStateChanged() {
-      for (const listener of permissionsStateHandlers) {
-        listener();
-      }
-    },
+    buildConnectionState,
+    buildProviderConnectionState,
   };
 };
 
@@ -289,7 +261,7 @@ describe("providerPortServer", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends handshake_ack with empty accounts when locked and drives the provider boundary", async () => {
+  it("sends handshake_ack with empty accounts when locked and activates the provider connection scope", async () => {
     const lockedSnapshot = makeSnapshot("eip155", false);
     const harness = createServerHarness({
       snapshots: { eip155: lockedSnapshot },
@@ -302,7 +274,7 @@ describe("providerPortServer", () => {
     handshake(port, "session-1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    expect(harness.mocks.connect).toHaveBeenCalledWith({
+    expect(harness.mocks.activateConnectionScope).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });
@@ -317,14 +289,13 @@ describe("providerPortServer", () => {
             chainId: "0x1",
             chainRef: "eip155:1",
             isUnlocked: false,
-            meta: lockedSnapshot.meta,
           },
         }),
       }),
     );
   });
 
-  it("keeps one live binding for multiple sessions on the same origin and namespace", async () => {
+  it("keeps one live connection scope for multiple sessions on the same origin and namespace", async () => {
     const harness = createServerHarness();
     const firstPort = new FakePort();
     const secondPort = new FakePort();
@@ -338,24 +309,23 @@ describe("providerPortServer", () => {
     handshake(secondPort, "session-2", "eip155");
     await vi.waitFor(() => expect(secondPort.postMessage).toHaveBeenCalledTimes(1));
 
-    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
+    expect(harness.mocks.activateConnectionScope).toHaveBeenCalledTimes(1);
     expect(harness.mocks.getConnectionState).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });
 
     firstPort.triggerDisconnect();
-    expect(harness.mocks.disconnect).not.toHaveBeenCalled();
+    expect(harness.mocks.deactivateConnectionScope).not.toHaveBeenCalled();
 
     secondPort.triggerDisconnect();
-    expect(harness.mocks.disconnect).toHaveBeenCalledTimes(1);
-    expect(harness.mocks.disconnect).toHaveBeenCalledWith({
+    expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });
   });
 
-  it("rejects pending requests on same-binding session rotation without disconnect or reconnect churn", async () => {
+  it("rejects pending requests on same-scope session rotation without disconnect or reconnect churn", async () => {
     let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
       throw new Error("executeRpcRequest resolver not initialized");
     };
@@ -410,8 +380,8 @@ describe("providerPortServer", () => {
       ),
     );
 
-    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
-    expect(harness.mocks.disconnect).not.toHaveBeenCalled();
+    expect(harness.mocks.activateConnectionScope).toHaveBeenCalledTimes(1);
+    expect(harness.mocks.deactivateConnectionScope).not.toHaveBeenCalled();
 
     const postMessageCallCount = port.postMessage.mock.calls.length;
     resolveRequest({
@@ -423,7 +393,7 @@ describe("providerPortServer", () => {
     expect(port.postMessage).toHaveBeenCalledTimes(postMessageCallCount);
   });
 
-  it("forwards provider-bound requests with the bound rpc context", async () => {
+  it("forwards provider requests with the session rpc context", async () => {
     const harness = createServerHarness();
     const port = new FakePort();
 
@@ -517,7 +487,7 @@ describe("providerPortServer", () => {
         }),
       ),
     );
-    expect(harness.mocks.disconnect).toHaveBeenCalledWith({
+    expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });
@@ -547,10 +517,6 @@ describe("providerPortServer", () => {
         eip155: makeSnapshot("eip155", true),
         conflux: makeSnapshot("conflux", true, {
           chain: { chainId: "0x405", chainRef: "conflux:1029" },
-          meta: {
-            activeChainByNamespace: { conflux: "conflux:1029" },
-            supportedChains: ["conflux:1029", "conflux:1030"],
-          },
         }),
       },
     });
@@ -558,7 +524,7 @@ describe("providerPortServer", () => {
     const confluxPort = new FakePort();
 
     harness.server.start();
-    await vi.waitFor(() => expect(harness.getSubscriptionCount("network")).toBe(1));
+    await vi.waitFor(() => expect(harness.getSubscriptionCount("connectionState")).toBe(1));
 
     harness.server.handleConnect(evmPort as unknown as Runtime.Port);
     harness.server.handleConnect(confluxPort as unknown as Runtime.Port);
@@ -567,24 +533,23 @@ describe("providerPortServer", () => {
     await vi.waitFor(() => expect(evmPort.postMessage).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(confluxPort.postMessage).toHaveBeenCalledTimes(1));
 
-    harness.emitNetworkStateChanged();
-    await vi.waitFor(() => expect(confluxPort.postMessage.mock.calls.length).toBeGreaterThan(1));
-
     evmPort.postMessage.mockClear();
     confluxPort.postMessage.mockClear();
 
-    harness.setSnapshot(
-      "conflux",
-      makeSnapshot("conflux", true, {
-        chain: { chainId: "0x406", chainRef: "conflux:1030" },
-        meta: {
-          activeChainByNamespace: { conflux: "conflux:1030" },
-          supportedChains: ["conflux:1029", "conflux:1030"],
-        },
-      }),
-    );
+    const scope = { origin: "https://example.com", namespace: "conflux" };
+    const previous = harness.buildProviderConnectionState(scope);
+    const nextSnapshot = makeSnapshot("conflux", true, {
+      chain: { chainId: "0x406", chainRef: "conflux:1030" },
+    });
+    harness.setSnapshot("conflux", nextSnapshot);
+    const next = harness.buildProviderConnectionState(scope);
 
-    harness.emitNetworkStateChanged();
+    harness.emitConnectionStateChanged({
+      scope,
+      previous,
+      next,
+      changed: { chain: true, accounts: true },
+    });
 
     await vi.waitFor(() =>
       expect(confluxPort.postMessage).toHaveBeenCalledWith(
@@ -613,117 +578,85 @@ describe("providerPortServer", () => {
     expect(evmPort.postMessage).not.toHaveBeenCalled();
   });
 
-  it("reconciles an active binding on session unlock without requiring another handshake", async () => {
+  it("projects provider-chain changes only to ports connected to the changed origin and namespace", async () => {
+    const firstOrigin = "https://first.example";
+    const secondOrigin = "https://second.example";
     const harness = createServerHarness({
-      snapshots: {
-        eip155: makeSnapshot("eip155", false),
+      resolveAccounts: ({ origin, chainRef }) => {
+        if (origin === firstOrigin && chainRef === "eip155:10") {
+          return ["0xfirstAlt"];
+        }
+        if (origin === firstOrigin) {
+          return ["0xfirstMain"];
+        }
+        return ["0xsecondMain"];
       },
-    });
-    const port = new FakePort();
-
-    harness.server.start();
-    harness.server.handleConnect(port as unknown as Runtime.Port);
-    handshake(port, "session-1", "eip155");
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-
-    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
-    harness.mocks.connect.mockClear();
-
-    harness.setSnapshot("eip155", makeSnapshot("eip155", true));
-    harness.emitSessionUnlocked({ reason: "manual" });
-
-    await vi.waitFor(() =>
-      expect(harness.mocks.connect).toHaveBeenCalledWith({
-        origin: "https://example.com",
-        namespace: "eip155",
-      }),
-    );
-    expect(port.disconnect).not.toHaveBeenCalled();
-  });
-
-  it("reconciles active bindings after permissions restore without requiring another handshake", async () => {
-    let canExposeAccounts = false;
-    const harness = createServerHarness({
-      resolveAccounts: () => (canExposeAccounts ? ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"] : []),
       snapshots: {
         eip155: makeSnapshot("eip155", true),
       },
     });
-    const port = new FakePort();
+    const firstPort = new FakePort();
+    const secondPort = new FakePort();
+
+    vi.mocked(getPortOrigin).mockImplementation((port) => {
+      if (port === (firstPort as unknown as Runtime.Port)) return firstOrigin;
+      if (port === (secondPort as unknown as Runtime.Port)) return secondOrigin;
+      return "https://example.com";
+    });
 
     harness.server.start();
-    harness.server.handleConnect(port as unknown as Runtime.Port);
-    handshake(port, "session-1", "eip155");
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.getSubscriptionCount("connectionState")).toBe(1));
 
-    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
-    harness.mocks.connect.mockClear();
+    harness.server.handleConnect(firstPort as unknown as Runtime.Port);
+    harness.server.handleConnect(secondPort as unknown as Runtime.Port);
+    handshake(firstPort, "session-first", "eip155");
+    handshake(secondPort, "session-second", "eip155");
+    await vi.waitFor(() => expect(firstPort.postMessage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(secondPort.postMessage).toHaveBeenCalledTimes(1));
 
-    canExposeAccounts = true;
-    harness.emitPermissionsStateChanged();
+    firstPort.postMessage.mockClear();
+    secondPort.postMessage.mockClear();
+
+    const scope = { origin: firstOrigin, namespace: "eip155" };
+    const previous = harness.buildProviderConnectionState(scope);
+    const nextSnapshot = makeSnapshot("eip155", true, {
+      chain: { chainId: "0xa", chainRef: "eip155:10" },
+    });
+    harness.setSnapshot(scope, nextSnapshot);
+    const next = harness.buildProviderConnectionState(scope);
+
+    harness.emitConnectionStateChanged({
+      scope,
+      previous,
+      next,
+      changed: { chain: true, accounts: true },
+    });
 
     await vi.waitFor(() =>
-      expect(harness.mocks.connect).toHaveBeenCalledWith({
-        origin: "https://example.com",
-        namespace: "eip155",
-      }),
-    );
-    await vi.waitFor(() =>
-      expect(port.postMessage).toHaveBeenCalledWith(
+      expect(firstPort.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "event",
           payload: {
-            event: "accountsChanged",
-            params: [["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"]],
+            event: "chainChanged",
+            params: [
+              expect.objectContaining({
+                chainId: "0xa",
+                chainRef: "eip155:10",
+              }),
+            ],
           },
         }),
       ),
     );
-  });
-
-  it("reconciles active bindings after the selected provider chain becomes authorized again", async () => {
-    const harness = createServerHarness({
-      resolveAccounts: ({ chainRef }) => (chainRef === "eip155:10" ? ["0xbbb"] : []),
-      snapshots: {
-        eip155: makeSnapshot("eip155", true),
-      },
-    });
-    const port = new FakePort();
-
-    harness.server.start();
-    harness.server.handleConnect(port as unknown as Runtime.Port);
-    handshake(port, "session-1", "eip155");
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-
-    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
-    harness.mocks.connect.mockClear();
-
-    harness.setSnapshot(
-      "eip155",
-      makeSnapshot("eip155", true, {
-        chain: { chainId: "0xa", chainRef: "eip155:10" },
-        meta: {
-          activeChainByNamespace: { eip155: "eip155:10" },
-          supportedChains: ["eip155:1", "eip155:10"],
-        },
-      }),
-    );
-    harness.emitNetworkSelectionChanged();
-
     await vi.waitFor(() =>
-      expect(harness.mocks.connect).toHaveBeenCalledWith({
-        origin: "https://example.com",
-        namespace: "eip155",
-      }),
-    );
-    await vi.waitFor(() =>
-      expect(port.postMessage).toHaveBeenCalledWith(
+      expect(firstPort.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "event",
-          payload: { event: "accountsChanged", params: [["0xbbb"]] },
+          payload: { event: "accountsChanged", params: [["0xfirstAlt"]] },
         }),
       ),
     );
+    expect(secondPort.postMessage).not.toHaveBeenCalled();
   });
 
   it("keeps the provider session alive while projecting lock state", async () => {
@@ -742,8 +675,17 @@ describe("providerPortServer", () => {
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
 
     port.postMessage.mockClear();
+    const scope = { origin: "https://example.com", namespace: "eip155" };
+    const previous = harness.buildProviderConnectionState(scope);
     harness.setSnapshot("eip155", makeSnapshot("eip155", false));
+    const next = harness.buildProviderConnectionState(scope);
     harness.emitSessionLocked({ reason: "manual" });
+    harness.emitConnectionStateChanged({
+      scope,
+      previous,
+      next,
+      changed: { chain: false, accounts: true },
+    });
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
     expect(port.postMessage).toHaveBeenNthCalledWith(
@@ -760,7 +702,7 @@ describe("providerPortServer", () => {
         payload: { event: "accountsChanged", params: [[]] },
       }),
     );
-    expect(harness.mocks.disconnect).not.toHaveBeenCalled();
+    expect(harness.mocks.deactivateConnectionScope).not.toHaveBeenCalled();
     expect(port.disconnect).not.toHaveBeenCalled();
 
     port.triggerMessage({
@@ -776,51 +718,5 @@ describe("providerPortServer", () => {
     });
 
     await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
-  });
-
-  it("does not forward a stale chainRef after the active chain changes", async () => {
-    const harness = createServerHarness({
-      snapshots: {
-        eip155: makeSnapshot("eip155", true),
-      },
-    });
-    const port = new FakePort();
-
-    harness.server.handleConnect(port as unknown as Runtime.Port);
-    handshake(port, "session-1", "eip155");
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-
-    harness.setSnapshot(
-      "eip155",
-      makeSnapshot("eip155", true, {
-        chain: { chainId: "0xa", chainRef: "eip155:10" },
-        meta: {
-          activeChainByNamespace: { eip155: "eip155:10" },
-          supportedChains: ["eip155:1", "eip155:10"],
-        },
-      }),
-    );
-
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "session-1",
-      type: "request",
-      id: "transport-1",
-      payload: {
-        id: "rpc-1",
-        jsonrpc: "2.0",
-        method: "wallet_requestPermissions",
-      },
-    });
-
-    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
-    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as Parameters<
-      WalletProvider["executeRpcRequest"]
-    >[0];
-
-    expect(request.context).toMatchObject({
-      providerNamespace: "eip155",
-    });
-    expect(request.context).not.toHaveProperty("chainRef");
   });
 });

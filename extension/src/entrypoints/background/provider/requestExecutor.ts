@@ -47,7 +47,6 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       jsonrpc: envelope.payload.jsonrpc,
       method: envelope.payload.method,
       params: envelope.payload.params as JsonRpcParams,
-      origin,
       context: providerContext,
       execution,
     };

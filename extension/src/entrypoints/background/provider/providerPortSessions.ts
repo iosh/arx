@@ -2,64 +2,45 @@ import type { Runtime } from "webextension-polyfill";
 import type { ConnectedPortContext, PortContext, ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
-type ProviderSessionRegistryDeps = {
+type ProviderPortSessionsDeps = {
   createPortId: () => string;
 };
 
-export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionRegistryDeps) => {
-  const connections = new Set<Runtime.Port>();
-  const pendingRequests = new Map<Runtime.Port, Map<string, PendingEntry>>();
-  const portContexts = new Map<Runtime.Port, PortContext>();
+export const createProviderPortSessions = ({ createPortId }: ProviderPortSessionsDeps) => {
+  const connectedPorts = new Set<Runtime.Port>();
+  const pendingRequestsByPort = new Map<Runtime.Port, Map<string, PendingEntry>>();
+  const contextByPort = new Map<Runtime.Port, PortContext>();
   const sessionByPort = new Map<Runtime.Port, string>();
   const portIdByPort = new Map<Runtime.Port, string>();
 
   const registerConnectedPort = (port: Runtime.Port, initialContext: ConnectedPortContext) => {
-    connections.add(port);
+    connectedPorts.add(port);
     if (!portIdByPort.has(port)) {
       portIdByPort.set(port, createPortId());
     }
-    if (!portContexts.has(port)) {
-      portContexts.set(port, initialContext);
+    if (!contextByPort.has(port)) {
+      contextByPort.set(port, initialContext);
     }
   };
 
   const countConnectedPorts = () => {
-    return connections.size;
+    return connectedPorts.size;
   };
 
   const listConnectedPorts = () => {
-    return [...connections];
-  };
-
-  const listConnectedNamespaces = () => {
-    const namespaces = new Set<string>();
-    for (const portContext of portContexts.values()) {
-      if ("providerNamespace" in portContext) {
-        namespaces.add(portContext.providerNamespace);
-      }
-    }
-    return [...namespaces];
-  };
-
-  const listPortsBoundToNamespaces = (namespaces: Iterable<string>) => {
-    const allowed = new Set(namespaces);
-    return listConnectedPorts().filter((port) => {
-      const portContext = portContexts.get(port);
-      const namespace = portContext && "providerNamespace" in portContext ? portContext.providerNamespace : null;
-      return typeof namespace === "string" && allowed.has(namespace);
-    });
+    return [...connectedPorts];
   };
 
   const readPortContext = (port: Runtime.Port) => {
-    return portContexts.get(port);
+    return contextByPort.get(port);
   };
 
   const writePortContext = (port: Runtime.Port, context: ProviderSessionContext) => {
-    portContexts.set(port, context);
+    contextByPort.set(port, context);
   };
 
   const readSessionContext = (port: Runtime.Port): ProviderSessionContext | null => {
-    const portContext = portContexts.get(port);
+    const portContext = contextByPort.get(port);
     return portContext && "providerNamespace" in portContext ? portContext : null;
   };
 
@@ -89,26 +70,26 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
   };
 
   const openPendingRequestMap = (port: Runtime.Port) => {
-    let requestMap = pendingRequests.get(port);
+    let requestMap = pendingRequestsByPort.get(port);
     if (!requestMap) {
       requestMap = new Map();
-      pendingRequests.set(port, requestMap);
+      pendingRequestsByPort.set(port, requestMap);
     }
     return requestMap;
   };
 
   const readPendingRequestMap = (port: Runtime.Port) => {
-    return pendingRequests.get(port);
+    return pendingRequestsByPort.get(port);
   };
 
   const dropPendingRequests = (port: Runtime.Port) => {
-    pendingRequests.delete(port);
+    pendingRequestsByPort.delete(port);
   };
 
   const removePortState = (port: Runtime.Port) => {
-    connections.delete(port);
-    pendingRequests.delete(port);
-    portContexts.delete(port);
+    connectedPorts.delete(port);
+    pendingRequestsByPort.delete(port);
+    contextByPort.delete(port);
     sessionByPort.delete(port);
     portIdByPort.delete(port);
   };
@@ -117,8 +98,6 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     registerConnectedPort,
     countConnectedPorts,
     listConnectedPorts,
-    listConnectedNamespaces,
-    listPortsBoundToNamespaces,
     readPortContext,
     readSessionContext,
     writePortContext,

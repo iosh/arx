@@ -4,7 +4,7 @@ import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol"
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
 import type { ProviderSessionContext } from "../types";
-import type { ProviderBinding } from "./bindingRegistry";
+import type { ProviderConnectionScope } from "./providerPortConnections";
 import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
@@ -16,7 +16,10 @@ type ProviderDisconnectFinalizerDeps = {
   clearPendingForPort: (port: Runtime.Port) => void;
   detachPortListeners: (port: Runtime.Port) => void;
   postEnvelope: (port: Runtime.Port, envelope: Envelope) => boolean;
-  releaseBinding: (port: Runtime.Port) => { binding: ProviderBinding; bindingBecameInactive: boolean } | null;
+  detachPortFromConnection: (port: Runtime.Port) => {
+    scope: ProviderConnectionScope;
+    scopeBecameInactive: boolean;
+  } | null;
   removePortState: (port: Runtime.Port) => void;
   cancelRequestScope: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
   portLog: (message: string, details?: Record<string, unknown>) => void;
@@ -32,7 +35,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     clearPendingForPort,
     detachPortListeners,
     postEnvelope,
-    releaseBinding,
+    detachPortFromConnection,
     removePortState,
     cancelRequestScope,
     portLog,
@@ -98,7 +101,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   };
 
   const cleanupPortState = (port: Runtime.Port) => {
-    releaseBinding(port);
+    detachPortFromConnection(port);
     removePortState(port);
     detachPortListeners(port);
   };

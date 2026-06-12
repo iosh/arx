@@ -1,75 +1,49 @@
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
-import type { ProviderBridgeSnapshot } from "../types";
+import type { ProviderBridgeConnectionState, ProviderBridgeSnapshot } from "../types";
+import type { ProviderConnectionScope } from "./providerPortConnections";
 
 type ProviderEventBroadcasterDeps = {
   getConnectedPorts: () => Runtime.Port[];
   getSessionIdForPort: (port: Runtime.Port) => string | null;
-  getPortsBoundToNamespaces: (namespaces: Iterable<string>) => Runtime.Port[];
-  findPortSnapshot: (port: Runtime.Port) => ProviderBridgeSnapshot | null;
-  syncPortContextsForPorts: (ports: Runtime.Port[]) => void;
+  getPortsForConnectionScopes: (scopes: Iterable<ProviderConnectionScope>) => Runtime.Port[];
   postEnvelope: (port: Runtime.Port, envelope: Envelope) => boolean;
   dropStalePort: (port: Runtime.Port, reason: string, error?: unknown) => void;
-  getPermittedAccountsForPort: (port: Runtime.Port, snapshot: ProviderBridgeSnapshot) => Promise<string[]>;
+};
+
+type ProviderConnectionChangedFields = {
+  chain: boolean;
+  accounts: boolean;
 };
 
 export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDeps) => {
-  const {
-    getConnectedPorts,
-    getSessionIdForPort,
-    getPortsBoundToNamespaces,
-    findPortSnapshot,
-    syncPortContextsForPorts,
-    postEnvelope,
-    dropStalePort,
-    getPermittedAccountsForPort,
-  } = deps;
+  const { getConnectedPorts, getSessionIdForPort, getPortsForConnectionScopes, postEnvelope, dropStalePort } = deps;
 
-  type ActivePortProjection = {
+  type ActivePortSession = {
     port: Runtime.Port;
     sessionId: string;
-    snapshot: ProviderBridgeSnapshot;
   };
 
-  const resolveActivePortProjections = (
-    ports: Runtime.Port[],
-    missingSnapshotReason: string,
-  ): ActivePortProjection[] => {
-    syncPortContextsForPorts(ports);
+  const readActivePortSessions = (ports: Runtime.Port[]): ActivePortSession[] => {
+    const activeSessions: ActivePortSession[] = [];
 
+    for (const port of ports) {
+      const sessionId = getSessionIdForPort(port);
+      if (!sessionId) continue;
+      activeSessions.push({ port, sessionId });
+    }
+
+    return activeSessions;
+  };
+
+  const broadcastToPorts = (ports: Runtime.Port[], buildEnvelope: (sessionId: string) => Envelope, reason: string) => {
     const stalePorts: Runtime.Port[] = [];
-    const projections: ActivePortProjection[] = [];
 
     for (const port of ports) {
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) continue;
 
-      const snapshot = findPortSnapshot(port);
-      if (!snapshot) {
-        stalePorts.push(port);
-        continue;
-      }
-
-      projections.push({ port, sessionId, snapshot });
-    }
-
-    for (const port of stalePorts) {
-      dropStalePort(port, missingSnapshotReason);
-    }
-
-    return projections;
-  };
-
-  const broadcastSafe = (
-    shouldInclude: (port: Runtime.Port) => boolean,
-    send: (port: Runtime.Port) => boolean,
-    reason: string,
-  ) => {
-    const stalePorts: Runtime.Port[] = [];
-
-    for (const port of getConnectedPorts()) {
-      if (!shouldInclude(port)) continue;
-      if (!send(port)) {
+      if (!postEnvelope(port, buildEnvelope(sessionId))) {
         stalePorts.push(port);
       }
     }
@@ -79,116 +53,87 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
     }
   };
 
-  const broadcastMetaChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPortSet = new Set(getPortsBoundToNamespaces(namespaces));
+  const buildChainChangedParams = (snapshot: ProviderBridgeSnapshot) => [
+    {
+      chainId: snapshot.chain.chainId,
+      chainRef: snapshot.chain.chainRef,
+      isUnlocked: snapshot.isUnlocked,
+    },
+  ];
 
-    broadcastSafe(
-      (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
-      (port) => {
-        const [projection] = resolveActivePortProjections([port], "broadcast_meta_changed_snapshot_missing");
-        if (!projection) return false;
-
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId: projection.sessionId,
-          type: "event",
-          payload: { event: PROVIDER_EVENTS.metaChanged, params: [projection.snapshot.meta] },
-        });
-      },
-      "broadcast_meta_changed_failed",
-    );
-  };
-
-  const broadcastChainChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPortSet = new Set(getPortsBoundToNamespaces(namespaces));
-
-    broadcastSafe(
-      (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
-      (port) => {
-        const [projection] = resolveActivePortProjections([port], "broadcast_chain_changed_snapshot_missing");
-        if (!projection) return false;
-
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId: projection.sessionId,
-          type: "event",
-          payload: {
-            event: PROVIDER_EVENTS.chainChanged,
-            params: [
-              {
-                chainId: projection.snapshot.chain.chainId,
-                chainRef: projection.snapshot.chain.chainRef,
-                isUnlocked: projection.snapshot.isUnlocked,
-                meta: projection.snapshot.meta,
-              },
-            ],
-          },
-        });
-      },
+  const broadcastChainChangedForPorts = (ports: Runtime.Port[], state: ProviderBridgeConnectionState) => {
+    broadcastToPorts(
+      ports,
+      (sessionId) => ({
+        channel: CHANNEL,
+        sessionId,
+        type: "event",
+        payload: {
+          event: PROVIDER_EVENTS.chainChanged,
+          params: buildChainChangedParams(state.snapshot),
+        },
+      }),
       "broadcast_chain_changed_failed",
     );
   };
 
-  const broadcastAccountsChangedForPorts = async (ports: Runtime.Port[]) => {
-    const projections = resolveActivePortProjections(ports, "broadcast_accounts_changed_snapshot_missing");
+  const broadcastAccountsChangedForPorts = (ports: Runtime.Port[], state: ProviderBridgeConnectionState) => {
+    const activeSessions = readActivePortSessions(ports);
+    const stalePorts: Runtime.Port[] = [];
 
-    await Promise.all(
-      projections.map(async ({ port, sessionId, snapshot }) => {
-        try {
-          const accounts = await getPermittedAccountsForPort(port, snapshot);
-          const activeSessionId = getSessionIdForPort(port);
-          if (!activeSessionId || activeSessionId !== sessionId) {
-            return;
-          }
+    for (const { port, sessionId } of activeSessions) {
+      const activeSessionId = getSessionIdForPort(port);
+      if (!activeSessionId || activeSessionId !== sessionId) {
+        continue;
+      }
 
-          const ok = postEnvelope(port, {
-            channel: CHANNEL,
-            sessionId,
-            type: "event",
-            payload: { event: PROVIDER_EVENTS.accountsChanged, params: [accounts] },
-          });
+      const ok = postEnvelope(port, {
+        channel: CHANNEL,
+        sessionId,
+        type: "event",
+        payload: { event: PROVIDER_EVENTS.accountsChanged, params: [state.accounts] },
+      });
 
-          if (!ok) {
-            dropStalePort(port, "broadcast_accounts_changed_failed");
-          }
-        } catch (error) {
-          dropStalePort(port, "broadcast_accounts_changed_error", error);
-        }
-      }),
-    );
+      if (!ok) {
+        stalePorts.push(port);
+      }
+    }
+
+    for (const port of stalePorts) {
+      dropStalePort(port, "broadcast_accounts_changed_failed");
+    }
   };
 
-  const broadcastAccountsChanged = async () => {
-    await broadcastAccountsChangedForPorts(getConnectedPorts());
-  };
+  const broadcastConnectionStateChange = (
+    scope: ProviderConnectionScope,
+    state: ProviderBridgeConnectionState,
+    changed: ProviderConnectionChangedFields,
+  ) => {
+    const ports = getPortsForConnectionScopes([scope]);
 
-  const broadcastAccountsChangedForNamespaces = async (namespaces: Iterable<string>) => {
-    await broadcastAccountsChangedForPorts(getPortsBoundToNamespaces(namespaces));
+    if (changed.chain) {
+      broadcastChainChangedForPorts(ports, state);
+    }
+    if (changed.accounts) {
+      broadcastAccountsChangedForPorts(ports, state);
+    }
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
-    broadcastSafe(
-      (port) => !!getSessionIdForPort(port),
-      (port) => {
-        const sessionId = getSessionIdForPort(port);
-        if (!sessionId) return true;
-
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId,
-          type: "event",
-          payload: { event, params },
-        });
-      },
+    broadcastToPorts(
+      getConnectedPorts(),
+      (sessionId) => ({
+        channel: CHANNEL,
+        sessionId,
+        type: "event",
+        payload: { event, params },
+      }),
       "broadcast_event_failed",
     );
   };
 
   return {
-    broadcastMetaChangedForNamespaces,
-    broadcastChainChangedForNamespaces,
-    broadcastAccountsChangedForNamespaces,
-    broadcastAccountsChanged,
+    broadcastConnectionStateChange,
     broadcastEvent,
   };
 };

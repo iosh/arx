@@ -22,16 +22,3 @@ export const syncPortContext = (
     providerNamespace: snapshot.namespace,
   });
 };
-
-export const syncAllPortContexts = (
-  connections: Iterable<Runtime.Port>,
-  snapshotByPort: (port: Runtime.Port) => ProviderBridgeSnapshot | null,
-  portContextStore: PortContextStore,
-  extensionOrigin: string,
-) => {
-  for (const port of connections) {
-    const snapshot = snapshotByPort(port);
-    if (!snapshot) continue;
-    syncPortContext(port, snapshot, portContextStore, extensionOrigin);
-  }
-};

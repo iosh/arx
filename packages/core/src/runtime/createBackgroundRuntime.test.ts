@@ -18,10 +18,11 @@ import {
   MemoryAccountsPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryWalletChainSelectionPort,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
@@ -79,7 +80,8 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
 const createTestRuntime = (params?: {
   chainSeed?: ChainMetadata[];
   customChainsPort?: MemoryCustomChainsPort;
-  networkSelectionPort?: MemoryNetworkSelectionPort;
+  walletChainSelectionPort?: MemoryWalletChainSelectionPort;
+  providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   namespaces?: Parameters<typeof createBackgroundRuntime>[0]["namespaces"];
   rpcAccessPolicy?: Parameters<typeof createBackgroundRuntime>[0]["rpcAccessPolicy"];
   settingsPort?: MemorySettingsPort;
@@ -103,8 +105,11 @@ const createTestRuntime = (params?: {
     },
     namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
     rpcAccessPolicy: params?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY,
-    networkSelection: {
-      port: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
+    walletChainSelection: {
+      port: params?.walletChainSelectionPort ?? new MemoryWalletChainSelectionPort(),
+    },
+    providerChainSelection: {
+      port: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
     },
     settings: {
       port: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
@@ -260,8 +265,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       customChainsPort,
     });
 
-    expect(runtime.services.networkSelection.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
-    expect(runtime.services.networkSelection.getChainRefByNamespace()).toEqual({
+    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
+    expect(runtime.services.walletChainSelection.getChainRefByNamespace()).toEqual({
       [BASE_CHAIN.namespace]: BASE_CHAIN.chainRef,
     });
 
@@ -277,8 +282,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const customChainsPort = new MemoryCustomChainsPort();
-    const networkSelectionPort = new MemoryNetworkSelectionPort({
-      id: "network-selection",
+    const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
+      id: "wallet-chain-selection",
       selectedNamespace: ALT_CHAIN.namespace,
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: now(),
@@ -287,7 +292,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const runtime = createTestRuntime({
       chainSeed,
       customChainsPort,
-      networkSelectionPort,
+      walletChainSelectionPort,
       storage: {
         vaultMetaPort: {
           loadVaultMeta: async () => null,
@@ -303,10 +308,43 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const networkState = runtime.services.network.getState();
-    expect(runtime.services.networkSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
+    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("round-robin");
+
+    runtime.lifecycle.shutdown();
+  });
+
+  it("does not hydrate provider chain selection when storage hydration is disabled", async () => {
+    const providerChainSelectionPort = new MemoryProviderChainSelectionPort([
+      {
+        origin: "https://dapp.example",
+        namespace: MAINNET_CHAIN.namespace,
+        chainRef: MAINNET_CHAIN.chainRef,
+        updatedAt: 1,
+      },
+    ]);
+    const listAll = vi.spyOn(providerChainSelectionPort, "listAll");
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
+      providerChainSelectionPort,
+      storage: {
+        hydrate: false,
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    expect(listAll).not.toHaveBeenCalled();
+    expect(
+      runtime.services.providerChainSelection.getSelectedChainRef({
+        origin: "https://dapp.example",
+        namespace: MAINNET_CHAIN.namespace,
+      }),
+    ).toBeNull();
 
     runtime.lifecycle.shutdown();
   });
@@ -357,8 +395,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const customChainsPort = new MemoryCustomChainsPort();
-    const networkSelectionPort = new MemoryNetworkSelectionPort({
-      id: "network-selection",
+    const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
+      id: "wallet-chain-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 0,
@@ -367,7 +405,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const runtime = createTestRuntime({
       chainSeed,
       customChainsPort,
-      networkSelectionPort,
+      walletChainSelectionPort,
       storage: {
         vaultMetaPort: {
           loadVaultMeta: async () => null,
@@ -383,12 +421,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createHandlersForRuntime(runtime);
 
-    expect(networkSelectionPort.saved.length).toBe(0);
+    expect(walletChainSelectionPort.saved.length).toBe(0);
     await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
     await flushAsync();
 
-    expect(networkSelectionPort.saved.length).toBeGreaterThan(0);
-    await expect(networkSelectionPort.get()).resolves.toMatchObject({
+    expect(walletChainSelectionPort.saved.length).toBeGreaterThan(0);
+    await expect(walletChainSelectionPort.get()).resolves.toMatchObject({
       selectedNamespace: ALT_CHAIN.namespace,
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
     });

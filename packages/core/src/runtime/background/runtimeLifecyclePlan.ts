@@ -1,6 +1,7 @@
 import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
 import type { NetworkStateInput } from "../../chains/runtime/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
+import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
 import { RuntimeHydrationError } from "./errors.js";
 import type { NetworkBootstrap } from "./networkBootstrap.js";
@@ -51,6 +52,8 @@ const hydrateCriticalStorage = async (
 export const createBackgroundRuntimeLifecycle = ({
   runtimeLifecycle,
   stateServices,
+  providerChainSelection,
+  hydrationEnabled,
   permissionsReady,
   deferredNetworkInitialState,
   registeredNamespaces,
@@ -64,6 +67,8 @@ export const createBackgroundRuntimeLifecycle = ({
 }: {
   runtimeLifecycle: RuntimeLifecycle;
   stateServices: BackgroundStateServices;
+  providerChainSelection: Pick<ProviderChainSelectionService, "loadAll">;
+  hydrationEnabled: boolean;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
@@ -101,6 +106,9 @@ export const createBackgroundRuntimeLifecycle = ({
         }
       }
       await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
+      if (hydrationEnabled) {
+        await hydrateCriticalStorage("chains", "providerChainSelection", () => providerChainSelection.loadAll());
+      }
     },
   };
 

@@ -9,7 +9,7 @@ import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
+import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
@@ -30,7 +30,7 @@ export {
 
 export type RpcHandlerDeps = {
   network: RpcRoutingService;
-  networkSelection: NetworkSelectionService;
+  walletChainSelection: WalletChainSelectionService;
   accounts: AccountSelectionService;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;

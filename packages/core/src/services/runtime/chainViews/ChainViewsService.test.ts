@@ -105,16 +105,10 @@ describe("ChainViewsService", () => {
         expect.objectContaining({ chainRef: OPTIMISM.chainRef }),
       ]),
     });
-    expect(service.buildProviderMeta("eip155")).toEqual({
-      activeChain: MAINNET.chainRef,
-      activeNamespace: MAINNET.namespace,
-      activeChainByNamespace: { eip155: MAINNET.chainRef },
-      supportedChains: [MAINNET.chainRef, OPTIMISM.chainRef],
-    });
     expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
-  it("builds provider meta from namespace-specific selection", () => {
+  it("resolves active chain views from namespace-specific selection", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
       selectedNamespace: SOLANA.namespace,
@@ -123,28 +117,17 @@ describe("ChainViewsService", () => {
 
     expect(service.getSelectedNamespace()).toBe(SOLANA.namespace);
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
-    expect(service.buildProviderMeta("eip155")).toEqual({
-      activeChain: MAINNET.chainRef,
-      activeNamespace: MAINNET.namespace,
-      activeChainByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
-      supportedChains: [MAINNET.chainRef, SOLANA.chainRef],
-    });
+    expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
     expect(service.getActiveChainViewForNamespace("solana")).toMatchObject({ chainRef: SOLANA.chainRef });
   });
 
-  it("builds provider meta even when the selected namespace differs from the provider namespace", () => {
+  it("resolves active chain views when selected namespace differs from the requested namespace", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
       selectedNamespace: SOLANA.namespace,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
-    expect(service.buildProviderMeta("eip155")).toEqual({
-      activeChain: MAINNET.chainRef,
-      activeNamespace: MAINNET.namespace,
-      activeChainByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
-      supportedChains: [MAINNET.chainRef, SOLANA.chainRef],
-    });
     expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 

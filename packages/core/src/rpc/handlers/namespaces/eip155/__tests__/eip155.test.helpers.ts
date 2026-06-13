@@ -4,6 +4,7 @@ import {
   toDisplayAddressFromAccountKey,
 } from "../../../../../accounts/addressing/accountKey.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../approvals/index.js";
+import { parseChainRef } from "../../../../../chains/caip.js";
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
@@ -11,10 +12,11 @@ import {
   MemoryAccountsPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryWalletChainSelectionPort,
   TEST_NAMESPACE_MANIFESTS,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
@@ -48,7 +50,8 @@ export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0))
 export const createCustomChainsPort = () => new MemoryCustomChainsPort();
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
-  const { supportedChains, session, networkSelection, rpcAccessPolicy, store, ...rest } = overrides ?? {};
+  const { supportedChains, session, walletChainSelection, providerChainSelection, rpcAccessPolicy, store, ...rest } =
+    overrides ?? {};
   const customChainsPort = supportedChains?.port ?? store?.ports.customChains ?? createCustomChainsPort();
   const runtime = createBackgroundRuntime({
     supportedChains: {
@@ -64,7 +67,8 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
         isInternalOrigin: () => false,
         shouldRequestUnlockAttention: () => false,
       } as const),
-    networkSelection: networkSelection ?? { port: new MemoryNetworkSelectionPort() },
+    walletChainSelection: walletChainSelection ?? { port: new MemoryWalletChainSelectionPort() },
+    providerChainSelection: providerChainSelection ?? { port: new MemoryProviderChainSelectionPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ports: {
@@ -88,6 +92,14 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
 };
 
 type TestRuntime = ReturnType<typeof createRuntime>;
+type RpcExecutorArgs = Parameters<TestRuntime["rpc"]["executeRequest"]>[0];
+type TestRpcExecutorArgs = RpcExecutorArgs extends infer Args
+  ? Args extends unknown
+    ? Omit<Args, "executionContext"> & {
+        executionContext?: RpcExecutorArgs["executionContext"];
+      }
+    : never
+  : never;
 type TestOwnedAccount = ReturnType<TestRuntime["services"]["accounts"]["getOwnedAccount"]>;
 type TestAccountSelectionService = TestRuntime["services"]["accounts"] & {
   __testOwnedAccounts?: Map<string, TestOwnedAccount>;
@@ -115,7 +127,7 @@ export const connectOrigin = async (args: {
 }) => {
   const { runtime, origin = ORIGIN, chainRefs, addresses } = args;
   const [firstChainRef] = chainRefs;
-  const [namespace] = firstChainRef.split(":");
+  const { namespace } = parseChainRef(firstChainRef);
 
   await runtime.services.permissions.grantAuthorization(origin, {
     namespace,
@@ -178,7 +190,7 @@ export const connectOrigin = async (args: {
 
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   const executeRequest = runtime.rpc.executeRequest;
-  return async (args: Parameters<typeof executeRequest>[0]) => {
+  return async (args: TestRpcExecutorArgs) => {
     const requestContext = {
       transport: "provider",
       portId: "test-port",
@@ -215,7 +227,21 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           getTerminalError: () => null,
         } as const,
       } as const);
-    return await executeRequest({ ...args, executionContext });
+    if ("invocation" in args && args.invocation) {
+      return await executeRequest({
+        origin: args.origin,
+        request: args.request,
+        invocation: args.invocation,
+        executionContext,
+      });
+    }
+
+    return await executeRequest({
+      origin: args.origin,
+      request: args.request,
+      ...(args.hint !== undefined ? { hint: args.hint } : {}),
+      executionContext,
+    });
   };
 };
 

@@ -3,18 +3,21 @@ import { ChainNotAvailableError, ChainNotCompatibleError, ChainNotSupportedError
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcRoutingService } from "../../../chains/runtime/types.js";
 import { RpcInvalidParamsError } from "../../../rpc/errors.js";
-import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
-import type { ActivateNamespaceChainParams, ChainActivationService } from "./types.js";
+import type { ProviderChainSelectionService } from "../../store/providerChainSelection/types.js";
+import type { WalletChainSelectionService } from "../../store/walletChainSelection/types.js";
+import type { ActivateNamespaceChainParams, ChainActivationService, SelectProviderChainParams } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
   network: Pick<RpcRoutingService, "getState">;
-  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
+  walletChainSelection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
+  providerChainSelection: Pick<ProviderChainSelectionService, "setSelectedChainRef">;
   logger?: (message: string, error?: unknown) => void;
 };
 
 export const createChainActivationService = ({
   network,
-  networkSelection,
+  walletChainSelection,
+  providerChainSelection,
 }: CreateChainActivationServiceOptions): ChainActivationService => {
   const isAvailableChainRef = (chainRef: ChainRef): boolean => {
     return network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
@@ -27,25 +30,25 @@ export const createChainActivationService = ({
   };
 
   const resolveAvailableActiveChainRefForNamespace = (namespace: string): ChainRef => {
-    const normalizedNamespace = namespace.trim();
-    if (normalizedNamespace.length === 0) {
+    const namespaceKey = namespace.trim();
+    if (namespaceKey.length === 0) {
       throw new RpcInvalidParamsError({
         message: "Invalid namespace identifier",
         details: { namespace },
       });
     }
 
-    const activeChainRef = networkSelection.getSelectedChainRef(normalizedNamespace);
+    const activeChainRef = walletChainSelection.getSelectedChainRef(namespaceKey);
     if (!activeChainRef) {
       throw new ChainNotSupportedError({
-        message: `No active chain configured for namespace "${normalizedNamespace}"`,
+        message: `No active chain configured for namespace "${namespaceKey}"`,
       });
     }
 
     const parsed = parseChainRef(activeChainRef);
-    if (parsed.namespace !== normalizedNamespace) {
+    if (parsed.namespace !== namespaceKey) {
       throw new ChainNotCompatibleError({
-        message: `Active chain "${activeChainRef}" does not belong to namespace "${normalizedNamespace}"`,
+        message: `Active chain "${activeChainRef}" does not belong to namespace "${namespaceKey}"`,
       });
     }
 
@@ -54,11 +57,11 @@ export const createChainActivationService = ({
   };
 
   const persistNamespaceChainSelection = async (chainRef: ChainRef) => {
-    return await networkSelection.selectChain(chainRef);
+    return await walletChainSelection.selectChain(chainRef);
   };
 
   const persistWalletChainSelection = async (chainRef: ChainRef) => {
-    return await networkSelection.selectChain(chainRef);
+    return await walletChainSelection.selectChain(chainRef);
   };
 
   const selectWalletChain = async (chainRef: ChainRef): Promise<void> => {
@@ -67,9 +70,9 @@ export const createChainActivationService = ({
   };
 
   const selectWalletNamespace = async (namespace: string): Promise<void> => {
-    const normalizedNamespace = namespace.trim();
-    resolveAvailableActiveChainRefForNamespace(normalizedNamespace);
-    await networkSelection.selectNamespace(normalizedNamespace);
+    const namespaceKey = namespace.trim();
+    resolveAvailableActiveChainRefForNamespace(namespaceKey);
+    await walletChainSelection.selectNamespace(namespaceKey);
   };
 
   const activateNamespaceChain = async ({
@@ -88,5 +91,22 @@ export const createChainActivationService = ({
     await persistNamespaceChainSelection(chainRef);
   };
 
-  return { selectWalletChain, selectWalletNamespace, activateNamespaceChain };
+  const selectProviderChain = async ({
+    origin,
+    namespace,
+    chainRef,
+    reason,
+  }: SelectProviderChainParams): Promise<void> => {
+    const parsed = parseChainRef(chainRef);
+    if (parsed.namespace !== namespace) {
+      throw new ChainNotCompatibleError({
+        message: `Provider chain selection namespace mismatch for reason "${reason}"`,
+      });
+    }
+
+    assertAvailableChainRef(chainRef);
+    await providerChainSelection.setSelectedChainRef({ origin, namespace, chainRef });
+  };
+
+  return { selectWalletChain, selectWalletNamespace, activateNamespaceChain, selectProviderChain };
 };

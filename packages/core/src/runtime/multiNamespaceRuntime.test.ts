@@ -9,10 +9,11 @@ import {
   MemoryAccountsPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryWalletChainSelectionPort,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
@@ -97,7 +98,8 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
         isInternalOrigin: () => false,
         shouldRequestUnlockAttention: () => false,
       },
-      networkSelection: { port: new MemoryNetworkSelectionPort() },
+      walletChainSelection: { port: new MemoryWalletChainSelectionPort() },
+      providerChainSelection: { port: new MemoryProviderChainSelectionPort() },
       store: {
         ports: {
           customChains: customChainsPort,
@@ -111,7 +113,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     });
 
     expect(runtime.rpc.registry.getRegisteredNamespaces()).toEqual(["eip155", "solana"]);
-    expect(runtime.services.networkSelection.getChainRefByNamespace()).toEqual({
+    expect(runtime.services.walletChainSelection.getChainRefByNamespace()).toEqual({
       eip155: MAINNET_CHAIN.chainRef,
       solana: SOLANA_CHAIN.chainRef,
     });

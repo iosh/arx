@@ -4,12 +4,14 @@ import { createCustomRpcService } from "../../services/store/customRpc/CustomRpc
 import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
 import { createKeyringMetasService } from "../../services/store/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import { createNetworkSelectionService } from "../../services/store/networkSelection/NetworkSelectionService.js";
-import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import { createProviderChainSelectionService } from "../../services/store/providerChainSelection/ProviderChainSelectionService.js";
+import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
 import { createSettingsService } from "../../services/store/settings/SettingsService.js";
-import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
+import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
+import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
+import type { RuntimeWalletChainSelectionDefaults } from "./networkDefaults.js";
 
 export type RuntimeStorePorts = {
   accounts: AccountsPort;
@@ -19,7 +21,8 @@ export type RuntimeStorePorts = {
 
 export type RuntimeStoreServices = {
   settingsService: ReturnType<typeof createSettingsService>;
-  networkSelection: ReturnType<typeof createNetworkSelectionService>;
+  walletChainSelection: ReturnType<typeof createWalletChainSelectionService>;
+  providerChainSelection: ReturnType<typeof createProviderChainSelectionService>;
   customRpc: ReturnType<typeof createCustomRpcService>;
   accountsStore: ReturnType<typeof createAccountsService>;
   keyringMetas: ReturnType<typeof createKeyringMetasService>;
@@ -27,24 +30,30 @@ export type RuntimeStoreServices = {
 
 export const initRuntimeStoreServices = ({
   settingsPort,
-  networkSelectionPort,
+  walletChainSelectionPort,
+  providerChainSelectionPort,
   customRpcPort,
   ports,
   selectionDefaults,
   now,
 }: {
   settingsPort: SettingsPort;
-  networkSelectionPort: NetworkSelectionPort;
+  walletChainSelectionPort: WalletChainSelectionPort;
+  providerChainSelectionPort: ProviderChainSelectionPort;
   customRpcPort: CustomRpcPort;
   ports: RuntimeStorePorts;
-  selectionDefaults: RuntimeNetworkSelectionDefaults;
+  selectionDefaults: RuntimeWalletChainSelectionDefaults;
   now: () => number;
 }): RuntimeStoreServices => {
   const settingsService = createSettingsService({ port: settingsPort, now });
 
-  const networkSelection = createNetworkSelectionService({
-    port: networkSelectionPort,
+  const walletChainSelection = createWalletChainSelectionService({
+    port: walletChainSelectionPort,
     defaults: selectionDefaults,
+    now,
+  });
+  const providerChainSelection = createProviderChainSelectionService({
+    port: providerChainSelectionPort,
     now,
   });
   const customRpc = createCustomRpcService({ port: customRpcPort, now });
@@ -54,7 +63,8 @@ export const initRuntimeStoreServices = ({
 
   return {
     settingsService,
-    networkSelection,
+    walletChainSelection,
+    providerChainSelection,
     customRpc,
     accountsStore,
     keyringMetas,

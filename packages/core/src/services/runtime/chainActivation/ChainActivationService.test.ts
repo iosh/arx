@@ -7,18 +7,23 @@ const createService = (params?: {
   activeChainByNamespace?: Record<string, string>;
   selectChain?: ReturnType<typeof vi.fn>;
   selectNamespace?: ReturnType<typeof vi.fn>;
+  setSelectedChainRef?: ReturnType<typeof vi.fn>;
 }) => {
   const selectChain = params?.selectChain ?? vi.fn().mockResolvedValue(undefined);
   const selectNamespace = params?.selectNamespace ?? vi.fn().mockResolvedValue(undefined);
+  const setSelectedChainRef = params?.setSelectedChainRef ?? vi.fn().mockResolvedValue(undefined);
 
   const service = createChainActivationService({
     network: {
       getState: () => ({ availableChainRefs: params?.availableChainRefs ?? ["eip155:1", "eip155:10", "solana:101"] }),
     } as never,
-    networkSelection: {
+    walletChainSelection: {
       getSelectedChainRef: (namespace: string) => params?.activeChainByNamespace?.[namespace] ?? null,
       selectChain,
       selectNamespace,
+    } as never,
+    providerChainSelection: {
+      setSelectedChainRef,
     } as never,
   });
 
@@ -26,6 +31,7 @@ const createService = (params?: {
     service,
     selectChain,
     selectNamespace,
+    setSelectedChainRef,
   };
 };
 

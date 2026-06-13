@@ -1,8 +1,9 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
-import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../../approvals/index.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
+import type { RequestPermissionsApprovalPayload } from "../../../../../permissions/service/types.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
@@ -42,7 +43,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("switches chains and retains the active account when wallet_switchEthereumChain succeeds", async () => {
+  it("switches the provider chain without changing the wallet-selected chain", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -82,15 +83,21 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(mainnet.chainRef);
+      expect(runtime.services.walletChainSelection.getSelectedChainRef("eip155")).toBe(mainnet.chainRef);
+      expect(
+        runtime.services.providerChainSelection.getSelectedChainRef({
+          origin: ORIGIN,
+          namespace: "eip155",
+        }),
+      ).toBe(ALT_CHAIN.chainRef);
       expect(
         runtime.services.accounts.getActiveAccountForNamespace({
-          namespace: ALT_CHAIN.namespace,
-          chainRef: ALT_CHAIN.chainRef,
+          namespace: mainnet.namespace,
+          chainRef: mainnet.chainRef,
         }),
       ).toMatchObject({
-        chainRef: ALT_CHAIN.chainRef,
+        chainRef: mainnet.chainRef,
         canonicalAddress: activeAddress,
         namespace: "eip155",
       });
@@ -241,15 +248,24 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("updates selected and provider chain state on successful switch", async () => {
+  it("resolves provider requests from the origin-scoped provider chain selection", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
+    const mainnet = getActiveChainMetadata(runtime);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
+    await runtime.services.session.createVault({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    await connectOrigin({
+      runtime,
+      chainRefs: [mainnet.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
+    const otherOrigin = "https://other.example";
 
     try {
       await execute({
@@ -260,8 +276,68 @@ describe("eip155 handlers - core error paths", () => {
         },
       });
 
-      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(mainnet.chainRef);
+      expect(runtime.services.walletChainSelection.getSelectedChainRef("eip155")).toBe(mainnet.chainRef);
+      expect(
+        runtime.services.providerChainSelection.getSelectedChainRef({
+          origin: ORIGIN,
+          namespace: "eip155",
+        }),
+      ).toBe(ALT_CHAIN.chainRef);
+      expect(
+        runtime.services.providerChainSelection.getSelectedChainRef({
+          origin: otherOrigin,
+          namespace: "eip155",
+        }),
+      ).toBeNull();
+
+      const switchedChainResponse = await runtime.providerAccess.executeRpcRequest({
+        id: "rpc-chain-switched",
+        jsonrpc: "2.0",
+        method: "eth_chainId",
+        context: { providerNamespace: "eip155" },
+        execution: {
+          requestScope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: "provider-port",
+            sessionId: "provider-session",
+          },
+        },
+      });
+      expect(switchedChainResponse).toMatchObject({ result: ALT_CHAIN.chainId });
+
+      const switchedAccountsResponse = await runtime.providerAccess.executeRpcRequest({
+        id: "rpc-accounts-switched",
+        jsonrpc: "2.0",
+        method: "eth_accounts",
+        context: { providerNamespace: "eip155", chainRef: mainnet.chainRef },
+        execution: {
+          requestScope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: "provider-port",
+            sessionId: "provider-session",
+          },
+        },
+      });
+      expect(switchedAccountsResponse).toMatchObject({ result: [] });
+
+      const fallbackChainResponse = await runtime.providerAccess.executeRpcRequest({
+        id: "rpc-chain-fallback",
+        jsonrpc: "2.0",
+        method: "eth_chainId",
+        context: { providerNamespace: "eip155" },
+        execution: {
+          requestScope: {
+            transport: "provider",
+            origin: otherOrigin,
+            portId: "provider-port-other",
+            sessionId: "provider-session-other",
+          },
+        },
+      });
+      expect(fallbackChainResponse).toMatchObject({ result: mainnet.chainId });
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
@@ -719,7 +795,7 @@ describe("eip155 handlers - core error paths", () => {
         },
       ]);
 
-      await runtime.services.networkSelection.selectChain(ALT_CHAIN.chainRef);
+      await runtime.services.walletChainSelection.selectChain(ALT_CHAIN.chainRef);
 
       await expect(
         execute({

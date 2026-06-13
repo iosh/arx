@@ -23,10 +23,12 @@ import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
+import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
+import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
+import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../../storage/index.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { KeyringService } from "../keyring/KeyringService.js";
@@ -83,7 +85,8 @@ export type BackgroundSessionScope = {
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
-  networkSelection: NetworkSelectionService;
+  walletChainSelection: WalletChainSelectionService;
+  providerChainSelection: ProviderChainSelectionService;
   customRpc: CustomRpcService;
   sessionLayer: SessionLayerResult;
   sessionStatus: SessionStatusService;
@@ -176,7 +179,8 @@ export const createBackgroundSessionScope = ({
   bootstrapScope,
   namespaceSession,
   settingsPort,
-  networkSelectionPort,
+  walletChainSelectionPort,
+  providerChainSelectionPort,
   customRpcPort,
   storePorts,
   vaultMetaPort,
@@ -186,7 +190,8 @@ export const createBackgroundSessionScope = ({
   bootstrapScope: BackgroundBootstrapScope;
   namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
-  networkSelectionPort: NetworkSelectionPort;
+  walletChainSelectionPort: WalletChainSelectionPort;
+  providerChainSelectionPort: ProviderChainSelectionPort;
   customRpcPort: CustomRpcPort;
   storePorts: {
     accounts: AccountsPort;
@@ -196,14 +201,16 @@ export const createBackgroundSessionScope = ({
   vaultMetaPort?: VaultMetaPort;
   sessionOptions?: SessionOptions;
 }): BackgroundSessionScope => {
-  const { settingsService, networkSelection, customRpc, accountsStore, keyringMetas } = initRuntimeStoreServices({
-    settingsPort,
-    networkSelectionPort,
-    customRpcPort,
-    ports: storePorts,
-    selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
-    now: bootstrapScope.storageNow,
-  });
+  const { settingsService, walletChainSelection, providerChainSelection, customRpc, accountsStore, keyringMetas } =
+    initRuntimeStoreServices({
+      settingsPort,
+      walletChainSelectionPort,
+      providerChainSelectionPort,
+      customRpcPort,
+      ports: storePorts,
+      selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
+      now: bootstrapScope.storageNow,
+    });
 
   const stateServicesInit = initBackgroundStateServices({
     bus: bootstrapScope.bus,
@@ -227,12 +234,13 @@ export const createBackgroundSessionScope = ({
   const chainViews = createChainViewsService({
     supportedChains: supportedChainsService,
     network: rpcRoutingService,
-    selection: networkSelection,
+    selection: walletChainSelection,
   });
 
   const chainActivation = createChainActivationService({
     network: rpcRoutingService,
-    networkSelection,
+    walletChainSelection,
+    providerChainSelection,
     logger: bootstrapScope.storageLogger,
   });
 
@@ -278,7 +286,8 @@ export const createBackgroundSessionScope = ({
     chainViews,
     chainActivation,
     attention,
-    networkSelection,
+    walletChainSelection,
+    providerChainSelection,
     customRpc,
     sessionLayer,
     sessionStatus,
@@ -342,7 +351,7 @@ export const createBackgroundSupportScope = ({
   const networkBootstrap = createNetworkBootstrap({
     network: sessionScope.stateServices.network,
     supportedChains: sessionScope.stateServices.supportedChains,
-    selection: sessionScope.networkSelection,
+    selection: sessionScope.walletChainSelection,
     customRpc: sessionScope.customRpc,
     selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
     hydrationEnabled: bootstrapScope.hydrationEnabled,

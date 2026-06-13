@@ -11,7 +11,7 @@ describe("eip155 passthrough executor", () => {
 
     const execute = createExecutor(runtime);
     const params = ["0xabc", "latest"] as JsonRpcParams;
-    const chainRef = runtime.services.networkSelection.getSelectedChainRef("eip155") ?? "eip155:1";
+    const chainRef = runtime.services.walletChainSelection.getSelectedChainRef("eip155") ?? "eip155:1";
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockResolvedValue("0x64"),
     };

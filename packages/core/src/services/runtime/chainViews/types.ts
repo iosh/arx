@@ -23,13 +23,6 @@ export type UiNetworksSnapshot = {
   available: ChainView[];
 };
 
-export type ProviderMetaSnapshot = {
-  activeChain: ChainRef;
-  activeNamespace: string;
-  activeChainByNamespace: Record<string, ChainRef>;
-  supportedChains: ChainRef[];
-};
-
 export type FindAvailableChainViewParams = {
   chainRef?: ChainRef;
   namespace?: string;
@@ -51,5 +44,4 @@ export type ChainViewsService = {
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
-  buildProviderMeta(namespace: string): ProviderMetaSnapshot;
 };

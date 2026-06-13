@@ -166,7 +166,7 @@ export const resolveRpcInvocation = (
   assertInvocationHintConsistency(hint);
 
   const namespace = resolveInvocationNamespace(catalog, method, hint);
-  const namespaceActiveChainRef = handlerDeps.networkSelection.getSelectedChainRef(namespace);
+  const namespaceActiveChainRef = handlerDeps.walletChainSelection.getSelectedChainRef(namespace);
   const chainRef = resolveInvocationChainRef({
     method,
     namespace,

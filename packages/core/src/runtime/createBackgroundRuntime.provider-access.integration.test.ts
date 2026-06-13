@@ -332,6 +332,36 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
+  it("clears stale provider chain selection before defaulting to the active chain", async () => {
+    const background = await setupBackground({
+      providerChainSelectionSeed: [
+        {
+          origin: ORIGIN,
+          namespace: "eip155",
+          chainRef: EIP155_ALT_CHAIN.chainRef,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    try {
+      const state = await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+
+      expect(state.snapshot.chain.chainRef).toBe("eip155:1");
+      expect(background.providerChainSelectionPort.removed).toEqual([{ origin: ORIGIN, namespace: "eip155" }]);
+      await expect(
+        background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
+      ).resolves.toMatchObject({
+        chainRef: "eip155:1",
+      });
+    } finally {
+      background.destroy();
+    }
+  });
+
   it("builds handshake connection state from one unlock snapshot", async () => {
     const background = await setupBackground();
 
@@ -619,7 +649,7 @@ describe("createBackgroundRuntime provider access", () => {
         approvalCreatedResolve = resolve;
       });
       const unsubscribe = background.runtime.services.approvals.onCreated(({ record }) => {
-        capturedApprovalRequesterId = record.requester.requestId;
+        capturedApprovalRequesterId = record.requester.requestId ?? null;
         approvalCreatedResolve?.();
       });
 
@@ -890,7 +920,7 @@ describe("createBackgroundRuntime provider access", () => {
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
-    let releaseBroadcast: (() => void) | null = null;
+    let releaseBroadcast = () => {};
     const broadcastReleased = new Promise<void>((resolve) => {
       releaseBroadcast = resolve;
     });
@@ -910,7 +940,10 @@ describe("createBackgroundRuntime provider access", () => {
       [
         chain.namespace,
         createNamespaceTransactionMock({
-          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x9" } })),
+          prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+            status: "ready",
+            prepared: { nonce: "0x9" },
+          })),
           broadcastTransaction,
         }),
       ],
@@ -959,7 +992,7 @@ describe("createBackgroundRuntime provider access", () => {
         }),
       ).resolves.toBe(1);
 
-      releaseBroadcast?.();
+      releaseBroadcast();
 
       await expect(pendingResponse).resolves.toMatchObject({
         id: "rpc-send-broadcast-cancelled",
@@ -980,7 +1013,7 @@ describe("createBackgroundRuntime provider access", () => {
         ]);
       });
     } finally {
-      releaseBroadcast?.();
+      releaseBroadcast();
       unsubscribeAutoApproval();
       background.destroy();
     }
@@ -992,7 +1025,7 @@ describe("createBackgroundRuntime provider access", () => {
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
-    let releaseSign: (() => void) | null = null;
+    let releaseSign = () => {};
     const signReleased = new Promise<void>((resolve) => {
       releaseSign = resolve;
     });
@@ -1016,7 +1049,10 @@ describe("createBackgroundRuntime provider access", () => {
       [
         chain.namespace,
         createNamespaceTransactionMock({
-          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0xa" } })),
+          prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+            status: "ready",
+            prepared: { nonce: "0xa" },
+          })),
           createBroadcastInput,
           broadcastTransaction,
         }),
@@ -1066,7 +1102,7 @@ describe("createBackgroundRuntime provider access", () => {
         }),
       ).resolves.toBe(1);
 
-      releaseSign?.();
+      releaseSign();
       const response = await pendingResponse;
 
       expect(response).toMatchObject({
@@ -1086,7 +1122,7 @@ describe("createBackgroundRuntime provider access", () => {
         ]);
       });
     } finally {
-      releaseSign?.();
+      releaseSign();
       unsubscribeAutoApproval();
       background.destroy();
     }
@@ -1105,7 +1141,10 @@ describe("createBackgroundRuntime provider access", () => {
       [
         chain.namespace,
         createNamespaceTransactionMock({
-          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
+          prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+            status: "ready",
+            prepared: {},
+          })),
           broadcastTransaction,
         }),
       ],

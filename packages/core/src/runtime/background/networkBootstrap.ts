@@ -4,17 +4,17 @@ import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../chain
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
 import type { NetworkChainConfig, RpcRoutingService, RpcRoutingState } from "../../chains/runtime/types.js";
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
+import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
 import { RuntimeHydrationError } from "./errors.js";
-import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
+import type { RuntimeWalletChainSelectionDefaults } from "./networkDefaults.js";
 
 export type CreateNetworkBootstrapOptions = {
   network: RpcRoutingService;
   supportedChains: SupportedChainsService;
-  selection: NetworkSelectionService;
+  selection: WalletChainSelectionService;
   customRpc: CustomRpcService;
-  selectionDefaults: RuntimeNetworkSelectionDefaults;
+  selectionDefaults: RuntimeWalletChainSelectionDefaults;
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
@@ -209,7 +209,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       } catch (error) {
         throw new RuntimeHydrationError({
           owner: "chains",
-          resource: "networkSelection",
+          resource: "walletChainSelection",
           cause: error,
         });
       }

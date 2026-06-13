@@ -8,12 +8,12 @@ import { NETWORK_TOPICS } from "../../chains/runtime/topics.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createCustomRpcService } from "../../services/store/customRpc/CustomRpcService.js";
-import { createNetworkSelectionService } from "../../services/store/networkSelection/NetworkSelectionService.js";
-import type { NetworkSelectionRecord } from "../../storage/records.js";
+import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
+import type { WalletChainSelectionRecord } from "../../storage/records.js";
 import {
   MemoryCustomChainsPort,
   MemoryCustomRpcPort,
-  MemoryNetworkSelectionPort,
+  MemoryWalletChainSelectionPort,
 } from "../__fixtures__/backgroundTestSetup.js";
 import { buildDefaultRoutingState } from "./constants.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
@@ -60,15 +60,15 @@ const createRpcRoutingService = (chain: ChainMetadata) => {
 };
 
 const createSelectionService = (
-  seed: NetworkSelectionRecord | null,
+  seed: WalletChainSelectionRecord | null,
   defaults = {
     selectedNamespace: MAINNET_CHAIN.namespace,
     chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
   },
   now = () => 1_000,
 ) => {
-  const port = new MemoryNetworkSelectionPort(seed);
-  const service = createNetworkSelectionService({
+  const port = new MemoryWalletChainSelectionPort(seed);
+  const service = createWalletChainSelectionService({
     port,
     defaults,
     now,
@@ -111,7 +111,7 @@ describe("networkBootstrap", () => {
       builtin: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN],
     });
     const { port: selectionPort, service: selection } = createSelectionService({
-      id: "network-selection",
+      id: "wallet-chain-selection",
       selectedNamespace: SOLANA_CHAIN.namespace,
       chainRefByNamespace: {
         eip155: ALT_CHAIN.chainRef,
@@ -154,7 +154,7 @@ describe("networkBootstrap", () => {
     expect(network.getState().availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(network.getActiveEndpoint(ALT_CHAIN.chainRef).url).toBe("https://rpc.optimism.custom.example");
     await expect(selectionPort.get()).resolves.toEqual({
-      id: "network-selection",
+      id: "wallet-chain-selection",
       selectedNamespace: "eip155",
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: 1_000,
@@ -168,7 +168,7 @@ describe("networkBootstrap", () => {
       custom: [MAINNET_CHAIN, ALT_CHAIN],
     });
     const { service: selection } = createSelectionService({
-      id: "network-selection",
+      id: "wallet-chain-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
@@ -216,7 +216,7 @@ describe("networkBootstrap", () => {
       custom: [ALT_CHAIN],
     });
     const { port: selectionPort, service: selection } = createSelectionService({
-      id: "network-selection",
+      id: "wallet-chain-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
@@ -244,7 +244,7 @@ describe("networkBootstrap", () => {
 
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     await expect(selectionPort.get()).resolves.toEqual({
-      id: "network-selection",
+      id: "wallet-chain-selection",
       selectedNamespace: "eip155",
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: 1_000,

@@ -5,7 +5,7 @@ import { cloneNetworkStateInput } from "../../chains/runtime/config.js";
 import type { NetworkStateInput, RpcStrategyConfig } from "../../chains/runtime/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
 
-export type RuntimeNetworkSelectionDefaults = {
+export type RuntimeWalletChainSelectionDefaults = {
   selectedNamespace: string;
   chainRefByNamespace: Record<string, ChainRef>;
 };
@@ -14,7 +14,7 @@ export type RuntimeNetworkPlan = {
   admittedChains: ChainMetadata[];
   bootstrapState: NetworkStateInput;
   deferredState: NetworkStateInput | null;
-  selectionDefaults: RuntimeNetworkSelectionDefaults;
+  selectionDefaults: RuntimeWalletChainSelectionDefaults;
 };
 
 const createBootstrapStateForChain = (

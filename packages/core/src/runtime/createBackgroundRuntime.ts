@@ -17,10 +17,12 @@ import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { CustomChainsPort } from "../services/store/customChains/port.js";
 import type { CustomRpcPort } from "../services/store/customRpc/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
-import type { NetworkSelectionPort } from "../services/store/networkSelection/port.js";
-import type { NetworkSelectionService } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
+import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
+import type { ProviderChainSelectionService } from "../services/store/providerChainSelection/types.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
+import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
+import type { WalletChainSelectionService } from "../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { CustomRpcRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
@@ -43,8 +45,11 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
     violationMode?: ViolationMode;
   };
   rpcAccessPolicy: BackgroundRpcAccessPolicyHooks;
-  networkSelection: {
-    port: NetworkSelectionPort;
+  walletChainSelection: {
+    port: WalletChainSelectionPort;
+  };
+  providerChainSelection: {
+    port: ProviderChainSelectionPort;
   };
   customRpc?: {
     port: CustomRpcPort;
@@ -86,7 +91,8 @@ export type BackgroundRuntime = {
     chainViews: ReturnType<typeof createChainViewsService>;
     permissionViews: ReturnType<typeof createPermissionViewsService>;
     accountCodecs: AccountCodecRegistry;
-    networkSelection: NetworkSelectionService;
+    walletChainSelection: WalletChainSelectionService;
+    providerChainSelection: ProviderChainSelectionService;
     namespaceBindings: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceBindings"];
     namespaceRuntimeSupport: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntimeSupport"];
     session: BackgroundSessionServices;
@@ -154,7 +160,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     port: customChainsPort,
   };
 
-  const networkSelectionPort = options.networkSelection.port;
+  const walletChainSelectionPort = options.walletChainSelection.port;
+  const providerChainSelectionPort = options.providerChainSelection.port;
   const customRpcPort = options.customRpc?.port ?? createEphemeralCustomRpcPort();
   const vaultMetaPort = options.storage?.vaultMetaPort ?? createNoopVaultMetaPort();
 
@@ -172,7 +179,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         chains: {
           customChains: customChainsPort,
           customRpc: customRpcPort,
-          networkSelection: networkSelectionPort,
+          walletChainSelection: walletChainSelectionPort,
+          providerChainSelection: providerChainSelectionPort,
         },
         transactions: options.store.ports.transactionAggregates,
         settings: options.settings.port,

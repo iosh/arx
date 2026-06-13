@@ -8,7 +8,8 @@ export const switchChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SwitchCh
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SwitchChain, input),
   async approve(record, _decision, deps) {
     const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: record.request });
-    await deps.chainActivation.activateNamespaceChain({
+    await deps.chainActivation.selectProviderChain({
+      origin: record.origin,
       namespace,
       chainRef: reviewChainRef,
       reason: NamespaceChainActivationReasons.SwitchChain,

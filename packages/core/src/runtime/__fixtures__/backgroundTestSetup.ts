@@ -11,18 +11,20 @@ import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
+import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
   CustomChainRecord,
   CustomRpcRecord,
   KeyringMetaRecord,
-  NetworkSelectionRecord,
   PermissionRecord,
+  ProviderChainSelectionRecord,
   SettingsRecord,
+  WalletChainSelectionRecord,
 } from "../../storage/records.js";
 import type {
   TransactionRecord as AggregateTransactionRecord,
@@ -325,21 +327,73 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
   return metadata;
 };
 
-export class MemoryNetworkSelectionPort implements NetworkSelectionPort {
-  #record: NetworkSelectionRecord | null;
-  public readonly saved: NetworkSelectionRecord[] = [];
+export class MemoryWalletChainSelectionPort implements WalletChainSelectionPort {
+  #record: WalletChainSelectionRecord | null;
+  public readonly saved: WalletChainSelectionRecord[] = [];
 
-  constructor(seed: NetworkSelectionRecord | null = null) {
+  constructor(seed: WalletChainSelectionRecord | null = null) {
     this.#record = seed ? clone(seed) : null;
   }
 
-  async get(): Promise<NetworkSelectionRecord | null> {
+  async get(): Promise<WalletChainSelectionRecord | null> {
     return this.#record ? clone(this.#record) : null;
   }
 
-  async put(record: NetworkSelectionRecord): Promise<void> {
+  async put(record: WalletChainSelectionRecord): Promise<void> {
     this.#record = clone(record);
     this.saved.push(clone(record));
+  }
+}
+
+export class MemoryProviderChainSelectionPort implements ProviderChainSelectionPort {
+  #records = new Map<string, Map<string, ProviderChainSelectionRecord>>();
+  public readonly saved: ProviderChainSelectionRecord[] = [];
+  public readonly removed: Array<{ origin: string; namespace: string }> = [];
+
+  constructor(seed: ProviderChainSelectionRecord[] = []) {
+    for (const record of seed) {
+      this.writeRecord(record);
+    }
+  }
+
+  private writeRecord(record: ProviderChainSelectionRecord) {
+    let recordsByNamespace = this.#records.get(record.origin);
+    if (!recordsByNamespace) {
+      recordsByNamespace = new Map();
+      this.#records.set(record.origin, recordsByNamespace);
+    }
+    recordsByNamespace.set(record.namespace, clone(record));
+  }
+
+  private listRecords(): ProviderChainSelectionRecord[] {
+    const records: ProviderChainSelectionRecord[] = [];
+    for (const recordsByNamespace of this.#records.values()) {
+      records.push(...recordsByNamespace.values());
+    }
+    return records;
+  }
+
+  async get(params: { origin: string; namespace: string }): Promise<ProviderChainSelectionRecord | null> {
+    const record = this.#records.get(params.origin)?.get(params.namespace) ?? null;
+    return record ? clone(record) : null;
+  }
+
+  async listAll(): Promise<ProviderChainSelectionRecord[]> {
+    return this.listRecords().map((record) => clone(record));
+  }
+
+  async upsert(record: ProviderChainSelectionRecord): Promise<void> {
+    this.writeRecord(record);
+    this.saved.push(clone(record));
+  }
+
+  async remove(params: { origin: string; namespace: string }): Promise<void> {
+    const recordsByNamespace = this.#records.get(params.origin);
+    recordsByNamespace?.delete(params.namespace);
+    if (recordsByNamespace?.size === 0) {
+      this.#records.delete(params.origin);
+    }
+    this.removed.push(clone(params));
   }
 }
 
@@ -543,7 +597,8 @@ export type TestBackgroundContext = {
   runtime: CreateBackgroundRuntimeResult;
   accountsPort: MemoryAccountsPort;
   keyringMetasPort: MemoryKeyringMetasPort;
-  networkSelectionPort: MemoryNetworkSelectionPort;
+  walletChainSelectionPort: MemoryWalletChainSelectionPort;
+  providerChainSelectionPort: MemoryProviderChainSelectionPort;
   customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
@@ -555,7 +610,8 @@ export type TestBackgroundContext = {
 // Setup options type
 export type SetupBackgroundOptions = {
   chainSeed?: ChainMetadata[];
-  networkSelectionSeed?: NetworkSelectionRecord | null;
+  walletChainSelectionSeed?: WalletChainSelectionRecord | null;
+  providerChainSelectionSeed?: ProviderChainSelectionRecord[];
   settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
   keyringMetasSeed?: KeyringMetaRecord[];
@@ -565,6 +621,7 @@ export type SetupBackgroundOptions = {
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
+  network?: CreateBackgroundRuntimeOptions["network"];
   autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -583,7 +640,8 @@ export type SetupBackgroundOptions = {
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
   const customChainsPort = new MemoryCustomChainsPort();
-  const networkSelectionPort = new MemoryNetworkSelectionPort(options.networkSelectionSeed ?? null);
+  const walletChainSelectionPort = new MemoryWalletChainSelectionPort(options.walletChainSelectionSeed ?? null);
+  const providerChainSelectionPort = new MemoryProviderChainSelectionPort(options.providerChainSelectionSeed ?? []);
   const vaultMetaPort = options.vaultMetaPort ?? new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
@@ -627,12 +685,16 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       port: customChainsPort,
       seed: chainSeed,
     },
+    ...(options.network ? { network: options.network } : {}),
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
     },
     rpcAccessPolicy: options.rpcAccessPolicy ?? defaultRpcAccessPolicy,
-    networkSelection: {
-      port: networkSelectionPort,
+    walletChainSelection: {
+      port: walletChainSelectionPort,
+    },
+    providerChainSelection: {
+      port: providerChainSelectionPort,
     },
     store: {
       ports: {
@@ -700,7 +762,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     runtime,
     accountsPort,
     keyringMetasPort,
-    networkSelectionPort,
+    walletChainSelectionPort,
+    providerChainSelectionPort,
     customChainsPort,
     vaultMetaPort,
     transactionAggregatesPort,
@@ -769,14 +832,13 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     const hintPayload = buildRpcHint(rpcHint);
     const namespace = deriveMethodNamespace(method, hintPayload);
     const resolvedChainRef =
-      hintPayload.chainRef ?? (namespace ? runtime.services.networkSelection.getSelectedChainRef(namespace) : null);
+      hintPayload.chainRef ?? (namespace ? runtime.services.walletChainSelection.getSelectedChainRef(namespace) : null);
 
     const response = await runtime.providerAccess.executeRpcRequest({
       id: requestId,
       jsonrpc: "2.0",
       method,
       ...(params !== undefined ? { params } : {}),
-      origin,
       context: {
         providerNamespace: namespace ?? hintPayload.namespace ?? "eip155",
         ...(resolvedChainRef ? { chainRef: resolvedChainRef } : {}),

@@ -14,8 +14,13 @@ export type ActivateNamespaceChainParams = {
   reason: NamespaceChainActivationReason;
 };
 
+export type SelectProviderChainParams = ActivateNamespaceChainParams & {
+  origin: string;
+};
+
 export type ChainActivationService = {
   selectWalletChain(chainRef: ChainRef): Promise<void>;
   selectWalletNamespace(namespace: string): Promise<void>;
   activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
+  selectProviderChain(params: SelectProviderChainParams): Promise<void>;
 };

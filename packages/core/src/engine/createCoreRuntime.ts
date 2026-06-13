@@ -116,7 +116,7 @@ const subscribeReadChanges = (
       subscribeAfterInitialReplay((handler) => runtime.services.accounts.onStateChanged(handler), notify),
       subscribeAfterInitialReplay((handler) => runtime.services.permissions.onStateChanged(handler), notify),
       subscribeAfterInitialReplay((handler) => runtime.services.network.onStateChanged(handler), notify),
-      runtime.services.networkSelection.subscribeChanged(notify),
+      runtime.services.walletChainSelection.subscribeChanged(notify),
       runtime.services.session.onStateChanged(notify),
       runtime.bus.subscribe(ATTENTION_STATE_CHANGED, notify),
       runtime.transactions.onTransactionsChanged(notify),

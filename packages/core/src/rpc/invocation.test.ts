@@ -6,7 +6,7 @@ import { RpcRegistry } from "./RpcRegistry.js";
 const makeRpcHandlerDeps = (activeChainByNamespace?: Record<string, string>): RpcHandlerDeps => {
   return {
     network: {} as never,
-    networkSelection: {
+    walletChainSelection: {
       getSelectedChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
     },
   } as unknown as RpcHandlerDeps;

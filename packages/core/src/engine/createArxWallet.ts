@@ -369,6 +369,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     runtimeLifecycle: sessionScope.runtimeLifecycle,
     stateServices: sessionScope.stateServices,
     providerChainSelection: sessionScope.providerChainSelection,
+    hydrationEnabled: bootstrapScope.hydrationEnabled,
     permissionsReady: sessionScope.permissionsReady,
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
@@ -416,7 +417,15 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const initializeProviderChainSelection = async (input: { origin: string; namespace: string }) => {
     const selectedChainRef = sessionScope.providerChainSelection.getSelectedChainRef(input);
     if (selectedChainRef) {
-      return;
+      const selectedChain = sessionScope.chainViews.findAvailableChainView({
+        namespace: input.namespace,
+        chainRef: selectedChainRef,
+      });
+      if (selectedChain) {
+        return;
+      }
+
+      await sessionScope.providerChainSelection.clear(input);
     }
 
     const activeChain = sessionScope.chainViews.getActiveChainViewForNamespace(input.namespace);

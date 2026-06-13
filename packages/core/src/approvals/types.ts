@@ -14,7 +14,7 @@ import type { ChainActivationService } from "../services/runtime/chainActivation
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
-  chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
+  chainActivation: Pick<ChainActivationService, "activateNamespaceChain" | "selectProviderChain">;
   supportedChains: Pick<SupportedChainsService, "getChain" | "addChain">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };

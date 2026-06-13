@@ -3,26 +3,26 @@ import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { CustomRpcService } from "../../services/store/customRpc/types.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
+import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { WalletNetworks } from "../types.js";
 
 // Selected namespace, supported chains, and custom RPC overrides.
 export const createWalletNetworks = (deps: {
-  networkSelection: NetworkSelectionService;
+  walletChainSelection: WalletChainSelectionService;
   supportedChains: SupportedChainsService;
   customRpc: CustomRpcService;
   chainViews: ChainViewsService;
   chainActivation: ChainActivationService;
   network: RpcRoutingService;
 }): WalletNetworks => {
-  const { networkSelection, supportedChains, customRpc, chainViews, chainActivation, network } = deps;
+  const { walletChainSelection, supportedChains, customRpc, chainViews, chainActivation, network } = deps;
 
   return {
-    getSelection: () => networkSelection.get(),
-    getSelectionSnapshot: () => networkSelection.getSnapshot(),
+    getSelection: () => walletChainSelection.get(),
+    getSelectionSnapshot: () => walletChainSelection.getSnapshot(),
     getSelectedNamespace: () => chainViews.getSelectedNamespace(),
-    getChainRefByNamespace: () => networkSelection.getChainRefByNamespace(),
-    getSelectedChainRef: (namespace) => networkSelection.getSelectedChainRef(namespace),
+    getChainRefByNamespace: () => walletChainSelection.getChainRefByNamespace(),
+    getSelectedChainRef: (namespace) => walletChainSelection.getSelectedChainRef(namespace),
     getChain: (chainRef) => supportedChains.getChain(chainRef),
     listChains: () => supportedChains.listChains(),
     getSelectedChainView: () => chainViews.getSelectedChainView(),
@@ -52,7 +52,7 @@ export const createWalletNetworks = (deps: {
       network.reportRpcOutcome(chainRef, outcome);
     },
     onStateChanged: (listener) => network.onStateChanged(listener),
-    onSelectionChanged: (listener) => networkSelection.subscribeChanged(listener),
+    onSelectionChanged: (listener) => walletChainSelection.subscribeChanged(listener),
     onChainUpdated: (listener) => supportedChains.onChainUpdated(listener),
     onCustomRpcChanged: (listener) => customRpc.subscribeChanged(listener),
   };

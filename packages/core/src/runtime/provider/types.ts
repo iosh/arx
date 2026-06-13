@@ -54,8 +54,7 @@ export type ProviderRuntimeRequestExecution = {
 };
 
 export type ProviderRuntimeRpcContext = {
-  providerNamespace: string;
-  chainRef?: ChainRef;
+  namespace: string;
 };
 
 export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {

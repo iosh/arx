@@ -15,7 +15,7 @@ type Awaitable<T> = T | Promise<T>;
 
 export type RpcProviderRequestHandle = {
   id: string;
-  providerNamespace: string;
+  namespace: string;
   signal: AbortSignal;
   attachBlockingApproval<T extends object>(
     createApproval: (reservation: RpcBlockingApprovalReservation) => Awaitable<T>,

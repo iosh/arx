@@ -19,7 +19,7 @@ export type ProviderRequestRecord = {
   id: string;
   scope: ProviderRuntimeRequestScope;
   rpcId: JsonRpcRequest<JsonRpcParams>["id"];
-  providerNamespace: string;
+  namespace: string;
   method: string;
   createdAt: number;
   blockingApprovalId?: string;
@@ -58,7 +58,7 @@ const cloneRecord = (record: ProviderRequestRecord): ProviderRequestRecord => ({
   id: record.id,
   scope: { ...record.scope },
   rpcId: record.rpcId,
-  providerNamespace: record.providerNamespace,
+  namespace: record.namespace,
   method: record.method,
   createdAt: record.createdAt,
   ...(record.blockingApprovalId ? { blockingApprovalId: record.blockingApprovalId } : {}),
@@ -118,7 +118,7 @@ export const createProviderRequests = ({
       id,
       scope: { ...input.scope },
       rpcId: input.rpcId,
-      providerNamespace: input.providerNamespace,
+      namespace: input.namespace,
       method: input.method,
       createdAt: now(),
     };
@@ -155,7 +155,7 @@ export const createProviderRequests = ({
 
     const handle: ProviderRequestHandle = {
       id,
-      providerNamespace: currentRecord.providerNamespace,
+      namespace: currentRecord.namespace,
       signal: abortController.signal,
       attachBlockingApproval: async <T extends object>(
         createApproval: (reservation: BlockingApprovalReservation) => Awaitable<T>,

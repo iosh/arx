@@ -101,8 +101,7 @@ const createUiPlatform = () => ({
 });
 
 const createProviderContext = () => ({
-  chainRef: EIP155_CHAIN_REF,
-  providerNamespace: EIP155_NAMESPACE,
+  namespace: EIP155_NAMESPACE,
 });
 
 const createProviderExecutionContext = () => ({

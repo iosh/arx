@@ -155,29 +155,13 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       if (!sessionId) continue;
 
       const error = encodeDisconnectError();
-      const sessionContext = getSessionContext(port);
-      const origin = getPortOrigin(port, extensionOrigin);
-      const namespace = sessionContext?.providerNamespace ?? null;
 
       void cancelRequestScope(port, sessionId, "failed to expire request scope on provider disconnect");
 
       rejectPendingWithDisconnectForSession(port, sessionId, error);
 
-      const delivered = postEnvelope(port, {
-        channel: CHANNEL,
-        sessionId,
-        type: "event",
-        payload: { event: PROVIDER_EVENTS.disconnect, params: [error] },
-      });
       cleanupPortState(port);
       disconnectPort(port);
-
-      portLog("broadcastDisconnect", {
-        origin,
-        errorCode: error.code,
-        namespace,
-        delivered,
-      });
     }
   };
 

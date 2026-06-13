@@ -205,7 +205,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
         requestContext,
         providerRequestHandle: {
           id: requestContext.requestId,
-          providerNamespace: "eip155",
+          namespace: "eip155",
           signal: new AbortController().signal,
           attachBlockingApproval: async <T extends object>(
             createApproval: (reservation: { approvalId: string; createdAt: number }) => T | Promise<T>,

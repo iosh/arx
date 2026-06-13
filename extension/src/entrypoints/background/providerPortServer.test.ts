@@ -460,7 +460,7 @@ describe("providerPortServer", () => {
     >[0];
 
     expect(request.context).toMatchObject({
-      providerNamespace: "eip155",
+      namespace: "eip155",
     });
     expect(request.execution).toMatchObject({
       requestScope: {

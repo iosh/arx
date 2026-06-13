@@ -9,7 +9,7 @@ export type ConnectedPortContext = {
 };
 
 export type ProviderSessionContext = ConnectedPortContext & {
-  providerNamespace: string;
+  namespace: string;
 };
 
 export type PortContext = ConnectedPortContext | ProviderSessionContext;

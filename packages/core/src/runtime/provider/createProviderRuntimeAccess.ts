@@ -104,13 +104,9 @@ type PreparedProviderRuntimeRequest =
 
 type ProviderAccessPolicyResult = { kind: "continue" } | { kind: "response"; result: Json };
 
-const buildInternalRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => {
-  if (context.chainRef) {
-    return { namespace: context.providerNamespace, chainRef: context.chainRef };
-  }
-
-  return { namespace: context.providerNamespace };
-};
+const buildInternalRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => ({
+  namespace: context.namespace,
+});
 
 const rejectProviderRequestHandle = (handle: ProviderRequestHandle | null) => {
   return handle ? handle.reject() : false;
@@ -456,12 +452,11 @@ export const createProviderRuntimeAccess = ({
         ? buildInternalRpcInvocationHint(context)
         : await buildProviderRpcInvocationHint({
             origin,
-            namespace: context.providerNamespace,
+            namespace: context.namespace,
           });
       const invocation = resolveInvocationDetails(request.method, invocationHint);
       const resolvedContext: ProviderRuntimeRpcContext = {
-        providerNamespace: invocation.namespace,
-        chainRef: invocation.chainRef,
+        namespace: invocation.namespace,
       };
 
       const accessPolicy = applyAccessPolicy({ origin, method: request.method, invocation });
@@ -476,7 +471,7 @@ export const createProviderRuntimeAccess = ({
       providerRequestHandle = providerRequests.beginRequest({
         scope: requestScope,
         rpcId: request.id,
-        providerNamespace: invocation.namespace,
+        namespace: invocation.namespace,
         method: request.method,
       });
 

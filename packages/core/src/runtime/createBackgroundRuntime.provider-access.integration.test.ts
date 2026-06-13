@@ -158,10 +158,9 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     transactionApprovals: runtime.transactions,
   });
 
-const buildProviderContext = (input: { chainRef: string; namespace: string }) => {
+const buildProviderContext = (input: { namespace: string }) => {
   return {
-    providerNamespace: input.namespace,
-    chainRef: input.chainRef,
+    namespace: input.namespace,
   };
 };
 
@@ -609,7 +608,6 @@ describe("createBackgroundRuntime provider access", () => {
         method: "eth_accounts",
         context: buildProviderContext({
           namespace: chain.namespace,
-          chainRef: chain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -659,7 +657,6 @@ describe("createBackgroundRuntime provider access", () => {
         method: "eth_requestAccounts",
         context: buildProviderContext({
           namespace: chain.namespace,
-          chainRef: chain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -751,7 +748,6 @@ describe("createBackgroundRuntime provider access", () => {
         ],
         context: buildProviderContext({
           namespace: chain.namespace,
-          chainRef: chain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -870,7 +866,6 @@ describe("createBackgroundRuntime provider access", () => {
         ],
         context: buildProviderContext({
           namespace: activeChain.namespace,
-          chainRef: activeChain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -977,7 +972,6 @@ describe("createBackgroundRuntime provider access", () => {
         ],
         context: buildProviderContext({
           namespace: activeChain.namespace,
-          chainRef: activeChain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -1087,7 +1081,6 @@ describe("createBackgroundRuntime provider access", () => {
         ],
         context: buildProviderContext({
           namespace: activeChain.namespace,
-          chainRef: activeChain.chainRef,
         }),
         execution: buildProviderExecutionContext({}),
       });
@@ -1179,7 +1172,6 @@ describe("createBackgroundRuntime provider access", () => {
           ],
           context: buildProviderContext({
             namespace: activeChain.namespace,
-            chainRef: activeChain.chainRef,
           }),
           execution: buildProviderExecutionContext({}),
         }),
@@ -1221,7 +1213,6 @@ describe("createBackgroundRuntime provider access", () => {
           method: "sol_getBalance",
           context: buildProviderContext({
             namespace: "solana",
-            chainRef: SOLANA_CHAIN.chainRef,
           }),
           execution: buildProviderExecutionContext({}),
         }),

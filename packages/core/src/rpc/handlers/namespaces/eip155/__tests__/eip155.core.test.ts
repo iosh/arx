@@ -295,7 +295,7 @@ describe("eip155 handlers - core error paths", () => {
         id: "rpc-chain-switched",
         jsonrpc: "2.0",
         method: "eth_chainId",
-        context: { providerNamespace: "eip155" },
+        context: { namespace: "eip155" },
         execution: {
           requestScope: {
             transport: "provider",
@@ -311,7 +311,7 @@ describe("eip155 handlers - core error paths", () => {
         id: "rpc-accounts-switched",
         jsonrpc: "2.0",
         method: "eth_accounts",
-        context: { providerNamespace: "eip155", chainRef: mainnet.chainRef },
+        context: { namespace: "eip155" },
         execution: {
           requestScope: {
             transport: "provider",
@@ -327,7 +327,7 @@ describe("eip155 handlers - core error paths", () => {
         id: "rpc-chain-fallback",
         jsonrpc: "2.0",
         method: "eth_chainId",
-        context: { providerNamespace: "eip155" },
+        context: { namespace: "eip155" },
         execution: {
           requestScope: {
             transport: "provider",

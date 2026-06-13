@@ -831,8 +831,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     const requestId = `${++nextRequestId}`;
     const hintPayload = buildRpcHint(rpcHint);
     const namespace = deriveMethodNamespace(method, hintPayload);
-    const resolvedChainRef =
-      hintPayload.chainRef ?? (namespace ? runtime.services.walletChainSelection.getSelectedChainRef(namespace) : null);
 
     const response = await runtime.providerAccess.executeRpcRequest({
       id: requestId,
@@ -840,8 +838,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       method,
       ...(params !== undefined ? { params } : {}),
       context: {
-        providerNamespace: namespace ?? hintPayload.namespace ?? "eip155",
-        ...(resolvedChainRef ? { chainRef: resolvedChainRef } : {}),
+        namespace: namespace ?? hintPayload.namespace ?? "eip155",
       },
       execution: {
         requestScope: {

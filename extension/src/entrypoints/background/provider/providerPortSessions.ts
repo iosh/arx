@@ -45,7 +45,7 @@ export const createProviderPortSessions = ({ createPortId }: ProviderPortSession
 
   const readSessionContext = (port: Runtime.Port): ProviderSessionContext | null => {
     const portContext = contextByPort.get(port);
-    return portContext && "providerNamespace" in portContext ? portContext : null;
+    return portContext && "namespace" in portContext ? portContext : null;
   };
 
   const readSessionId = (port: Runtime.Port) => {

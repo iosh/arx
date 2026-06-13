@@ -21,13 +21,13 @@ describe("createProviderRequests", () => {
     const targetHandle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-1",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "eth_requestAccounts",
     });
     const siblingHandle = providerRequests.beginRequest({
       scope: { ...REQUEST_SCOPE, sessionId: "22222222-2222-4222-8222-222222222222" },
       rpcId: "rpc-2",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "eth_requestAccounts",
     });
 
@@ -60,7 +60,7 @@ describe("createProviderRequests", () => {
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-fast",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "eth_chainId",
     });
 
@@ -83,7 +83,7 @@ describe("createProviderRequests", () => {
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-send",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "eth_sendTransaction",
     });
 
@@ -107,7 +107,7 @@ describe("createProviderRequests", () => {
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-send-fail",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "eth_sendTransaction",
     });
 
@@ -132,7 +132,7 @@ describe("createProviderRequests", () => {
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-3",
-      providerNamespace: "eip155",
+      namespace: "eip155",
       method: "personal_sign",
     });
 

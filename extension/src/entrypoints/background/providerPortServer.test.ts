@@ -65,6 +65,14 @@ const makeSnapshot = (
   isUnlocked,
 });
 
+const makeConnectionState = (
+  snapshot: ProviderBridgeSnapshot,
+  accounts: readonly string[],
+): ProviderBridgeConnectionState => ({
+  snapshot,
+  accounts: [...accounts],
+});
+
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
   port.triggerMessage({
     channel: CHANNEL,
@@ -79,6 +87,7 @@ const buildTestConnectionScopeKey = ({ origin, namespace }: { origin: string; na
 
 const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
+  activateConnectionScope?: WalletProvider["activateConnectionScope"];
   executeRpcRequest?: WalletProvider["executeRpcRequest"];
   encodeRuntimeRpcError?: WalletProvider["encodeRuntimeRpcError"];
   cancelRequestScope?: WalletProvider["cancelRequestScope"];
@@ -144,10 +153,13 @@ const createServerHarness = (options?: {
     return snapshot;
   });
   const getConnectionState = vi.fn((input: { origin: string; namespace: string }) => buildConnectionState(input));
-  const activateConnectionScope = vi.fn(async (input: { origin: string; namespace: string }) => {
-    activeConnectionScopes.add(buildTestConnectionScopeKey(input));
-    return buildProviderConnectionState(input);
-  });
+  const activateConnectionScope = vi.fn(
+    options?.activateConnectionScope ??
+      (async (input: { origin: string; namespace: string }) => {
+        activeConnectionScopes.add(buildTestConnectionScopeKey(input));
+        return buildProviderConnectionState(input);
+      }),
+  );
   const deactivateConnectionScope = vi.fn((input: { origin: string; namespace: string }) => {
     activeConnectionScopes.delete(buildTestConnectionScopeKey(input));
   });
@@ -320,6 +332,44 @@ describe("providerPortServer", () => {
 
     secondPort.triggerDisconnect();
     expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledWith({
+      origin: "https://example.com",
+      namespace: "eip155",
+    });
+  });
+
+  it("does not revive a provider session when the port disconnects during connection activation", async () => {
+    let resolveActivation: (value: ProviderBridgeConnectionState) => void = () => {
+      throw new Error("activateConnectionScope resolver not initialized");
+    };
+    const activated = new Promise<ProviderBridgeConnectionState>((resolve) => {
+      resolveActivation = resolve;
+    });
+    const harness = createServerHarness({
+      activateConnectionScope: vi.fn(() => activated),
+    });
+    const port = new FakePort();
+
+    harness.server.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+
+    await vi.waitFor(() =>
+      expect(harness.mocks.activateConnectionScope).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        namespace: "eip155",
+      }),
+    );
+
+    port.triggerDisconnect();
+    expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledWith({
+      origin: "https://example.com",
+      namespace: "eip155",
+    });
+
+    resolveActivation(makeConnectionState(makeSnapshot("eip155", true), ["0xaaa"]));
+
+    await vi.waitFor(() => expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledTimes(2));
+    expect(port.postMessage).not.toHaveBeenCalled();
+    expect(harness.mocks.deactivateConnectionScope).toHaveBeenLastCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });
@@ -502,17 +552,8 @@ describe("providerPortServer", () => {
     expect(port.postMessage).toHaveBeenCalledTimes(postMessageCallCount);
   });
 
-  it("projects namespace-scoped chain and account updates from the latest snapshot", async () => {
+  it("projects namespace-scoped chain and account updates from the core change payload", async () => {
     const harness = createServerHarness({
-      resolveAccounts: ({ chainRef }) => {
-        if (chainRef === "conflux:1030") {
-          return ["cfx:new"];
-        }
-        if (chainRef === "conflux:1029") {
-          return ["cfx:old"];
-        }
-        return ["0xaaa"];
-      },
       snapshots: {
         eip155: makeSnapshot("eip155", true),
         conflux: makeSnapshot("conflux", true, {
@@ -535,14 +576,26 @@ describe("providerPortServer", () => {
 
     evmPort.postMessage.mockClear();
     confluxPort.postMessage.mockClear();
+    harness.mocks.buildSnapshot.mockClear();
+    harness.mocks.getConnectionState.mockClear();
 
     const scope = { origin: "https://example.com", namespace: "conflux" };
-    const previous = harness.buildProviderConnectionState(scope);
+    const previous = makeConnectionState(
+      makeSnapshot("conflux", true, {
+        chain: { chainId: "0x405", chainRef: "conflux:1029" },
+      }),
+      ["cfx:old"],
+    );
     const nextSnapshot = makeSnapshot("conflux", true, {
       chain: { chainId: "0x406", chainRef: "conflux:1030" },
     });
-    harness.setSnapshot("conflux", nextSnapshot);
-    const next = harness.buildProviderConnectionState(scope);
+    const next = makeConnectionState(nextSnapshot, ["cfx:new"]);
+    harness.setSnapshot(
+      "conflux",
+      makeSnapshot("conflux", true, {
+        chain: { chainId: "0x405", chainRef: "conflux:1029" },
+      }),
+    );
 
     harness.emitConnectionStateChanged({
       scope,
@@ -576,6 +629,8 @@ describe("providerPortServer", () => {
       ),
     );
     expect(evmPort.postMessage).not.toHaveBeenCalled();
+    expect(harness.mocks.buildSnapshot).not.toHaveBeenCalled();
+    expect(harness.mocks.getConnectionState).not.toHaveBeenCalled();
   });
 
   it("projects provider-chain changes only to ports connected to the changed origin and namespace", async () => {
@@ -616,14 +671,16 @@ describe("providerPortServer", () => {
 
     firstPort.postMessage.mockClear();
     secondPort.postMessage.mockClear();
+    harness.mocks.buildSnapshot.mockClear();
+    harness.mocks.getConnectionState.mockClear();
 
     const scope = { origin: firstOrigin, namespace: "eip155" };
-    const previous = harness.buildProviderConnectionState(scope);
+    const previous = makeConnectionState(makeSnapshot("eip155", true), ["0xfirstMain"]);
     const nextSnapshot = makeSnapshot("eip155", true, {
       chain: { chainId: "0xa", chainRef: "eip155:10" },
     });
-    harness.setSnapshot(scope, nextSnapshot);
-    const next = harness.buildProviderConnectionState(scope);
+    const next = makeConnectionState(nextSnapshot, ["0xfirstAlt"]);
+    harness.setSnapshot(scope, makeSnapshot("eip155", true));
 
     harness.emitConnectionStateChanged({
       scope,
@@ -657,6 +714,8 @@ describe("providerPortServer", () => {
       ),
     );
     expect(secondPort.postMessage).not.toHaveBeenCalled();
+    expect(harness.mocks.buildSnapshot).not.toHaveBeenCalled();
+    expect(harness.mocks.getConnectionState).not.toHaveBeenCalled();
   });
 
   it("keeps the provider session alive while projecting lock state", async () => {

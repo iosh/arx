@@ -119,6 +119,15 @@ export const createProviderPortConnections = () => {
     };
   };
 
+  const hasPortInScope = (port: Runtime.Port, scope: ProviderConnectionScope) => {
+    const currentScope = scopeByPort.get(port);
+    return currentScope?.origin === scope.origin && currentScope.namespace === scope.namespace;
+  };
+
+  const hasPortsForScope = (scope: ProviderConnectionScope) => {
+    return (getPortsForScope(scope)?.size ?? 0) > 0;
+  };
+
   const listPortsForConnectionScopes = (scopes: Iterable<ProviderConnectionScope>) => {
     const ports = new Set<Runtime.Port>();
 
@@ -137,6 +146,8 @@ export const createProviderPortConnections = () => {
   return {
     attachPortToConnection,
     detachPort,
+    hasPortInScope,
+    hasPortsForScope,
     listPortsForConnectionScopes,
   };
 };

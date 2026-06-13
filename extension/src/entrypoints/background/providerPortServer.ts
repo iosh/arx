@@ -155,6 +155,10 @@ export const createProviderPortServer = ({
   const getConnectionStateForPort = async (port: Runtime.Port, namespace: string) => {
     const origin = providerPortSessions.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
     const activeProvider = await loadProvider();
+    if (!providerPortSessions.hasConnectedPort(port)) {
+      return null;
+    }
+
     const scope = { origin, namespace };
     const change = providerPortConnections.attachPortToConnection(port, scope);
 
@@ -165,6 +169,13 @@ export const createProviderPortServer = ({
     const connectionState = change.scopeBecameActive
       ? await activeProvider.activateConnectionScope(scope)
       : activeProvider.getConnectionState(scope);
+    if (!providerPortSessions.hasConnectedPort(port) || !providerPortConnections.hasPortInScope(port, scope)) {
+      if (change.scopeBecameActive && !providerPortConnections.hasPortsForScope(scope)) {
+        disconnectConnectionScope(scope);
+      }
+      return null;
+    }
+
     return connectionState;
   };
 
@@ -239,6 +250,9 @@ export const createProviderPortServer = ({
     writeSessionId: (port, sessionId) => providerPortSessions.writeSessionId(port, sessionId),
     getProviderConnectionState: async (port, namespace) => {
       const connectionState = await getConnectionStateForPort(port, namespace);
+      if (!connectionState) {
+        return null;
+      }
       return {
         snapshot: connectionState.snapshot,
         accounts: connectionState.accounts,

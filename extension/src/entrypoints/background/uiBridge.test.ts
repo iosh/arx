@@ -661,12 +661,6 @@ const createRuntimeServices = () => {
       known: [CHAIN],
       available: [CHAIN],
     }),
-    buildProviderMeta: () => ({
-      activeChain: CHAIN.chainRef,
-      activeNamespace: CHAIN.namespace,
-      activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef },
-      supportedChains: [CHAIN.chainRef],
-    }),
   };
   const permissionViews = {
     buildUiPermissionsSnapshot: () => ({ origins: {} }),
@@ -697,10 +691,8 @@ const createUiAccessForTest = (input: {
   platform: ReturnType<typeof createUiPlatform>;
   activationEntries?: Parameters<typeof createUiActivationExtension>[0]["entries"];
   uiOrigin: string;
-  networkSelection: {
-    subscribeChanged: (
-      handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
-    ) => () => void;
+  walletChainSelection: {
+    subscribeChanged: (handler: () => void) => () => void;
   };
   subscribeAttentionStateChanged: (listener: () => void) => () => void;
   attentionSnapshot?: () => { queue: never[]; count: number };
@@ -839,7 +831,7 @@ const createUiAccessForTest = (input: {
         },
         chains: {
           onStateChanged: input.services.network.onStateChanged,
-          onSelectionChanged: (listener: () => void) => input.networkSelection.subscribeChanged(() => listener()),
+          onSelectionChanged: (listener: () => void) => input.walletChainSelection.subscribeChanged(() => listener()),
         },
         session: sessionAccess,
         attention: {
@@ -966,13 +958,11 @@ const buildBridge = (opts?: {
   });
   const persistVaultMeta = vi.fn(async () => {});
   const attentionStateHandlers = new Set<() => void>();
-  const networkSelectionListeners = new Set<
-    (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
-  >();
-  const networkSelection = {
-    subscribeChanged: (handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void) => {
-      networkSelectionListeners.add(handler);
-      return () => networkSelectionListeners.delete(handler);
+  const walletChainSelectionListeners = new Set<() => void>();
+  const walletChainSelection = {
+    subscribeChanged: (handler: () => void) => {
+      walletChainSelectionListeners.add(handler);
+      return () => walletChainSelectionListeners.delete(handler);
     },
   };
   const uiAccess = createUiAccessForTest({
@@ -985,7 +975,7 @@ const buildBridge = (opts?: {
     platform,
     uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
     installSurfaceActivationExtension: opts?.installSurfaceActivationExtension,
-    networkSelection,
+    walletChainSelection,
     transactionsAccess: runtimeServices.transactionAccess,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
@@ -1003,9 +993,9 @@ const buildBridge = (opts?: {
     approvals: approvalQueueService,
     browser: browserApi,
     persistVaultMeta,
-    emitNetworkSelectionChanged: () => {
-      for (const handler of networkSelectionListeners) {
-        handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
+    emitWalletChainSelectionChanged: () => {
+      for (const handler of walletChainSelectionListeners) {
+        handler();
       }
     },
     emitAttentionStateChanged: () => {
@@ -1051,7 +1041,7 @@ describe("uiBridge", () => {
   let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
-  let _emitNetworkSelectionChanged: ReturnType<typeof buildBridge>["emitNetworkSelectionChanged"];
+  let _emitWalletChainSelectionChanged: ReturnType<typeof buildBridge>["emitWalletChainSelectionChanged"];
   let persistVaultMeta: ReturnType<typeof buildBridge>["persistVaultMeta"];
 
   beforeEach(() => {
@@ -1062,7 +1052,7 @@ describe("uiBridge", () => {
     unlock = ctx.unlock;
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
-    _emitNetworkSelectionChanged = ctx.emitNetworkSelectionChanged;
+    _emitWalletChainSelectionChanged = ctx.emitWalletChainSelectionChanged;
     persistVaultMeta = ctx.persistVaultMeta;
 
     port = createPort();
@@ -1285,7 +1275,7 @@ describe("uiBridge", () => {
       entrypoints: ENTRYPOINTS,
     });
     const runtimeServices = createRuntimeServices();
-    const listeners = new Set<(payload: { next: { activeChainByNamespace: Record<string, string> } }) => void>();
+    const listeners = new Set<() => void>();
     const attentionStateHandlers = new Set<() => void>();
     let snapshotBroken = true;
 
@@ -1309,10 +1299,8 @@ describe("uiBridge", () => {
       keyring,
       platform,
       uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
-      networkSelection: {
-        subscribeChanged: (
-          handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
-        ) => {
+      walletChainSelection: {
+        subscribeChanged: (handler: () => void) => {
           listeners.add(handler);
           return () => listeners.delete(handler);
         },
@@ -1352,7 +1340,7 @@ describe("uiBridge", () => {
 
     snapshotBroken = false;
     for (const handler of listeners) {
-      handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
+      handler();
     }
 
     const snapshot = latestSnapshotFromMessages(port.messages);

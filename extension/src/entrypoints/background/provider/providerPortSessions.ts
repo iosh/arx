@@ -27,6 +27,10 @@ export const createProviderPortSessions = ({ createPortId }: ProviderPortSession
     return connectedPorts.size;
   };
 
+  const hasConnectedPort = (port: Runtime.Port) => {
+    return connectedPorts.has(port);
+  };
+
   const listConnectedPorts = () => {
     return [...connectedPorts];
   };
@@ -97,6 +101,7 @@ export const createProviderPortSessions = ({ createPortId }: ProviderPortSession
   return {
     registerConnectedPort,
     countConnectedPorts,
+    hasConnectedPort,
     listConnectedPorts,
     readPortContext,
     readSessionContext,

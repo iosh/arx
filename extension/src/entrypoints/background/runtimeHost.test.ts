@@ -1,4 +1,5 @@
 import { ATTENTION_REQUESTED } from "@arx/core/services";
+import type { ProviderRuntimeSnapshot } from "@arx/core/runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
@@ -102,18 +103,15 @@ const makeRuntime = () => {
   const onUnlocked = vi.fn(() => vi.fn());
   const onLocked = vi.fn(() => vi.fn());
   const onSessionLockStateChanged = vi.fn(() => vi.fn());
-  const subscribeNetworkSelectionChanged = vi.fn(() => vi.fn());
+  const onWalletChainSelectionChanged = vi.fn(() => vi.fn());
+  const onConnectionStateChanged = vi.fn(() => vi.fn());
   const unsubscribeBus = vi.fn();
   const subscribe = vi.fn(() => unsubscribeBus);
   const providerSnapshot = {
     namespace: "eip155",
     chain: { chainId: "0x1", chainRef: "eip155:1" },
     isUnlocked: true,
-    meta: {
-      activeChainByNamespace: { eip155: "eip155:1" },
-      supportedChains: ["eip155:1"],
-    },
-  };
+  } satisfies ProviderRuntimeSnapshot;
   const provider = {
     buildSnapshot: vi.fn(() => providerSnapshot),
     getConnectionState: vi.fn(async () => ({
@@ -123,21 +121,12 @@ const makeRuntime = () => {
     })),
     subscribeSessionUnlocked: onUnlocked,
     subscribeSessionLocked: onLocked,
-    subscribeNetworkStateChanged: onNetworkStateChanged,
-    subscribeNetworkSelectionChanged,
-    subscribeAccountsStateChanged: onAccountsStateChanged,
-    subscribePermissionsStateChanged: onPermissionsStateChanged,
-    connect: vi.fn(() => ({
+    activateConnectionScope: vi.fn(async () => ({
       snapshot: providerSnapshot,
       accounts: [],
-      connected: false,
     })),
-    disconnect: vi.fn(() => ({
-      snapshot: providerSnapshot,
-      accounts: [],
-      connected: false,
-    })),
-    disconnectOrigin: vi.fn(() => 0),
+    deactivateConnectionScope: vi.fn(),
+    subscribeConnectionStateChanged: onConnectionStateChanged,
     executeRpcRequest: vi.fn(),
     encodeRuntimeRpcError: vi.fn(),
     cancelRequestScope: vi.fn(async () => 0),
@@ -189,10 +178,6 @@ const makeRuntime = () => {
       attention: {},
       chainActivation: {},
       chainViews: {
-        buildProviderMeta: vi.fn(() => ({
-          activeChainByNamespace: { eip155: "eip155:1" },
-          supportedChains: ["eip155:1"],
-        })),
         getActiveChainViewForNamespace: vi.fn(() => ({
           chainId: "0x1",
           chainRef: "eip155:1",
@@ -200,9 +185,9 @@ const makeRuntime = () => {
       },
       permissionViews: {},
       accountCodecs: {},
-      networkSelection: {
+      walletChainSelection: {
         getChainRefByNamespace: () => ({ eip155: "eip155:1" }),
-        subscribeChanged: subscribeNetworkSelectionChanged,
+        subscribeChanged: onWalletChainSelectionChanged,
       },
       session: {
         vault: {
@@ -264,7 +249,8 @@ const makeRuntime = () => {
     onUnlocked,
     onLocked,
     onSessionLockStateChanged,
-    subscribeNetworkSelectionChanged,
+    onWalletChainSelectionChanged,
+    onConnectionStateChanged,
     addTransactionApproval,
     onTransactionApprovalsChanged,
     getTransactionApproval,
@@ -304,7 +290,8 @@ describe("runtimeHost", () => {
         chains: {
           customChains: {},
           customRpc: {},
-          networkSelection: {},
+          walletChainSelection: {},
+          providerChainSelection: {},
         },
         settings: {},
       },
@@ -374,8 +361,13 @@ describe("runtimeHost", () => {
     expect(provider).toBe(runtimeHarness.provider);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);
-    expect(provider.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
-    expect(runtimeHarness.provider.buildSnapshot).toHaveBeenCalledWith("eip155");
+    expect(provider.buildSnapshot({ origin: "https://example.com", namespace: "eip155" })).toEqual(
+      runtimeHarness.providerSnapshot,
+    );
+    expect(runtimeHarness.provider.buildSnapshot).toHaveBeenCalledWith({
+      origin: "https://example.com",
+      namespace: "eip155",
+    });
     expect(uiEntryAccess.hasInitializedVault()).toBe(true);
 
     const unlockListener = vi.fn();

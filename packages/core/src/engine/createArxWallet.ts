@@ -40,6 +40,7 @@ import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletCreateUiOptions, WalletProvider } from "./types.js";
+import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
 import {
   createWalletAccounts,
   createWalletApprovals,
@@ -69,7 +70,8 @@ type WalletRuntimeServices = Readonly<
     chainViews: BackgroundSessionScope["chainViews"];
     permissionViews: BackgroundSupportScope["permissionViews"];
     accountCodecs: BackgroundBootstrapScope["namespaceBootstrap"]["accountCodecs"];
-    networkSelection: BackgroundSessionScope["networkSelection"];
+    walletChainSelection: BackgroundSessionScope["walletChainSelection"];
+    providerChainSelection: BackgroundSessionScope["providerChainSelection"];
     customRpc: BackgroundSessionScope["customRpc"];
     namespaceBindings: BackgroundSupportScope["namespaceBindings"];
     namespaceRuntimeSupport: BackgroundSupportScope["namespaceRuntimeSupport"];
@@ -251,7 +253,7 @@ const createWalletUiDeps = (
         },
         chains: {
           onStateChanged: (listener) => runtime.services.network.onStateChanged(listener),
-          onSelectionChanged: (listener) => runtime.services.networkSelection.subscribeChanged(() => listener()),
+          onSelectionChanged: (listener) => runtime.services.walletChainSelection.subscribeChanged(() => listener()),
         },
         session,
         attention: {
@@ -273,7 +275,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const namespaces = createWalletNamespaces({ modules });
   const namespaceStages = assembleRuntimeNamespaceStagesFromWalletModules(namespaces.listModules());
   const storageOptions = buildStorageOptions(input);
-  const cleanupTasks: Array<() => void> = [];
   let sessionScope: BackgroundSessionScope | null = null;
   let backgroundSupportScope: BackgroundSupportScope | null = null;
 
@@ -315,7 +316,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     bootstrapScope,
     namespaceSession: namespaceStages.session,
     settingsPort: input.storage.ports.settings,
-    networkSelectionPort: input.storage.ports.chains.networkSelection,
+    walletChainSelectionPort: input.storage.ports.chains.walletChainSelection,
+    providerChainSelectionPort: input.storage.ports.chains.providerChainSelection,
     customRpcPort: input.storage.ports.chains.customRpc,
     storePorts: {
       accounts: input.storage.ports.accounts,
@@ -366,6 +368,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const lifecycle = createBackgroundRuntimeLifecycle({
     runtimeLifecycle: sessionScope.runtimeLifecycle,
     stateServices: sessionScope.stateServices,
+    providerChainSelection: sessionScope.providerChainSelection,
     permissionsReady: sessionScope.permissionsReady,
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
@@ -380,7 +383,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const stateServices = sessionScope.stateServices;
   const rpcHandlerDeps: RpcHandlerDeps = {
     ...stateServices,
-    networkSelection: sessionScope.networkSelection,
+    walletChainSelection: sessionScope.walletChainSelection,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
       now: bootstrapScope.storageNow,
@@ -402,6 +405,30 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       transactions: transactionServices.transactions,
     },
   });
+  const resolveProviderChain = (input: { origin: string; namespace: string }) =>
+    resolveProviderChainForConnection(
+      {
+        chainViews: sessionScope.chainViews,
+        providerChainSelection: sessionScope.providerChainSelection,
+      },
+      input,
+    );
+  const initializeProviderChainSelection = async (input: { origin: string; namespace: string }) => {
+    const selectedChainRef = sessionScope.providerChainSelection.getSelectedChainRef(input);
+    if (selectedChainRef) {
+      return;
+    }
+
+    const activeChain = sessionScope.chainViews.getActiveChainViewForNamespace(input.namespace);
+    await sessionScope.providerChainSelection.setSelectedChainRef({
+      origin: input.origin,
+      namespace: input.namespace,
+      chainRef: activeChain.chainRef,
+    });
+  };
+  const subscribeProviderChainChanged = (listener: () => void) => {
+    return sessionScope.providerChainSelection.subscribeChanged(() => listener());
+  };
   const providerRequests = createProviderRequests({
     generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
     now: bootstrapScope.storageNow,
@@ -427,9 +454,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const providerAccess = createProviderRuntimeAccess({
     getIsInitialized: () => lifecycle.getIsInitialized(),
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
-    getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
-    buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
-    getActiveChainByNamespace: () => sessionScope.networkSelection.getChainRefByNamespace(),
+    resolveProviderChain,
+    initializeProviderChainSelection,
     listPermittedAccountsView: (origin, options) =>
       backgroundSupportScope.permissionViews.listPermittedAccounts(origin, options),
     formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
@@ -456,9 +482,11 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
     subscribeNetworkStateChanged: (listener) => stateServices.network.onStateChanged(listener),
-    subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
+    subscribeProviderChainSelectionChanged: (listener) =>
+      sessionScope.providerChainSelection.subscribeChanged(listener),
     subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(listener),
     subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(listener),
+    logger: bootstrapScope.storageLogger,
   });
   const session = createWalletSession({
     session: sessionScope.sessionLayer.session,
@@ -487,7 +515,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     permissions: stateServices.permissions,
   });
   const networks = createWalletNetworks({
-    networkSelection: sessionScope.networkSelection,
+    walletChainSelection: sessionScope.walletChainSelection,
     supportedChains: stateServices.supportedChains,
     customRpc: sessionScope.customRpc,
     chainViews: sessionScope.chainViews,
@@ -502,15 +530,26 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     sessionStatus: sessionScope.sessionStatus,
     permissionViews: backgroundSupportScope.permissionViews,
     chainViews: sessionScope.chainViews,
+    providerChainSelection: sessionScope.providerChainSelection,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(() => listener()),
     subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(() => listener()),
     subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(() => listener()),
     subscribeNetworkStateChanged: (listener) => stateServices.network.onStateChanged(() => listener()),
-    subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
-    registerCleanup: (cleanup) => {
-      cleanupTasks.push(cleanup);
-    },
+    subscribeProviderChainChanged,
+  });
+  const syncDappConnectionFromProviderState = (input: { origin: string; namespace: string }, accountCount: number) => {
+    if (accountCount > 0) {
+      dappConnections.connect(input);
+      return;
+    }
+
+    dappConnections.disconnect(input);
+  };
+  providerAccess.subscribeConnectionStateChanged((change) => {
+    if (change.changed.accounts) {
+      syncDappConnectionFromProviderState(change.scope, change.next.accounts.length);
+    }
   });
   const snapshots = createWalletSnapshots({
     session: sessionScope.sessionLayer.session,
@@ -531,9 +570,10 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     },
     namespaceBindings: backgroundSupportScope.namespaceBindings,
     dappConnections,
-    providerProjection: {
+    providerSnapshot: {
       sessionStatus: sessionScope.sessionStatus,
       chainViews: sessionScope.chainViews,
+      providerChainSelection: sessionScope.providerChainSelection,
     },
   });
   const services: WalletRuntimeServices = {
@@ -543,7 +583,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainViews: sessionScope.chainViews,
     permissionViews: backgroundSupportScope.permissionViews,
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
-    networkSelection: sessionScope.networkSelection,
+    walletChainSelection: sessionScope.walletChainSelection,
+    providerChainSelection: sessionScope.providerChainSelection,
     customRpc: sessionScope.customRpc,
     namespaceBindings: backgroundSupportScope.namespaceBindings,
     namespaceRuntimeSupport: backgroundSupportScope.namespaceRuntimeSupport,
@@ -589,11 +630,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     }
 
     shutdownPromise = (async () => {
-      cleanupTasks.splice(0).forEach((cleanup) => {
-        try {
-          cleanup();
-        } catch {}
-      });
       lifecycle.shutdown();
     })();
 

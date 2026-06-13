@@ -12,9 +12,14 @@ import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHi
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
+import { createSignal, type StateChangeSubscription } from "../../services/store/_shared/signal.js";
+import type { ProviderChainSelectionChangedHandler } from "../../services/store/providerChainSelection/types.js";
+import { InvalidProviderConnectionScopeError } from "./errors.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
+  ProviderConnectionScope,
+  ProviderConnectionStateChange,
+  ProviderConnectionStateChangedHandler,
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
@@ -31,9 +36,11 @@ import type {
 
 const UNKNOWN_ORIGIN = "unknown://";
 
-type ProviderRuntimeChainView = {
-  chainId: string;
-  chainRef: ChainRef;
+type ProviderRuntimeResolvedChain = {
+  chain: {
+    chainId: string;
+    chainRef: ChainRef;
+  };
 };
 
 type ProviderRuntimeExecuteRequest = (args: {
@@ -49,12 +56,8 @@ type ProviderRuntimeExecuteRequest = (args: {
 type ProviderRuntimeAccessDeps = {
   getIsInitialized: () => boolean;
   getSessionStatus: () => { isUnlocked: boolean };
-  getActiveChainViewForNamespace: (namespace: string) => ProviderRuntimeChainView;
-  buildProviderMeta: (namespace: string) => {
-    activeChainByNamespace: Record<string, ChainRef>;
-    supportedChains: ChainRef[];
-  };
-  getActiveChainByNamespace: () => Record<string, ChainRef>;
+  resolveProviderChain: (input: ProviderRuntimeConnectionQuery) => ProviderRuntimeResolvedChain;
+  initializeProviderChainSelection: (input: ProviderConnectionScope) => Promise<void>;
   listPermittedAccountsView: (origin: string, options: { chainRef: ChainRef }) => Array<{ canonicalAddress: string }>;
   formatAddress: (input: { chainRef: ChainRef; canonical: string }) => string;
   resolveInvocationDetails: (method: string, hint?: RpcInvocationHint) => ResolvedRpcInvocationDetails;
@@ -77,9 +80,10 @@ type ProviderRuntimeAccessDeps = {
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
   subscribeNetworkStateChanged: StateChangeSubscription;
-  subscribeNetworkSelectionChanged: StateChangeSubscription;
+  subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
   subscribeAccountsStateChanged: StateChangeSubscription;
   subscribePermissionsStateChanged: StateChangeSubscription;
+  logger?: (message: string, error?: unknown) => void;
 };
 
 type BegunProviderRuntimeRequest = {
@@ -100,8 +104,8 @@ type PreparedProviderRuntimeRequest =
 
 type ProviderAccessPolicyResult = { kind: "continue" } | { kind: "response"; result: Json };
 
-const buildRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => {
-  if (context.chainRef !== undefined) {
+const buildInternalRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => {
+  if (context.chainRef) {
     return { namespace: context.providerNamespace, chainRef: context.chainRef };
   }
 
@@ -129,12 +133,67 @@ const encodeProviderRuntimeError = (error: unknown): ProviderRuntimeRpcError => 
   return { kind: "JsonRpcError", code: -32603, message: "Internal error" };
 };
 
+const createRuntimeNotInitializedError = () =>
+  new RpcInternalError({
+    message: "Background runtime is not initialized (call lifecycle.initialize() first).",
+  });
+
+const parseProviderConnectionScope = ({ origin, namespace }: ProviderConnectionScope): ProviderConnectionScope => {
+  if (origin.length === 0 || origin.trim() !== origin) {
+    throw new InvalidProviderConnectionScopeError({
+      field: "origin",
+      message: "Provider connection scope origin is required.",
+    });
+  }
+
+  if (namespace.length === 0 || namespace.trim() !== namespace) {
+    throw new InvalidProviderConnectionScopeError({
+      field: "namespace",
+      message: "Provider connection scope namespace is required.",
+    });
+  }
+
+  return {
+    origin,
+    namespace,
+  };
+};
+
+const areAccountListsEqual = (left: readonly string[], right: readonly string[]) => {
+  return left.length === right.length && left.every((account, index) => account === right[index]);
+};
+
+const deriveProviderConnectionStateChange = (args: {
+  scope: ProviderConnectionScope;
+  previous: ProviderRuntimeConnectionState;
+  next: ProviderRuntimeConnectionState;
+}): ProviderConnectionStateChange | null => {
+  const { scope, previous, next } = args;
+  const chainChanged =
+    previous.snapshot.chain.chainId !== next.snapshot.chain.chainId ||
+    previous.snapshot.chain.chainRef !== next.snapshot.chain.chainRef;
+  const accountsChanged = !areAccountListsEqual(previous.accounts, next.accounts);
+
+  if (!chainChanged && !accountsChanged) {
+    return null;
+  }
+
+  return {
+    scope,
+    previous,
+    next,
+    changed: {
+      chain: chainChanged,
+      accounts: accountsChanged,
+    },
+  };
+};
+
 export const createProviderRuntimeAccess = ({
   getIsInitialized,
   getSessionStatus,
-  getActiveChainViewForNamespace,
-  buildProviderMeta,
-  getActiveChainByNamespace,
+  resolveProviderChain,
+  initializeProviderChainSelection,
   listPermittedAccountsView,
   formatAddress,
   resolveInvocationDetails,
@@ -147,33 +206,37 @@ export const createProviderRuntimeAccess = ({
   subscribeSessionUnlocked,
   subscribeSessionLocked,
   subscribeNetworkStateChanged,
-  subscribeNetworkSelectionChanged,
+  subscribeProviderChainSelectionChanged,
   subscribeAccountsStateChanged,
   subscribePermissionsStateChanged,
+  logger,
 }: ProviderRuntimeAccessDeps): ProviderRuntimeAccess => {
-  const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {
-    const providerMeta = buildProviderMeta(namespace);
-    const providerChain = getActiveChainViewForNamespace(namespace);
-    const supportedChains = providerMeta.supportedChains.filter((chainRef) => chainRef.startsWith(`${namespace}:`));
+  type ActiveConnectionScopeState = {
+    scope: ProviderConnectionScope;
+    state: ProviderRuntimeConnectionState;
+  };
+
+  const connectionStateChanged = createSignal<ProviderConnectionStateChange>();
+  const activeScopesByOrigin = new Map<string, Map<string, ActiveConnectionScopeState>>();
+  let connectionStateReconcileQueue: Promise<void> = Promise.resolve();
+
+  const buildSnapshotForScope = (input: ProviderConnectionScope, isUnlocked: boolean): ProviderRuntimeSnapshot => {
+    const { namespace } = input;
+    const resolvedProviderChain = resolveProviderChain(input);
+    const { chain } = resolvedProviderChain;
 
     return {
       namespace,
       chain: {
-        chainId: providerChain.chainId,
-        chainRef: providerChain.chainRef,
+        chainId: chain.chainId,
+        chainRef: chain.chainRef,
       },
       isUnlocked,
-      meta: {
-        activeChainByNamespace: {
-          [namespace]: providerMeta.activeChainByNamespace[namespace] ?? providerChain.chainRef,
-        },
-        supportedChains,
-      },
     };
   };
 
-  const buildSnapshot = (namespace: string): ProviderRuntimeSnapshot => {
-    return buildSnapshotFromState(namespace, getSessionStatus().isUnlocked);
+  const buildSnapshot = (input: ProviderRuntimeConnectionQuery): ProviderRuntimeSnapshot => {
+    return buildSnapshotForScope(parseProviderConnectionScope(input), getSessionStatus().isUnlocked);
   };
 
   const listPermittedAccountsForState = ({
@@ -201,6 +264,67 @@ export const createProviderRuntimeAccess = ({
     return encodeProviderRuntimeError(error);
   };
 
+  const copyConnectionState = (state: ProviderRuntimeConnectionState): ProviderRuntimeConnectionState => ({
+    snapshot: {
+      namespace: state.snapshot.namespace,
+      chain: {
+        chainId: state.snapshot.chain.chainId,
+        chainRef: state.snapshot.chain.chainRef,
+      },
+      isUnlocked: state.snapshot.isUnlocked,
+    },
+    accounts: [...state.accounts],
+  });
+
+  const getActiveScopeState = (scope: ProviderConnectionScope): ActiveConnectionScopeState | null => {
+    return activeScopesByOrigin.get(scope.origin)?.get(scope.namespace) ?? null;
+  };
+
+  const setActiveScopeState = (scope: ProviderConnectionScope, state: ProviderRuntimeConnectionState) => {
+    let namespaceStates = activeScopesByOrigin.get(scope.origin);
+    if (!namespaceStates) {
+      namespaceStates = new Map();
+      activeScopesByOrigin.set(scope.origin, namespaceStates);
+    }
+
+    namespaceStates.set(scope.namespace, {
+      scope,
+      state: copyConnectionState(state),
+    });
+  };
+
+  const deleteActiveScopeState = (scope: ProviderConnectionScope) => {
+    const namespaceStates = activeScopesByOrigin.get(scope.origin);
+    if (!namespaceStates) {
+      return;
+    }
+
+    namespaceStates.delete(scope.namespace);
+    if (namespaceStates.size === 0) {
+      activeScopesByOrigin.delete(scope.origin);
+    }
+  };
+
+  const listActiveConnectionScopes = (): ProviderConnectionScope[] => {
+    const scopes: ProviderConnectionScope[] = [];
+
+    for (const namespaceStates of activeScopesByOrigin.values()) {
+      for (const { scope } of namespaceStates.values()) {
+        scopes.push(scope);
+      }
+    }
+
+    return scopes.sort(
+      (left, right) => left.origin.localeCompare(right.origin) || left.namespace.localeCompare(right.namespace),
+    );
+  };
+
+  const selectActiveConnectionScopes = (
+    predicate: (scope: ProviderConnectionScope) => boolean,
+  ): ProviderConnectionScope[] => {
+    return listActiveConnectionScopes().filter(predicate);
+  };
+
   const requestUnlockAttentionIfNeeded = (args: {
     origin: string;
     method: string;
@@ -225,9 +349,7 @@ export const createProviderRuntimeAccess = ({
     invocation: ResolvedRpcInvocationDetails;
   }): ProviderAccessPolicyResult => {
     if (!getIsInitialized()) {
-      throw new RpcInternalError({
-        message: "Background runtime is not initialized (call lifecycle.initialize() first).",
-      });
+      throw createRuntimeNotInitializedError();
     }
 
     const { origin, method, invocation } = args;
@@ -299,12 +421,24 @@ export const createProviderRuntimeAccess = ({
     }
   };
 
+  const buildProviderRpcInvocationHint = async (args: {
+    origin: string;
+    namespace: string;
+  }): Promise<RpcInvocationHint> => {
+    const scope = parseProviderConnectionScope(args);
+    await initializeProviderChainSelection(scope);
+    return {
+      namespace: scope.namespace,
+      chainRef: resolveProviderChain(scope).chain.chainRef,
+    };
+  };
+
   const executeRpcRequest = async ({
-    origin,
     context,
     execution,
     ...request
   }: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse> => {
+    const origin = execution.requestScope.origin;
     let providerRequestHandle: ProviderRequestHandle | null = null;
 
     const buildErrorResponse = (error: unknown): ProviderRuntimeRpcResponse => ({
@@ -313,9 +447,17 @@ export const createProviderRuntimeAccess = ({
       error: encodeRuntimeRpcError(error),
     });
 
-    const prepareRequest = (): PreparedProviderRuntimeRequest => {
+    const prepareRequest = async (): Promise<PreparedProviderRuntimeRequest> => {
       const requestScope = execution.requestScope;
-      const invocationHint = buildRpcInvocationHint(context);
+      if (!getIsInitialized()) {
+        throw createRuntimeNotInitializedError();
+      }
+      const invocationHint = isInternalOrigin(origin)
+        ? buildInternalRpcInvocationHint(context)
+        : await buildProviderRpcInvocationHint({
+            origin,
+            namespace: context.providerNamespace,
+          });
       const invocation = resolveInvocationDetails(request.method, invocationHint);
       const resolvedContext: ProviderRuntimeRpcContext = {
         providerNamespace: invocation.namespace,
@@ -386,7 +528,7 @@ export const createProviderRuntimeAccess = ({
     };
 
     try {
-      const prepared = prepareRequest();
+      const prepared = await prepareRequest();
       if (prepared.kind === "response") {
         return {
           id: request.id,
@@ -412,22 +554,119 @@ export const createProviderRuntimeAccess = ({
     });
   };
 
-  const buildConnectionState = async ({
-    namespace,
-    origin,
-  }: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState> => {
+  const readConnectionStateForScope = (scope: ProviderConnectionScope): ProviderRuntimeConnectionState => {
     const isUnlocked = getSessionStatus().isUnlocked;
-    const snapshot = buildSnapshotFromState(namespace, isUnlocked);
+    const snapshot = buildSnapshotForScope(scope, isUnlocked);
 
     return {
       snapshot,
       accounts: listPermittedAccountsForState({
-        origin,
+        origin: scope.origin,
         chainRef: snapshot.chain.chainRef,
         isUnlocked,
       }),
     };
   };
+
+  const buildConnectionState = async ({
+    namespace,
+    origin,
+  }: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState> => {
+    return readConnectionStateForScope(parseProviderConnectionScope({ origin, namespace }));
+  };
+
+  const reconcileConnectionScope = async (scope: ProviderConnectionScope) => {
+    const activeState = getActiveScopeState(scope);
+    if (!activeState) {
+      return;
+    }
+
+    const next = await readConnectionStateForScope(scope);
+    setActiveScopeState(scope, next);
+    const change = deriveProviderConnectionStateChange({
+      scope,
+      previous: activeState.state,
+      next,
+    });
+
+    if (change) {
+      connectionStateChanged.emit({
+        ...change,
+        scope: { ...change.scope },
+        previous: copyConnectionState(change.previous),
+        next: copyConnectionState(change.next),
+      });
+    }
+  };
+
+  const enqueueConnectionScopeReconcile = (
+    label: string,
+    loadScopes: () => ProviderConnectionScope[],
+  ): Promise<void> => {
+    connectionStateReconcileQueue = connectionStateReconcileQueue
+      .then(async () => {
+        const scopes = loadScopes();
+        for (const scope of scopes) {
+          try {
+            await reconcileConnectionScope(scope);
+          } catch (error) {
+            logger?.(`provider connection state reconcile failed for ${scope.origin} ${scope.namespace}`, error);
+          }
+        }
+      })
+      .catch((error) => {
+        logger?.(`provider connection state reconcile failed: ${label}`, error);
+      });
+
+    return connectionStateReconcileQueue;
+  };
+
+  const reconcileAllActiveConnectionScopes = (label: string) =>
+    enqueueConnectionScopeReconcile(label, listActiveConnectionScopes);
+
+  const activateConnectionScope = async (input: ProviderConnectionScope): Promise<ProviderRuntimeConnectionState> => {
+    const scope = parseProviderConnectionScope(input);
+    await initializeProviderChainSelection(scope);
+    const state = await readConnectionStateForScope(scope);
+    setActiveScopeState(scope, state);
+    return copyConnectionState(state);
+  };
+
+  const deactivateConnectionScope = (input: ProviderConnectionScope) => {
+    deleteActiveScopeState(parseProviderConnectionScope(input));
+  };
+
+  const subscribeConnectionStateChanged = (listener: ProviderConnectionStateChangedHandler) => {
+    return connectionStateChanged.subscribe((change) => {
+      listener({
+        scope: { ...change.scope },
+        previous: copyConnectionState(change.previous),
+        next: copyConnectionState(change.next),
+        changed: { ...change.changed },
+      });
+    });
+  };
+
+  subscribeProviderChainSelectionChanged((payload) => {
+    void enqueueConnectionScopeReconcile("provider_chain_selection_changed", () =>
+      selectActiveConnectionScopes((scope) => scope.origin === payload.origin && scope.namespace === payload.namespace),
+    );
+  });
+  subscribeNetworkStateChanged(() => {
+    void reconcileAllActiveConnectionScopes("network_state_changed");
+  });
+  subscribeSessionUnlocked(() => {
+    void reconcileAllActiveConnectionScopes("session_unlocked");
+  });
+  subscribeSessionLocked(() => {
+    void reconcileAllActiveConnectionScopes("session_locked");
+  });
+  subscribeAccountsStateChanged(() => {
+    void reconcileAllActiveConnectionScopes("accounts_state_changed");
+  });
+  subscribePermissionsStateChanged(() => {
+    void reconcileAllActiveConnectionScopes("permissions_state_changed");
+  });
 
   const cancelRequestScope = async (input: ProviderRuntimeRequestScope) => {
     return await providerRequests.cancelScope(input, "caller_disconnected");
@@ -436,13 +675,11 @@ export const createProviderRuntimeAccess = ({
   return {
     buildSnapshot,
     buildConnectionState,
-    getActiveChainByNamespace,
+    activateConnectionScope,
+    deactivateConnectionScope,
+    subscribeConnectionStateChanged,
     subscribeSessionUnlocked,
     subscribeSessionLocked,
-    subscribeNetworkStateChanged,
-    subscribeNetworkSelectionChanged,
-    subscribeAccountsStateChanged,
-    subscribePermissionsStateChanged,
     executeRpcRequest,
     encodeRuntimeRpcError,
     listPermittedAccounts,

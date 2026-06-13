@@ -7,6 +7,7 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
+import { NamespaceChainActivationReasons } from "../services/runtime/chainActivation/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransaction,
@@ -22,14 +23,16 @@ import {
   MemoryAccountsPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
+  MemoryWalletChainSelectionPort,
   setupBackground,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
+import type { ProviderConnectionStateChange } from "./provider/types.js";
 
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
@@ -41,6 +44,12 @@ const SOLANA_CHAIN: ChainMetadata = {
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
   rpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
+const EIP155_ALT_CHAIN = createChainMetadata({
+  chainRef: "eip155:10",
+  chainId: "0xa",
+  displayName: "Optimism",
+  shortName: "OP",
+});
 
 const initializeUnlockedSession = async (runtime: CreateBackgroundRuntimeResult) => {
   await runtime.services.session.createVault({ password: PASSWORD });
@@ -230,7 +239,8 @@ const setupNamespaceAwareProviderRuntime = async () => {
       isInternalOrigin: () => false,
       shouldRequestUnlockAttention: () => false,
     },
-    networkSelection: { port: new MemoryNetworkSelectionPort() },
+    walletChainSelection: { port: new MemoryWalletChainSelectionPort() },
+    providerChainSelection: { port: new MemoryProviderChainSelectionPort() },
     store: {
       ports: {
         customChains: customChainsPort,
@@ -249,12 +259,58 @@ const setupNamespaceAwareProviderRuntime = async () => {
   return runtime;
 };
 
+const setupProviderConnectionStateRuntime = async () => {
+  const background = await setupBackground({
+    chainSeed: [createChainMetadata(), EIP155_ALT_CHAIN],
+    network: {
+      initialState: {
+        availableChainRefs: ["eip155:1", EIP155_ALT_CHAIN.chainRef],
+        rpc: {
+          "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },
+          [EIP155_ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
+        },
+      },
+    },
+    walletChainSelectionSeed: {
+      id: "wallet-chain-selection",
+      selectedNamespace: "eip155",
+      chainRefByNamespace: { eip155: "eip155:1" },
+      updatedAt: 0,
+    },
+  });
+
+  return background;
+};
+
+const collectProviderConnectionChanges = (runtime: CreateBackgroundRuntimeResult) => {
+  const changes: ProviderConnectionStateChange[] = [];
+  const unsubscribe = runtime.providerAccess.subscribeConnectionStateChanged((change) => {
+    changes.push(change);
+  });
+
+  return {
+    changes,
+    unsubscribe,
+    clear: () => {
+      changes.length = 0;
+    },
+  };
+};
+
 describe("createBackgroundRuntime provider access", () => {
   it("builds namespace-scoped snapshots and hides permitted accounts while locked", async () => {
     const background = await setupBackground();
 
     try {
-      const snapshot = background.runtime.providerAccess.buildSnapshot("eip155");
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+
+      const snapshot = background.runtime.providerAccess.buildSnapshot({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
 
       expect(snapshot).toEqual({
         namespace: "eip155",
@@ -263,12 +319,6 @@ describe("createBackgroundRuntime provider access", () => {
           chainRef: "eip155:1",
         },
         isUnlocked: false,
-        meta: {
-          activeChainByNamespace: {
-            eip155: "eip155:1",
-          },
-          supportedChains: ["eip155:1"],
-        },
       });
 
       await expect(
@@ -286,7 +336,7 @@ describe("createBackgroundRuntime provider access", () => {
     const background = await setupBackground();
 
     try {
-      const lockedState = await background.runtime.providerAccess.buildConnectionState({
+      const lockedState = await background.runtime.providerAccess.activateConnectionScope({
         namespace: "eip155",
         origin: ORIGIN,
       });
@@ -298,12 +348,6 @@ describe("createBackgroundRuntime provider access", () => {
             chainRef: "eip155:1",
           },
           isUnlocked: false,
-          meta: {
-            activeChainByNamespace: {
-              eip155: "eip155:1",
-            },
-            supportedChains: ["eip155:1"],
-          },
         },
         accounts: [],
       });
@@ -338,13 +382,138 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
+  it("emits provider connection state changes only for the selected origin and namespace", async () => {
+    const background = await setupProviderConnectionStateRuntime();
+    const events = collectProviderConnectionChanges(background.runtime);
+
+    try {
+      const state = await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: "https://other.example",
+        namespace: "eip155",
+      });
+      await flushAsync();
+
+      expect(state.snapshot.chain.chainRef).toBe("eip155:1");
+      expect(
+        background.runtime.services.providerChainSelection.getSelectedChainRef({
+          origin: ORIGIN,
+          namespace: "eip155",
+        }),
+      ).toBe("eip155:1");
+      expect(events.changes).toEqual([]);
+      events.clear();
+
+      await background.runtime.services.chainActivation.selectProviderChain({
+        origin: ORIGIN,
+        namespace: "eip155",
+        chainRef: EIP155_ALT_CHAIN.chainRef,
+        reason: NamespaceChainActivationReasons.SwitchChain,
+      });
+      await flushAsync();
+
+      expect(events.changes).toHaveLength(1);
+      expect(events.changes[0]).toMatchObject({
+        scope: { origin: ORIGIN, namespace: "eip155" },
+        previous: { snapshot: { chain: { chainRef: "eip155:1" } } },
+        next: { snapshot: { chain: { chainRef: EIP155_ALT_CHAIN.chainRef } } },
+        changed: { chain: true, accounts: false },
+      });
+    } finally {
+      events.unsubscribe();
+      background.destroy();
+    }
+  });
+
+  it("keeps provider connection chains independent from later wallet chain changes", async () => {
+    const background = await setupProviderConnectionStateRuntime();
+    const events = collectProviderConnectionChanges(background.runtime);
+
+    try {
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: "https://other.example",
+        namespace: "eip155",
+      });
+      events.clear();
+
+      await background.runtime.services.chainActivation.selectWalletChain(EIP155_ALT_CHAIN.chainRef);
+      await flushAsync();
+
+      expect(events.changes).toEqual([]);
+      await expect(
+        background.runtime.providerAccess.buildConnectionState({
+          origin: "https://other.example",
+          namespace: "eip155",
+        }),
+      ).resolves.toMatchObject({
+        snapshot: {
+          chain: { chainRef: "eip155:1", chainId: "0x1" },
+        },
+      });
+    } finally {
+      events.unsubscribe();
+      background.destroy();
+    }
+  });
+
+  it("emits account-only provider connection changes when permissions change", async () => {
+    const background = await setupProviderConnectionStateRuntime();
+    const events = collectProviderConnectionChanges(background.runtime);
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: chain.chainRef,
+        address,
+      });
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+      events.clear();
+
+      await background.runtime.services.permissions.revokeChainAuthorization(ORIGIN, {
+        namespace: "eip155",
+        chainRef: chain.chainRef,
+      });
+      await flushAsync();
+
+      expect(events.changes).toHaveLength(1);
+      expect(events.changes[0]).toMatchObject({
+        scope: { origin: ORIGIN, namespace: "eip155" },
+        previous: { accounts: [expect.any(String)] },
+        next: { accounts: [] },
+        changed: { chain: false, accounts: true },
+      });
+    } finally {
+      events.unsubscribe();
+      background.destroy();
+    }
+  });
+
   it("formats permitted accounts for an unlocked authorized origin and re-checks lock state on each call", async () => {
     const background = await setupBackground();
 
     try {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
-      const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot(chain.namespace);
+      await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: chain.namespace,
+      });
+      const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot({
+        origin: ORIGIN,
+        namespace: chain.namespace,
+      });
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
@@ -408,7 +577,6 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-1",
         jsonrpc: "2.0",
         method: "eth_accounts",
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -459,7 +627,6 @@ describe("createBackgroundRuntime provider access", () => {
         id: "rpc-2",
         jsonrpc: "2.0",
         method: "eth_requestAccounts",
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -552,7 +719,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -672,7 +838,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
@@ -777,7 +942,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
@@ -885,7 +1049,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        origin: ORIGIN,
         context: buildProviderContext({
           namespace: activeChain.namespace,
           chainRef: activeChain.chainRef,
@@ -975,7 +1138,6 @@ describe("createBackgroundRuntime provider access", () => {
               value: "0x0",
             },
           ],
-          origin: ORIGIN,
           context: buildProviderContext({
             namespace: activeChain.namespace,
             chainRef: activeChain.chainRef,
@@ -1018,7 +1180,6 @@ describe("createBackgroundRuntime provider access", () => {
           id: "rpc-sol-1",
           jsonrpc: "2.0",
           method: "sol_getBalance",
-          origin: ORIGIN,
           context: buildProviderContext({
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,

@@ -7,15 +7,10 @@ import type {
   RpcProviderRequestContext,
 } from "../../rpc/index.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
+import type { Unsubscribe } from "../../services/store/_shared/signal.js";
 import type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 
 export type { ProviderRuntimeRequestScope } from "./providerRequests.js";
-
-export type ProviderRuntimeMeta = {
-  activeChainByNamespace: Record<string, ChainRef>;
-  supportedChains: ChainRef[];
-};
 
 export type ProviderRuntimeSnapshot = {
   namespace: string;
@@ -24,18 +19,31 @@ export type ProviderRuntimeSnapshot = {
     chainRef: ChainRef;
   };
   isUnlocked: boolean;
-  meta: ProviderRuntimeMeta;
 };
 
-export type ProviderRuntimeConnectionQuery = {
+export type ProviderConnectionScope = {
   namespace: string;
   origin: string;
 };
+
+export type ProviderRuntimeConnectionQuery = ProviderConnectionScope;
 
 export type ProviderRuntimeConnectionState = {
   snapshot: ProviderRuntimeSnapshot;
   accounts: string[];
 };
+
+export type ProviderConnectionStateChange = {
+  scope: ProviderConnectionScope;
+  previous: ProviderRuntimeConnectionState;
+  next: ProviderRuntimeConnectionState;
+  changed: {
+    chain: boolean;
+    accounts: boolean;
+  };
+};
+
+export type ProviderConnectionStateChangedHandler = (change: ProviderConnectionStateChange) => void;
 
 export type ProviderRuntimeRequestContext = RpcProviderRequestContext;
 
@@ -51,7 +59,6 @@ export type ProviderRuntimeRpcContext = {
 };
 
 export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
-  origin: string;
   context: ProviderRuntimeRpcContext;
   execution: ProviderRuntimeRequestExecution;
 };
@@ -86,15 +93,13 @@ export type ProviderRuntimeAccountsQuery = {
 };
 
 export type ProviderRuntimeAccess = {
-  buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
+  buildSnapshot(input: ProviderRuntimeConnectionQuery): ProviderRuntimeSnapshot;
   buildConnectionState(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
-  getActiveChainByNamespace(): Record<string, ChainRef>;
+  activateConnectionScope(input: ProviderConnectionScope): Promise<ProviderRuntimeConnectionState>;
+  deactivateConnectionScope(input: ProviderConnectionScope): void;
+  subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): Unsubscribe;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
-  subscribeNetworkStateChanged(listener: () => void): () => void;
-  subscribeNetworkSelectionChanged: StateChangeSubscription;
-  subscribeAccountsStateChanged(listener: () => void): () => void;
-  subscribePermissionsStateChanged(listener: () => void): () => void;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   listPermittedAccounts(input: ProviderRuntimeAccountsQuery): Promise<string[]>;

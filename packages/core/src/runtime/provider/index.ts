@@ -1,5 +1,5 @@
 export { createProviderRuntimeAccess } from "./createProviderRuntimeAccess.js";
-export { TransportDisconnectedError } from "./errors.js";
+export { InvalidProviderConnectionScopeError, TransportDisconnectedError } from "./errors.js";
 export type {
   ProviderRequestBeginInput,
   ProviderRequestCancellationReason,
@@ -9,12 +9,14 @@ export type {
 } from "./providerRequests.js";
 export { createProviderRequests } from "./providerRequests.js";
 export type {
+  ProviderConnectionScope,
+  ProviderConnectionStateChange,
+  ProviderConnectionStateChangedHandler,
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeExecutionContext,
-  ProviderRuntimeMeta,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestExecution,
   ProviderRuntimeRequestScope,

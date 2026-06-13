@@ -5,16 +5,17 @@ import {
   MemoryCustomChainsPort,
   MemoryCustomRpcPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryVaultMetaPort,
+  MemoryWalletChainSelectionPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import type { VaultMetaSnapshot } from "../storage/index.js";
-import type { NetworkSelectionRecord } from "../storage/records.js";
+import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionAggregate } from "../transactions/storage/index.js";
 import type { CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { createCoreRuntime } from "./createCoreRuntime.js";
@@ -36,7 +37,8 @@ type TestCoreStoragePorts = CreateCoreRuntimeInput["storage"];
 const createCoreRuntimeInput = (params?: {
   accountsPort?: TestCoreStoragePorts["accounts"];
   customRpcPort?: TestCoreStoragePorts["chains"]["customRpc"];
-  networkSelectionPort?: TestCoreStoragePorts["chains"]["networkSelection"];
+  walletChainSelectionPort?: TestCoreStoragePorts["chains"]["walletChainSelection"];
+  providerChainSelectionPort?: TestCoreStoragePorts["chains"]["providerChainSelection"];
   permissionsPort?: TestCoreStoragePorts["permissions"];
   transactionAggregatesPort?: TestCoreStoragePorts["transactions"];
   vaultMetaPort?: TestCoreStoragePorts["vault"];
@@ -53,7 +55,8 @@ const createCoreRuntimeInput = (params?: {
     chains: {
       customChains: new MemoryCustomChainsPort(),
       customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
-      networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
+      walletChainSelection: params?.walletChainSelectionPort ?? new MemoryWalletChainSelectionPort(),
+      providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
     },
     transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
     settings: new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
@@ -67,8 +70,8 @@ class FailingVaultMetaPort extends MemoryVaultMetaPort {
   }
 }
 
-class FailingNetworkSelectionPort extends MemoryNetworkSelectionPort {
-  override async get(): Promise<NetworkSelectionRecord | null> {
+class FailingWalletChainSelectionPort extends MemoryWalletChainSelectionPort {
+  override async get(): Promise<WalletChainSelectionRecord | null> {
     throw HYDRATE_FAILURE;
   }
 }
@@ -163,10 +166,14 @@ describe("createCoreRuntime", () => {
       session: { isUnlocked: false },
       networks: { selectedNamespace: EIP155_NAMESPACE },
     });
-    expect(core.provider.buildSnapshot(EIP155_NAMESPACE)).toMatchObject({
-      namespace: EIP155_NAMESPACE,
-      chain: { chainRef: EIP155_CHAIN_REF },
-      isUnlocked: false,
+    await expect(
+      core.provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
+    ).resolves.toMatchObject({
+      snapshot: {
+        namespace: EIP155_NAMESPACE,
+        chain: { chainRef: EIP155_CHAIN_REF },
+        isUnlocked: false,
+      },
     });
   });
 
@@ -285,9 +292,9 @@ describe("createCoreRuntime", () => {
   it("fails boot when correctness-critical chain preferences cannot hydrate", async () => {
     await expectHydrationFailure(
       createCoreRuntimeInput({
-        networkSelectionPort: new FailingNetworkSelectionPort(),
+        walletChainSelectionPort: new FailingWalletChainSelectionPort(),
       }),
-      { owner: "chains", resource: "networkSelection" },
+      { owner: "chains", resource: "walletChainSelection" },
     );
   });
 

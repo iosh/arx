@@ -145,14 +145,7 @@ const createServerHarness = (options?: {
     };
   };
 
-  const buildSnapshot = vi.fn((input: { origin: string; namespace: string }) => {
-    const snapshot = snapshots.get(buildTestConnectionScopeKey(input)) ?? snapshots.get(input.namespace);
-    if (!snapshot) {
-      throw new Error(`Missing snapshot for ${input.namespace}`);
-    }
-    return snapshot;
-  });
-  const getConnectionState = vi.fn((input: { origin: string; namespace: string }) => buildConnectionState(input));
+  const getConnectionState = vi.fn(async (input: { origin: string; namespace: string }) => buildConnectionState(input));
   const activateConnectionScope = vi.fn(
     options?.activateConnectionScope ??
       (async (input: { origin: string; namespace: string }) => {
@@ -186,7 +179,6 @@ const createServerHarness = (options?: {
   const cancelRequestScope = vi.fn(options?.cancelRequestScope ?? (async () => 1));
 
   const provider: WalletProvider = {
-    buildSnapshot,
     getConnectionState,
     activateConnectionScope,
     deactivateConnectionScope,
@@ -225,7 +217,6 @@ const createServerHarness = (options?: {
     server,
     getOrInitProvider,
     mocks: {
-      buildSnapshot,
       getConnectionState,
       activateConnectionScope,
       deactivateConnectionScope,
@@ -576,7 +567,6 @@ describe("providerPortServer", () => {
 
     evmPort.postMessage.mockClear();
     confluxPort.postMessage.mockClear();
-    harness.mocks.buildSnapshot.mockClear();
     harness.mocks.getConnectionState.mockClear();
 
     const scope = { origin: "https://example.com", namespace: "conflux" };
@@ -629,7 +619,6 @@ describe("providerPortServer", () => {
       ),
     );
     expect(evmPort.postMessage).not.toHaveBeenCalled();
-    expect(harness.mocks.buildSnapshot).not.toHaveBeenCalled();
     expect(harness.mocks.getConnectionState).not.toHaveBeenCalled();
   });
 
@@ -671,7 +660,6 @@ describe("providerPortServer", () => {
 
     firstPort.postMessage.mockClear();
     secondPort.postMessage.mockClear();
-    harness.mocks.buildSnapshot.mockClear();
     harness.mocks.getConnectionState.mockClear();
 
     const scope = { origin: firstOrigin, namespace: "eip155" };
@@ -714,7 +702,6 @@ describe("providerPortServer", () => {
       ),
     );
     expect(secondPort.postMessage).not.toHaveBeenCalled();
-    expect(harness.mocks.buildSnapshot).not.toHaveBeenCalled();
     expect(harness.mocks.getConnectionState).not.toHaveBeenCalled();
   });
 

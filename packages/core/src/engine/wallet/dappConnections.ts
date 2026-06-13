@@ -1,83 +1,31 @@
-import type { ChainRef } from "../../chains/ids.js";
-import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
-import type { ProviderRuntimeConnectionQuery } from "../../runtime/provider/types.js";
-import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
-import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { SessionStatusService } from "../../services/runtime/sessionStatus.js";
-import { createSignal, type StateChangeSubscription } from "../../services/store/_shared/signal.js";
-import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
-import type {
-  DappConnectionRecord,
-  DappConnectionsState,
-  DappConnectionView,
-  WalletDappConnections,
-} from "../types.js";
-import {
-  buildProviderConnectionState,
-  buildProviderSnapshot,
-  listFormattedPermittedAccounts,
-} from "./providerSnapshot.js";
+import type { ProviderRuntimeConnectionQuery, ProviderRuntimeConnectionState } from "../../runtime/provider/types.js";
+import { createSignal } from "../../services/store/_shared/signal.js";
+import type { DappConnectionRecord, DappConnectionsState, WalletDappConnections } from "../types.js";
 
 type DappConnectionsRecord = {
   origin: string;
   namespace: string;
+  chainRef: DappConnectionRecord["chainRef"];
   connectedAt: number;
   updatedAt: number;
 };
 
-// Live dApp connections tracked only in memory.
-export const createWalletDappConnections = (deps: {
-  now?: () => number;
-  sessionStatus: Pick<SessionStatusService, "getStatus">;
-  permissionViews: Pick<PermissionViewsService, "listPermittedAccounts">;
-  chainViews: Pick<ChainViewsService, "findAvailableChainView">;
-  providerChainSelection: Pick<ProviderChainSelectionService, "getSelectedChainRef">;
-  chainAddressCodecs: Pick<ChainAddressCodecRegistry, "formatAddress">;
-  subscribeSessionLocked: StateChangeSubscription;
-  subscribeAccountsStateChanged: StateChangeSubscription;
-  subscribePermissionsStateChanged: StateChangeSubscription;
-  subscribeNetworkStateChanged: StateChangeSubscription;
-  subscribeProviderChainChanged: StateChangeSubscription;
-}): WalletDappConnections => {
-  const {
-    now = Date.now,
-    sessionStatus,
-    permissionViews,
-    chainViews,
-    providerChainSelection,
-    chainAddressCodecs,
-    subscribeSessionLocked,
-    subscribeAccountsStateChanged,
-    subscribePermissionsStateChanged,
-    subscribeNetworkStateChanged,
-    subscribeProviderChainChanged,
-  } = deps;
+export type DappConnectionWriter = Readonly<{
+  record(scope: ProviderRuntimeConnectionQuery, state: ProviderRuntimeConnectionState): DappConnectionRecord | null;
+  remove(scope: ProviderRuntimeConnectionQuery): boolean;
+}>;
 
+export type WalletDappConnectionsController = WalletDappConnections & DappConnectionWriter;
+
+export const createWalletDappConnections = (deps: { now?: () => number } = {}): WalletDappConnectionsController => {
+  const { now = Date.now } = deps;
   const changed = createSignal<DappConnectionsState>();
   const connections = new Map<string, Map<string, DappConnectionsRecord>>();
 
-  const parseConnectionOrigin = (origin: string): string => {
-    if (origin.length === 0 || origin.trim() !== origin) {
-      throw new Error("dappConnections origin is required");
-    }
-    return origin;
-  };
-
-  const parseConnectionNamespace = (namespace: string): string => {
-    const namespaceKey = namespace.trim();
-    if (namespaceKey.length === 0) {
-      throw new Error("dappConnections namespace is required");
-    }
-    return namespaceKey;
-  };
-
-  const getConnectionRecord = (origin: string, namespace: string): DappConnectionsRecord | null =>
+  const readConnectionRecord = (origin: string, namespace: string): DappConnectionsRecord | null =>
     connections.get(origin)?.get(namespace) ?? null;
 
-  const hasConnectionRecord = (origin: string, namespace: string): boolean =>
-    connections.get(origin)?.has(namespace) ?? false;
-
-  const setConnectionRecord = (record: DappConnectionsRecord) => {
+  const writeConnectionRecord = (record: DappConnectionsRecord) => {
     let recordsByNamespace = connections.get(record.origin);
     if (!recordsByNamespace) {
       recordsByNamespace = new Map();
@@ -107,15 +55,10 @@ export const createWalletDappConnections = (deps: {
     return records;
   };
 
-  const getActiveChainRef = (origin: string, namespace: string): ChainRef => {
-    return buildProviderSnapshot({ sessionStatus, chainViews, providerChainSelection }, { origin, namespace }).chain
-      .chainRef;
-  };
-
   const toConnectionRecord = (record: DappConnectionsRecord): DappConnectionRecord => ({
     origin: record.origin,
     namespace: record.namespace,
-    chainRef: getActiveChainRef(record.origin, record.namespace),
+    chainRef: record.chainRef,
     connectedAt: record.connectedAt,
     updatedAt: record.updatedAt,
   });
@@ -140,148 +83,53 @@ export const createWalletDappConnections = (deps: {
     changed.emit(buildStateSnapshot());
   };
 
-  const clearConnections = (): DappConnectionsState => {
-    if (connections.size === 0) {
-      return buildStateSnapshot();
-    }
-
-    connections.clear();
-    const next = buildStateSnapshot();
-    changed.emit(next);
-    return next;
-  };
-
-  const buildConnectionPreview = (params: ProviderRuntimeConnectionQuery) => {
-    const origin = parseConnectionOrigin(params.origin);
-    const namespace = parseConnectionNamespace(params.namespace);
-
-    return buildProviderConnectionState({
-      providerSnapshot: {
-        sessionStatus,
-        chainViews,
-        providerChainSelection,
-      },
-      accountAccess: {
-        sessionStatus,
-        permissionViews,
-        chainAddressCodecs,
-      },
-      origin,
-      namespace,
-    });
-  };
-
-  // Recheck live connections against the current provider-facing view.
-  const pruneInactiveConnections = () => {
-    let changedState = false;
-
-    for (const record of listConnectionRecords()) {
-      const preview = buildConnectionPreview({
-        origin: record.origin,
-        namespace: record.namespace,
-      });
-      if (preview.accounts.length > 0) {
-        continue;
+  const recordConnection = (
+    scope: ProviderRuntimeConnectionQuery,
+    state: ProviderRuntimeConnectionState,
+  ): DappConnectionRecord | null => {
+    if (state.accounts.length === 0) {
+      const removed = deleteConnectionRecord(scope.origin, scope.namespace);
+      if (removed) {
+        emitChanged();
       }
-
-      deleteConnectionRecord(record.origin, record.namespace);
-      changedState = true;
+      return null;
     }
 
-    if (changedState) {
+    const existing = readConnectionRecord(scope.origin, scope.namespace);
+    const at = now();
+    if (existing?.chainRef === state.snapshot.chain.chainRef) {
+      return toConnectionRecord(existing);
+    }
+
+    const next: DappConnectionsRecord = {
+      origin: scope.origin,
+      namespace: scope.namespace,
+      chainRef: state.snapshot.chain.chainRef,
+      connectedAt: existing?.connectedAt ?? at,
+      updatedAt: at,
+    };
+    writeConnectionRecord(next);
+    emitChanged();
+    return toConnectionRecord(next);
+  };
+
+  const removeConnection = (scope: ProviderRuntimeConnectionQuery): boolean => {
+    const removed = deleteConnectionRecord(scope.origin, scope.namespace);
+    if (removed) {
       emitChanged();
     }
+    return removed;
   };
-
-  subscribeSessionLocked(() => {
-    clearConnections();
-  });
-  subscribeAccountsStateChanged(() => {
-    pruneInactiveConnections();
-  });
-  subscribePermissionsStateChanged(() => {
-    pruneInactiveConnections();
-  });
-  subscribeNetworkStateChanged(() => {
-    pruneInactiveConnections();
-  });
-  subscribeProviderChainChanged(() => {
-    pruneInactiveConnections();
-  });
 
   return {
     getState: () => buildStateSnapshot(),
     getConnection: (origin, options) => {
-      const parsedOrigin = parseConnectionOrigin(origin);
-      const namespace = parseConnectionNamespace(options.namespace);
-      const record = getConnectionRecord(parsedOrigin, namespace);
+      const record = readConnectionRecord(origin, options.namespace);
       return record ? toConnectionRecord(record) : null;
     },
-    isConnected: (origin, options) => {
-      const parsedOrigin = parseConnectionOrigin(origin);
-      const namespace = parseConnectionNamespace(options.namespace);
-      return hasConnectionRecord(parsedOrigin, namespace);
-    },
-    connect: (input) => {
-      const origin = parseConnectionOrigin(input.origin);
-      const namespace = parseConnectionNamespace(input.namespace);
-      const preview = buildConnectionPreview({ origin, namespace });
-      if (preview.accounts.length === 0) {
-        return null;
-      }
-
-      const existing = getConnectionRecord(origin, namespace);
-      const at = now();
-      const next = {
-        origin,
-        namespace,
-        connectedAt: existing?.connectedAt ?? at,
-        updatedAt: at,
-      };
-      setConnectionRecord(next);
-      emitChanged();
-      return toConnectionRecord(next);
-    },
-    disconnect: (input) => {
-      const origin = parseConnectionOrigin(input.origin);
-      const namespace = parseConnectionNamespace(input.namespace);
-      const removed = deleteConnectionRecord(origin, namespace);
-      if (removed) {
-        emitChanged();
-      }
-      return removed;
-    },
-    disconnectOrigin: (origin) => {
-      const parsedOrigin = parseConnectionOrigin(origin);
-      const recordsByNamespace = connections.get(parsedOrigin);
-      const removed = recordsByNamespace?.size ?? 0;
-      if (removed === 0) {
-        return 0;
-      }
-
-      connections.delete(parsedOrigin);
-      emitChanged();
-      return removed;
-    },
-    clear: () => clearConnections(),
-    getConnectionState: (input): DappConnectionView => {
-      const origin = parseConnectionOrigin(input.origin);
-      const namespace = parseConnectionNamespace(input.namespace);
-      const state = buildConnectionPreview({ origin, namespace });
-      return {
-        ...state,
-        connected: hasConnectionRecord(origin, namespace) && state.accounts.length > 0,
-      };
-    },
-    listPermittedAccounts: (input) =>
-      listFormattedPermittedAccounts(
-        {
-          sessionStatus,
-          permissionViews,
-          chainAddressCodecs,
-        },
-        input,
-      ),
+    isConnected: (origin, options) => Boolean(readConnectionRecord(origin, options.namespace)),
+    record: recordConnection,
+    remove: removeConnection,
     onStateChanged: (listener) => changed.subscribe(listener),
-  } satisfies WalletDappConnections;
+  };
 };

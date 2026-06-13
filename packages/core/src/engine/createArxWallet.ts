@@ -527,28 +527,21 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const dappConnections = createWalletDappConnections({
     ...(input.env?.now ? { now: input.env.now } : {}),
-    sessionStatus: sessionScope.sessionStatus,
-    permissionViews: backgroundSupportScope.permissionViews,
-    chainViews: sessionScope.chainViews,
-    providerChainSelection: sessionScope.providerChainSelection,
-    chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
-    subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(() => listener()),
-    subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(() => listener()),
-    subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(() => listener()),
-    subscribeNetworkStateChanged: (listener) => stateServices.network.onStateChanged(() => listener()),
-    subscribeProviderChainChanged,
   });
-  const syncDappConnectionFromProviderState = (input: { origin: string; namespace: string }, accountCount: number) => {
-    if (accountCount > 0) {
-      dappConnections.connect(input);
+  const syncDappConnectionFromProviderState = (
+    input: { origin: string; namespace: string },
+    state: Parameters<typeof dappConnections.record>[1],
+  ) => {
+    if (state.accounts.length > 0) {
+      dappConnections.record(input, state);
       return;
     }
 
-    dappConnections.disconnect(input);
+    dappConnections.remove(input);
   };
   providerAccess.subscribeConnectionStateChanged((change) => {
-    if (change.changed.accounts) {
-      syncDappConnectionFromProviderState(change.scope, change.next.accounts.length);
+    if (change.changed.chain || change.changed.accounts) {
+      syncDappConnectionFromProviderState(change.scope, change.next);
     }
   });
   const snapshots = createWalletSnapshots({
@@ -569,12 +562,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       },
     },
     namespaceBindings: backgroundSupportScope.namespaceBindings,
-    dappConnections,
-    providerSnapshot: {
-      sessionStatus: sessionScope.sessionStatus,
-      chainViews: sessionScope.chainViews,
-      providerChainSelection: sessionScope.providerChainSelection,
-    },
   });
   const services: WalletRuntimeServices = {
     ...stateServices,
@@ -602,7 +589,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const provider = createWalletProvider({
     runtimeAccess: providerAccess,
     dappConnections,
-    snapshots,
   });
   const createUi = (options: WalletCreateUiOptions) =>
     createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, approvalResolveService, options));

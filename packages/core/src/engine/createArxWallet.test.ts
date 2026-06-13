@@ -7,11 +7,12 @@ import {
   MemoryCustomChainsPort,
   MemoryCustomRpcPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
+  MemoryProviderChainSelectionPort,
   MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryVaultMetaPort,
+  MemoryWalletChainSelectionPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
@@ -35,8 +36,9 @@ const PROVIDER_SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
 const createWalletInput = (params?: {
   modules?: readonly WalletNamespaceModule[];
-  networkSelectionPort?: MemoryNetworkSelectionPort;
+  walletChainSelectionPort?: MemoryWalletChainSelectionPort;
   customRpcPort?: MemoryCustomRpcPort;
+  providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   accountsPort?: MemoryAccountsPort;
   permissionsPort?: MemoryPermissionsPort;
   settingsPort?: MemorySettingsPort;
@@ -58,7 +60,8 @@ const createWalletInput = (params?: {
         chains: {
           customChains: new MemoryCustomChainsPort(),
           customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
-          networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
+          walletChainSelection: params?.walletChainSelectionPort ?? new MemoryWalletChainSelectionPort(),
+          providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
         },
         transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
@@ -118,13 +121,13 @@ afterEach(() => {
 
 describe("createArxWallet", () => {
   it("boots an eip155 wallet and repairs invalid persisted network state", async () => {
-    const networkSelectionPort = new MemoryNetworkSelectionPort({
-      id: "network-selection",
+    const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
+      id: "wallet-chain-selection",
       selectedNamespace: "solana",
       chainRefByNamespace: { solana: "solana:1" },
       updatedAt: 1,
     });
-    const runtime = await createWalletRuntime({ networkSelectionPort });
+    const runtime = await createWalletRuntime({ walletChainSelectionPort });
 
     try {
       const { wallet } = runtime;
@@ -144,20 +147,15 @@ describe("createArxWallet", () => {
       expect(wallet.networks.getSelectedNamespace()).toBe("eip155");
       expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      expect(wallet.snapshots.buildProviderSnapshot("eip155")).toMatchObject({
-        namespace: "eip155",
-        chain: { chainRef: "eip155:1" },
-        isUnlocked: false,
-      });
       expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
         vault: { initialized: false },
         session: { isUnlocked: false },
         networks: { selectedNamespace: "eip155" },
       });
 
-      const correctedSelection = networkSelectionPort.saved.at(-1);
+      const correctedSelection = walletChainSelectionPort.saved.at(-1);
       expect(correctedSelection).toEqual({
-        id: "network-selection",
+        id: "wallet-chain-selection",
         selectedNamespace: "eip155",
         chainRefByNamespace: {
           eip155: "eip155:1",
@@ -300,15 +298,16 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
+      const provider = wallet.createProvider();
       const permissionSnapshot = runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
         chainRef: EIP155_CHAIN_REF,
       });
       expect(permissionSnapshot.isAuthorized).toBe(true);
       expect(permissionSnapshot.accounts).toHaveLength(1);
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      expect(
-        wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
-      ).toMatchObject({
+      await expect(
+        provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
+      ).resolves.toMatchObject({
         snapshot: {
           namespace: EIP155_NAMESPACE,
           chain: {
@@ -316,33 +315,25 @@ describe("createArxWallet", () => {
             chainRef: EIP155_CHAIN_REF,
           },
           isUnlocked: false,
-          meta: {
-            activeChainByNamespace: {
-              [EIP155_NAMESPACE]: EIP155_CHAIN_REF,
-            },
-          },
         },
         accounts: [],
       });
-      expect(
-        wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).snapshot.meta
-          .supportedChains,
-      ).toContain(EIP155_CHAIN_REF);
 
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
-      expect(
-        wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).accounts,
-      ).toHaveLength(1);
 
-      const connected = wallet.dappConnections.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(connected).toMatchObject({
-        origin: ORIGIN,
-        namespace: EIP155_NAMESPACE,
-        chainRef: EIP155_CHAIN_REF,
+      await expect(
+        provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
+      ).resolves.toMatchObject({
+        accounts: [expect.any(String)],
+        snapshot: {
+          chain: { chainRef: EIP155_CHAIN_REF },
+        },
       });
-      expect(wallet.dappConnections.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(
-        true,
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: true,
+        },
       );
       expect(wallet.dappConnections.getState().count).toBe(1);
 
@@ -358,7 +349,12 @@ describe("createArxWallet", () => {
         chains: [{ chainRef: EIP155_CHAIN_REF, accountKeys: [ACCOUNT_KEY] }],
       });
       await flushAsync();
-      wallet.dappConnections.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: true,
+          accounts: [expect.any(String)],
+        },
+      );
       expect(wallet.dappConnections.getState().count).toBe(1);
 
       wallet.session.lock("manual");
@@ -367,15 +363,18 @@ describe("createArxWallet", () => {
       expect(
         runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(true);
-      expect(
-        wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).accounts,
-      ).toEqual([]);
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: false,
+          accounts: [],
+        },
+      );
     } finally {
       await runtime.shutdown();
     }
   });
 
-  it("creates provider contracts with live connection state", async () => {
+  it("creates provider contracts with active connection scope state", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -385,25 +384,26 @@ describe("createArxWallet", () => {
       const { wallet } = runtime;
       const provider = wallet.createProvider();
 
-      expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).toMatchObject({
-        connected: false,
-        accounts: [],
-      });
+      expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
 
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
-      const connected = provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(connected.connected).toBe(true);
-      expect(connected.accounts).toHaveLength(1);
-      expect(connected.snapshot.chain.chainRef).toBe(EIP155_CHAIN_REF);
+      const activated = await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      expect(activated.accounts).toHaveLength(1);
+      expect(activated.snapshot.chain.chainRef).toBe(EIP155_CHAIN_REF);
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: true,
+        },
+      );
 
-      const disconnected = provider.disconnect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(disconnected.connected).toBe(false);
-
-      provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(provider.disconnectOrigin(ORIGIN)).toBe(1);
-      expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(false);
+      provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: false,
+        },
+      );
     } finally {
       await runtime.shutdown();
     }
@@ -469,9 +469,10 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
+      const provider = wallet.createProvider();
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
-      wallet.dappConnections.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       expect(wallet.dappConnections.getState().count).toBe(1);
     } finally {
       await runtime.shutdown();
@@ -536,7 +537,6 @@ describe("createArxWallet", () => {
           id: "rpc-accounts-locked",
           jsonrpc: "2.0",
           method: "eth_accounts",
-          origin: ORIGIN,
           context: createProviderContext(),
           execution: createProviderExecutionContext(),
         }),

@@ -1,33 +1,36 @@
 import type { ProviderRuntimeAccess } from "../../runtime/provider/types.js";
-import type { WalletDappConnections, WalletProvider, WalletSnapshots } from "../types.js";
+import type { WalletDappConnections, WalletProvider } from "../types.js";
+import type { DappConnectionWriter } from "./dappConnections.js";
 
 export const createWalletProvider = (deps: {
   runtimeAccess: ProviderRuntimeAccess;
-  dappConnections: Pick<WalletDappConnections, "getConnectionState" | "connect" | "disconnect" | "disconnectOrigin">;
-  snapshots: Pick<WalletSnapshots, "buildProviderSnapshot">;
+  dappConnections: Pick<WalletDappConnections, "isConnected"> & Pick<DappConnectionWriter, "record" | "remove">;
 }): WalletProvider => {
-  const { runtimeAccess, dappConnections, snapshots } = deps;
+  const { runtimeAccess, dappConnections } = deps;
 
   return {
-    buildSnapshot: (namespace) => snapshots.buildProviderSnapshot(namespace),
-    getConnectionState: (input) => dappConnections.getConnectionState(input),
+    getConnectionState: async (input) => {
+      const state = await runtimeAccess.buildConnectionState(input);
+      return {
+        ...state,
+        connected:
+          dappConnections.isConnected(input.origin, { namespace: input.namespace }) && state.accounts.length > 0,
+      };
+    },
+    activateConnectionScope: async (input) => {
+      const state = await runtimeAccess.activateConnectionScope(input);
+      dappConnections.record(input, state);
+      return state;
+    },
+    deactivateConnectionScope: (input) => {
+      runtimeAccess.deactivateConnectionScope(input);
+      dappConnections.remove(input);
+    },
+    subscribeConnectionStateChanged: (listener) => runtimeAccess.subscribeConnectionStateChanged(listener),
     executeRpcRequest: (request) => runtimeAccess.executeRpcRequest(request),
     encodeRuntimeRpcError: (error) => runtimeAccess.encodeRuntimeRpcError(error),
-    connect: (input) => {
-      dappConnections.connect(input);
-      return dappConnections.getConnectionState(input);
-    },
-    disconnect: (input) => {
-      dappConnections.disconnect(input);
-      return dappConnections.getConnectionState(input);
-    },
-    disconnectOrigin: (origin) => dappConnections.disconnectOrigin(origin),
     cancelRequestScope: (input) => runtimeAccess.cancelRequestScope(input),
     subscribeSessionUnlocked: (listener) => runtimeAccess.subscribeSessionUnlocked(listener),
     subscribeSessionLocked: (listener) => runtimeAccess.subscribeSessionLocked(listener),
-    subscribeNetworkStateChanged: (listener) => runtimeAccess.subscribeNetworkStateChanged(listener),
-    subscribeNetworkSelectionChanged: (listener) => runtimeAccess.subscribeNetworkSelectionChanged(listener),
-    subscribeAccountsStateChanged: (listener) => runtimeAccess.subscribeAccountsStateChanged(listener),
-    subscribePermissionsStateChanged: (listener) => runtimeAccess.subscribePermissionsStateChanged(listener),
   };
 };

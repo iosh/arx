@@ -1,5 +1,5 @@
-import { ATTENTION_REQUESTED } from "@arx/core/services";
 import type { ProviderRuntimeSnapshot } from "@arx/core/runtime";
+import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
@@ -113,7 +113,6 @@ const makeRuntime = () => {
     isUnlocked: true,
   } satisfies ProviderRuntimeSnapshot;
   const provider = {
-    buildSnapshot: vi.fn(() => providerSnapshot),
     getConnectionState: vi.fn(async () => ({
       snapshot: providerSnapshot,
       accounts: [],
@@ -361,10 +360,12 @@ describe("runtimeHost", () => {
     expect(provider).toBe(runtimeHarness.provider);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);
-    expect(provider.buildSnapshot({ origin: "https://example.com", namespace: "eip155" })).toEqual(
-      runtimeHarness.providerSnapshot,
-    );
-    expect(runtimeHarness.provider.buildSnapshot).toHaveBeenCalledWith({
+    await expect(provider.getConnectionState({ origin: "https://example.com", namespace: "eip155" })).resolves.toEqual({
+      snapshot: runtimeHarness.providerSnapshot,
+      accounts: [],
+      connected: false,
+    });
+    expect(runtimeHarness.provider.getConnectionState).toHaveBeenCalledWith({
       origin: "https://example.com",
       namespace: "eip155",
     });

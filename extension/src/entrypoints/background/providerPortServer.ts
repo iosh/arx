@@ -168,7 +168,7 @@ export const createProviderPortServer = ({
 
     const connectionState = change.scopeBecameActive
       ? await activeProvider.activateConnectionScope(scope)
-      : activeProvider.getConnectionState(scope);
+      : await activeProvider.getConnectionState(scope);
     if (!providerPortSessions.hasConnectedPort(port) || !providerPortConnections.hasPortInScope(port, scope)) {
       if (change.scopeBecameActive && !providerPortConnections.hasPortsForScope(scope)) {
         disconnectConnectionScope(scope);

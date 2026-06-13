@@ -40,6 +40,7 @@ import type {
 } from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
+  ProviderConnectionStateChangedHandler,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeRequestScope,
@@ -65,12 +66,13 @@ import type { CustomChainsPort } from "../services/store/customChains/port.js";
 import type { CustomRpcPort } from "../services/store/customRpc/port.js";
 import type { CustomRpcChangedHandler } from "../services/store/customRpc/types.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
-import type { NetworkSelectionPort } from "../services/store/networkSelection/port.js";
-import type { NetworkSelectionChangedHandler } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
+import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
+import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
+import type { WalletChainSelectionChangedHandler } from "../services/store/walletChainSelection/types.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
-import type { NetworkSelectionRecord } from "../storage/records.js";
+import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
@@ -141,7 +143,8 @@ export type WalletNamespaces = Readonly<{
 export type CoreChainsStoragePorts = Readonly<{
   customChains: CustomChainsPort;
   customRpc: CustomRpcPort;
-  networkSelection: NetworkSelectionPort;
+  walletChainSelection: WalletChainSelectionPort;
+  providerChainSelection: ProviderChainSelectionPort;
 }>;
 
 /** Owner-scoped storage ports required to boot a wallet. */
@@ -277,8 +280,8 @@ export type WalletPermissions = Readonly<{
 
 /** Selected namespace, supported chains, and custom RPC overrides. */
 export type WalletNetworks = Readonly<{
-  getSelection(): Promise<NetworkSelectionRecord | null>;
-  getSelectionSnapshot(): NetworkSelectionRecord | null;
+  getSelection(): Promise<WalletChainSelectionRecord | null>;
+  getSelectionSnapshot(): WalletChainSelectionRecord | null;
   getSelectedNamespace(): string;
   getChainRefByNamespace(): Record<string, ChainRef>;
   getSelectedChainRef(namespace: string): ChainRef | null;
@@ -302,7 +305,7 @@ export type WalletNetworks = Readonly<{
   setRpcStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
   onStateChanged(listener: (state: NetworkState) => void): () => void;
-  onSelectionChanged(listener: NetworkSelectionChangedHandler): () => void;
+  onSelectionChanged(listener: WalletChainSelectionChangedHandler): () => void;
   onChainUpdated(listener: (update: SupportedChainsUpdate) => void): () => void;
   onCustomRpcChanged(listener: CustomRpcChangedHandler): () => void;
 }>;
@@ -330,32 +333,24 @@ export type DappConnectionsState = Readonly<{
   count: number;
 }>;
 
-/** Provider-facing connection view plus the live connected bit. */
-export type DappConnectionView = Readonly<
+/** Provider-facing connection state with the live connected bit. */
+export type WalletProviderConnectionState = Readonly<
   ProviderRuntimeConnectionState & {
     connected: boolean;
   }
 >;
 
-/** Provider-facing connection state with the live connected bit. */
-export type WalletProviderConnectionState = DappConnectionView;
-
 /** Engine-owned provider contract for wallet shells. */
 export type WalletProvider = Readonly<{
-  buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  getConnectionState(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionState;
+  getConnectionState(input: ProviderRuntimeConnectionQuery): Promise<WalletProviderConnectionState>;
+  activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
+  deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
+  subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): () => void;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  connect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
-  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
-  disconnectOrigin(origin: string): number;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
-  subscribeNetworkStateChanged(listener: () => void): () => void;
-  subscribeNetworkSelectionChanged(listener: () => void): () => void;
-  subscribeAccountsStateChanged(listener: () => void): () => void;
-  subscribePermissionsStateChanged(listener: () => void): () => void;
 }>;
 
 /** Options for creating a wallet UI contract. */
@@ -399,19 +394,11 @@ export type WalletDappConnections = Readonly<{
   getState(): DappConnectionsState;
   getConnection(origin: string, options: { namespace: string }): DappConnectionRecord | null;
   isConnected(origin: string, options: { namespace: string }): boolean;
-  connect(input: { origin: string; namespace: string }): DappConnectionRecord | null;
-  disconnect(input: { origin: string; namespace: string }): boolean;
-  disconnectOrigin(origin: string): number;
-  clear(): DappConnectionsState;
-  getConnectionState(input: ProviderRuntimeConnectionQuery): DappConnectionView;
-  listPermittedAccounts(input: { origin: string; chainRef: ChainRef }): string[];
   onStateChanged(listener: (state: DappConnectionsState) => void): () => void;
 }>;
 
 /** Provider and UI snapshot builders. */
 export type WalletSnapshots = Readonly<{
-  buildProviderSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  buildProviderConnectionState(input: ProviderRuntimeConnectionQuery): ProviderRuntimeConnectionState;
   buildUiSnapshot(): UiSnapshot;
 }>;
 

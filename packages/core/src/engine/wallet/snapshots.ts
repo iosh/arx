@@ -8,8 +8,7 @@ import type { SessionStatusService } from "../../services/runtime/sessionStatus.
 import { createUiSessionAccess } from "../../ui/server/sessionAccess.js";
 import { buildUiSnapshot } from "../../ui/server/snapshot.js";
 import type { UiApprovalsAccess } from "../../ui/server/types.js";
-import type { WalletAccounts, WalletDappConnections, WalletSnapshots } from "../types.js";
-import { buildProviderSnapshot, type ProviderProjectionDeps } from "./providerProjection.js";
+import type { WalletAccounts, WalletSnapshots } from "../types.js";
 
 export const createWalletSnapshots = (deps: {
   session: BackgroundSessionServices;
@@ -30,21 +29,8 @@ export const createWalletSnapshots = (deps: {
     NamespaceRuntimeBindingsRegistry,
     "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
   >;
-  dappConnections: Pick<WalletDappConnections, "getConnectionState">;
-  providerProjection: ProviderProjectionDeps;
 }): WalletSnapshots => {
-  const {
-    session,
-    sessionStatus,
-    keyring,
-    attention,
-    chainViews,
-    permissionViews,
-    accounts,
-    namespaceBindings,
-    dappConnections,
-    providerProjection,
-  } = deps;
+  const { session, sessionStatus, keyring, attention, chainViews, permissionViews, accounts, namespaceBindings } = deps;
   const uiSessionAccess = createUiSessionAccess({
     session,
     sessionStatus,
@@ -52,11 +38,6 @@ export const createWalletSnapshots = (deps: {
   });
 
   return {
-    buildProviderSnapshot: (namespace) => buildProviderSnapshot(providerProjection, namespace),
-    buildProviderConnectionState: (input) => {
-      const { connected: _connected, ...state } = dappConnections.getConnectionState(input);
-      return state;
-    },
     buildUiSnapshot: () =>
       buildUiSnapshot({
         accounts,

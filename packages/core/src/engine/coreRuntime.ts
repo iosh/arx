@@ -1,10 +1,11 @@
 import type {
+  ProviderConnectionStateChangedHandler,
   ProviderRuntimeConnectionQuery,
+  ProviderRuntimeConnectionState,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeRpcResponse,
-  ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
 import type { UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
@@ -38,20 +39,15 @@ export type CreateCoreRuntimeInput = Readonly<{
 }>;
 
 export type CoreProviderApi = Readonly<{
-  buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
-  getConnectionState(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionState;
+  getConnectionState(input: ProviderRuntimeConnectionQuery): Promise<WalletProviderConnectionState>;
+  activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
+  deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
+  subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): CoreUnsubscribe;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  connect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
-  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionState;
-  disconnectOrigin(origin: string): number;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): CoreUnsubscribe;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): CoreUnsubscribe;
-  subscribeNetworkStateChanged(listener: () => void): CoreUnsubscribe;
-  subscribeNetworkSelectionChanged(listener: () => void): CoreUnsubscribe;
-  subscribeAccountsStateChanged(listener: () => void): CoreUnsubscribe;
-  subscribePermissionsStateChanged(listener: () => void): CoreUnsubscribe;
 }>;
 
 export type CoreSessionUnlockInput = UiMethodParams<"ui.session.unlock">;

@@ -49,7 +49,6 @@ export type {
   CreateArxWalletInput,
   DappConnectionRecord,
   DappConnectionsState,
-  DappConnectionView,
   NamespaceEngineDefinition,
   NamespaceEngineFactories,
   NamespaceEngineFacts,

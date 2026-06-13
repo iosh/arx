@@ -1,13 +1,17 @@
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { NetworkSelectionRecord } from "../../../storage/records.js";
+import type { WalletChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
-import type { NetworkSelectionPort } from "./port.js";
-import type { NetworkSelectionChangedPayload, NetworkSelectionService, UpdateNetworkSelectionParams } from "./types.js";
+import type { WalletChainSelectionPort } from "./port.js";
+import type {
+  UpdateWalletChainSelectionParams,
+  WalletChainSelectionChangedPayload,
+  WalletChainSelectionService,
+} from "./types.js";
 
-export type CreateNetworkSelectionServiceOptions = {
-  port: NetworkSelectionPort;
+export type CreateWalletChainSelectionServiceOptions = {
+  port: WalletChainSelectionPort;
   defaults: {
     selectedNamespace: string;
     chainRefByNamespace: Record<string, ChainRef>;
@@ -15,20 +19,20 @@ export type CreateNetworkSelectionServiceOptions = {
   now?: () => number;
 };
 
-export const createNetworkSelectionService = ({
+export const createWalletChainSelectionService = ({
   port,
   defaults,
   now,
-}: CreateNetworkSelectionServiceOptions): NetworkSelectionService => {
+}: CreateWalletChainSelectionServiceOptions): WalletChainSelectionService => {
   const clock = now ?? Date.now;
-  const changed = createSignal<NetworkSelectionChangedPayload>();
+  const changed = createSignal<WalletChainSelectionChangedPayload>();
   const run = createSerialQueue();
-  let cached: NetworkSelectionRecord | null = null;
+  let cached: WalletChainSelectionRecord | null = null;
 
   const getDefaultSelectedNamespace = () => defaults.selectedNamespace;
   const getDefaultChainRefByNamespace = () => ({ ...defaults.chainRefByNamespace });
 
-  const emitChanged = (previous: NetworkSelectionRecord | null, next: NetworkSelectionRecord) => {
+  const emitChanged = (previous: WalletChainSelectionRecord | null, next: WalletChainSelectionRecord) => {
     cached = next;
     changed.emit({
       previous: previous ? structuredClone(previous) : null,
@@ -36,13 +40,13 @@ export const createNetworkSelectionService = ({
     });
   };
 
-  const get = async (): Promise<NetworkSelectionRecord | null> => {
+  const get = async (): Promise<WalletChainSelectionRecord | null> => {
     const record = await port.get();
     cached = record;
     return record ? structuredClone(record) : null;
   };
 
-  const getSnapshot = (): NetworkSelectionRecord | null => (cached ? structuredClone(cached) : null);
+  const getSnapshot = (): WalletChainSelectionRecord | null => (cached ? structuredClone(cached) : null);
 
   const getSelectedNamespace = (): string => cached?.selectedNamespace ?? getDefaultSelectedNamespace();
 
@@ -54,14 +58,14 @@ export const createNetworkSelectionService = ({
   };
 
   const getSelectedChainRef = (namespace: string): ChainRef | null => {
-    const normalizedNamespace = namespace.trim();
-    if (normalizedNamespace.length === 0) {
+    const namespaceKey = namespace.trim();
+    if (namespaceKey.length === 0) {
       return null;
     }
-    return getChainRefByNamespace()[normalizedNamespace] ?? null;
+    return getChainRefByNamespace()[namespaceKey] ?? null;
   };
 
-  const update = async (params: UpdateNetworkSelectionParams): Promise<NetworkSelectionRecord> => {
+  const update = async (params: UpdateWalletChainSelectionParams): Promise<WalletChainSelectionRecord> => {
     return await run(async () => {
       const previous = await port.get();
       cached = previous;
@@ -74,23 +78,23 @@ export const createNetworkSelectionService = ({
       const nextChainRefByNamespace: Record<string, ChainRef> = { ...nextBase };
       if (params.chainRefByNamespacePatch) {
         for (const [namespace, chainRef] of Object.entries(params.chainRefByNamespacePatch)) {
-          const normalizedNamespace = namespace.trim();
-          if (normalizedNamespace.length === 0) {
+          const namespaceKey = namespace.trim();
+          if (namespaceKey.length === 0) {
             continue;
           }
           if (chainRef === null) {
-            delete nextChainRefByNamespace[normalizedNamespace];
+            delete nextChainRefByNamespace[namespaceKey];
             continue;
           }
-          nextChainRefByNamespace[normalizedNamespace] = chainRef;
+          nextChainRefByNamespace[namespaceKey] = chainRef;
         }
       }
 
       const nextSelectedNamespace =
         params.selectedNamespace?.trim() || previous?.selectedNamespace || getDefaultSelectedNamespace();
 
-      const next: NetworkSelectionRecord = {
-        id: "network-selection",
+      const next: WalletChainSelectionRecord = {
+        id: "wallet-chain-selection",
         selectedNamespace: nextSelectedNamespace,
         chainRefByNamespace: nextChainRefByNamespace,
         updatedAt: clock(),

@@ -3,9 +3,10 @@ import type {
   CustomChainRecord,
   CustomRpcRecord,
   KeyringMetaRecord,
-  NetworkSelectionRecord,
   PermissionRecord,
+  ProviderChainSelectionRecord,
   SettingsRecord,
+  WalletChainSelectionRecord,
 } from "@arx/core/storage";
 import type {
   TransactionRecord as AggregateTransactionRecord,
@@ -29,7 +30,8 @@ export class ArxStorageDatabase extends Dexie {
   settings!: Table<SettingsRecord, string>;
   customChains!: Table<CustomChainRow, string>;
   customRpc!: Table<CustomRpcRow, string>;
-  networkSelection!: Table<NetworkSelectionRecord, string>;
+  walletChainSelection!: Table<WalletChainSelectionRecord, string>;
+  providerChainSelection!: Table<ProviderChainSelectionRecord, [string, string]>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, [string, string]>;
   transactionRecords!: Table<AggregateTransactionRecord, string>;
@@ -45,7 +47,8 @@ export class ArxStorageDatabase extends Dexie {
       settings: "&id",
       customChains: "&chainRef, namespace, updatedAt",
       customRpc: "&chainRef, updatedAt",
-      networkSelection: "&id",
+      walletChainSelection: "&id",
+      providerChainSelection: "[origin+namespace]",
       accounts: "&accountKey, namespace, keyringId",
       permissions: "[origin+namespace], origin",
       transactionRecords: TRANSACTION_RECORDS_SCHEMA,

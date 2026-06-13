@@ -38,10 +38,17 @@ export type CustomRpcRecord = {
   updatedAt: number;
 };
 
-export type NetworkSelectionRecord = {
-  id: "network-selection";
+export type WalletChainSelectionRecord = {
+  id: "wallet-chain-selection";
   selectedNamespace: string;
   chainRefByNamespace: Record<string, ChainRef>;
+  updatedAt: number;
+};
+
+export type ProviderChainSelectionRecord = {
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef;
   updatedAt: number;
 };
 

@@ -7,9 +7,10 @@ export type {
   CustomChainRecord,
   CustomRpcRecord,
   KeyringMetaRecord,
-  NetworkSelectionRecord,
   PermissionRecord,
+  ProviderChainSelectionRecord,
   SettingsRecord,
+  WalletChainSelectionRecord,
 } from "./records.js";
 export { AccountKeySchema } from "./records.js";
 

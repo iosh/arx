@@ -9,6 +9,7 @@ export * from "./store/accounts/index.js";
 export * from "./store/customChains/index.js";
 export * from "./store/customRpc/index.js";
 export * from "./store/keyringMetas/index.js";
-export * from "./store/networkSelection/index.js";
 export * from "./store/permissions/index.js";
+export * from "./store/providerChainSelection/index.js";
 export * from "./store/settings/index.js";
+export * from "./store/walletChainSelection/index.js";

@@ -6,11 +6,12 @@ import { DexieAccountsPort } from "./ports/accountsPort.js";
 import { DexieCustomChainsPort } from "./ports/customChainsPort.js";
 import { DexieCustomRpcPort } from "./ports/customRpcPort.js";
 import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
-import { DexieNetworkSelectionPort } from "./ports/networkSelectionPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
+import { DexieProviderChainSelectionPort } from "./ports/providerChainSelectionPort.js";
 import { DexieSettingsPort } from "./ports/settingsPort.js";
 import { DexieTransactionAggregatesPort } from "./ports/transactionAggregatesPort.js";
 import { DexieVaultMetaPort } from "./ports/vaultMetaPort.js";
+import { DexieWalletChainSelectionPort } from "./ports/walletChainSelectionPort.js";
 
 export const DEFAULT_DEXIE_DATABASE_NAME = "arx-storage";
 
@@ -50,7 +51,8 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
       chains: {
         customChains: new DexieCustomChainsPort(ctx),
         customRpc: new DexieCustomRpcPort(ctx),
-        networkSelection: new DexieNetworkSelectionPort(ctx),
+        walletChainSelection: new DexieWalletChainSelectionPort(ctx),
+        providerChainSelection: new DexieProviderChainSelectionPort(ctx),
       },
       transactions: new DexieTransactionAggregatesPort(ctx),
       settings: new DexieSettingsPort(ctx),

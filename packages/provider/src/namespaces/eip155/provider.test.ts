@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestArguments } from "../../types/eip1193.js";
 import { REQUEST_VALIDATION_MESSAGES } from "./constants.js";
-import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
+import { StubTransport } from "./eip155.test.helpers.js";
 import { JsonRpcInternalError, ProviderDisconnectedError } from "./errors.js";
 import { Eip155Provider } from "./provider.js";
 import type { ProviderSnapshot } from "./state.js";
@@ -12,7 +12,6 @@ const INITIAL_SNAPSHOT: ProviderSnapshot = {
   chainRef: "eip155:1",
   accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   isUnlocked: true,
-  meta: buildMeta(),
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -139,7 +138,6 @@ describe("Eip155Provider: request() state errors", () => {
           chainRef: null,
           accounts: [],
           isUnlocked: null,
-          meta: null,
         },
         { readyTimeoutMs: 10 },
       );
@@ -270,7 +268,6 @@ describe("Eip155Provider: standard and legacy events", () => {
         chainRef: null,
         accounts: [],
         isUnlocked: null,
-        meta: null,
       },
       { readyTimeoutMs: 2000 },
     );
@@ -283,7 +280,6 @@ describe("Eip155Provider: standard and legacy events", () => {
       chainRef: "eip155:1",
       accounts: [],
       isUnlocked: true,
-      meta: buildMeta(),
     }));
     transport.setRequestHandler(async () => "0x10");
 
@@ -318,10 +314,6 @@ describe("Eip155Provider: standard and legacy events", () => {
       type: "chain",
       chainId: "0x89",
       chainRef: "eip155:137",
-      meta: buildMeta({
-        activeChainByNamespace: { eip155: "eip155:137" },
-        supportedChains: ["eip155:1", "eip155:137"],
-      }),
     });
 
     expect(chainChanged).toHaveBeenCalledTimes(1);
@@ -344,7 +336,6 @@ describe("Eip155Provider: standard and legacy events", () => {
       type: "chain",
       chainId: "0x89",
       chainRef: "eip155:137",
-      meta: buildMeta({ activeChainByNamespace: { eip155: "eip155:137" } }),
     });
     transport.emit("patch", { type: "unlock", isUnlocked: false });
 
@@ -429,10 +420,6 @@ describe("Eip155Provider: public API hardening", () => {
       type: "chain",
       chainId: "0x89",
       chainRef: "eip155:137",
-      meta: buildMeta({
-        activeChainByNamespace: { eip155: "eip155:137" },
-        supportedChains: ["eip155:1", "eip155:137"],
-      }),
     });
     expect(pageProvider.chainId).toBe("0x89");
     expect(pageProvider.networkVersion).toBe("137");

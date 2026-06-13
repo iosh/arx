@@ -1,7 +1,5 @@
 import { PROVIDER_EVENTS, type ProviderEventName } from "../../protocol/events.js";
 import type { TransportCodec, TransportCodecResult } from "../../transport/codec.js";
-import { cloneTransportMeta, isTransportMeta } from "../../transport/transportMeta.js";
-import type { TransportMeta } from "../../types/transport.js";
 import { ProviderDisconnectedError } from "./errors.js";
 import {
   applyProviderPatch,
@@ -16,14 +14,12 @@ type Eip155HandshakeState = {
   chainRef: string;
   accounts: string[];
   isUnlocked: boolean;
-  meta: TransportMeta;
 };
 
 type ChainUpdate = {
   chainId: string;
   chainRef?: string | null;
   isUnlocked?: boolean;
-  meta?: TransportMeta | null;
 };
 
 const ignoreResult = <TPatch>(): TransportCodecResult<TPatch> => ({ kind: "ignore" });
@@ -40,7 +36,6 @@ const isEip155HandshakeState = (value: unknown): value is Eip155HandshakeState =
   if (typeof candidate.chainRef !== "string") return false;
   if (typeof candidate.isUnlocked !== "boolean") return false;
   if (!Array.isArray(candidate.accounts) || !candidate.accounts.every((item) => typeof item === "string")) return false;
-  if (!isTransportMeta(candidate.meta)) return false;
   return true;
 };
 
@@ -51,7 +46,6 @@ const isChainUpdate = (value: unknown): value is ChainUpdate => {
   if (candidate.chainRef !== undefined && candidate.chainRef !== null && typeof candidate.chainRef !== "string")
     return false;
   if (candidate.isUnlocked !== undefined && typeof candidate.isUnlocked !== "boolean") return false;
-  if (candidate.meta !== undefined && candidate.meta !== null && !isTransportMeta(candidate.meta)) return false;
   return true;
 };
 
@@ -76,7 +70,6 @@ export const eip155TransportCodec: TransportCodec<ProviderSnapshot, ProviderPatc
       chainRef: state.chainRef,
       accounts: [...state.accounts],
       isUnlocked: state.isUnlocked,
-      meta: cloneTransportMeta(state.meta),
     };
   },
 
@@ -99,15 +92,8 @@ export const eip155TransportCodec: TransportCodec<ProviderSnapshot, ProviderPatc
             chainId: update.chainId,
             ...(update.chainRef === undefined ? {} : { chainRef: update.chainRef ?? null }),
             ...(update.isUnlocked === undefined ? {} : { isUnlocked: update.isUnlocked }),
-            ...(update.meta === undefined ? {} : { meta: update.meta ?? null }),
           },
         ]);
-      }
-
-      case PROVIDER_EVENTS.metaChanged: {
-        const meta = params[0];
-        if (meta !== null && !isTransportMeta(meta)) return ignoreResult();
-        return patchResult([{ type: "meta", meta: (meta as TransportMeta | null | undefined) ?? null }]);
       }
 
       case PROVIDER_EVENTS.sessionLocked: {

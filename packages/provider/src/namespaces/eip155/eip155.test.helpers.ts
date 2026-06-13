@@ -1,6 +1,6 @@
 import { EventEmitter } from "eventemitter3";
 import type { RequestArguments } from "../../types/eip1193.js";
-import type { Transport, TransportMeta } from "../../types/transport.js";
+import type { Transport } from "../../types/transport.js";
 import type { ProviderPatch, ProviderSnapshot } from "./state.js";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -48,9 +48,3 @@ export class StubTransport extends EventEmitter implements Transport<ProviderSna
     this.#requestHandler = handler;
   }
 }
-
-export const buildMeta = (overrides?: Partial<TransportMeta>): TransportMeta => ({
-  activeChainByNamespace: { eip155: "eip155:1" },
-  supportedChains: ["eip155:1"],
-  ...overrides,
-});

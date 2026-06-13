@@ -115,7 +115,6 @@ describe("WindowPostMessageTransport", () => {
       chainRef: "eip155:1",
       accounts: options?.accounts ?? [],
       isUnlocked: true,
-      meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
     const snapshot = await pendingBootstrap;
     if (shouldRestore) {
@@ -135,7 +134,6 @@ describe("WindowPostMessageTransport", () => {
         chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
-        meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
       });
       expect(transport.isConnected()).toBe(true);
     });
@@ -151,7 +149,6 @@ describe("WindowPostMessageTransport", () => {
         chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
-        meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
       });
 
       await expect(first).resolves.toMatchObject({ accounts: ["0xabc"] });
@@ -178,7 +175,6 @@ describe("WindowPostMessageTransport", () => {
           chainRef: "eip155:1",
           accounts: ["0xabc"],
           isUnlocked: true,
-          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
         },
         { protocolVersion: null },
       );
@@ -203,7 +199,6 @@ describe("WindowPostMessageTransport", () => {
           chainRef: "eip155:1",
           accounts: ["0xabc"],
           isUnlocked: true,
-          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
         },
         { protocolVersion: 999 },
       );
@@ -326,7 +321,6 @@ describe("WindowPostMessageTransport", () => {
         chainRef: "eip155:1",
         accounts: ["0xaaa"],
         isUnlocked: true,
-        meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
       });
 
       await expect(pendingBootstrap).resolves.toEqual({
@@ -335,7 +329,6 @@ describe("WindowPostMessageTransport", () => {
         chainRef: "eip155:1",
         accounts: ["0xbbb"],
         isUnlocked: true,
-        meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
       });
       postMessageSpy.mockRestore();
     });
@@ -374,7 +367,6 @@ describe("WindowPostMessageTransport", () => {
               chainId: "0x89",
               chainRef: "eip155:137",
               isUnlocked: false,
-              meta: { activeChainByNamespace: { eip155: "eip155:137" }, supportedChains: ["eip155:1", "eip155:137"] },
             },
           ],
         },
@@ -386,7 +378,6 @@ describe("WindowPostMessageTransport", () => {
         chainId: "0x89",
         chainRef: "eip155:137",
         isUnlocked: false,
-        meta: { activeChainByNamespace: { eip155: "eip155:137" }, supportedChains: ["eip155:1", "eip155:137"] },
       });
     });
 

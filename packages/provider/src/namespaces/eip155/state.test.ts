@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { buildMeta } from "./eip155.test.helpers.js";
 import { applyProviderPatch, Eip155ProviderState, type ProviderSnapshot } from "./state.js";
 
 describe("Eip155ProviderState", () => {
@@ -13,7 +12,6 @@ describe("Eip155ProviderState", () => {
         chainRef: "solana",
         accounts: [],
         isUnlocked: true,
-        meta: buildMeta(),
       }),
     ).not.toThrow();
 
@@ -29,7 +27,6 @@ describe("Eip155ProviderState", () => {
       chainRef: "eip155:137",
       accounts: [],
       isUnlocked: true,
-      meta: buildMeta({ activeChainByNamespace: { eip155: "eip155:1" } }),
     });
 
     expect(state.getProviderState().networkVersion).toBe("137");
@@ -42,7 +39,6 @@ describe("Eip155ProviderState", () => {
       chainRef: "eip155:1",
       accounts: ["0xabc"],
       isUnlocked: true,
-      meta: buildMeta(),
     };
 
     const nextSnapshot = applyProviderPatch(snapshot, {
@@ -50,10 +46,6 @@ describe("Eip155ProviderState", () => {
       chainId: "0x89",
       chainRef: "eip155:137",
       isUnlocked: false,
-      meta: buildMeta({
-        activeChainByNamespace: { eip155: "eip155:137" },
-        supportedChains: ["eip155:1", "eip155:137"],
-      }),
     });
 
     expect(snapshot.chainId).toBe("0x1");
@@ -63,10 +55,6 @@ describe("Eip155ProviderState", () => {
       chainId: "0x89",
       chainRef: "eip155:137",
       isUnlocked: false,
-      meta: {
-        activeChainByNamespace: { eip155: "eip155:137" },
-        supportedChains: ["eip155:1", "eip155:137"],
-      },
     });
   });
 });

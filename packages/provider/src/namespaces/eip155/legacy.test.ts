@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
+import { StubTransport } from "./eip155.test.helpers.js";
 import { Eip155Provider } from "./provider.js";
 import type { ProviderSnapshot } from "./state.js";
 
@@ -9,7 +9,6 @@ const INITIAL_STATE: ProviderSnapshot = {
   chainRef: "eip155:1",
   accounts: [],
   isUnlocked: true,
-  meta: buildMeta(),
 };
 
 const createProvider = (initialState: ProviderSnapshot = INITIAL_STATE) => {

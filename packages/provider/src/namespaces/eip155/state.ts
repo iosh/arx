@@ -1,6 +1,4 @@
 import { parseChainRef } from "@arx/core";
-import { cloneTransportMeta } from "../../transport/transportMeta.js";
-import type { TransportMeta } from "../../types/transport.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
 export type ProviderStateSnapshot = {
@@ -16,14 +14,12 @@ export type ProviderSnapshot = {
   chainRef: string | null;
   accounts: string[];
   isUnlocked: boolean | null;
-  meta: TransportMeta | null;
 };
 
 export type ProviderPatch =
   | { type: "accounts"; accounts: string[] }
-  | { type: "chain"; chainId: string; chainRef?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null }
-  | { type: "unlock"; isUnlocked: boolean }
-  | { type: "meta"; meta: TransportMeta | null };
+  | { type: "chain"; chainId: string; chainRef?: string | null; isUnlocked?: boolean }
+  | { type: "unlock"; isUnlocked: boolean };
 
 export const cloneProviderSnapshot = (snapshot: ProviderSnapshot): ProviderSnapshot => ({
   connected: snapshot.connected,
@@ -31,7 +27,6 @@ export const cloneProviderSnapshot = (snapshot: ProviderSnapshot): ProviderSnaps
   chainRef: snapshot.chainRef,
   accounts: [...snapshot.accounts],
   isUnlocked: snapshot.isUnlocked,
-  meta: snapshot.meta ? cloneTransportMeta(snapshot.meta) : null,
 });
 
 export const cloneProviderPatch = (patch: ProviderPatch): ProviderPatch => {
@@ -45,14 +40,10 @@ export const cloneProviderPatch = (patch: ProviderPatch): ProviderPatch => {
         chainId: patch.chainId,
         ...(patch.chainRef === undefined ? {} : { chainRef: patch.chainRef }),
         ...(patch.isUnlocked === undefined ? {} : { isUnlocked: patch.isUnlocked }),
-        ...(patch.meta === undefined ? {} : { meta: patch.meta ? cloneTransportMeta(patch.meta) : null }),
       };
 
     case "unlock":
       return { type: "unlock", isUnlocked: patch.isUnlocked };
-
-    case "meta":
-      return { type: "meta", meta: patch.meta ? cloneTransportMeta(patch.meta) : null };
 
     default: {
       const exhaustive: never = patch;
@@ -73,10 +64,6 @@ export const applyProviderPatch = (snapshot: ProviderSnapshot, patch: ProviderPa
       nextSnapshot.isUnlocked = patch.isUnlocked;
       return nextSnapshot;
 
-    case "meta":
-      nextSnapshot.meta = patch.meta ? cloneTransportMeta(patch.meta) : null;
-      return nextSnapshot;
-
     case "chain":
       nextSnapshot.chainId = patch.chainId;
       if (patch.chainRef !== undefined) {
@@ -84,9 +71,6 @@ export const applyProviderPatch = (snapshot: ProviderSnapshot, patch: ProviderPa
       }
       if (patch.isUnlocked !== undefined) {
         nextSnapshot.isUnlocked = patch.isUnlocked;
-      }
-      if (patch.meta !== undefined) {
-        nextSnapshot.meta = patch.meta ? cloneTransportMeta(patch.meta) : null;
       }
       return nextSnapshot;
 
@@ -108,7 +92,6 @@ export class Eip155ProviderState {
   #chainRef: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
-  #meta: TransportMeta | null = null;
 
   get namespace() {
     return this.#namespace;
@@ -150,9 +133,7 @@ export class Eip155ProviderState {
   applySnapshot(snapshot: ProviderSnapshot): { accountsChanged: boolean } {
     const prevAccounts = [...this.#accounts];
 
-    this.#updateMeta(snapshot.meta);
-    const effectiveChainRef = this.#deriveEffectiveChainRef(snapshot.chainRef);
-    this.#updateNamespace(effectiveChainRef);
+    this.#updateNamespace(snapshot.chainRef);
 
     this.#chainId = snapshot.chainId;
     this.#accounts = snapshot.accounts;
@@ -171,11 +152,6 @@ export class Eip155ProviderState {
     const prevUnlock = this.#isUnlocked;
 
     switch (patch.type) {
-      case "meta": {
-        this.#updateMeta(patch.meta);
-        return {};
-      }
-
       case "accounts": {
         this.#accounts = patch.accounts;
         if (didAccountsChange(prevAccounts, this.#accounts)) {
@@ -193,11 +169,7 @@ export class Eip155ProviderState {
       }
 
       case "chain": {
-        if (patch.meta !== undefined) {
-          this.#updateMeta(patch.meta);
-        }
-        const effectiveChainRef = this.#deriveEffectiveChainRef(patch.chainRef);
-        this.#updateNamespace(effectiveChainRef);
+        this.#updateNamespace(patch.chainRef);
 
         this.#chainId = patch.chainId;
         if (typeof patch.isUnlocked === "boolean") {
@@ -223,7 +195,6 @@ export class Eip155ProviderState {
     this.#chainRef = null;
     this.#accounts = [];
     this.#isUnlocked = null;
-    this.#meta = null;
   }
 
   #updateNamespace(chainRef: string | null | undefined) {
@@ -241,18 +212,6 @@ export class Eip155ProviderState {
 
     this.#chainRef = null;
     this.#namespace = EIP155_NAMESPACE;
-  }
-
-  #updateMeta(meta: TransportMeta | null | undefined) {
-    if (meta === undefined) return;
-    this.#meta = meta ? cloneTransportMeta(meta) : null;
-  }
-
-  #deriveEffectiveChainRef(candidate: unknown): string | null {
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-    return this.#meta?.activeChainByNamespace[EIP155_NAMESPACE] ?? null;
   }
 
   #parseNumericReference(candidate: string | null | undefined) {
@@ -274,9 +233,6 @@ export class Eip155ProviderState {
         // swallow malformed hex to fall back on CAIP references
       }
     }
-    return (
-      this.#parseNumericReference(this.#chainRef) ??
-      this.#parseNumericReference(this.#meta?.activeChainByNamespace[EIP155_NAMESPACE])
-    );
+    return this.#parseNumericReference(this.#chainRef);
   }
 }

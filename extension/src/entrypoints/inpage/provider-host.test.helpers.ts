@@ -1,5 +1,4 @@
 import { CHANNEL, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
-import type { TransportMeta } from "@arx/provider/types";
 import { JSDOM } from "jsdom";
 
 export type TestDomContext = {
@@ -47,11 +46,6 @@ export const createTestDom = (url = DEFAULT_DAPP_URL): TestDomContext => {
     },
   };
 };
-
-export const buildMeta = (activeChain: string): TransportMeta => ({
-  activeChainByNamespace: { eip155: activeChain },
-  supportedChains: [activeChain],
-});
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
@@ -130,7 +124,6 @@ export class MockContentBridge {
           chainRef,
           accounts,
           isUnlocked: true,
-          meta: buildMeta(chainRef),
         },
       },
     });
@@ -154,7 +147,7 @@ export class MockContentBridge {
       type: "event",
       payload: {
         event: PROVIDER_EVENTS.chainChanged,
-        params: [{ chainId: update.chainId, chainRef: update.chainRef, meta: buildMeta(update.chainRef) }],
+        params: [{ chainId: update.chainId, chainRef: update.chainRef }],
       },
     });
   }

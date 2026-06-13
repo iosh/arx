@@ -33,7 +33,6 @@ const createStubTransport = (): Transport => ({
     chainRef: "eip155:1",
     accounts: [],
     isUnlocked: true,
-    meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
   }),
   disconnect: async () => {},
   isConnected: () => false,

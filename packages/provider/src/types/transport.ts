@@ -1,10 +1,5 @@
 import type { RequestArguments } from "./eip1193.js";
 
-export type TransportMeta = {
-  activeChainByNamespace: Record<string, string>;
-  supportedChains: string[];
-};
-
 export type TransportRequestOptions = {
   timeoutMs?: number;
 };

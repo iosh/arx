@@ -5,6 +5,10 @@ import { ApprovalKinds } from "../../../../../approvals/index.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import type { RequestPermissionsApprovalPayload } from "../../../../../permissions/service/types.js";
 import {
+  MemoryChainRpcDefaultEndpointsPort,
+  MemoryChainRpcEndpointOverridesPort,
+} from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
+import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
   ALT_CHAIN,
@@ -366,7 +370,10 @@ describe("eip155 handlers - core error paths", () => {
   });
 
   it("adds a new chain via wallet_addEthereumChain", async () => {
-    const runtime = createRuntime();
+    const chainRpcDefaultEndpointsPort = new MemoryChainRpcDefaultEndpointsPort();
+    const runtime = createRuntime({
+      chainRpcDefaultEndpoints: { port: chainRpcDefaultEndpointsPort },
+    });
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
@@ -397,6 +404,11 @@ describe("eip155 handlers - core error paths", () => {
 
       const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
+
+      await expect(chainRpcDefaultEndpointsPort.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
+        chainRef: ADDED_CHAIN_REF,
+        rpcEndpoints: [{ url: "https://mainnet.base.org", type: "public" }],
+      });
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();

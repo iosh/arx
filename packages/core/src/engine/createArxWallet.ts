@@ -344,6 +344,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
             permissions: stateServices.permissions,
             chainActivation: activeSessionScope.chainActivation,
             supportedChains: stateServices.supportedChains,
+            chainRpcDefaultEndpoints: activeSessionScope.chainRpcDefaultEndpoints,
             namespaceBindings: activeBackgroundSupportScope.namespaceBindings,
           };
         },

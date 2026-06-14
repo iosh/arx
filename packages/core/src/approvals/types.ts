@@ -10,12 +10,14 @@ import type { SupportedChainsService } from "../chains/runtime/supportedChains/t
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { PermissionsWriter } from "../permissions/service/types.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
+import type { ChainRpcDefaultEndpointsService } from "../services/store/chainRpcDefaultEndpoints/types.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain" | "selectProviderChain">;
   supportedChains: Pick<SupportedChainsService, "getChain" | "addChain">;
+  chainRpcDefaultEndpoints: Pick<ChainRpcDefaultEndpointsService, "setDefaultEndpoints">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };
 

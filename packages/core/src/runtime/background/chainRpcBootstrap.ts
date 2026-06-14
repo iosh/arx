@@ -3,6 +3,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
 import type { ChainRpcAccess, ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
 import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
@@ -12,6 +13,7 @@ export type CreateChainRpcBootstrapOptions = {
   chainRpcAccessUpdater: ChainRpcAccessUpdater;
   supportedChains: SupportedChainsService;
   selection: WalletChainSelectionService;
+  defaultEndpoints: ChainRpcDefaultEndpointsService;
   endpointOverrides: ChainRpcEndpointOverridesService;
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   hydrationEnabled: boolean;
@@ -32,6 +34,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
     chainRpcAccessUpdater,
     supportedChains,
     selection,
+    defaultEndpoints,
     endpointOverrides,
     selectionDefaults,
     hydrationEnabled,
@@ -41,22 +44,32 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   } = opts;
 
   let selectionLoaded = !hydrationEnabled;
+  let defaultEndpointsLoaded = !hydrationEnabled;
   let endpointOverridesLoaded = !hydrationEnabled;
   let pendingSync = false;
 
   let syncInFlight: Promise<void> | null = null;
 
-  const readSupportedChainRpcAccesses = (): ChainRpcAccess[] =>
-    supportedChains
-      .getState()
-      .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
-      .map((entry) => {
-        const endpoints = endpointOverrides.readEndpointOverride(entry.chainRef) ?? entry.metadata.rpcEndpoints;
-        return {
-          chainRef: entry.chainRef,
-          endpoints: assertNonEmptyRpcEndpoints(entry.chainRef, endpoints),
-        };
+  const listSupportedChainsForRegisteredNamespaces = () =>
+    supportedChains.getState().chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace));
+
+  const readSupportedChainRpcAccesses = (): ChainRpcAccess[] => {
+    const accesses: ChainRpcAccess[] = [];
+    for (const entry of listSupportedChainsForRegisteredNamespaces()) {
+      const endpoints =
+        endpointOverrides.readEndpointOverride(entry.chainRef) ?? defaultEndpoints.readDefaultEndpoints(entry.chainRef);
+      if (!endpoints) {
+        logger(`chainRpc: missing default RPC endpoints for "${entry.chainRef}"`);
+        continue;
+      }
+
+      accesses.push({
+        chainRef: entry.chainRef,
+        endpoints: assertNonEmptyRpcEndpoints(entry.chainRef, endpoints),
       });
+    }
+    return accesses;
+  };
 
   const resolveChainRefByNamespace = (accesses: readonly ChainRpcAccess[]): Record<string, ChainRef> => {
     const availableByNamespace = new Map<string, ChainRef[]>();
@@ -172,6 +185,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   const loadPersistedState = async () => {
     if (!hydrationEnabled) {
       selectionLoaded = true;
+      defaultEndpointsLoaded = true;
       endpointOverridesLoaded = true;
       return;
     }
@@ -184,6 +198,19 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
         throw new RuntimeHydrationError({
           owner: "chains",
           resource: "walletChainSelection",
+          cause: error,
+        });
+      }
+    }
+
+    if (!defaultEndpointsLoaded) {
+      try {
+        await defaultEndpoints.getAll();
+        defaultEndpointsLoaded = true;
+      } catch (error) {
+        throw new RuntimeHydrationError({
+          owner: "chains",
+          resource: "chainRpcDefaultEndpoints",
           cause: error,
         });
       }
@@ -204,9 +231,16 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   };
 
   const syncOnce = async () => {
-    if (!selectionLoaded || !endpointOverridesLoaded) {
+    if (!selectionLoaded || !defaultEndpointsLoaded || !endpointOverridesLoaded) {
       await loadPersistedState();
     }
+
+    await defaultEndpoints.replaceDefaultEndpoints(
+      listSupportedChainsForRegisteredNamespaces().map((entry) => ({
+        chainRef: entry.chainRef,
+        rpcEndpoints: entry.metadata.rpcEndpoints,
+      })),
+    );
 
     const accesses = readSupportedChainRpcAccesses();
     if (accesses.length === 0) {
@@ -248,6 +282,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
     if (listenersAttached) return;
     listenersAttached = true;
     supportedChains.onStateChanged(() => requestSync());
+    defaultEndpoints.subscribeChanged(() => requestSync());
     endpointOverrides.subscribeChanged(() => requestSync());
   };
 
@@ -256,6 +291,10 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   };
 
   const flushPendingSync = async () => {
+    if (pendingSync && !syncInFlight && !getIsHydrating()) {
+      requestSync();
+    }
+
     if (syncInFlight) {
       await syncInFlight;
     }

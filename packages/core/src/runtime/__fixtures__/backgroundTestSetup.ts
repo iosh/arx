@@ -8,6 +8,7 @@ import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
@@ -18,6 +19,7 @@ import type { WalletChainSelectionPort } from "../../services/store/walletChainS
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
+  ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
   CustomChainRecord,
   KeyringMetaRecord,
@@ -410,6 +412,41 @@ export class MemoryChainRpcEndpointOverridesPort implements ChainRpcEndpointOver
   }
 }
 
+export class MemoryChainRpcDefaultEndpointsPort implements ChainRpcDefaultEndpointsPort {
+  #records = new Map<ChainRef, ChainRpcDefaultEndpointsRecord>();
+  public readonly upserted: ChainRpcDefaultEndpointsRecord[] = [];
+  public readonly removed: ChainRef[] = [];
+
+  constructor(seed: ChainRpcDefaultEndpointsRecord[] = []) {
+    for (const record of seed) {
+      this.#records.set(record.chainRef, clone(record));
+    }
+  }
+
+  async get(chainRef: ChainRef): Promise<ChainRpcDefaultEndpointsRecord | null> {
+    const record = this.#records.get(chainRef);
+    return record ? clone(record) : null;
+  }
+
+  async list(): Promise<ChainRpcDefaultEndpointsRecord[]> {
+    return Array.from(this.#records.values(), (record) => clone(record));
+  }
+
+  async upsert(record: ChainRpcDefaultEndpointsRecord): Promise<void> {
+    this.#records.set(record.chainRef, clone(record));
+    this.upserted.push(clone(record));
+  }
+
+  async remove(chainRef: ChainRef): Promise<void> {
+    this.#records.delete(chainRef);
+    this.removed.push(chainRef);
+  }
+
+  async clear(): Promise<void> {
+    this.#records.clear();
+  }
+}
+
 export class MemoryVaultMetaPort implements VaultMetaPort {
   #vaultMeta: VaultMetaSnapshot | null;
   public savedVaultMeta: VaultMetaSnapshot | null = null;
@@ -577,6 +614,7 @@ export type TestBackgroundContext = {
   keyringMetasPort: MemoryKeyringMetasPort;
   walletChainSelectionPort: MemoryWalletChainSelectionPort;
   providerChainSelectionPort: MemoryProviderChainSelectionPort;
+  chainRpcDefaultEndpointsPort: MemoryChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverridesPort: MemoryChainRpcEndpointOverridesPort;
   customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
@@ -620,6 +658,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const customChainsPort = new MemoryCustomChainsPort();
   const walletChainSelectionPort = new MemoryWalletChainSelectionPort(options.walletChainSelectionSeed ?? null);
   const providerChainSelectionPort = new MemoryProviderChainSelectionPort(options.providerChainSelectionSeed ?? []);
+  const chainRpcDefaultEndpointsPort = new MemoryChainRpcDefaultEndpointsPort();
   const chainRpcEndpointOverridesPort = new MemoryChainRpcEndpointOverridesPort();
   const vaultMetaPort = options.vaultMetaPort ?? new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
@@ -673,6 +712,9 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     },
     providerChainSelection: {
       port: providerChainSelectionPort,
+    },
+    chainRpcDefaultEndpoints: {
+      port: chainRpcDefaultEndpointsPort,
     },
     chainRpcEndpointOverrides: {
       port: chainRpcEndpointOverridesPort,
@@ -745,6 +787,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     keyringMetasPort,
     walletChainSelectionPort,
     providerChainSelectionPort,
+    chainRpcDefaultEndpointsPort,
     chainRpcEndpointOverridesPort,
     customChainsPort,
     vaultMetaPort,

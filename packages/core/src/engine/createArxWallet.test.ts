@@ -4,6 +4,7 @@ import { ApprovalKinds } from "../approvals/queue/types.js";
 import {
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
@@ -37,6 +38,7 @@ const PROVIDER_SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const createWalletInput = (params?: {
   modules?: readonly WalletNamespaceModule[];
   walletChainSelectionPort?: MemoryWalletChainSelectionPort;
+  chainRpcDefaultEndpointsPort?: MemoryChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverridesPort?: MemoryChainRpcEndpointOverridesPort;
   providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   accountsPort?: MemoryAccountsPort;
@@ -59,6 +61,7 @@ const createWalletInput = (params?: {
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
         chains: {
           customChains: new MemoryCustomChainsPort(),
+          chainRpcDefaultEndpoints: params?.chainRpcDefaultEndpointsPort ?? new MemoryChainRpcDefaultEndpointsPort(),
           chainRpcEndpointOverrides: params?.chainRpcEndpointOverridesPort ?? new MemoryChainRpcEndpointOverridesPort(),
           walletChainSelection: params?.walletChainSelectionPort ?? new MemoryWalletChainSelectionPort(),
           providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),

@@ -16,6 +16,7 @@ import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
@@ -94,6 +95,7 @@ const createTestRuntime = (params?: {
   messenger?: Parameters<typeof createBackgroundRuntime>[0]["messenger"];
   rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
   approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
+  chainRpcDefaultEndpoints?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcDefaultEndpoints"];
   chainRpcEndpointOverrides?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcEndpointOverrides"];
 }) => {
   const customChainsPort = params?.customChainsPort ?? new MemoryCustomChainsPort();
@@ -110,6 +112,9 @@ const createTestRuntime = (params?: {
     },
     providerChainSelection: {
       port: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
+    },
+    chainRpcDefaultEndpoints: params?.chainRpcDefaultEndpoints ?? {
+      port: new MemoryChainRpcDefaultEndpointsPort(),
     },
     chainRpcEndpointOverrides: params?.chainRpcEndpointOverrides ?? {
       port: new MemoryChainRpcEndpointOverridesPort(),

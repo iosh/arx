@@ -4,6 +4,7 @@ export type {
   AccountKey,
   AccountNamespace,
   AccountRecord,
+  ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
   CustomChainRecord,
   KeyringMetaRecord,

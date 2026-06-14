@@ -32,6 +32,12 @@ export type ChainRpcEndpointOverrideRecord = {
   updatedAt: number;
 };
 
+export type ChainRpcDefaultEndpointsRecord = {
+  chainRef: ChainRef;
+  rpcEndpoints: RpcEndpoint[];
+  updatedAt: number;
+};
+
 export type WalletChainSelectionRecord = {
   id: "wallet-chain-selection";
   selectedNamespace: string;

@@ -14,6 +14,7 @@ import type { KeyringExportService } from "../services/runtime/keyringExport.js"
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { ChainRpcDefaultEndpointsPort } from "../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../services/store/chainRpcEndpointOverrides/port.js";
 import type { CustomChainsPort } from "../services/store/customChains/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
@@ -52,6 +53,9 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
   };
   chainRpcEndpointOverrides: {
     port: ChainRpcEndpointOverridesPort;
+  };
+  chainRpcDefaultEndpoints: {
+    port: ChainRpcDefaultEndpointsPort;
   };
   storage?: {
     vaultMetaPort?: VaultMetaPort;
@@ -139,6 +143,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const walletChainSelectionPort = options.walletChainSelection.port;
   const providerChainSelectionPort = options.providerChainSelection.port;
+  const chainRpcDefaultEndpointsPort = options.chainRpcDefaultEndpoints.port;
   const chainRpcEndpointOverridesPort = options.chainRpcEndpointOverrides.port;
   const vaultMetaPort = options.storage?.vaultMetaPort ?? createNoopVaultMetaPort();
 
@@ -155,6 +160,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         permissions: options.store.ports.permissions,
         chains: {
           customChains: customChainsPort,
+          chainRpcDefaultEndpoints: chainRpcDefaultEndpointsPort,
           chainRpcEndpointOverrides: chainRpcEndpointOverridesPort,
           walletChainSelection: walletChainSelectionPort,
           providerChainSelection: providerChainSelectionPort,

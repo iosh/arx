@@ -317,6 +317,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     settingsPort: input.storage.ports.settings,
     walletChainSelectionPort: input.storage.ports.chains.walletChainSelection,
     providerChainSelectionPort: input.storage.ports.chains.providerChainSelection,
+    chainRpcDefaultEndpointsPort: input.storage.ports.chains.chainRpcDefaultEndpoints,
     chainRpcEndpointOverridesPort: input.storage.ports.chains.chainRpcEndpointOverrides,
     storePorts: {
       accounts: input.storage.ports.accounts,

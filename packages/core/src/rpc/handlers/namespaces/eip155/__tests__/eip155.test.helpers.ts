@@ -10,6 +10,7 @@ import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   FakeVault,
   MemoryAccountsPort,
+  MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
@@ -56,6 +57,7 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     session,
     walletChainSelection,
     providerChainSelection,
+    chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides,
     rpcAccessPolicy,
     store,
@@ -78,6 +80,7 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
       } as const),
     walletChainSelection: walletChainSelection ?? { port: new MemoryWalletChainSelectionPort() },
     providerChainSelection: providerChainSelection ?? { port: new MemoryProviderChainSelectionPort() },
+    chainRpcDefaultEndpoints: chainRpcDefaultEndpoints ?? { port: new MemoryChainRpcDefaultEndpointsPort() },
     chainRpcEndpointOverrides: chainRpcEndpointOverrides ?? { port: new MemoryChainRpcEndpointOverridesPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {

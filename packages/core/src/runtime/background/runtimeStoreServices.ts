@@ -1,5 +1,7 @@
 import { createAccountsService } from "../../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
+import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
 import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
 import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
 import { createKeyringMetasService } from "../../services/store/keyringMetas/KeyringMetasService.js";
@@ -23,6 +25,7 @@ export type RuntimeStoreServices = {
   settingsService: ReturnType<typeof createSettingsService>;
   walletChainSelection: ReturnType<typeof createWalletChainSelectionService>;
   providerChainSelection: ReturnType<typeof createProviderChainSelectionService>;
+  chainRpcDefaultEndpoints: ReturnType<typeof createChainRpcDefaultEndpointsService>;
   chainRpcEndpointOverrides: ReturnType<typeof createChainRpcEndpointOverridesService>;
   accountsStore: ReturnType<typeof createAccountsService>;
   keyringMetas: ReturnType<typeof createKeyringMetasService>;
@@ -32,6 +35,7 @@ export const initRuntimeStoreServices = ({
   settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
+  chainRpcDefaultEndpointsPort,
   chainRpcEndpointOverridesPort,
   ports,
   selectionDefaults,
@@ -40,6 +44,7 @@ export const initRuntimeStoreServices = ({
   settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
+  chainRpcDefaultEndpointsPort: ChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverridesPort: ChainRpcEndpointOverridesPort;
   ports: RuntimeStorePorts;
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
@@ -56,6 +61,10 @@ export const initRuntimeStoreServices = ({
     port: providerChainSelectionPort,
     now,
   });
+  const chainRpcDefaultEndpoints = createChainRpcDefaultEndpointsService({
+    port: chainRpcDefaultEndpointsPort,
+    now,
+  });
   const chainRpcEndpointOverrides = createChainRpcEndpointOverridesService({
     port: chainRpcEndpointOverridesPort,
     now,
@@ -68,6 +77,7 @@ export const initRuntimeStoreServices = ({
     settingsService,
     walletChainSelection,
     providerChainSelection,
+    chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides,
     accountsStore,
     keyringMetas,

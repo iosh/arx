@@ -6,6 +6,7 @@ export * from "./runtime/keyringExport.js";
 export * from "./runtime/permissionViews/index.js";
 export * from "./runtime/sessionStatus.js";
 export * from "./store/accounts/index.js";
+export * from "./store/chainRpcDefaultEndpoints/index.js";
 export * from "./store/chainRpcEndpointOverrides/index.js";
 export * from "./store/customChains/index.js";
 export * from "./store/keyringMetas/index.js";

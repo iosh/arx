@@ -8,9 +8,8 @@ import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
-import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
 import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
-import type { ChainRpcAccess, ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
+import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
 import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
 import { SUPPORTED_CHAINS_TOPICS } from "../../chains/runtime/supportedChains/topics.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
@@ -22,7 +21,6 @@ import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
-import type { RuntimeChainAdmission } from "./chainRpcDefaults.js";
 
 export type BackgroundStateServiceOptions = {
   approvals?: {
@@ -55,19 +53,12 @@ export type BackgroundStateServicesInitResult = {
   setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
 };
 
-const buildInitialRpcAccesses = (chains: readonly ChainMetadata[]): ChainRpcAccess[] =>
-  chains.map((chain) => ({
-    chainRef: chain.chainRef,
-    endpoints: assertNonEmptyRpcEndpoints(chain.chainRef, chain.rpcEndpoints),
-  }));
-
 export const initBackgroundStateServices = ({
   bus,
   accountCodecs,
   accountsService,
   settingsService,
   permissionsPort,
-  chainAdmission,
   options,
 }: {
   bus: Messenger;
@@ -75,7 +66,6 @@ export const initBackgroundStateServices = ({
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsPort: PermissionsPort;
-  chainAdmission: RuntimeChainAdmission;
   options: BackgroundStateServiceOptions;
 }): BackgroundStateServicesInitResult => {
   const { approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
@@ -88,7 +78,7 @@ export const initBackgroundStateServices = ({
 
   const chainRpcService = new ChainRpcService({
     messenger: bus.scope({ name: "chainRpc", publish: CHAIN_RPC_TOPICS }),
-    initialAccesses: buildInitialRpcAccesses(chainAdmission.admittedChains),
+    initialAccesses: [],
   });
 
   const accountSelectionService: AccountSelectionService = new StoreAccountSelectionService({

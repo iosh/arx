@@ -21,6 +21,7 @@ import {
   createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
@@ -241,6 +242,7 @@ const setupNamespaceAwareProviderRuntime = async () => {
     },
     walletChainSelection: { port: new MemoryWalletChainSelectionPort() },
     providerChainSelection: { port: new MemoryProviderChainSelectionPort() },
+    chainRpcDefaultEndpoints: { port: new MemoryChainRpcDefaultEndpointsPort() },
     chainRpcEndpointOverrides: { port: new MemoryChainRpcEndpointOverridesPort() },
     store: {
       ports: {

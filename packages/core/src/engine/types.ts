@@ -61,6 +61,7 @@ import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainVie
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { ChainRpcDefaultEndpointsPort } from "../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../services/store/chainRpcEndpointOverrides/port.js";
 import type { ChainRpcEndpointOverridesChangedHandler } from "../services/store/chainRpcEndpointOverrides/types.js";
 import type { CustomChainsPort } from "../services/store/customChains/port.js";
@@ -141,6 +142,7 @@ export type WalletNamespaces = Readonly<{
 /** Chain storage ports required to boot a wallet. */
 export type CoreChainsStoragePorts = Readonly<{
   customChains: CustomChainsPort;
+  chainRpcDefaultEndpoints: ChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverrides: ChainRpcEndpointOverridesPort;
   walletChainSelection: WalletChainSelectionPort;
   providerChainSelection: ProviderChainSelectionPort;

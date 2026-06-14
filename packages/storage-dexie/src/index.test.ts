@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 
 import {
+  type ChainRpcDefaultEndpointsRecord,
   type ProviderChainSelectionRecord,
   VAULT_META_SNAPSHOT_VERSION,
   type VaultMetaSnapshot,
@@ -66,6 +67,24 @@ describe("@arx/storage-dexie", () => {
     await port.remove({ origin: first.origin, namespace: first.namespace });
     expect(await port.get({ origin: first.origin, namespace: first.namespace })).toBeNull();
     expect(await port.get({ origin: second.origin, namespace: second.namespace })).toEqual(second);
+  });
+
+  it("ChainRpcDefaultEndpointsPort roundtrips by chainRef", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.chains.chainRpcDefaultEndpoints;
+
+    const record = {
+      chainRef: "eip155:1",
+      rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+      updatedAt: 1_000,
+    } satisfies ChainRpcDefaultEndpointsRecord;
+
+    await port.upsert(record);
+    expect(await port.get(record.chainRef)).toEqual(record);
+    expect(await port.list()).toEqual([record]);
+
+    await port.remove(record.chainRef);
+    expect(await port.get(record.chainRef)).toBeNull();
   });
 
   it("VaultMetaPort roundtrips", async () => {

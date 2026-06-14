@@ -288,6 +288,7 @@ describe("runtimeHost", () => {
         transactions: {},
         chains: {
           customChains: {},
+          chainRpcDefaultEndpoints: {},
           chainRpcEndpointOverrides: {},
           walletChainSelection: {},
           providerChainSelection: {},

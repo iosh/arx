@@ -3,6 +3,7 @@ import type { CoreStoragePorts } from "@arx/core/engine";
 import { ArxStorageDatabase } from "./db.js";
 import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
 import { DexieAccountsPort } from "./ports/accountsPort.js";
+import { DexieChainRpcDefaultEndpointsPort } from "./ports/chainRpcDefaultEndpointsPort.js";
 import { DexieChainRpcEndpointOverridesPort } from "./ports/chainRpcEndpointOverridesPort.js";
 import { DexieCustomChainsPort } from "./ports/customChainsPort.js";
 import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
@@ -50,6 +51,7 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
       permissions: new DexiePermissionsPort(ctx),
       chains: {
         customChains: new DexieCustomChainsPort(ctx),
+        chainRpcDefaultEndpoints: new DexieChainRpcDefaultEndpointsPort(ctx),
         chainRpcEndpointOverrides: new DexieChainRpcEndpointOverridesPort(ctx),
         walletChainSelection: new DexieWalletChainSelectionPort(ctx),
         providerChainSelection: new DexieProviderChainSelectionPort(ctx),

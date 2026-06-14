@@ -16,9 +16,9 @@ import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainDefinitionsPort,
   MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
-  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
@@ -81,7 +81,7 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
 
 const createTestRuntime = (params?: {
   chainSeed?: ChainMetadata[];
-  customChainsPort?: MemoryCustomChainsPort;
+  chainDefinitionsPort?: MemoryChainDefinitionsPort;
   walletChainSelectionPort?: MemoryWalletChainSelectionPort;
   providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   namespaces?: Parameters<typeof createBackgroundRuntime>[0]["namespaces"];
@@ -98,12 +98,11 @@ const createTestRuntime = (params?: {
   chainRpcDefaultEndpoints?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcDefaultEndpoints"];
   chainRpcEndpointOverrides?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcEndpointOverrides"];
 }) => {
-  const customChainsPort = params?.customChainsPort ?? new MemoryCustomChainsPort();
+  const chainDefinitionsPort = params?.chainDefinitionsPort ?? new MemoryChainDefinitionsPort();
   return createBackgroundRuntime({
     supportedChains: {
-      port: customChainsPort,
-      ...(params?.chainSeed ? { seed: params.chainSeed } : {}),
       ...(params?.supportedChains ?? {}),
+      ...(params?.chainSeed ? { seed: params.chainSeed } : {}),
     },
     namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
     rpcAccessPolicy: params?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY,
@@ -124,7 +123,7 @@ const createTestRuntime = (params?: {
     },
     store: {
       ports: {
-        customChains: customChainsPort,
+        chainDefinitions: chainDefinitionsPort,
         permissions: new MemoryPermissionsPort(),
         transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),
@@ -265,10 +264,8 @@ const createHandlersForRuntime = (
 
 describe("createBackgroundRuntime (no snapshots)", () => {
   it("derives network selection defaults from the admitted chain seed before hydration", async () => {
-    const customChainsPort = new MemoryCustomChainsPort();
     const runtime = createTestRuntime({
       chainSeed: [BASE_CHAIN],
-      customChainsPort,
     });
 
     expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
@@ -287,7 +284,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("hydrates network selection from persisted selection state", async () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const customChainsPort = new MemoryCustomChainsPort();
     const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
       id: "wallet-chain-selection",
       selectedNamespace: ALT_CHAIN.namespace,
@@ -297,7 +293,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed,
-      customChainsPort,
       walletChainSelectionPort,
       storage: {
         vaultMetaPort: {
@@ -337,7 +332,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const listAll = vi.spyOn(providerChainSelectionPort, "listAll");
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       providerChainSelectionPort,
       storage: {
         hydrate: false,
@@ -369,7 +363,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed: [ALT_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       session: {
         keyringNamespaces: overriddenKeyringNamespaces,
       },
@@ -384,7 +377,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("resolves unlocked session state through ui.session.unlock", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -403,7 +395,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("persists selectedNamespace-derived UI chain when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const customChainsPort = new MemoryCustomChainsPort();
     const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
       id: "wallet-chain-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
@@ -413,7 +404,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed,
-      customChainsPort,
       walletChainSelectionPort,
       storage: {
         vaultMetaPort: {
@@ -447,7 +437,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const runtime = createTestRuntime({
       chainSeed,
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -483,7 +472,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const runtime = createTestRuntime({
       chainSeed,
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -540,7 +528,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const getBalance = vi.fn(async () => "0xde0b6b3a7640000");
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       rpcClients: {
         factories: [
           {
@@ -592,7 +579,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("fails closed when sign approvals are unsupported for the namespace", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -646,7 +632,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("tracks rpc client support separately from other runtime support", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -682,7 +667,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("derives selected-chain UI capabilities from transaction submission support", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -726,7 +710,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("creates send transaction approvals when receipt tracking is unsupported", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -777,7 +760,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("projects transaction submission capability from overridden namespace transactions", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -833,7 +815,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -877,7 +858,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -930,7 +910,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("rejects extension handlers that override common UI methods", () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     const overrideResolveExtension = {
@@ -952,7 +931,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("rejects conflicting UI methods across extensions", () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     const firstActivationExtension = {
@@ -991,7 +969,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -1069,7 +1046,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("propagates transaction approval creation errors to the UI handler", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
-      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();

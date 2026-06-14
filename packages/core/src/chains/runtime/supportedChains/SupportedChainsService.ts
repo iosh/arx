@@ -1,11 +1,8 @@
-import type { CustomChainsPort } from "../../../services/store/customChains/port.js";
-import type { CustomChainRecord } from "../../../storage/records.js";
-import { ChainDefinitionConflictError } from "../../errors.js";
+import type { ChainDefinitionEntity } from "../../../storage/index.js";
 import type { ChainRef } from "../../ids.js";
-import { type ChainMetadata, isSameAddChainComparableMetadata } from "../../metadata.js";
-import { prepareChainMetadataForStorage } from "../chainDefinitions/state.js";
+import type { ChainMetadata } from "../../metadata.js";
+import type { ChainDefinitionsService, ChainDefinitionsUpdate } from "../chainDefinitions/types.js";
 import { cloneSupportedChainEntity, cloneSupportedChainsState, toSupportedChainEntity } from "./state.js";
-import { SUPPORTED_CHAINS_STATE_CHANGED, SUPPORTED_CHAINS_UPDATED, type SupportedChainsMessenger } from "./topics.js";
 import type {
   AddSupportedChainOptions,
   AddSupportedChainResult,
@@ -16,196 +13,103 @@ import type {
 } from "./types.js";
 
 type SupportedChainsServiceOptions = {
-  messenger: SupportedChainsMessenger;
-  port: CustomChainsPort;
-  seed?: readonly ChainMetadata[];
-  logger?: (message: string, error?: unknown) => void;
-  now?: () => number;
+  chainDefinitions: ChainDefinitionsService;
+};
+
+const toSupportedChain = (entity: ChainDefinitionEntity): SupportedChainEntity =>
+  toSupportedChainEntity({
+    metadata: entity.metadata,
+    source: entity.source,
+    ...(entity.createdByOrigin ? { createdByOrigin: entity.createdByOrigin } : {}),
+  });
+
+const toSupportedChainsUpdate = (update: ChainDefinitionsUpdate): SupportedChainsUpdate => {
+  if (update.kind === "removed") {
+    return {
+      kind: "removed",
+      chainRef: update.chainRef,
+      ...(update.previous ? { previous: toSupportedChain(update.previous) } : {}),
+    };
+  }
+
+  if (update.kind === "added") {
+    return {
+      kind: "added",
+      chain: toSupportedChain(update.chain),
+    };
+  }
+
+  return {
+    kind: "updated",
+    chain: toSupportedChain(update.chain),
+    previous: toSupportedChain(update.previous),
+  };
 };
 
 export class InMemorySupportedChainsService implements SupportedChainsService {
-  #messenger: SupportedChainsMessenger;
-  #port: CustomChainsPort;
-  #logger: (message: string, error?: unknown) => void;
-  #now: () => number;
-  #chains = new Map<ChainRef, SupportedChainEntity>();
-  #ready: Promise<void>;
+  readonly #chainDefinitions: ChainDefinitionsService;
 
-  constructor({ messenger, port, seed = [], logger = () => {}, now = Date.now }: SupportedChainsServiceOptions) {
-    this.#messenger = messenger;
-    this.#port = port;
-    this.#logger = logger;
-    this.#now = now;
-    this.#ready = this.#initialize(seed);
+  constructor({ chainDefinitions }: SupportedChainsServiceOptions) {
+    this.#chainDefinitions = chainDefinitions;
   }
 
   getState(): SupportedChainsState {
-    return cloneSupportedChainsState(this.#chains.values());
+    return cloneSupportedChainsState(this.#chainDefinitions.getChains().map(toSupportedChain));
   }
 
   getChain(chainRef: ChainRef): SupportedChainEntity | null {
-    const entry = this.#chains.get(chainRef);
-    return entry ? cloneSupportedChainEntity(entry) : null;
+    const entry = this.#chainDefinitions.getChain(chainRef);
+    return entry ? toSupportedChain(entry) : null;
   }
 
   listChains(): SupportedChainEntity[] {
-    return cloneSupportedChainsState(this.#chains.values()).chains;
+    return this.getState().chains;
   }
 
   async addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult> {
-    await this.#ready;
-
-    const storedMetadata = prepareChainMetadataForStorage(chain);
-    const previous = this.#chains.get(storedMetadata.chainRef) ?? null;
-
-    if (previous?.source === "builtin") {
-      if (isSameAddChainComparableMetadata(previous.metadata, storedMetadata)) {
-        return { kind: "noop", chain: cloneSupportedChainEntity(previous) };
-      }
-
-      throw new ChainDefinitionConflictError({ chainRef: storedMetadata.chainRef });
+    const result = await this.#chainDefinitions.upsertCustomChain(chain, options);
+    if (result.kind === "noop") {
+      return {
+        kind: "noop",
+        chain: cloneSupportedChainEntity(toSupportedChain(result.chain)),
+      };
     }
 
-    const createdByOrigin = previous?.createdByOrigin ?? options?.createdByOrigin;
-    const next = toSupportedChainEntity({
-      metadata: storedMetadata,
-      source: "custom",
-      ...(createdByOrigin ? { createdByOrigin } : {}),
-    });
-
-    if (
-      previous &&
-      previous.source === "custom" &&
-      previous.createdByOrigin === next.createdByOrigin &&
-      isSameAddChainComparableMetadata(previous.metadata, next.metadata)
-    ) {
-      return { kind: "noop", chain: cloneSupportedChainEntity(previous) };
+    if (result.kind === "added") {
+      return {
+        kind: "added",
+        chain: cloneSupportedChainEntity(toSupportedChain(result.chain)),
+      };
     }
 
-    await this.#port.upsert(this.#toCustomChainRecord(next));
-    this.#chains.set(next.chainRef, next);
-
-    this.#publishState();
-    const update: SupportedChainsUpdate =
-      previous && previous.source === "custom"
-        ? {
-            kind: "updated",
-            chain: cloneSupportedChainEntity(next),
-            previous: cloneSupportedChainEntity(previous),
-          }
-        : { kind: "added", chain: cloneSupportedChainEntity(next) };
-    this.#messenger.publish(SUPPORTED_CHAINS_UPDATED, update);
-
-    if (update.kind === "updated") {
-      return update;
-    }
-    return update;
+    return {
+      kind: "updated",
+      chain: cloneSupportedChainEntity(toSupportedChain(result.chain)),
+      previous: cloneSupportedChainEntity(toSupportedChain(result.previous)),
+    };
   }
 
   async removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }> {
-    await this.#ready;
-
-    const previous = this.#chains.get(chainRef);
-    if (!previous) {
-      return { removed: false };
-    }
-    if (previous.source !== "custom") {
-      return { removed: false, previous: cloneSupportedChainEntity(previous) };
-    }
-
-    await this.#port.remove(chainRef);
-    this.#chains.delete(chainRef);
-    this.#publishState();
-    this.#messenger.publish(SUPPORTED_CHAINS_UPDATED, {
-      kind: "removed",
-      chainRef,
-      previous: cloneSupportedChainEntity(previous),
-    });
-
-    return { removed: true, previous: cloneSupportedChainEntity(previous) };
+    const result = await this.#chainDefinitions.removeCustomChain(chainRef);
+    return {
+      removed: result.removed,
+      ...(result.previous ? { previous: cloneSupportedChainEntity(toSupportedChain(result.previous)) } : {}),
+    };
   }
 
   onStateChanged(handler: (state: SupportedChainsState) => void): () => void {
-    return this.#messenger.subscribe(SUPPORTED_CHAINS_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#chainDefinitions.onStateChanged((state) => {
+      handler(cloneSupportedChainsState(state.chains.map(toSupportedChain)));
+    });
   }
 
   onChainUpdated(handler: (update: SupportedChainsUpdate) => void): () => void {
-    return this.#messenger.subscribe(SUPPORTED_CHAINS_UPDATED, handler);
+    return this.#chainDefinitions.onChainUpdated((update) => {
+      handler(toSupportedChainsUpdate(update));
+    });
   }
 
   whenReady(): Promise<void> {
-    return this.#ready;
-  }
-
-  async #initialize(seed: readonly ChainMetadata[]): Promise<void> {
-    try {
-      for (const metadata of seed) {
-        const storedMetadata = prepareChainMetadataForStorage(metadata);
-        if (this.#chains.has(storedMetadata.chainRef)) {
-          throw new Error(`Duplicate builtin supported chain "${storedMetadata.chainRef}"`);
-        }
-        this.#chains.set(
-          storedMetadata.chainRef,
-          toSupportedChainEntity({
-            metadata: storedMetadata,
-            source: "builtin",
-          }),
-        );
-      }
-
-      const persisted = await this.#port.list();
-      for (const entry of persisted) {
-        const record = this.#parseCustomChainRecord(entry);
-        if (!record) {
-          continue;
-        }
-
-        const existing = this.#chains.get(record.chainRef) ?? null;
-        if (existing?.source === "builtin") {
-          await this.#port.remove(record.chainRef);
-          continue;
-        }
-
-        this.#chains.set(
-          record.chainRef,
-          toSupportedChainEntity({
-            metadata: record.metadata,
-            source: "custom",
-            ...(record.createdByOrigin ? { createdByOrigin: record.createdByOrigin } : {}),
-          }),
-        );
-      }
-
-      if (this.#chains.size > 0) {
-        this.#publishState();
-      }
-    } catch (error) {
-      this.#logger("[supportedChains] failed to initialize", error);
-      throw error;
-    }
-  }
-
-  #parseCustomChainRecord(record: CustomChainRecord): CustomChainRecord | null {
-    return {
-      chainRef: record.chainRef,
-      namespace: record.namespace,
-      metadata: prepareChainMetadataForStorage(record.metadata),
-      ...(record.createdByOrigin ? { createdByOrigin: record.createdByOrigin } : {}),
-      updatedAt: record.updatedAt,
-    };
-  }
-
-  #toCustomChainRecord(chain: SupportedChainEntity): CustomChainRecord {
-    return {
-      chainRef: chain.chainRef,
-      namespace: chain.namespace,
-      metadata: chain.metadata,
-      ...(chain.createdByOrigin ? { createdByOrigin: chain.createdByOrigin } : {}),
-      updatedAt: this.#now(),
-    };
-  }
-
-  #publishState() {
-    this.#messenger.publish(SUPPORTED_CHAINS_STATE_CHANGED, cloneSupportedChainsState(this.#chains.values()));
+    return this.#chainDefinitions.whenReady();
   }
 }

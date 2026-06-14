@@ -287,7 +287,7 @@ describe("runtimeHost", () => {
         permissions: {},
         transactions: {},
         chains: {
-          customChains: {},
+          chainDefinitions: {},
           chainRpcDefaultEndpoints: {},
           chainRpcEndpointOverrides: {},
           walletChainSelection: {},

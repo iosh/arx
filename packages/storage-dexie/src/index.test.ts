@@ -1,6 +1,8 @@
 import "fake-indexeddb/auto";
 
 import {
+  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  type ChainDefinitionEntity,
   type ChainRpcDefaultEndpointsRecord,
   type ProviderChainSelectionRecord,
   VAULT_META_SNAPSHOT_VERSION,
@@ -84,6 +86,34 @@ describe("@arx/storage-dexie", () => {
     expect(await port.list()).toEqual([record]);
 
     await port.remove(record.chainRef);
+    expect(await port.get(record.chainRef)).toBeNull();
+  });
+
+  it("ChainDefinitionsPort roundtrips by chainRef", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.chains.chainDefinitions;
+
+    const record = {
+      chainRef: "eip155:1",
+      namespace: "eip155",
+      schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+      source: "builtin",
+      updatedAt: 1_000,
+      metadata: {
+        chainRef: "eip155:1",
+        namespace: "eip155",
+        chainId: "0x1",
+        displayName: "Ethereum",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+      },
+    } satisfies ChainDefinitionEntity;
+
+    await port.put(record);
+    expect(await port.get(record.chainRef)).toEqual(record);
+    expect(await port.getAll()).toEqual([record]);
+
+    await port.delete(record.chainRef);
     expect(await port.get(record.chainRef)).toBeNull();
   });
 

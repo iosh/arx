@@ -10,9 +10,9 @@ import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   FakeVault,
   MemoryAccountsPort,
+  MemoryChainDefinitionsPort,
   MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
-  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
@@ -49,7 +49,7 @@ export const TEST_MNEMONIC = "test test test test test test test test test test 
 
 export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-export const createCustomChainsPort = () => new MemoryCustomChainsPort();
+export const createChainDefinitionsPort = () => new MemoryChainDefinitionsPort();
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
   const {
@@ -63,10 +63,17 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     store,
     ...rest
   } = overrides ?? {};
-  const customChainsPort = supportedChains?.port ?? store?.ports.customChains ?? createCustomChainsPort();
+  const chainDefinitionsPort = store?.ports.chainDefinitions ?? createChainDefinitionsPort();
+  const storePorts = {
+    chainDefinitions: chainDefinitionsPort,
+    permissions: new MemoryPermissionsPort(),
+    transactionAggregates: new MemoryTransactionAggregatesPort(),
+    accounts: new MemoryAccountsPort(),
+    keyringMetas: new MemoryKeyringMetasPort(),
+    ...(store?.ports ?? {}),
+  };
   const runtime = createBackgroundRuntime({
     supportedChains: {
-      port: customChainsPort,
       ...(supportedChains ?? {}),
     },
     namespaces: {
@@ -84,15 +91,8 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     chainRpcEndpointOverrides: chainRpcEndpointOverrides ?? { port: new MemoryChainRpcEndpointOverridesPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
-      ports: {
-        customChains: customChainsPort,
-        permissions: new MemoryPermissionsPort(),
-        transactionAggregates: new MemoryTransactionAggregatesPort(),
-        accounts: new MemoryAccountsPort(),
-        keyringMetas: new MemoryKeyringMetasPort(),
-        ...(store?.ports ?? {}),
-      },
-      ...(store ? { ...store, ports: { customChains: customChainsPort, ...store.ports } } : {}),
+      ...(store ?? {}),
+      ports: storePorts,
     },
     session: {
       vault: new FakeVault(() => Date.now()),

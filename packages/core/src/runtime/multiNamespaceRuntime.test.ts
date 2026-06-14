@@ -7,9 +7,9 @@ import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifes
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import {
   MemoryAccountsPort,
+  MemoryChainDefinitionsPort,
   MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
-  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
@@ -87,10 +87,9 @@ const solanaNamespaceManifest = (() => {
 
 describe("createBackgroundRuntime multi-namespace assembly", () => {
   it("assembles a second namespace without falling back to eip155 runtime defaults", async () => {
-    const customChainsPort = new MemoryCustomChainsPort();
+    const chainDefinitionsPort = new MemoryChainDefinitionsPort();
     const runtime = createBackgroundRuntime({
       supportedChains: {
-        port: customChainsPort,
         seed: [MAINNET_CHAIN, SOLANA_CHAIN],
       },
       namespaces: {
@@ -106,7 +105,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       chainRpcEndpointOverrides: { port: new MemoryChainRpcEndpointOverridesPort() },
       store: {
         ports: {
-          customChains: customChainsPort,
+          chainDefinitions: chainDefinitionsPort,
           permissions: new MemoryPermissionsPort(),
           transactionAggregates: new MemoryTransactionAggregatesPort(),
           accounts: new MemoryAccountsPort(),

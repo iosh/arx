@@ -21,9 +21,9 @@ import {
   createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainDefinitionsPort,
   MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
-  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
@@ -227,10 +227,9 @@ const solanaNamespaceManifest = (() => {
 
 const setupNamespaceAwareProviderRuntime = async () => {
   const mainnetChain = createChainMetadata();
-  const customChainsPort = new MemoryCustomChainsPort();
+  const chainDefinitionsPort = new MemoryChainDefinitionsPort();
   const runtime = createBackgroundRuntime({
     supportedChains: {
-      port: customChainsPort,
       seed: [mainnetChain, SOLANA_CHAIN],
     },
     namespaces: {
@@ -246,7 +245,7 @@ const setupNamespaceAwareProviderRuntime = async () => {
     chainRpcEndpointOverrides: { port: new MemoryChainRpcEndpointOverridesPort() },
     store: {
       ports: {
-        customChains: customChainsPort,
+        chainDefinitions: chainDefinitionsPort,
         permissions: new MemoryPermissionsPort(),
         transactionAggregates: new MemoryTransactionAggregatesPort(),
         accounts: new MemoryAccountsPort(),

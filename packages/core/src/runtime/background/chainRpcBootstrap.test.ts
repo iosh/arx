@@ -2,18 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
+import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
+import { CHAIN_DEFINITIONS_TOPICS } from "../../chains/runtime/chainDefinitions/topics.js";
 import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
-import { SUPPORTED_CHAINS_TOPICS } from "../../chains/runtime/supportedChains/topics.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
 import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
 import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
+import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type { WalletChainSelectionRecord } from "../../storage/records.js";
 import {
+  MemoryChainDefinitionsPort,
   MemoryChainRpcDefaultEndpointsPort,
   MemoryChainRpcEndpointOverridesPort,
-  MemoryCustomChainsPort,
   MemoryWalletChainSelectionPort,
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createChainRpcBootstrap } from "./chainRpcBootstrap.js";
@@ -94,20 +96,25 @@ const createChainRpcDefaultEndpoints = (
   return { port, service };
 };
 
-const toCustomChainRecord = (metadata: ChainMetadata) => ({
+const toCustomChainDefinition = (metadata: ChainMetadata) => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata,
+  schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  source: "custom" as const,
   updatedAt: 0,
 });
 
 const createSupportedChains = async (params: { builtin?: ChainMetadata[]; custom?: ChainMetadata[] }) => {
   const bus = new Messenger();
-  const supportedChains = new InMemorySupportedChainsService({
-    messenger: bus.scope({ publish: SUPPORTED_CHAINS_TOPICS }),
-    port: new MemoryCustomChainsPort((params.custom ?? []).map(toCustomChainRecord)),
+  const chainDefinitions = new InMemoryChainDefinitionsService({
+    messenger: bus.scope({ publish: CHAIN_DEFINITIONS_TOPICS }),
+    port: new MemoryChainDefinitionsPort((params.custom ?? []).map(toCustomChainDefinition)),
     seed: params.builtin ?? [],
     now: () => 0,
+  });
+  const supportedChains = new InMemorySupportedChainsService({
+    chainDefinitions,
   });
   await supportedChains.whenReady();
   return supportedChains;

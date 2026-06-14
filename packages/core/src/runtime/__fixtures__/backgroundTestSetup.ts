@@ -8,20 +8,19 @@ import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
-import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
-import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
+import type { ChainDefinitionEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
-  CustomChainRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
@@ -471,30 +470,40 @@ export class MemoryVaultMetaPort implements VaultMetaPort {
   }
 }
 
-export class MemoryCustomChainsPort implements CustomChainsPort {
-  #records = new Map<ChainRef, CustomChainRecord>();
+export class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
+  #records = new Map<ChainRef, ChainDefinitionEntity>();
+  public readonly putEntities: ChainDefinitionEntity[] = [];
+  public readonly deleted: ChainRef[] = [];
 
-  constructor(seed: CustomChainRecord[] = []) {
+  constructor(seed: ChainDefinitionEntity[] = []) {
     for (const record of seed) {
       this.#records.set(record.chainRef, clone(record));
     }
   }
 
-  async get(chainRef: ChainRef): Promise<CustomChainRecord | null> {
+  async get(chainRef: ChainRef): Promise<ChainDefinitionEntity | null> {
     const record = this.#records.get(chainRef);
     return record ? clone(record) : null;
   }
 
-  async list(): Promise<CustomChainRecord[]> {
+  async getAll(): Promise<ChainDefinitionEntity[]> {
     return Array.from(this.#records.values(), (record) => clone(record));
   }
 
-  async upsert(record: CustomChainRecord): Promise<void> {
-    this.#records.set(record.chainRef, clone(record));
+  async put(entity: ChainDefinitionEntity): Promise<void> {
+    this.#records.set(entity.chainRef, clone(entity));
+    this.putEntities.push(clone(entity));
   }
 
-  async remove(chainRef: ChainRef): Promise<void> {
+  async putMany(entities: ChainDefinitionEntity[]): Promise<void> {
+    for (const entity of entities) {
+      await this.put(entity);
+    }
+  }
+
+  async delete(chainRef: ChainRef): Promise<void> {
     this.#records.delete(chainRef);
+    this.deleted.push(chainRef);
   }
 
   async clear(): Promise<void> {
@@ -614,9 +623,9 @@ export type TestBackgroundContext = {
   keyringMetasPort: MemoryKeyringMetasPort;
   walletChainSelectionPort: MemoryWalletChainSelectionPort;
   providerChainSelectionPort: MemoryProviderChainSelectionPort;
+  chainDefinitionsPort: MemoryChainDefinitionsPort;
   chainRpcDefaultEndpointsPort: MemoryChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverridesPort: MemoryChainRpcEndpointOverridesPort;
-  customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
   settingsPort: MemorySettingsPort;
@@ -638,6 +647,7 @@ export type SetupBackgroundOptions = {
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
+  chainDefinitionsPort?: MemoryChainDefinitionsPort;
   autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -655,7 +665,7 @@ export type SetupBackgroundOptions = {
  */
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
-  const customChainsPort = new MemoryCustomChainsPort();
+  const chainDefinitionsPort = options.chainDefinitionsPort ?? new MemoryChainDefinitionsPort();
   const walletChainSelectionPort = new MemoryWalletChainSelectionPort(options.walletChainSelectionSeed ?? null);
   const providerChainSelectionPort = new MemoryProviderChainSelectionPort(options.providerChainSelectionSeed ?? []);
   const chainRpcDefaultEndpointsPort = new MemoryChainRpcDefaultEndpointsPort();
@@ -700,7 +710,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   const runtime = createBackgroundRuntime({
     supportedChains: {
-      port: customChainsPort,
       seed: chainSeed,
     },
     namespaces: {
@@ -721,7 +730,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     },
     store: {
       ports: {
-        customChains: customChainsPort,
+        chainDefinitions: chainDefinitionsPort,
         permissions: permissionsPort,
         transactionAggregates: transactionAggregatesPort,
         accounts: accountsPort,
@@ -787,9 +796,9 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     keyringMetasPort,
     walletChainSelectionPort,
     providerChainSelectionPort,
+    chainDefinitionsPort,
     chainRpcDefaultEndpointsPort,
     chainRpcEndpointOverridesPort,
-    customChainsPort,
     vaultMetaPort,
     transactionAggregatesPort,
     settingsPort,

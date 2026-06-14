@@ -6,7 +6,6 @@ export type {
   AccountRecord,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
-  CustomChainRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,

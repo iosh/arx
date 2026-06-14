@@ -71,7 +71,7 @@ export const createBackgroundRuntimeLifecycle = ({
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
     initialize: async () => {
-      await hydrateCriticalStorage("chains", "customChains", () => stateServices.supportedChains.whenReady());
+      await hydrateCriticalStorage("chains", "chainDefinitions", () => stateServices.chainDefinitions.whenReady());
       await hydrateCriticalStorage("accounts", "accounts", () => stateServices.accounts.whenReady?.());
       await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
       if (hydrationEnabled) {

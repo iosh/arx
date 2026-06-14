@@ -14,9 +14,9 @@ import type { KeyringExportService } from "../services/runtime/keyringExport.js"
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../services/store/chainRpcEndpointOverrides/port.js";
-import type { CustomChainsPort } from "../services/store/customChains/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
@@ -66,15 +66,13 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
   store: {
     ports: {
       accounts: AccountsPort;
-      customChains?: CustomChainsPort;
+      chainDefinitions: ChainDefinitionsPort;
       keyringMetas: KeyringMetasPort;
       permissions: PermissionsPort;
       transactionAggregates: TransactionsStoragePort;
     };
   };
-  supportedChains?: Omit<NonNullable<BackgroundAssemblyOptions["supportedChains"]>, "port"> & {
-    port?: CustomChainsPort;
-  };
+  supportedChains?: Omit<NonNullable<BackgroundAssemblyOptions["supportedChains"]>, "port">;
   settings: {
     port: SettingsPort;
   };
@@ -131,14 +129,10 @@ const createNoopVaultMetaPort = (): VaultMetaPort => ({
 });
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
-  const customChainsPort = options.store.ports.customChains ?? options.supportedChains?.port;
-  if (!customChainsPort) {
-    throw new Error("createBackgroundRuntime requires a custom chains port");
-  }
-
+  const chainDefinitionsPort = options.store.ports.chainDefinitions;
   const supportedChains = {
     ...(options.supportedChains ?? {}),
-    port: customChainsPort,
+    port: chainDefinitionsPort,
   };
 
   const walletChainSelectionPort = options.walletChainSelection.port;
@@ -159,7 +153,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         accounts: options.store.ports.accounts,
         permissions: options.store.ports.permissions,
         chains: {
-          customChains: customChainsPort,
+          chainDefinitions: chainDefinitionsPort,
           chainRpcDefaultEndpoints: chainRpcDefaultEndpointsPort,
           chainRpcEndpointOverrides: chainRpcEndpointOverridesPort,
           walletChainSelection: walletChainSelectionPort,

@@ -306,7 +306,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
     supportedChainsOptions: {
       ...(assemblyOptions?.supportedChains ?? {}),
-      port: input.storage.ports.chains.customChains,
+      port: input.storage.ports.chains.chainDefinitions,
     },
   });
 

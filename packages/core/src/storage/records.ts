@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
+import type { RpcEndpoint } from "../chains/metadata.js";
 import type { KeyringType } from "./keyringSchemas.js";
 
 export type AccountNamespace = string;
@@ -15,14 +15,6 @@ export type AccountKey = string;
 export type SettingsRecord = {
   id: "settings";
   selectedAccountKeysByNamespace?: Record<string, AccountKey> | undefined;
-  updatedAt: number;
-};
-
-export type CustomChainRecord = {
-  chainRef: ChainRef;
-  namespace: string;
-  metadata: ChainMetadata;
-  createdByOrigin?: string | undefined;
   updatedAt: number;
 };
 

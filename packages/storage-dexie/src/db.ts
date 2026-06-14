@@ -1,8 +1,8 @@
 import type {
   AccountRecord,
+  ChainDefinitionEntity,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
-  CustomChainRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
@@ -23,14 +23,14 @@ const TRANSACTION_RECORDS_SCHEMA =
 const TRANSACTION_SUBMISSIONS_SCHEMA =
   "&id, transactionId, status, createdAt, updatedAt, [transactionId+id], [transactionId+createdAt], [transactionId+status], [status+updatedAt]";
 
-type CustomChainRow = CustomChainRecord;
+type ChainDefinitionRow = ChainDefinitionEntity;
 type ChainRpcDefaultEndpointsRow = ChainRpcDefaultEndpointsRecord;
 type ChainRpcEndpointOverridesRow = ChainRpcEndpointOverrideRecord;
 type KeyringMetaRow = KeyringMetaRecord;
 
 export class ArxStorageDatabase extends Dexie {
   settings!: Table<SettingsRecord, string>;
-  customChains!: Table<CustomChainRow, string>;
+  chainDefinitions!: Table<ChainDefinitionRow, string>;
   chainRpcDefaultEndpoints!: Table<ChainRpcDefaultEndpointsRow, string>;
   chainRpcEndpointOverrides!: Table<ChainRpcEndpointOverridesRow, string>;
   walletChainSelection!: Table<WalletChainSelectionRecord, string>;
@@ -48,7 +48,7 @@ export class ArxStorageDatabase extends Dexie {
     super(name);
     this.version(DB_SCHEMA_VERSION).stores({
       settings: "&id",
-      customChains: "&chainRef, namespace, updatedAt",
+      chainDefinitions: "&chainRef, namespace, source, updatedAt",
       chainRpcDefaultEndpoints: "&chainRef, updatedAt",
       chainRpcEndpointOverrides: "&chainRef, updatedAt",
       walletChainSelection: "&id",

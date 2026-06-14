@@ -25,7 +25,11 @@ describe("eip155 passthrough executor", () => {
 
       expect(result).toBe("0x64");
       expect(getClient).toHaveBeenCalledWith("eip155", chainRef);
-      expect(rpcClient.request).toHaveBeenCalledWith({ method: "eth_getBalance", params });
+      expect(rpcClient.request).toHaveBeenCalledWith({
+        method: "eth_getBalance",
+        params,
+        retry: { transportFailure: true },
+      });
     } finally {
       getClient.mockRestore();
       runtime.lifecycle.shutdown();

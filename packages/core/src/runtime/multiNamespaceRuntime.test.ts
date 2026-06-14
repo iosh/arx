@@ -7,6 +7,7 @@ import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifes
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import {
   MemoryAccountsPort,
+  MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
@@ -100,6 +101,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       },
       walletChainSelection: { port: new MemoryWalletChainSelectionPort() },
       providerChainSelection: { port: new MemoryProviderChainSelectionPort() },
+      chainRpcEndpointOverrides: { port: new MemoryChainRpcEndpointOverridesPort() },
       store: {
         ports: {
           customChains: customChainsPort,

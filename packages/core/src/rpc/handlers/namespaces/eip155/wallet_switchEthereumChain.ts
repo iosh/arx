@@ -88,7 +88,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
 
     const target = resolveSwitchEthereumChainTarget({
       supportedChains,
-      network: deps.network,
+      chainRpc: deps.chainRpc,
       chainId: params.chainId,
     });
 

@@ -57,6 +57,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(rpcClient.request).toHaveBeenCalledWith({
         method: "eth_getBalance",
         params: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "latest"],
+        retry: { transportFailure: true },
       });
     } finally {
       getClient.mockRestore();

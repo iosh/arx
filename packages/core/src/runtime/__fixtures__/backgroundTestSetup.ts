@@ -8,8 +8,8 @@ import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
-import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
@@ -18,8 +18,8 @@ import type { WalletChainSelectionPort } from "../../services/store/walletChainS
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
+  ChainRpcEndpointOverrideRecord,
   CustomChainRecord,
-  CustomRpcRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
@@ -271,28 +271,6 @@ export const flushAsync = async (turns = DEFAULT_FLUSH_TURNS) => {
   }
 };
 
-export const buildRpcSnapshot = (metadata: ChainMetadata) => ({
-  activeIndex: 0,
-  endpoints: metadata.rpcEndpoints.map((endpoint, index) => ({
-    index,
-    url: endpoint.url,
-    type: endpoint.type ?? "public",
-    weight: endpoint.weight,
-    headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-  })),
-  health: metadata.rpcEndpoints.map((_, index) => ({
-    index,
-    successCount: 0,
-    failureCount: 0,
-    consecutiveFailures: 0,
-    lastError: undefined,
-    lastFailureAt: undefined,
-    cooldownUntil: undefined,
-  })),
-  strategy: { id: "round-robin" },
-  lastUpdatedAt: 0,
-});
-
 /**
  * Produces minimal chain metadata for tests while allowing selective overrides.
  */
@@ -397,27 +375,27 @@ export class MemoryProviderChainSelectionPort implements ProviderChainSelectionP
   }
 }
 
-export class MemoryCustomRpcPort implements CustomRpcPort {
-  #records = new Map<ChainRef, CustomRpcRecord>();
-  public readonly upserted: CustomRpcRecord[] = [];
+export class MemoryChainRpcEndpointOverridesPort implements ChainRpcEndpointOverridesPort {
+  #records = new Map<ChainRef, ChainRpcEndpointOverrideRecord>();
+  public readonly upserted: ChainRpcEndpointOverrideRecord[] = [];
   public readonly removed: ChainRef[] = [];
 
-  constructor(seed: CustomRpcRecord[] = []) {
+  constructor(seed: ChainRpcEndpointOverrideRecord[] = []) {
     for (const record of seed) {
       this.#records.set(record.chainRef, clone(record));
     }
   }
 
-  async get(chainRef: ChainRef): Promise<CustomRpcRecord | null> {
+  async get(chainRef: ChainRef): Promise<ChainRpcEndpointOverrideRecord | null> {
     const record = this.#records.get(chainRef);
     return record ? clone(record) : null;
   }
 
-  async list(): Promise<CustomRpcRecord[]> {
+  async list(): Promise<ChainRpcEndpointOverrideRecord[]> {
     return Array.from(this.#records.values(), (record) => clone(record));
   }
 
-  async upsert(record: CustomRpcRecord): Promise<void> {
+  async upsert(record: ChainRpcEndpointOverrideRecord): Promise<void> {
     this.#records.set(record.chainRef, clone(record));
     this.upserted.push(clone(record));
   }
@@ -599,6 +577,7 @@ export type TestBackgroundContext = {
   keyringMetasPort: MemoryKeyringMetasPort;
   walletChainSelectionPort: MemoryWalletChainSelectionPort;
   providerChainSelectionPort: MemoryProviderChainSelectionPort;
+  chainRpcEndpointOverridesPort: MemoryChainRpcEndpointOverridesPort;
   customChainsPort: MemoryCustomChainsPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
@@ -621,7 +600,6 @@ export type SetupBackgroundOptions = {
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
-  network?: CreateBackgroundRuntimeOptions["network"];
   autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -642,6 +620,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const customChainsPort = new MemoryCustomChainsPort();
   const walletChainSelectionPort = new MemoryWalletChainSelectionPort(options.walletChainSelectionSeed ?? null);
   const providerChainSelectionPort = new MemoryProviderChainSelectionPort(options.providerChainSelectionSeed ?? []);
+  const chainRpcEndpointOverridesPort = new MemoryChainRpcEndpointOverridesPort();
   const vaultMetaPort = options.vaultMetaPort ?? new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
@@ -685,7 +664,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       port: customChainsPort,
       seed: chainSeed,
     },
-    ...(options.network ? { network: options.network } : {}),
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
     },
@@ -695,6 +673,9 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     },
     providerChainSelection: {
       port: providerChainSelectionPort,
+    },
+    chainRpcEndpointOverrides: {
+      port: chainRpcEndpointOverridesPort,
     },
     store: {
       ports: {
@@ -764,6 +745,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     keyringMetasPort,
     walletChainSelectionPort,
     providerChainSelectionPort,
+    chainRpcEndpointOverridesPort,
     customChainsPort,
     vaultMetaPort,
     transactionAggregatesPort,

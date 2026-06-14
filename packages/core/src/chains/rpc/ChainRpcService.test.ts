@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+import { Messenger } from "../../messenger/Messenger.js";
+import { ChainRpcService } from "./ChainRpcService.js";
+import { assertNonEmptyRpcEndpoints } from "./config.js";
+import { CHAIN_RPC_TOPICS } from "./topics.js";
+
+const createService = () => {
+  const bus = new Messenger();
+  return new ChainRpcService({
+    messenger: bus.scope({ publish: CHAIN_RPC_TOPICS }),
+    initialAccesses: [
+      {
+        chainRef: "eip155:1",
+        endpoints: assertNonEmptyRpcEndpoints("eip155:1", [
+          { url: "https://rpc.primary.example", type: "public" },
+          { url: "https://rpc.backup.example", type: "public" },
+        ]),
+      },
+    ],
+  });
+};
+
+describe("ChainRpcService", () => {
+  it("returns cloned effective endpoints and access state", () => {
+    const service = createService();
+
+    const endpoints = service.getEndpoints("eip155:1");
+    endpoints[0].url = "https://mutated.example";
+
+    expect(service.hasEndpoints("eip155:1")).toBe(true);
+    expect(service.listChainRefs()).toEqual(["eip155:1"]);
+    expect(service.getEndpoints("eip155:1")[0].url).toBe("https://rpc.primary.example");
+    expect(service.getState()).toMatchObject({
+      accesses: [{ chainRef: "eip155:1" }],
+    });
+  });
+
+  it("publishes endpoint changes when access changes", () => {
+    const service = createService();
+    const changed: string[] = [];
+    service.onEndpointsChanged((event) => changed.push(event.chainRef));
+
+    service.replaceAccesses([
+      {
+        chainRef: "eip155:1",
+        endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.next.example", type: "public" }]),
+      },
+      {
+        chainRef: "eip155:10",
+        endpoints: assertNonEmptyRpcEndpoints("eip155:10", [{ url: "https://rpc.optimism.example", type: "public" }]),
+      },
+    ]);
+
+    expect(changed).toEqual(["eip155:1", "eip155:10"]);
+    expect(service.listChainRefs()).toEqual(["eip155:1", "eip155:10"]);
+    expect(service.getEndpoints("eip155:1")[0].url).toBe("https://rpc.next.example");
+  });
+
+  it("does not publish when replacement keeps endpoints unchanged", () => {
+    const service = createService();
+    const changed: string[] = [];
+    service.onEndpointsChanged((event) => changed.push(event.chainRef));
+
+    service.replaceAccesses(service.listAccesses());
+
+    expect(changed).toEqual([]);
+    expect(service.getState().accesses).toHaveLength(1);
+  });
+
+  it("rejects missing and duplicate access", () => {
+    const service = createService();
+
+    expect(() => service.getEndpoints("eip155:10")).toThrowError(
+      expect.objectContaining({ code: "chain.not_available" }),
+    );
+    expect(() =>
+      service.replaceAccesses([
+        {
+          chainRef: "eip155:1",
+          endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.one.example" }]),
+        },
+        {
+          chainRef: "eip155:1",
+          endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.two.example" }]),
+        },
+      ]),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "chain.rpc_access_config_invalid",
+        details: { chainRef: "eip155:1", reason: "duplicate" },
+      }),
+    );
+  });
+});

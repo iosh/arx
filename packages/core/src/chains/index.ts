@@ -9,10 +9,17 @@ export * from "./errors.js";
 export * from "./ids.js";
 export * from "./metadata.js";
 export * from "./registry.js";
-export * from "./runtime/config.js";
-export * from "./runtime/RpcRoutingService.js";
+export { ChainRpcService } from "./rpc/ChainRpcService.js";
+export * from "./rpc/config.js";
+export * from "./rpc/topics.js";
+export type {
+  ChainRpcAccess,
+  ChainRpcAccessUpdater,
+  ChainRpcEndpointsChangedEvent,
+  ChainRpcReader,
+  ChainRpcState,
+  NonEmptyRpcEndpoints,
+} from "./rpc/types.js";
 export * from "./runtime/supportedChains/index.js";
-export * from "./runtime/topics.js";
-export * from "./runtime/types.js";
 export * from "./types.js";
 export * from "./url.js";

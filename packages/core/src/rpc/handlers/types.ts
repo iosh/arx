@@ -4,8 +4,8 @@ import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
+import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
@@ -29,7 +29,7 @@ export {
 } from "../executionContext.js";
 
 export type RpcHandlerDeps = {
-  network: RpcRoutingService;
+  chainRpc: ChainRpcReader;
   walletChainSelection: WalletChainSelectionService;
   accounts: AccountSelectionService;
   approvals: ApprovalQueueService;

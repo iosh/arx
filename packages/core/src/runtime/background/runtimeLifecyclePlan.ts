@@ -1,10 +1,8 @@
-import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
-import type { NetworkStateInput } from "../../chains/runtime/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
+import type { ChainRpcBootstrap } from "./chainRpcBootstrap.js";
 import { RuntimeHydrationError } from "./errors.js";
-import type { NetworkBootstrap } from "./networkBootstrap.js";
 import type { RuntimeLifecycle } from "./runtimeLifecycle.js";
 import { type RuntimePlugin, runPluginHooks, startPlugins } from "./runtimePlugins.js";
 import type { SessionLayerResult } from "./session.js";
@@ -14,10 +12,6 @@ export type BackgroundLifecycleHandle = {
   start(): void;
   shutdown(): void;
   getIsInitialized(): boolean;
-};
-
-type Destroyable = {
-  destroy(): void;
 };
 
 type RestartRecovery = {
@@ -55,13 +49,10 @@ export const createBackgroundRuntimeLifecycle = ({
   providerChainSelection,
   hydrationEnabled,
   permissionsReady,
-  deferredNetworkInitialState,
-  registeredNamespaces,
   transactionRecovery,
   transactionRestartRecovery,
-  networkBootstrap,
+  chainRpcBootstrap,
   sessionLayer,
-  rpcClientRegistry,
   bus,
   logger,
 }: {
@@ -70,13 +61,10 @@ export const createBackgroundRuntimeLifecycle = ({
   providerChainSelection: Pick<ProviderChainSelectionService, "loadAll">;
   hydrationEnabled: boolean;
   permissionsReady: Promise<void>;
-  deferredNetworkInitialState: NetworkStateInput | null;
-  registeredNamespaces: ReadonlySet<string>;
   transactionRecovery: RestartRecovery;
   transactionRestartRecovery?: "run" | "skip";
-  networkBootstrap: NetworkBootstrap;
+  chainRpcBootstrap: ChainRpcBootstrap;
   sessionLayer: SessionLayerResult;
-  rpcClientRegistry: Destroyable;
   bus: Messenger;
   logger: (message: string, error?: unknown) => void;
 }): BackgroundLifecycleHandle => {
@@ -85,26 +73,6 @@ export const createBackgroundRuntimeLifecycle = ({
     initialize: async () => {
       await hydrateCriticalStorage("chains", "customChains", () => stateServices.supportedChains.whenReady());
       await hydrateCriticalStorage("accounts", "accounts", () => stateServices.accounts.whenReady?.());
-
-      if (deferredNetworkInitialState) {
-        const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
-          const metadata = stateServices.supportedChains.getChain(chainRef)?.metadata;
-          if (!metadata) {
-            throw new Error(`Deferred network state references missing supported chain ${chainRef}`);
-          }
-          return metadata;
-        });
-
-        const allDeferredChainsAdmitted = deferredChains.every((metadata) =>
-          registeredNamespaces.has(metadata.namespace),
-        );
-
-        if (allDeferredChainsAdmitted) {
-          stateServices.network.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
-        } else {
-          logger("network: skipped deferred initial state with unregistered namespace chain");
-        }
-      }
       await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
       if (hydrationEnabled) {
         await hydrateCriticalStorage("chains", "providerChainSelection", () => providerChainSelection.loadAll());
@@ -131,15 +99,14 @@ export const createBackgroundRuntimeLifecycle = ({
     },
   };
 
-  const networkBootstrapPlugin: RuntimePlugin = {
-    name: "networkBootstrap",
-    initialize: () => networkBootstrap.loadPreferences(),
+  const chainRpcBootstrapPlugin: RuntimePlugin = {
+    name: "chainRpcBootstrap",
+    initialize: () => chainRpcBootstrap.loadPreferences(),
     hydrate: async () => {
-      networkBootstrap.requestSync();
+      chainRpcBootstrap.requestSync();
     },
-    afterHydration: () => networkBootstrap.flushPendingSync(),
-    start: () => networkBootstrap.start(),
-    destroy: () => networkBootstrap.destroy(),
+    afterHydration: () => chainRpcBootstrap.flushPendingSync(),
+    start: () => chainRpcBootstrap.start(),
   };
 
   const sessionPlugin: RuntimePlugin = {
@@ -164,11 +131,6 @@ export const createBackgroundRuntimeLifecycle = ({
     },
   };
 
-  const rpcClientsPlugin: RuntimePlugin = {
-    name: "rpcClients",
-    destroy: () => rpcClientRegistry.destroy(),
-  };
-
   const busPlugin: RuntimePlugin = {
     name: "messenger",
     destroy: () => bus.clear(),
@@ -176,18 +138,12 @@ export const createBackgroundRuntimeLifecycle = ({
 
   const initializeOrder =
     transactionRestartRecovery === "skip"
-      ? ([coreReadyPlugin, networkBootstrapPlugin] as const)
-      : ([coreReadyPlugin, transactionRecoveryPlugin, networkBootstrapPlugin] as const);
-  const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
-  const afterHydrationOrder = [networkBootstrapPlugin] as const;
-  const startOrder = [networkBootstrapPlugin, sessionPlugin] as const;
-  const destroyOrder = [
-    sessionPlugin,
-    networkBootstrapPlugin,
-    accountSelectionServicePlugin,
-    rpcClientsPlugin,
-    busPlugin,
-  ] as const;
+      ? ([coreReadyPlugin, chainRpcBootstrapPlugin] as const)
+      : ([coreReadyPlugin, transactionRecoveryPlugin, chainRpcBootstrapPlugin] as const);
+  const hydrateOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
+  const afterHydrationOrder = [chainRpcBootstrapPlugin] as const;
+  const startOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
+  const destroyOrder = [sessionPlugin, accountSelectionServicePlugin, busPlugin] as const;
 
   return {
     initialize: async () =>

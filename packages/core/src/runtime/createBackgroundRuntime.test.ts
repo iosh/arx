@@ -16,6 +16,7 @@ import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
@@ -91,10 +92,9 @@ const createTestRuntime = (params?: {
   session?: Parameters<typeof createBackgroundRuntime>[0]["session"];
   transactions?: Parameters<typeof createBackgroundRuntime>[0]["transactions"];
   messenger?: Parameters<typeof createBackgroundRuntime>[0]["messenger"];
-  network?: Parameters<typeof createBackgroundRuntime>[0]["network"];
   rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
   approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
-  customRpc?: Parameters<typeof createBackgroundRuntime>[0]["customRpc"];
+  chainRpcEndpointOverrides?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcEndpointOverrides"];
 }) => {
   const customChainsPort = params?.customChainsPort ?? new MemoryCustomChainsPort();
   return createBackgroundRuntime({
@@ -110,6 +110,9 @@ const createTestRuntime = (params?: {
     },
     providerChainSelection: {
       port: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
+    },
+    chainRpcEndpointOverrides: params?.chainRpcEndpointOverrides ?? {
+      port: new MemoryChainRpcEndpointOverridesPort(),
     },
     settings: {
       port: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
@@ -128,10 +131,8 @@ const createTestRuntime = (params?: {
     ...(params?.session ? { session: params.session } : {}),
     ...(params?.transactions ? { transactions: params.transactions } : {}),
     ...(params?.messenger ? { messenger: params.messenger } : {}),
-    ...(params?.network ? { network: params.network } : {}),
     ...(params?.rpcClients ? { rpcClients: params.rpcClients } : {}),
     ...(params?.approvals ? { approvals: params.approvals } : {}),
-    ...(params?.customRpc ? { customRpc: params.customRpc } : {}),
   });
 };
 
@@ -307,11 +308,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const networkState = runtime.services.network.getState();
+    const chainRpcState = runtime.services.chainRpc.getState();
     expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-    expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
-    expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("round-robin");
+    expect(chainRpcState.accesses.map((access) => access.chainRef)).toEqual([
+      MAINNET_CHAIN.chainRef,
+      ALT_CHAIN.chainRef,
+    ]);
+    expect(runtime.services.chainRpc.getEndpoints(ALT_CHAIN.chainRef)[0].url).toBe("https://rpc.alt");
 
     runtime.lifecycle.shutdown();
   });

@@ -50,6 +50,27 @@ export class ChainNotAvailableError extends ArxBaseError {
   }
 }
 
+export type ChainRpcAccessConfigInput = ErrorCause & {
+  chainRef: string;
+  reason: "duplicate" | "empty_endpoints";
+};
+
+export class ChainRpcAccessConfigError extends ArxBaseError {
+  static readonly code = "chain.rpc_access_config_invalid";
+
+  constructor(params: ChainRpcAccessConfigInput) {
+    const message =
+      params.reason === "duplicate"
+        ? "Duplicate chain RPC access configuration."
+        : "Chain RPC access requires at least one endpoint.";
+    super(message, {
+      code: ChainRpcAccessConfigError.code,
+      details: { chainRef: params.chainRef, reason: params.reason },
+      cause: params.cause,
+    });
+  }
+}
+
 export class ChainNotSupportedError extends ArxBaseError {
   static readonly code = "chain.not_supported";
 

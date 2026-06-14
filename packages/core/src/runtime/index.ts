@@ -1,4 +1,3 @@
-export * from "./background/constants.js";
 export type { BackgroundRpcAccessPolicyHooks } from "./background/rpcAccessPolicy.js";
 export * from "./createBackgroundRuntime.js";
 export * from "./keyring/KeyringService.js";

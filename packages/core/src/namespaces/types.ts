@@ -3,8 +3,8 @@ import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { ChainAddressCodec } from "../chains/types.js";
+import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import type { RpcClientFactory, RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
@@ -63,11 +63,11 @@ export type NamespaceRuntimeManifest = {
   createSigner?: (params: { accountSigning: AccountSigningService }) => unknown;
   createApprovalBindings?: (params: { signer: unknown }) => NamespaceApprovalBindings;
   createUiBindings?: (params: {
-    rpcClients: Pick<RpcClientRegistry, "getClient">;
+    rpcClients: Pick<ChainRpcClientPool, "getClient">;
     chains: ChainAddressCodecRegistry;
   }) => NamespaceUiBindings;
   createTransaction?: (params: {
-    rpcClients: Pick<RpcClientRegistry, "getClient">;
+    rpcClients: Pick<ChainRpcClientPool, "getClient">;
     chains: ChainAddressCodecRegistry;
     signer: unknown;
   }) => NamespaceTransaction;

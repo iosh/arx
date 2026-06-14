@@ -1,36 +1,34 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcEndpoint } from "../../../chains/metadata.js";
-import type { CustomRpcRecord } from "../../../storage/records.js";
+import { assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
 import { createSignal } from "../_shared/signal.js";
-import type { CustomRpcPort } from "./port.js";
-import type { CustomRpcService } from "./types.js";
+import type { ChainRpcEndpointOverridesPort } from "./port.js";
+import type { ChainRpcEndpointOverridesService } from "./types.js";
 
-const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] => {
-  return rpcEndpoints.map((endpoint) => ({
-    url: endpoint.url,
-    type: endpoint.type,
-    weight: endpoint.weight,
-    headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-  }));
-};
+const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] =>
+  structuredClone(rpcEndpoints) as RpcEndpoint[];
 
-export type CreateCustomRpcServiceOptions = {
-  port: CustomRpcPort;
+export type CreateChainRpcEndpointOverridesServiceOptions = {
+  port: ChainRpcEndpointOverridesPort;
   now?: () => number;
 };
 
-export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOptions): CustomRpcService => {
+export const createChainRpcEndpointOverridesService = ({
+  port,
+  now,
+}: CreateChainRpcEndpointOverridesServiceOptions): ChainRpcEndpointOverridesService => {
   const clock = now ?? Date.now;
   const changed = createSignal<{
     chainRef: ChainRef;
-    previous: CustomRpcRecord | null;
-    next: CustomRpcRecord | null;
+    previous: ChainRpcEndpointOverrideRecord | null;
+    next: ChainRpcEndpointOverrideRecord | null;
   }>();
   const run = createSerialQueue();
-  const cache = new Map<ChainRef, CustomRpcRecord>();
+  const cache = new Map<ChainRef, ChainRpcEndpointOverrideRecord>();
 
-  const toRecord = (record: CustomRpcRecord): CustomRpcRecord => {
+  const toRecord = (record: ChainRpcEndpointOverrideRecord): ChainRpcEndpointOverrideRecord => {
     return {
       chainRef: record.chainRef,
       rpcEndpoints: cloneRpcEndpoints(record.rpcEndpoints),
@@ -38,7 +36,7 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
     };
   };
 
-  const get = async (chainRef: ChainRef): Promise<CustomRpcRecord | null> => {
+  const get = async (chainRef: ChainRef): Promise<ChainRpcEndpointOverrideRecord | null> => {
     const record = await port.get(chainRef);
     if (!record) {
       cache.delete(chainRef);
@@ -48,7 +46,7 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
     return toRecord(record);
   };
 
-  const getAll = async (): Promise<CustomRpcRecord[]> => {
+  const getAll = async (): Promise<ChainRpcEndpointOverrideRecord[]> => {
     const records = await port.list();
     cache.clear();
     for (const record of records) {
@@ -57,17 +55,22 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
     return records.map((record) => toRecord(record));
   };
 
-  const getRpcEndpoints = (chainRef: ChainRef): RpcEndpoint[] | null => {
+  const readEndpointOverride = (chainRef: ChainRef): RpcEndpoint[] | null => {
     const record = cache.get(chainRef);
     return record ? cloneRpcEndpoints(record.rpcEndpoints) : null;
   };
 
-  const set = async (chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<CustomRpcRecord> => {
+  const setEndpointOverride = async (
+    chainRef: ChainRef,
+    endpoints: RpcEndpoint[],
+  ): Promise<ChainRpcEndpointOverrideRecord> => {
+    const rpcEndpoints = assertNonEmptyRpcEndpoints(chainRef, endpoints);
+
     return await run(async () => {
       const previous = await port.get(chainRef);
-      const next: CustomRpcRecord = {
+      const next: ChainRpcEndpointOverrideRecord = {
         chainRef,
-        rpcEndpoints: cloneRpcEndpoints(rpcEndpoints),
+        rpcEndpoints,
         updatedAt: clock(),
       };
 
@@ -83,7 +86,7 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
     });
   };
 
-  const clear = async (chainRef: ChainRef): Promise<void> => {
+  const clearEndpointOverride = async (chainRef: ChainRef): Promise<void> => {
     await run(async () => {
       const previous = await port.get(chainRef);
       if (!previous) {
@@ -105,8 +108,8 @@ export const createCustomRpcService = ({ port, now }: CreateCustomRpcServiceOpti
     subscribeChanged: changed.subscribe,
     get,
     getAll,
-    getRpcEndpoints,
-    set,
-    clear,
+    readEndpointOverride,
+    setEndpointOverride,
+    clearEndpointOverride,
   };
 };

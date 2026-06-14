@@ -7,8 +7,8 @@ import { getChainRefNamespace } from "../../../chains/caip.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
+import type { ChainRpcReader } from "../../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../../chains/runtime/supportedChains/types.js";
-import type { RpcRoutingService } from "../../../chains/runtime/types.js";
 import type { WalletChainSelectionService } from "../../store/walletChainSelection/types.js";
 import type {
   ApprovalReviewChainViewParams,
@@ -20,7 +20,7 @@ import type {
 
 type CreateChainViewsServiceOptions = {
   supportedChains: SupportedChainsService;
-  network: RpcRoutingService;
+  chainRpc: ChainRpcReader;
   selection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 };
 
@@ -42,12 +42,12 @@ const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chain
 
 class DefaultChainViewsService implements ChainViewsService {
   readonly #supportedChains: SupportedChainsService;
-  readonly #network: RpcRoutingService;
+  readonly #chainRpc: ChainRpcReader;
   readonly #selection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 
   constructor(options: CreateChainViewsServiceOptions) {
     this.#supportedChains = options.supportedChains;
-    this.#network = options.network;
+    this.#chainRpc = options.chainRpc;
     this.#selection = options.selection;
   }
 
@@ -78,10 +78,7 @@ class DefaultChainViewsService implements ChainViewsService {
       throw new ChainNotFoundError();
     }
 
-    const isAvailable = this.#network
-      .getState()
-      .availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
-    if (!isAvailable) {
+    if (!this.#chainRpc.hasEndpoints(chainRef)) {
       throw new ChainNotAvailableError();
     }
 
@@ -131,17 +128,14 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   #listAvailableMetadata(): ChainMetadata[] {
-    return this.#network.getState().availableChainRefs.map((chainRef) => this.requireAvailableChainMetadata(chainRef));
+    return this.#chainRpc.listChainRefs().map((chainRef) => this.requireAvailableChainMetadata(chainRef));
   }
 
   #deriveApprovalReviewContext(record: ApprovalChainContextRecord, request?: ApprovalChainContextRequest) {
     return deriveApprovalReviewContext(record, request ? { request } : undefined);
   }
 
-  #resolveActiveChainRefForNamespace(
-    namespace: string,
-    availableChainRefs = [...this.#network.getState().availableChainRefs],
-  ): ChainRef {
+  #resolveActiveChainRefForNamespace(namespace: string, availableChainRefs = this.#chainRpc.listChainRefs()): ChainRef {
     const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
     const activeChain = activeChainByNamespace[namespace];
     if (activeChain) {

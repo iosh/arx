@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import type { Hex as OxHex } from "ox/Hex";
 import type { RpcBlock, RpcFeeHistory, RpcTransactionReceipt } from "viem";
-import type { RpcClient, RpcClientFactory, RpcTransportRequest } from "../RpcClientRegistry.js";
+import type { RpcClient, RpcClientFactory, RpcTransportRequest } from "../ChainRpcClientPool.js";
 
 export type Eip155BlockRef = "latest" | "earliest" | "pending" | "safe" | "finalized" | OxHex;
 

@@ -1,9 +1,8 @@
 import type { WalletProvider } from "@arx/core/engine";
 import { type ProviderRuntimeRpcError, TransportDisconnectedError } from "@arx/core/runtime";
-import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
+import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
-import type { ProviderSessionContext } from "../types";
 import type { ProviderConnectionScope } from "./providerPortConnections";
 import type { PendingEntry } from "./types";
 
@@ -11,7 +10,6 @@ type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
   getProvider: () => WalletProvider | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
-  getSessionContext: (port: Runtime.Port) => ProviderSessionContext | null;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;
   detachPortListeners: (port: Runtime.Port) => void;
@@ -30,7 +28,6 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     extensionOrigin,
     getProvider,
     getSessionIdForPort,
-    getSessionContext,
     getPendingRequestMap,
     clearPendingForPort,
     detachPortListeners,

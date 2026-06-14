@@ -1,12 +1,12 @@
 import {
+  ChainRpcClientPool,
+  type ChainRpcClientPoolOptions,
   type RpcClientFactory,
-  RpcClientRegistry,
-  type RpcClientRegistryOptions,
-} from "../../rpc/RpcClientRegistry.js";
+} from "../../rpc/ChainRpcClientPool.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
 
 export type RpcLayerOptions = {
-  options?: Partial<Omit<RpcClientRegistryOptions, "network">>;
+  options?: Partial<Omit<ChainRpcClientPoolOptions, "chainRpc">>;
   factories?: Array<{ namespace: string; factory: RpcClientFactory }>;
 };
 
@@ -19,19 +19,17 @@ export const initRpcLayer = ({
   rpcClientOptions?: Pick<RpcLayerOptions, "options">;
   factories?: ReadonlyArray<{ namespace: string; factory: RpcClientFactory }>;
 }) => {
-  const rpcClientRegistry = new RpcClientRegistry({
+  const chainRpcClientPool = new ChainRpcClientPool({
     ...(rpcClientOptions?.options ?? {}),
-    network: {
-      getActiveEndpoint: (chainRef) => stateServices.network.getActiveEndpoint(chainRef),
-      reportRpcOutcome: (chainRef, outcome) => stateServices.network.reportRpcOutcome(chainRef, outcome),
-      onRpcEndpointChanged: (handler) => stateServices.network.onRpcEndpointChanged(handler),
-      onChainConfigChanged: (handler) => stateServices.network.onChainConfigChanged(handler),
+    chainRpc: {
+      getEndpoints: (chainRef) => stateServices.chainRpc.getEndpoints(chainRef),
+      onEndpointsChanged: (handler) => stateServices.chainRpc.onEndpointsChanged(handler),
     },
   });
 
   for (const entry of factories ?? []) {
-    rpcClientRegistry.registerFactory(entry.namespace, entry.factory);
+    chainRpcClientPool.registerFactory(entry.namespace, entry.factory);
   }
 
-  return rpcClientRegistry;
+  return chainRpcClientPool;
 };

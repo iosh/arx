@@ -97,7 +97,7 @@ const makeRuntime = () => {
     }
     return transaction;
   });
-  const onNetworkStateChanged = vi.fn(() => vi.fn());
+  const onChainRpcStateChanged = vi.fn(() => vi.fn());
   const onAccountsStateChanged = vi.fn(() => vi.fn());
   const onPermissionsStateChanged = vi.fn(() => vi.fn());
   const onUnlocked = vi.fn(() => vi.fn());
@@ -171,8 +171,8 @@ const makeRuntime = () => {
       permissions: {
         onStateChanged: onPermissionsStateChanged,
       },
-      network: {
-        onStateChanged: onNetworkStateChanged,
+      chainRpc: {
+        onStateChanged: onChainRpcStateChanged,
       },
       attention: {},
       chainActivation: {},
@@ -242,7 +242,7 @@ const makeRuntime = () => {
     onFinished,
     onApprovalsStateChanged,
     cancelApproval,
-    onNetworkStateChanged,
+    onChainRpcStateChanged,
     onAccountsStateChanged,
     onPermissionsStateChanged,
     onUnlocked,
@@ -288,7 +288,7 @@ describe("runtimeHost", () => {
         transactions: {},
         chains: {
           customChains: {},
-          customRpc: {},
+          chainRpcEndpointOverrides: {},
           walletChainSelection: {},
           providerChainSelection: {},
         },

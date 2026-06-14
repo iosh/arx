@@ -1,9 +1,9 @@
 import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
+import type { ChainRpcClientPool } from "../rpc/ChainRpcClientPool.js";
 import type { RpcHandlerDeps } from "../rpc/handlers/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
@@ -265,7 +265,7 @@ const assertTransactionOverridesMatchInstalledNamespaces = (params: {
 
 const materializeNamespaceTransactions = (params: {
   runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  rpcClients: Pick<RpcClientRegistry, "getClient">;
+  rpcClients: Pick<ChainRpcClientPool, "getClient">;
   chains: ChainAddressCodecRegistry;
   signerByNamespace: ReadonlyMap<string, unknown>;
   transactionOverrides?: NamespaceTransactions;
@@ -306,7 +306,7 @@ const materializeNamespaceTransactions = (params: {
 
 export const materializeNamespaceRuntimeSupport = (params: {
   runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  rpcClients: Pick<RpcClientRegistry, "getClient">;
+  rpcClients: Pick<ChainRpcClientPool, "getClient">;
   chains: ChainAddressCodecRegistry;
   accountSigning: AccountSigningService;
   rpcClientNamespaces: ReadonlySet<string>;

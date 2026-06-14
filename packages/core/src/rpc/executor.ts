@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../error.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
+import type { ChainRpcClientPool, RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
   HandlerRuntimeServices,
@@ -14,7 +15,6 @@ import type {
 } from "./handlers/types.js";
 import type { ResolvedRpcInvocationDetails } from "./invocation.js";
 import { resolveRpcInvocationDetails } from "./invocation.js";
-import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 
 type RpcExecutorCatalog = {
@@ -27,7 +27,7 @@ type RpcExecutorCatalog = {
 type CreateRpcMethodExecutorOptions = {
   registry: RpcExecutorCatalog;
   deps: RpcHandlerDeps;
-  rpcClientRegistry: RpcClientRegistry;
+  chainRpcClientPool: ChainRpcClientPool;
   services: HandlerRuntimeServices;
 };
 
@@ -61,7 +61,7 @@ const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: 
 export const createRpcMethodExecutor = ({
   registry,
   deps,
-  rpcClientRegistry,
+  chainRpcClientPool,
   services,
 }: CreateRpcMethodExecutorOptions) => {
   const parseDefinitionParams = (
@@ -172,8 +172,11 @@ export const createRpcMethodExecutor = ({
     };
 
     try {
-      const client = rpcClientRegistry.getClient(args.namespace, args.chainRef);
-      const rpcPayload: RpcTransportRequest = { method: args.request.method };
+      const client = chainRpcClientPool.getClient(args.namespace, args.chainRef);
+      const rpcPayload: RpcTransportRequest = {
+        method: args.request.method,
+        retry: { transportFailure: true },
+      };
       if (args.request.params !== undefined) {
         rpcPayload.params = args.request.params;
       }

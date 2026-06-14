@@ -549,20 +549,12 @@ const createRuntimeServices = () => {
       };
     },
   };
-  const networkListeners = new Set<() => void>();
-  const network = {
-    getActiveChain: () => CHAIN,
-    getState: () => ({ availableChainRefs: [CHAIN.chainRef] }),
+  const chainRpcListeners = new Set<() => void>();
+  const chainRpc = {
+    getState: () => ({ accesses: [{ chainRef: CHAIN.chainRef, endpoints: [{ url: "https://rpc.example" }] }] }),
     onStateChanged: (fn: () => void) => {
-      networkListeners.add(fn);
-      return () => networkListeners.delete(fn);
-    },
-    onChainChanged: (fn: (c: typeof CHAIN) => void) => {
-      return () => void fn;
-    },
-    getChain: (_chainRef: string) => {
-      void _chainRef;
-      return CHAIN;
+      chainRpcListeners.add(fn);
+      return () => chainRpcListeners.delete(fn);
     },
   };
   const mockTransaction = {
@@ -670,7 +662,7 @@ const createRuntimeServices = () => {
     accounts,
     approvals,
     permissions,
-    network,
+    chainRpc,
     transactionAccess,
     providerTransactionCommands,
     transactionExecution,
@@ -830,7 +822,7 @@ const createUiAccessForTest = (input: {
           onStateChanged: input.services.permissions.onStateChanged,
         },
         chains: {
-          onStateChanged: input.services.network.onStateChanged,
+          onStateChanged: input.services.chainRpc.onStateChanged,
           onSelectionChanged: (listener: () => void) => input.walletChainSelection.subscribeChanged(() => listener()),
         },
         session: sessionAccess,

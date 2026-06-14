@@ -115,7 +115,7 @@ const subscribeReadChanges = (
     const unsubscribers: CoreUnsubscribe[] = [
       subscribeAfterInitialReplay((handler) => runtime.services.accounts.onStateChanged(handler), notify),
       subscribeAfterInitialReplay((handler) => runtime.services.permissions.onStateChanged(handler), notify),
-      subscribeAfterInitialReplay((handler) => runtime.services.network.onStateChanged(handler), notify),
+      subscribeAfterInitialReplay((handler) => runtime.services.chainRpc.onStateChanged(handler), notify),
       runtime.services.walletChainSelection.subscribeChanged(notify),
       runtime.services.session.onStateChanged(notify),
       runtime.bus.subscribe(ATTENTION_STATE_CHANGED, notify),

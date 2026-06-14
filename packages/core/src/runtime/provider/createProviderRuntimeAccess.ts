@@ -79,7 +79,7 @@ type ProviderRuntimeAccessDeps = {
   providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
-  subscribeNetworkStateChanged: StateChangeSubscription;
+  subscribeChainRpcStateChanged: StateChangeSubscription;
   subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
   subscribeAccountsStateChanged: StateChangeSubscription;
   subscribePermissionsStateChanged: StateChangeSubscription;
@@ -201,7 +201,7 @@ export const createProviderRuntimeAccess = ({
   providerRequests,
   subscribeSessionUnlocked,
   subscribeSessionLocked,
-  subscribeNetworkStateChanged,
+  subscribeChainRpcStateChanged,
   subscribeProviderChainSelectionChanged,
   subscribeAccountsStateChanged,
   subscribePermissionsStateChanged,
@@ -647,7 +647,7 @@ export const createProviderRuntimeAccess = ({
       selectActiveConnectionScopes((scope) => scope.origin === payload.origin && scope.namespace === payload.namespace),
     );
   });
-  subscribeNetworkStateChanged(() => {
+  subscribeChainRpcStateChanged(() => {
     void reconcileAllActiveConnectionScopes("network_state_changed");
   });
   subscribeSessionUnlocked(() => {

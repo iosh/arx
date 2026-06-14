@@ -37,8 +37,8 @@ const setup = (available: ChainMetadata[]) => {
         return metadata ? { metadata } : null;
       },
     } as const,
-    network: {
-      getState: () => ({ availableChainRefs: available.map((chain) => chain.chainRef) }),
+    chainRpc: {
+      hasEndpoints: (chainRef: string) => available.some((chain) => chain.chainRef === chainRef),
     } as const,
   };
 };

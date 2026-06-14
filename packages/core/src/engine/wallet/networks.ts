@@ -1,21 +1,22 @@
+import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { RpcRoutingService } from "../../chains/runtime/types.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
-import type { CustomRpcService } from "../../services/store/customRpc/types.js";
+import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { WalletNetworks } from "../types.js";
 
-// Selected namespace, supported chains, and custom RPC overrides.
+// Selected namespace, supported chains, and chain RPC controls.
 export const createWalletNetworks = (deps: {
   walletChainSelection: WalletChainSelectionService;
   supportedChains: SupportedChainsService;
-  customRpc: CustomRpcService;
+  chainRpcEndpointOverrides: ChainRpcEndpointOverridesService;
   chainViews: ChainViewsService;
   chainActivation: ChainActivationService;
-  network: RpcRoutingService;
+  chainRpc: ChainRpcReader;
 }): WalletNetworks => {
-  const { walletChainSelection, supportedChains, customRpc, chainViews, chainActivation, network } = deps;
+  const { walletChainSelection, supportedChains, chainRpcEndpointOverrides, chainViews, chainActivation, chainRpc } =
+    deps;
 
   return {
     getSelection: () => walletChainSelection.get(),
@@ -30,30 +31,22 @@ export const createWalletNetworks = (deps: {
     listKnownChainViews: () => chainViews.listKnownChainViews(),
     listAvailableChainViews: () => chainViews.listAvailableChainViews(),
     buildWalletNetworksSnapshot: () => chainViews.buildWalletNetworksSnapshot(),
-    getNetworkState: () => network.getState(),
-    getRpcEndpoints: (chainRef) =>
-      customRpc.getRpcEndpoints(chainRef) ?? supportedChains.getChain(chainRef)?.metadata.rpcEndpoints.slice() ?? [],
-    getActiveEndpoint: (chainRef) => network.getActiveEndpoint(chainRef),
+    getChainRpcState: () => chainRpc.getState(),
+    getRpcEndpoints: (chainRef) => chainRpc.getEndpoints(chainRef),
     addChain: (chain, options) => supportedChains.addChain(chain, options),
     removeChain: (chainRef) => supportedChains.removeChain(chainRef),
-    setCustomRpc: async (chainRef, rpcEndpoints) => {
-      await customRpc.set(chainRef, rpcEndpoints);
+    setChainRpcEndpointOverride: async (chainRef, rpcEndpoints) => {
+      await chainRpcEndpointOverrides.setEndpointOverride(chainRef, rpcEndpoints);
     },
-    clearCustomRpc: async (chainRef) => {
-      await customRpc.clear(chainRef);
+    clearChainRpcEndpointOverride: async (chainRef) => {
+      await chainRpcEndpointOverrides.clearEndpointOverride(chainRef);
     },
     selectChain: (chainRef) => chainActivation.selectWalletChain(chainRef),
     selectNamespace: (namespace) => chainActivation.selectWalletNamespace(namespace),
     activateNamespaceChain: (params) => chainActivation.activateNamespaceChain(params),
-    setRpcStrategy: (chainRef, strategy) => {
-      network.setStrategy(chainRef, strategy);
-    },
-    reportRpcOutcome: (chainRef, outcome) => {
-      network.reportRpcOutcome(chainRef, outcome);
-    },
-    onStateChanged: (listener) => network.onStateChanged(listener),
+    onStateChanged: (listener) => chainRpc.onStateChanged(listener),
     onSelectionChanged: (listener) => walletChainSelection.subscribeChanged(listener),
     onChainUpdated: (listener) => supportedChains.onChainUpdated(listener),
-    onCustomRpcChanged: (listener) => customRpc.subscribeChanged(listener),
+    onChainRpcEndpointOverridesChanged: (listener) => chainRpcEndpointOverrides.subscribeChanged(listener),
   };
 };

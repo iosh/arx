@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import {
   MemoryAccountsPort,
+  MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
-  MemoryCustomRpcPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
@@ -36,7 +36,7 @@ type TestCoreStoragePorts = CreateCoreRuntimeInput["storage"];
 
 const createCoreRuntimeInput = (params?: {
   accountsPort?: TestCoreStoragePorts["accounts"];
-  customRpcPort?: TestCoreStoragePorts["chains"]["customRpc"];
+  chainRpcEndpointOverridesPort?: TestCoreStoragePorts["chains"]["chainRpcEndpointOverrides"];
   walletChainSelectionPort?: TestCoreStoragePorts["chains"]["walletChainSelection"];
   providerChainSelectionPort?: TestCoreStoragePorts["chains"]["providerChainSelection"];
   permissionsPort?: TestCoreStoragePorts["permissions"];
@@ -54,7 +54,7 @@ const createCoreRuntimeInput = (params?: {
     permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
     chains: {
       customChains: new MemoryCustomChainsPort(),
-      customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
+      chainRpcEndpointOverrides: params?.chainRpcEndpointOverridesPort ?? new MemoryChainRpcEndpointOverridesPort(),
       walletChainSelection: params?.walletChainSelectionPort ?? new MemoryWalletChainSelectionPort(),
       providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
     },

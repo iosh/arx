@@ -7,18 +7,13 @@ import { APPROVAL_TOPICS } from "../../approvals/queue/topics.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import { buildNetworkRuntimeInput } from "../../chains/runtime/config.js";
-import { InMemoryRpcRoutingService } from "../../chains/runtime/RpcRoutingService.js";
+import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
+import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
+import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
+import type { ChainRpcAccess, ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
 import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
 import { SUPPORTED_CHAINS_TOPICS } from "../../chains/runtime/supportedChains/topics.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import { NETWORK_TOPICS } from "../../chains/runtime/topics.js";
-import type {
-  NetworkStateInput,
-  RpcEventLogger,
-  RpcRoutingService,
-  RpcStrategyConfig,
-} from "../../chains/runtime/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import { PermissionsService } from "../../permissions/service/PermissionsService.js";
 import { PERMISSION_TOPICS } from "../../permissions/service/topics.js";
@@ -27,17 +22,9 @@ import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
-import { DEFAULT_STRATEGY } from "./constants.js";
-import type { RuntimeNetworkPlan } from "./networkDefaults.js";
+import type { RuntimeChainAdmission } from "./chainRpcDefaults.js";
 
 export type BackgroundStateServiceOptions = {
-  network?: {
-    initialState?: NetworkStateInput;
-    defaultStrategy?: RpcStrategyConfig;
-    defaultCooldownMs?: number;
-    now?: () => number;
-    logger?: RpcEventLogger;
-  };
   approvals?: {
     autoRejectMessage?: string;
     ttlMs?: number;
@@ -52,7 +39,7 @@ export type BackgroundStateServiceOptions = {
 };
 
 export type BackgroundStateServices = {
-  network: RpcRoutingService;
+  chainRpc: ChainRpcReader;
   accounts: AccountSelectionService;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
@@ -61,13 +48,18 @@ export type BackgroundStateServices = {
 
 export type BackgroundStateServicesInitResult = {
   stateServices: BackgroundStateServices;
-  rpcRoutingService: RpcRoutingService;
+  chainRpcAccessUpdater: ChainRpcAccessUpdater;
   supportedChainsService: SupportedChainsService;
   permissionsService: PermissionsService;
   permissionsReady: Promise<void>;
-  deferredNetworkInitialState: NetworkStateInput | null;
   setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
 };
+
+const buildInitialRpcAccesses = (chains: readonly ChainMetadata[]): ChainRpcAccess[] =>
+  chains.map((chain) => ({
+    chainRef: chain.chainRef,
+    endpoints: assertNonEmptyRpcEndpoints(chain.chainRef, chain.rpcEndpoints),
+  }));
 
 export const initBackgroundStateServices = ({
   bus,
@@ -75,7 +67,7 @@ export const initBackgroundStateServices = ({
   accountsService,
   settingsService,
   permissionsPort,
-  networkPlan,
+  chainAdmission,
   options,
 }: {
   bus: Messenger;
@@ -83,10 +75,10 @@ export const initBackgroundStateServices = ({
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsPort: PermissionsPort;
-  networkPlan: RuntimeNetworkPlan;
+  chainAdmission: RuntimeChainAdmission;
   options: BackgroundStateServiceOptions;
 }): BackgroundStateServicesInitResult => {
-  const { network: networkOptions, approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
+  const { approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
 
   if (!supportedChainsOptions?.port) {
     throw new Error("createBackgroundRuntime requires supportedChains.port");
@@ -94,13 +86,9 @@ export const initBackgroundStateServices = ({
 
   const supportedChainSeed: ChainMetadata[] = (supportedChainsOptions.seed ?? []).map((entry) => ({ ...entry }));
 
-  const rpcRoutingService = new InMemoryRpcRoutingService({
-    messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
-    initialRuntime: buildNetworkRuntimeInput(networkPlan.bootstrapState, networkPlan.admittedChains),
-    defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
-    ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
-    ...(networkOptions?.now ? { now: networkOptions.now } : {}),
-    ...(networkOptions?.logger ? { logger: networkOptions.logger } : {}),
+  const chainRpcService = new ChainRpcService({
+    messenger: bus.scope({ name: "chainRpc", publish: CHAIN_RPC_TOPICS }),
+    initialAccesses: buildInitialRpcAccesses(chainAdmission.admittedChains),
   });
 
   const accountSelectionService: AccountSelectionService = new StoreAccountSelectionService({
@@ -137,7 +125,7 @@ export const initBackgroundStateServices = ({
   });
 
   const stateServices: BackgroundStateServices = {
-    network: rpcRoutingService,
+    chainRpc: chainRpcService,
     accounts: accountSelectionService,
     approvals: approvalQueueService,
     permissions: permissionsService,
@@ -146,11 +134,10 @@ export const initBackgroundStateServices = ({
 
   return {
     stateServices,
-    rpcRoutingService,
+    chainRpcAccessUpdater: chainRpcService,
     supportedChainsService,
     permissionsService,
     permissionsReady,
-    deferredNetworkInitialState: networkPlan.deferredState,
     setApprovalExecutor(executor) {
       approvalExecutor = executor;
     },

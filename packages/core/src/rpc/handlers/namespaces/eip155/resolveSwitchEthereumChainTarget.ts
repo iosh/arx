@@ -11,25 +11,24 @@ type SwitchEthereumChainTargetDeps = {
   supportedChains: {
     getChain(chainRef: ChainRef): { metadata: ChainMetadata } | null;
   };
-  network: {
-    getState(): { availableChainRefs: ChainRef[] };
+  chainRpc: {
+    hasEndpoints(chainRef: ChainRef): boolean;
   };
 };
 
 type ResolveSwitchEthereumChainTargetDeps = ResolveSwitchEthereumChainTargetParams & {
   supportedChains: SwitchEthereumChainTargetDeps["supportedChains"];
-  network: SwitchEthereumChainTargetDeps["network"];
+  chainRpc: SwitchEthereumChainTargetDeps["chainRpc"];
 };
 
 export const resolveSwitchEthereumChainTarget = ({
   supportedChains,
-  network,
+  chainRpc,
   chainId,
 }: ResolveSwitchEthereumChainTargetDeps): ChainMetadata => {
   const targetChainRef = eip155ChainRefFromChainIdHex(chainId);
-  const isAvailable = network.getState().availableChainRefs.some((chainRef) => chainRef === targetChainRef);
 
-  if (!isAvailable) {
+  if (!chainRpc.hasEndpoints(targetChainRef)) {
     throw new ChainNotFoundError();
   }
 

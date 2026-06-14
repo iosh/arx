@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
 import type { KeyringType } from "./keyringSchemas.js";
-import type { RpcStrategy } from "./schemas/rpc.js";
 
 export type AccountNamespace = string;
 
@@ -19,11 +18,6 @@ export type SettingsRecord = {
   updatedAt: number;
 };
 
-export type NetworkRpcPreference = {
-  activeIndex: number;
-  strategy: RpcStrategy;
-};
-
 export type CustomChainRecord = {
   chainRef: ChainRef;
   namespace: string;
@@ -32,7 +26,7 @@ export type CustomChainRecord = {
   updatedAt: number;
 };
 
-export type CustomRpcRecord = {
+export type ChainRpcEndpointOverrideRecord = {
   chainRef: ChainRef;
   rpcEndpoints: RpcEndpoint[];
   updatedAt: number;
@@ -49,14 +43,6 @@ export type ProviderChainSelectionRecord = {
   origin: string;
   namespace: string;
   chainRef: ChainRef;
-  updatedAt: number;
-};
-
-export type NetworkPreferencesRecord = {
-  id: "network-preferences";
-  selectedNamespace: string;
-  activeChainByNamespace: Record<string, ChainRef>;
-  rpc: Record<ChainRef, NetworkRpcPreference>;
   updatedAt: number;
 };
 

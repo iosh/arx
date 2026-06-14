@@ -10,6 +10,7 @@ import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   FakeVault,
   MemoryAccountsPort,
+  MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
@@ -50,8 +51,16 @@ export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0))
 export const createCustomChainsPort = () => new MemoryCustomChainsPort();
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
-  const { supportedChains, session, walletChainSelection, providerChainSelection, rpcAccessPolicy, store, ...rest } =
-    overrides ?? {};
+  const {
+    supportedChains,
+    session,
+    walletChainSelection,
+    providerChainSelection,
+    chainRpcEndpointOverrides,
+    rpcAccessPolicy,
+    store,
+    ...rest
+  } = overrides ?? {};
   const customChainsPort = supportedChains?.port ?? store?.ports.customChains ?? createCustomChainsPort();
   const runtime = createBackgroundRuntime({
     supportedChains: {
@@ -69,6 +78,7 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
       } as const),
     walletChainSelection: walletChainSelection ?? { port: new MemoryWalletChainSelectionPort() },
     providerChainSelection: providerChainSelection ?? { port: new MemoryProviderChainSelectionPort() },
+    chainRpcEndpointOverrides: chainRpcEndpointOverrides ?? { port: new MemoryChainRpcEndpointOverridesPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ports: {
@@ -250,7 +260,7 @@ export const waitForChainInNetwork = async (
   chainRef: ChainRef,
   timeoutMs = 5000,
 ): Promise<ChainMetadata> => {
-  const isAvailable = runtime.services.network.getState().availableChainRefs.includes(chainRef);
+  const isAvailable = runtime.services.chainRpc.hasEndpoints(chainRef);
   const existing = isAvailable ? getChainMetadata(runtime, chainRef) : null;
   if (existing) {
     return existing;
@@ -272,7 +282,7 @@ export const waitForChainInNetwork = async (
     };
 
     const tryResolve = () => {
-      const nextIsAvailable = runtime.services.network.getState().availableChainRefs.includes(chainRef);
+      const nextIsAvailable = runtime.services.chainRpc.hasEndpoints(chainRef);
       const chain = nextIsAvailable ? getChainMetadata(runtime, chainRef) : null;
       if (chain) {
         cleanup();
@@ -282,10 +292,10 @@ export const waitForChainInNetwork = async (
 
     timeoutId = setTimeout(() => {
       cleanup();
-      reject(new Error(`Timeout waiting for chain ${chainRef} in network service`));
+      reject(new Error(`Timeout waiting for chain ${chainRef} in chain RPC service`));
     }, timeoutMs);
 
-    unsubscribe = runtime.services.network.onStateChanged(() => {
+    unsubscribe = runtime.services.chainRpc.onStateChanged(() => {
       tryResolve();
     });
 

@@ -1,19 +1,18 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../chains/runtime/config.js";
+import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
+import type { ChainRpcAccess, ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { NetworkChainConfig, RpcRoutingService, RpcRoutingState } from "../../chains/runtime/types.js";
-import type { CustomRpcService } from "../../services/store/customRpc/types.js";
+import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
-import { buildDefaultRoutingState } from "./constants.js";
+import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
 import { RuntimeHydrationError } from "./errors.js";
-import type { RuntimeWalletChainSelectionDefaults } from "./networkDefaults.js";
 
-export type CreateNetworkBootstrapOptions = {
-  network: RpcRoutingService;
+export type CreateChainRpcBootstrapOptions = {
+  chainRpcAccessUpdater: ChainRpcAccessUpdater;
   supportedChains: SupportedChainsService;
   selection: WalletChainSelectionService;
-  customRpc: CustomRpcService;
+  endpointOverrides: ChainRpcEndpointOverridesService;
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
@@ -21,20 +20,19 @@ export type CreateNetworkBootstrapOptions = {
   getRegisteredNamespaces: () => ReadonlySet<string>;
 };
 
-export type NetworkBootstrap = {
+export type ChainRpcBootstrap = {
   loadPreferences(): Promise<void>;
   requestSync(): void;
   flushPendingSync(): Promise<void>;
   start(): void;
-  destroy(): void;
 };
 
-export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
+export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): ChainRpcBootstrap => {
   const {
-    network,
+    chainRpcAccessUpdater,
     supportedChains,
     selection,
-    customRpc,
+    endpointOverrides,
     selectionDefaults,
     hydrationEnabled,
     logger,
@@ -43,57 +41,33 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   } = opts;
 
   let selectionLoaded = !hydrationEnabled;
-  let customRpcLoaded = !hydrationEnabled;
+  let endpointOverridesLoaded = !hydrationEnabled;
   let pendingSync = false;
-
-  let listenersAttached = false;
-  let unsubscribeSupportedChains: (() => void) | null = null;
-  let unsubscribeCustomRpc: (() => void) | null = null;
 
   let syncInFlight: Promise<void> | null = null;
 
-  const readSupportedChainConfigs = (): NetworkChainConfig[] =>
-    buildNetworkChainConfigs(
-      supportedChains
-        .getState()
-        .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
-        .map((entry) => ({
-          chainRef: entry.metadata.chainRef,
-          rpcEndpoints: customRpc.getRpcEndpoints(entry.chainRef) ?? entry.metadata.rpcEndpoints,
-        })),
-    );
+  const readSupportedChainRpcAccesses = (): ChainRpcAccess[] =>
+    supportedChains
+      .getState()
+      .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
+      .map((entry) => {
+        const endpoints = endpointOverrides.readEndpointOverride(entry.chainRef) ?? entry.metadata.rpcEndpoints;
+        return {
+          chainRef: entry.chainRef,
+          endpoints: assertNonEmptyRpcEndpoints(entry.chainRef, endpoints),
+        };
+      });
 
-  const computeRpcState = (
-    chainConfigs: NetworkChainConfig[],
-    current: ReturnType<typeof network.getState>,
-  ): Record<ChainRef, RpcRoutingState> => {
-    return Object.fromEntries(
-      chainConfigs.map((chain) => {
-        const fromCurrent = current.rpc[chain.chainRef];
-        const base = fromCurrent ?? buildDefaultRoutingState(chain);
-        const safeIndex = Math.min(base.activeIndex, Math.max(0, chain.rpcEndpoints.length - 1));
-
-        return [
-          chain.chainRef,
-          {
-            ...base,
-            activeIndex: safeIndex,
-          },
-        ] as const;
-      }),
-    ) as Record<ChainRef, RpcRoutingState>;
-  };
-
-  const resolveChainRefByNamespace = (chainConfigs: NetworkChainConfig[]): Record<string, ChainRef> => {
+  const resolveChainRefByNamespace = (accesses: readonly ChainRpcAccess[]): Record<string, ChainRef> => {
     const availableByNamespace = new Map<string, ChainRef[]>();
 
-    for (const chain of chainConfigs) {
-      const namespace = getChainRefNamespace(chain.chainRef);
+    for (const access of accesses) {
+      const namespace = getChainRefNamespace(access.chainRef);
       const chainRefs = availableByNamespace.get(namespace);
       if (chainRefs) {
-        chainRefs.push(chain.chainRef);
+        chainRefs.push(access.chainRef);
       } else {
-        availableByNamespace.set(namespace, [chain.chainRef]);
+        availableByNamespace.set(namespace, [access.chainRef]);
       }
     }
 
@@ -123,10 +97,10 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   };
 
   const selectNamespace = (
-    chainConfigs: NetworkChainConfig[],
+    accesses: readonly ChainRpcAccess[],
     chainRefByNamespace: Record<string, ChainRef>,
   ): string => {
-    if (chainConfigs.length === 0) {
+    if (accesses.length === 0) {
       return selection.getSelectedNamespace();
     }
 
@@ -140,9 +114,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       return selectionDefaults.selectedNamespace;
     }
 
-    const first = chainConfigs[0];
+    const first = accesses[0];
     if (!first) {
-      throw new Error("Network bootstrap expected at least one available chain");
+      throw new Error("Chain RPC bootstrap expected at least one available chain");
     }
 
     return getChainRefNamespace(first.chainRef);
@@ -173,12 +147,12 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
   };
 
-  const pruneUnavailableCustomRpc = async (availableChainRefs: Set<ChainRef>) => {
-    let records: Awaited<ReturnType<CustomRpcService["getAll"]>>;
+  const pruneUnavailableEndpointOverrides = async (availableChainRefs: Set<ChainRef>) => {
+    let records: Awaited<ReturnType<ChainRpcEndpointOverridesService["getAll"]>>;
     try {
-      records = await customRpc.getAll();
+      records = await endpointOverrides.getAll();
     } catch (error) {
-      logger("customRpc: failed to read overrides for pruning", error);
+      logger("chainRpc: failed to read endpoint overrides for pruning", error);
       return;
     }
 
@@ -188,9 +162,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
 
       try {
-        await customRpc.clear(record.chainRef);
+        await endpointOverrides.clearEndpointOverride(record.chainRef);
       } catch (error) {
-        logger(`customRpc: failed to clear unavailable override "${record.chainRef}"`, error);
+        logger(`chainRpc: failed to clear unavailable endpoint override "${record.chainRef}"`, error);
       }
     }
   };
@@ -198,7 +172,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   const loadPersistedState = async () => {
     if (!hydrationEnabled) {
       selectionLoaded = true;
-      customRpcLoaded = true;
+      endpointOverridesLoaded = true;
       return;
     }
 
@@ -215,14 +189,14 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
     }
 
-    if (!customRpcLoaded) {
+    if (!endpointOverridesLoaded) {
       try {
-        await customRpc.getAll();
-        customRpcLoaded = true;
+        await endpointOverrides.getAll();
+        endpointOverridesLoaded = true;
       } catch (error) {
         throw new RuntimeHydrationError({
           owner: "chains",
-          resource: "customRpc",
+          resource: "chainRpcEndpointOverrides",
           cause: error,
         });
       }
@@ -230,32 +204,22 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   };
 
   const syncOnce = async () => {
-    if (!selectionLoaded || !customRpcLoaded) {
+    if (!selectionLoaded || !endpointOverridesLoaded) {
       await loadPersistedState();
     }
 
-    const chainConfigs = readSupportedChainConfigs();
-    if (chainConfigs.length === 0) {
+    const accesses = readSupportedChainRpcAccesses();
+    if (accesses.length === 0) {
       return;
     }
 
-    const current = network.getState();
-    const nextChainRefByNamespace = resolveChainRefByNamespace(chainConfigs);
-    const nextSelectedNamespace = selectNamespace(chainConfigs, nextChainRefByNamespace);
-
-    network.replaceState(
-      createNetworkRuntimeInput({
-        state: {
-          availableChainRefs: chainConfigs.map((chain) => chain.chainRef),
-          rpc: computeRpcState(chainConfigs, current),
-        },
-        chainConfigs,
-      }),
-    );
+    const nextChainRefByNamespace = resolveChainRefByNamespace(accesses);
+    const nextSelectedNamespace = selectNamespace(accesses, nextChainRefByNamespace);
+    chainRpcAccessUpdater.replaceAccesses(accesses);
 
     if (!getIsHydrating()) {
       await persistSelectionIfNeeded(nextSelectedNamespace, nextChainRefByNamespace);
-      await pruneUnavailableCustomRpc(new Set(chainConfigs.map((chain) => chain.chainRef)));
+      await pruneUnavailableEndpointOverrides(new Set(accesses.map((access) => access.chainRef)));
     }
   };
 
@@ -272,46 +236,19 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
           await syncOnce();
         }
       } catch (error) {
-        logger("network: failed to sync supported chains", error);
+        logger("chainRpc: failed to sync supported chains", error);
       } finally {
         syncInFlight = null;
       }
     })();
   };
 
+  let listenersAttached = false;
   const attachListeners = () => {
-    if (listenersAttached) {
-      return;
-    }
+    if (listenersAttached) return;
     listenersAttached = true;
-
-    unsubscribeSupportedChains = supportedChains.onStateChanged(() => requestSync());
-    unsubscribeCustomRpc = customRpc.subscribeChanged(() => requestSync());
-  };
-
-  const detachListeners = () => {
-    if (!listenersAttached) {
-      return;
-    }
-    listenersAttached = false;
-
-    if (unsubscribeSupportedChains) {
-      try {
-        unsubscribeSupportedChains();
-      } catch (error) {
-        logger("lifecycle: failed to remove supported chains listener", error);
-      }
-      unsubscribeSupportedChains = null;
-    }
-
-    if (unsubscribeCustomRpc) {
-      try {
-        unsubscribeCustomRpc();
-      } catch (error) {
-        logger("lifecycle: failed to remove custom rpc listener", error);
-      }
-      unsubscribeCustomRpc = null;
-    }
+    supportedChains.onStateChanged(() => requestSync());
+    endpointOverrides.subscribeChanged(() => requestSync());
   };
 
   const loadPreferences = async () => {
@@ -328,15 +265,10 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     attachListeners();
   };
 
-  const destroy = () => {
-    detachListeners();
-  };
-
   return {
     loadPreferences,
     requestSync,
     flushPendingSync,
     start,
-    destroy,
   };
 };

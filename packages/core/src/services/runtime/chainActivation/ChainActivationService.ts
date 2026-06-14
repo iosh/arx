@@ -1,26 +1,26 @@
 import { parseChainRef } from "../../../chains/caip.js";
 import { ChainNotAvailableError, ChainNotCompatibleError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { RpcRoutingService } from "../../../chains/runtime/types.js";
+import type { ChainRpcReader } from "../../../chains/rpc/types.js";
 import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { ProviderChainSelectionService } from "../../store/providerChainSelection/types.js";
 import type { WalletChainSelectionService } from "../../store/walletChainSelection/types.js";
 import type { ActivateNamespaceChainParams, ChainActivationService, SelectProviderChainParams } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
-  network: Pick<RpcRoutingService, "getState">;
+  chainRpc: Pick<ChainRpcReader, "hasEndpoints">;
   walletChainSelection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
   providerChainSelection: Pick<ProviderChainSelectionService, "setSelectedChainRef">;
   logger?: (message: string, error?: unknown) => void;
 };
 
 export const createChainActivationService = ({
-  network,
+  chainRpc,
   walletChainSelection,
   providerChainSelection,
 }: CreateChainActivationServiceOptions): ChainActivationService => {
   const isAvailableChainRef = (chainRef: ChainRef): boolean => {
-    return network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
+    return chainRpc.hasEndpoints(chainRef);
   };
 
   const assertAvailableChainRef = (chainRef: ChainRef): void => {

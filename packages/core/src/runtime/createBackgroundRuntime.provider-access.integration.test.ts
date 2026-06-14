@@ -21,6 +21,7 @@ import {
   createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
+  MemoryChainRpcEndpointOverridesPort,
   MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
@@ -240,6 +241,7 @@ const setupNamespaceAwareProviderRuntime = async () => {
     },
     walletChainSelection: { port: new MemoryWalletChainSelectionPort() },
     providerChainSelection: { port: new MemoryProviderChainSelectionPort() },
+    chainRpcEndpointOverrides: { port: new MemoryChainRpcEndpointOverridesPort() },
     store: {
       ports: {
         customChains: customChainsPort,
@@ -261,15 +263,6 @@ const setupNamespaceAwareProviderRuntime = async () => {
 const setupProviderConnectionStateRuntime = async () => {
   const background = await setupBackground({
     chainSeed: [createChainMetadata(), EIP155_ALT_CHAIN],
-    network: {
-      initialState: {
-        availableChainRefs: ["eip155:1", EIP155_ALT_CHAIN.chainRef],
-        rpc: {
-          "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },
-          [EIP155_ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
-        },
-      },
-    },
     walletChainSelectionSeed: {
       id: "wallet-chain-selection",
       selectedNamespace: "eip155",

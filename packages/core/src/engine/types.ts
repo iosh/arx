@@ -15,13 +15,13 @@ import type {
 } from "../approvals/queue/types.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
+import type { ChainRpcState } from "../chains/rpc/types.js";
 import type {
   AddSupportedChainOptions,
   AddSupportedChainResult,
   SupportedChainEntity,
   SupportedChainsUpdate,
 } from "../chains/runtime/supportedChains/types.js";
-import type { NetworkState, RpcOutcomeReport, RpcRoutingService, RpcStrategyConfig } from "../chains/runtime/types.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type {
@@ -47,7 +47,6 @@ import type {
   ProviderRuntimeRpcError,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeRpcResponse,
-  ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type {
   SessionLockState,
@@ -62,9 +61,9 @@ import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainVie
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { ChainRpcEndpointOverridesPort } from "../services/store/chainRpcEndpointOverrides/port.js";
+import type { ChainRpcEndpointOverridesChangedHandler } from "../services/store/chainRpcEndpointOverrides/types.js";
 import type { CustomChainsPort } from "../services/store/customChains/port.js";
-import type { CustomRpcPort } from "../services/store/customRpc/port.js";
-import type { CustomRpcChangedHandler } from "../services/store/customRpc/types.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
@@ -142,7 +141,7 @@ export type WalletNamespaces = Readonly<{
 /** Chain storage ports required to boot a wallet. */
 export type CoreChainsStoragePorts = Readonly<{
   customChains: CustomChainsPort;
-  customRpc: CustomRpcPort;
+  chainRpcEndpointOverrides: ChainRpcEndpointOverridesPort;
   walletChainSelection: WalletChainSelectionPort;
   providerChainSelection: ProviderChainSelectionPort;
 }>;
@@ -278,7 +277,7 @@ export type WalletPermissions = Readonly<{
   onOriginChanged: PermissionsEvents["onOriginChanged"];
 }>;
 
-/** Selected namespace, supported chains, and custom RPC overrides. */
+/** Selected namespace, supported chains, and chain RPC controls. */
 export type WalletNetworks = Readonly<{
   getSelection(): Promise<WalletChainSelectionRecord | null>;
   getSelectionSnapshot(): WalletChainSelectionRecord | null;
@@ -292,22 +291,19 @@ export type WalletNetworks = Readonly<{
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
-  getNetworkState(): NetworkState;
+  getChainRpcState(): ChainRpcState;
   getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
-  getActiveEndpoint: RpcRoutingService["getActiveEndpoint"];
   addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
   removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
-  setCustomRpc(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;
-  clearCustomRpc(chainRef: ChainRef): Promise<void>;
+  setChainRpcEndpointOverride(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;
+  clearChainRpcEndpointOverride(chainRef: ChainRef): Promise<void>;
   selectChain(chainRef: ChainRef): Promise<void>;
   selectNamespace(namespace: string): Promise<void>;
   activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
-  setRpcStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
-  reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
-  onStateChanged(listener: (state: NetworkState) => void): () => void;
+  onStateChanged(listener: (state: ChainRpcState) => void): () => void;
   onSelectionChanged(listener: WalletChainSelectionChangedHandler): () => void;
   onChainUpdated(listener: (update: SupportedChainsUpdate) => void): () => void;
-  onCustomRpcChanged(listener: CustomRpcChangedHandler): () => void;
+  onChainRpcEndpointOverridesChanged(listener: ChainRpcEndpointOverridesChangedHandler): () => void;
 }>;
 
 /** Ephemeral prompts outside the approvals flow. */

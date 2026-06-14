@@ -1,5 +1,6 @@
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
+import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   materializeNamespaceRuntimeSupport,
@@ -20,8 +21,8 @@ import { createKeyringExportService, type KeyringExportService } from "../../ser
 import { createPermissionViewsService } from "../../services/runtime/permissionViews/index.js";
 import { createSessionStatusService, type SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
-import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
-import type { CustomRpcService } from "../../services/store/customRpc/types.js";
+import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
+import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
@@ -37,8 +38,8 @@ import {
   type BackgroundStateServices,
   initBackgroundStateServices,
 } from "./backgroundStateServices.js";
-import { createNetworkBootstrap } from "./networkBootstrap.js";
-import { buildRuntimeNetworkPlan, type RuntimeNetworkPlan } from "./networkDefaults.js";
+import { createChainRpcBootstrap } from "./chainRpcBootstrap.js";
+import { buildRuntimeChainAdmission, type RuntimeChainAdmission } from "./chainRpcDefaults.js";
 import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
 import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 import { initRuntimeStoreServices } from "./runtimeStoreServices.js";
@@ -69,7 +70,7 @@ export type BackgroundBootstrapScope = {
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   registeredNamespaces: ReadonlySet<string>;
   admittedChains: readonly ChainMetadata[];
-  networkPlan: RuntimeNetworkPlan;
+  chainAdmission: RuntimeChainAdmission;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
   hydrationEnabled: boolean;
@@ -79,15 +80,15 @@ export type BackgroundBootstrapScope = {
 export type BackgroundSessionScope = {
   namespaceSession: RuntimeSessionNamespaceAssembly;
   stateServices: BackgroundStateServices;
+  chainRpcAccessUpdater: ChainRpcAccessUpdater;
   setApprovalExecutor: ReturnType<typeof initBackgroundStateServices>["setApprovalExecutor"];
   permissionsReady: Promise<void>;
-  deferredNetworkInitialState: ReturnType<typeof initBackgroundStateServices>["deferredNetworkInitialState"];
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
   walletChainSelection: WalletChainSelectionService;
   providerChainSelection: ProviderChainSelectionService;
-  customRpc: CustomRpcService;
+  chainRpcEndpointOverrides: ChainRpcEndpointOverridesService;
   sessionLayer: SessionLayerResult;
   sessionStatus: SessionStatusService;
   accountSigning: AccountSigningService;
@@ -98,12 +99,12 @@ export type BackgroundSessionScope = {
 
 export type BackgroundSupportScope = {
   namespaceTransactions: NamespaceTransactions;
-  rpcClientRegistry: ReturnType<typeof initRpcLayer>;
+  chainRpcClientPool: ReturnType<typeof initRpcLayer>;
   signers: RpcHandlerDeps["signers"];
   namespaceBindings: NamespaceRuntimeBindingsRegistry;
   namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
   permissionViews: ReturnType<typeof createPermissionViewsService>;
-  networkBootstrap: ReturnType<typeof createNetworkBootstrap>;
+  chainRpcBootstrap: ReturnType<typeof createChainRpcBootstrap>;
 };
 
 const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLayerOptions | undefined => {
@@ -120,7 +121,6 @@ export const createBackgroundBootstrapScope = ({
   namespaceBootstrap,
   messengerOptions,
   storageOptions,
-  networkOptions,
   approvalOptions,
   transactionOptions,
   supportedChainsOptions,
@@ -129,7 +129,6 @@ export const createBackgroundBootstrapScope = ({
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   messengerOptions?: MessengerOptions;
   storageOptions?: StorageOptions;
-  networkOptions?: BackgroundAssemblyOptions["network"];
   approvalOptions?: BackgroundAssemblyOptions["approvals"];
   transactionOptions?: BackgroundAssemblyOptions["transactions"];
   supportedChainsOptions: NonNullable<BackgroundAssemblyOptions["supportedChains"]>;
@@ -144,17 +143,14 @@ export const createBackgroundBootstrapScope = ({
   });
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
-  const networkPlan = buildRuntimeNetworkPlan({
+  const chainAdmission = buildRuntimeChainAdmission({
     admittedChains: supportedChainSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
-    ...(networkOptions?.initialState ? { requestedInitialState: networkOptions.initialState } : {}),
-    ...(networkOptions?.defaultStrategy ? { defaultStrategy: networkOptions.defaultStrategy } : {}),
   });
 
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
 
   const backgroundAssemblyOptions: BackgroundAssemblyOptions = {
-    ...(networkOptions ? { network: networkOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     supportedChains: { ...supportedChainsOptions, seed: [...supportedChainSeed] },
@@ -165,8 +161,8 @@ export const createBackgroundBootstrapScope = ({
     rpcRegistry,
     namespaceBootstrap,
     registeredNamespaces,
-    admittedChains: networkPlan.admittedChains,
-    networkPlan,
+    admittedChains: chainAdmission.admittedChains,
+    chainAdmission,
     storageLogger,
     storageNow,
     hydrationEnabled,
@@ -181,7 +177,7 @@ export const createBackgroundSessionScope = ({
   settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
-  customRpcPort,
+  chainRpcEndpointOverridesPort,
   storePorts,
   vaultMetaPort,
   sessionOptions,
@@ -192,7 +188,7 @@ export const createBackgroundSessionScope = ({
   settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
-  customRpcPort: CustomRpcPort;
+  chainRpcEndpointOverridesPort: ChainRpcEndpointOverridesPort;
   storePorts: {
     accounts: AccountsPort;
     keyringMetas: KeyringMetasPort;
@@ -201,16 +197,22 @@ export const createBackgroundSessionScope = ({
   vaultMetaPort?: VaultMetaPort;
   sessionOptions?: SessionOptions;
 }): BackgroundSessionScope => {
-  const { settingsService, walletChainSelection, providerChainSelection, customRpc, accountsStore, keyringMetas } =
-    initRuntimeStoreServices({
-      settingsPort,
-      walletChainSelectionPort,
-      providerChainSelectionPort,
-      customRpcPort,
-      ports: storePorts,
-      selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
-      now: bootstrapScope.storageNow,
-    });
+  const {
+    settingsService,
+    walletChainSelection,
+    providerChainSelection,
+    chainRpcEndpointOverrides,
+    accountsStore,
+    keyringMetas,
+  } = initRuntimeStoreServices({
+    settingsPort,
+    walletChainSelectionPort,
+    providerChainSelectionPort,
+    chainRpcEndpointOverridesPort,
+    ports: storePorts,
+    selectionDefaults: bootstrapScope.chainAdmission.selectionDefaults,
+    now: bootstrapScope.storageNow,
+  });
 
   const stateServicesInit = initBackgroundStateServices({
     bus: bootstrapScope.bus,
@@ -218,27 +220,21 @@ export const createBackgroundSessionScope = ({
     accountsService: accountsStore,
     settingsService,
     permissionsPort: storePorts.permissions,
-    networkPlan: bootstrapScope.networkPlan,
+    chainAdmission: bootstrapScope.chainAdmission,
     options: bootstrapScope.backgroundAssemblyOptions,
   });
 
-  const {
-    stateServices,
-    setApprovalExecutor,
-    rpcRoutingService,
-    supportedChainsService,
-    permissionsReady,
-    deferredNetworkInitialState,
-  } = stateServicesInit;
+  const { stateServices, setApprovalExecutor, chainRpcAccessUpdater, supportedChainsService, permissionsReady } =
+    stateServicesInit;
 
   const chainViews = createChainViewsService({
     supportedChains: supportedChainsService,
-    network: rpcRoutingService,
+    chainRpc: stateServices.chainRpc,
     selection: walletChainSelection,
   });
 
   const chainActivation = createChainActivationService({
-    network: rpcRoutingService,
+    chainRpc: stateServices.chainRpc,
     walletChainSelection,
     providerChainSelection,
     logger: bootstrapScope.storageLogger,
@@ -280,15 +276,15 @@ export const createBackgroundSessionScope = ({
   return {
     namespaceSession,
     stateServices,
+    chainRpcAccessUpdater,
     setApprovalExecutor,
     permissionsReady,
-    deferredNetworkInitialState,
     chainViews,
     chainActivation,
     attention,
     walletChainSelection,
     providerChainSelection,
-    customRpc,
+    chainRpcEndpointOverrides,
     sessionLayer,
     sessionStatus,
     accountSigning,
@@ -318,7 +314,7 @@ export const createBackgroundSupportScope = ({
   const rpcClientFactoryNamespaces = new Set(
     [...manifestRpcClientFactories, ...overrideRpcClientFactories].map((entry) => entry.namespace),
   );
-  const rpcClientRegistry = initRpcLayer({
+  const chainRpcClientPool = initRpcLayer({
     stateServices: sessionScope.stateServices,
     ...(rpcClientOptions?.options ? { rpcClientOptions: { options: rpcClientOptions.options } } : {}),
     factories: [...manifestRpcClientFactories, ...overrideRpcClientFactories],
@@ -326,7 +322,7 @@ export const createBackgroundSupportScope = ({
 
   const materializedRuntimeSupport = materializeNamespaceRuntimeSupport({
     runtimeSupport: namespaceRuntimeSupport,
-    rpcClients: rpcClientRegistry,
+    rpcClients: chainRpcClientPool,
     chains: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     accountSigning: sessionScope.accountSigning,
     rpcClientNamespaces: rpcClientFactoryNamespaces,
@@ -348,12 +344,12 @@ export const createBackgroundSupportScope = ({
     permissions: sessionScope.stateServices.permissions,
   });
 
-  const networkBootstrap = createNetworkBootstrap({
-    network: sessionScope.stateServices.network,
+  const chainRpcBootstrap = createChainRpcBootstrap({
+    chainRpcAccessUpdater: sessionScope.chainRpcAccessUpdater,
     supportedChains: sessionScope.stateServices.supportedChains,
     selection: sessionScope.walletChainSelection,
-    customRpc: sessionScope.customRpc,
-    selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
+    endpointOverrides: sessionScope.chainRpcEndpointOverrides,
+    selectionDefaults: bootstrapScope.chainAdmission.selectionDefaults,
     hydrationEnabled: bootstrapScope.hydrationEnabled,
     logger: bootstrapScope.storageLogger,
     getIsHydrating: () => sessionScope.runtimeLifecycle.getIsHydrating(),
@@ -362,11 +358,11 @@ export const createBackgroundSupportScope = ({
 
   return {
     namespaceTransactions,
-    rpcClientRegistry,
+    chainRpcClientPool,
     signers: materializedRuntimeSupport.signers,
     namespaceBindings: materializedRuntimeSupport.bindings,
     namespaceRuntimeSupport: materializedRuntimeSupport.runtimeSupport,
     permissionViews,
-    networkBootstrap,
+    chainRpcBootstrap,
   };
 };

@@ -71,12 +71,9 @@ const setup = (params?: {
           : null;
       },
     } as never,
-    network: {
-      getState: () => ({
-        revision: 1,
-        availableChainRefs: available.map((chain) => chain.chainRef),
-        rpc: {},
-      }),
+    chainRpc: {
+      hasEndpoints: (chainRef: string) => available.some((chain) => chain.chainRef === chainRef),
+      listChainRefs: () => available.map((chain) => chain.chainRef),
     } as never,
     selection: {
       getSelectedNamespace: () => selectedNamespace,

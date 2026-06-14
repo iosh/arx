@@ -14,8 +14,9 @@ const createService = (params?: {
   const setSelectedChainRef = params?.setSelectedChainRef ?? vi.fn().mockResolvedValue(undefined);
 
   const service = createChainActivationService({
-    network: {
-      getState: () => ({ availableChainRefs: params?.availableChainRefs ?? ["eip155:1", "eip155:10", "solana:101"] }),
+    chainRpc: {
+      hasEndpoints: (chainRef: string) =>
+        (params?.availableChainRefs ?? ["eip155:1", "eip155:10", "solana:101"]).includes(chainRef),
     } as never,
     walletChainSelection: {
       getSelectedChainRef: (namespace: string) => params?.activeChainByNamespace?.[namespace] ?? null,

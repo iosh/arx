@@ -14,8 +14,8 @@ import type { KeyringExportService } from "../services/runtime/keyringExport.js"
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { ChainRpcEndpointOverridesPort } from "../services/store/chainRpcEndpointOverrides/port.js";
 import type { CustomChainsPort } from "../services/store/customChains/port.js";
-import type { CustomRpcPort } from "../services/store/customRpc/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
@@ -24,7 +24,6 @@ import type { SettingsPort } from "../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
 import type { WalletChainSelectionService } from "../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../storage/index.js";
-import type { CustomRpcRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { BackgroundStateServices } from "./background/backgroundStateServices.js";
@@ -51,8 +50,8 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
   providerChainSelection: {
     port: ProviderChainSelectionPort;
   };
-  customRpc?: {
-    port: CustomRpcPort;
+  chainRpcEndpointOverrides: {
+    port: ChainRpcEndpointOverridesPort;
   };
   storage?: {
     vaultMetaPort?: VaultMetaPort;
@@ -119,28 +118,6 @@ export type BackgroundRuntime = {
   wallet: ArxWallet;
 };
 
-const createEphemeralCustomRpcPort = (): CustomRpcPort => {
-  const records = new Map<CustomRpcRecord["chainRef"], CustomRpcRecord>();
-
-  return {
-    async get(chainRef) {
-      return records.get(chainRef) ?? null;
-    },
-    async list() {
-      return Array.from(records.values());
-    },
-    async upsert(record) {
-      records.set(record.chainRef, structuredClone(record));
-    },
-    async remove(chainRef) {
-      records.delete(chainRef);
-    },
-    async clear() {
-      records.clear();
-    },
-  };
-};
-
 const createNoopVaultMetaPort = (): VaultMetaPort => ({
   async loadVaultMeta() {
     return null;
@@ -162,7 +139,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const walletChainSelectionPort = options.walletChainSelection.port;
   const providerChainSelectionPort = options.providerChainSelection.port;
-  const customRpcPort = options.customRpc?.port ?? createEphemeralCustomRpcPort();
+  const chainRpcEndpointOverridesPort = options.chainRpcEndpointOverrides.port;
   const vaultMetaPort = options.storage?.vaultMetaPort ?? createNoopVaultMetaPort();
 
   const modules = options.namespaces.manifests.map((manifest) => createWalletNamespaceModuleFromManifest(manifest));
@@ -178,7 +155,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         permissions: options.store.ports.permissions,
         chains: {
           customChains: customChainsPort,
-          customRpc: customRpcPort,
+          chainRpcEndpointOverrides: chainRpcEndpointOverridesPort,
           walletChainSelection: walletChainSelectionPort,
           providerChainSelection: providerChainSelectionPort,
         },
@@ -196,7 +173,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       lifecycleLabel: "createBackgroundRuntime",
       ...(options.messenger ? { messenger: options.messenger } : {}),
       assemblyOptions: {
-        ...(options.network ? { network: options.network } : {}),
         ...(options.approvals ? { approvals: options.approvals } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
         supportedChains,

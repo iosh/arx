@@ -1,9 +1,10 @@
 import { z } from "zod";
 import * as Hex from "../../utils/hex.js";
-import type { ChainMetadata } from "../metadata.js";
-import { validateChainMetadata } from "../metadata.js";
+import type { ChainDefinitionSeed } from "../definition.js";
+import type { ChainMetadata, RpcEndpoint } from "../metadata.js";
+import { deriveChainMetadataFromDefinitionSeed } from "../metadata.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
-import { eip155ChainRefFromChainIdHex } from "./format.js";
+import { eip155ChainIdHexFromChainRef, eip155ChainRefFromChainIdHex } from "./format.js";
 
 const trimmed = () =>
   z
@@ -33,7 +34,7 @@ const eip3085Schema = z.object({
 
 const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((value) => value.trim())));
 
-export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata => {
+export const createEip155DefinitionSeedFromEip3085 = (input: unknown): ChainDefinitionSeed<RpcEndpoint> => {
   const payload = eip3085Schema.parse(input);
 
   const chainId = Hex.fromNumber(Hex.toBigInt(payload.chainId));
@@ -52,16 +53,23 @@ export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata =
       }))
     : undefined;
 
-  const metadata: ChainMetadata = {
-    chainRef,
-    namespace: "eip155",
-    chainId,
-    displayName: payload.chainName,
-    shortName: payload.nativeCurrency.symbol,
-    nativeCurrency: payload.nativeCurrency,
-    rpcEndpoints: rpcUrls.map((url) => ({ url, type: "public" as const })),
-    blockExplorers: explorers,
+  return {
+    definition: {
+      chainRef,
+      displayName: payload.chainName,
+      shortName: payload.nativeCurrency.symbol,
+      nativeCurrency: payload.nativeCurrency,
+      blockExplorers: explorers,
+    },
+    defaultRpcEndpoints: rpcUrls.map((url) => ({ url, type: "public" as const })),
   };
+};
 
-  return validateChainMetadata(metadata);
+export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata => {
+  const seed = createEip155DefinitionSeedFromEip3085(input);
+  return deriveChainMetadataFromDefinitionSeed({
+    seed,
+    namespace: "eip155",
+    chainId: eip155ChainIdHexFromChainRef(seed.definition.chainRef),
+  });
 };

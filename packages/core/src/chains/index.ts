@@ -3,7 +3,7 @@ export * from "./chains.seed.js";
 export * from "./definition.js";
 export { createEip155AddressModule } from "./eip155/address.js";
 export { eip155AddressCodec } from "./eip155/addressCodec.js";
-export { createEip155MetadataFromEip3085 } from "./eip155/eip3085.js";
+export { createEip155DefinitionSeedFromEip3085, createEip155MetadataFromEip3085 } from "./eip155/eip3085.js";
 export * from "./eip155/format.js";
 export * from "./errors.js";
 export * from "./ids.js";

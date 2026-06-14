@@ -33,6 +33,12 @@ export type ChainDefinitionSeed<TRpcEndpoint = unknown> = {
   defaultRpcEndpoints?: readonly TRpcEndpoint[] | undefined;
 };
 
+export const defineChainDefinitionSeed = <const TSeed extends ChainDefinitionSeed>(seed: TSeed): TSeed => seed;
+
+export const defineChainDefinitionSeeds = <const TSeeds extends readonly ChainDefinitionSeed[]>(
+  seeds: TSeeds,
+): TSeeds => seeds;
+
 export const cloneChainDefinition = (definition: ChainDefinition): ChainDefinition => ({
   chainRef: definition.chainRef,
   displayName: definition.displayName,

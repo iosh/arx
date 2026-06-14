@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
-import { DEFAULT_CHAIN_METADATA } from "./chains.seed.js";
+import { DEFAULT_CHAIN_DEFINITION_SEEDS, DEFAULT_CHAIN_METADATA } from "./chains.seed.js";
 import {
   createChainMetadataListSchema,
+  deriveChainDefinitionSeedFromMetadata,
   isSameAddChainComparableMetadata,
   validateChainMetadata,
   validateChainMetadataList,
@@ -29,6 +30,43 @@ describe("metadata", () => {
     expect(value.namespace).toBe("eip155");
     expect(value.rpcEndpoints).toHaveLength(2);
     expect(value.nativeCurrency.symbol).toBe("ETH");
+  });
+
+  it("derives a chain definition seed from legacy metadata", () => {
+    const metadata = validateChainMetadata(baseEip155Metadata);
+
+    const seed = deriveChainDefinitionSeedFromMetadata(metadata);
+
+    expect(seed.definition).toEqual({
+      chainRef: "eip155:1",
+      displayName: "Ethereum Mainnet",
+      shortName: "eth",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      blockExplorers: [{ type: "default", url: "https://etherscan.io" }],
+      icon: { url: "https://assets.example.com/icons/ethereum.svg", width: 64, height: 64, format: "svg" },
+    });
+    expect(seed.definition).not.toHaveProperty("namespace");
+    expect(seed.definition).not.toHaveProperty("chainId");
+    expect(seed.definition).not.toHaveProperty("rpcEndpoints");
+    expect(seed.defaultRpcEndpoints).toEqual(metadata.rpcEndpoints);
+    expect(seed.defaultRpcEndpoints).not.toBe(metadata.rpcEndpoints);
+    expect(seed.defaultRpcEndpoints?.[0]).not.toBe(metadata.rpcEndpoints[0]);
+  });
+
+  it("exposes legacy builtin metadata derived from chain definition seeds", () => {
+    const firstSeed = DEFAULT_CHAIN_DEFINITION_SEEDS[0];
+    if (!firstSeed) {
+      throw new Error("DEFAULT_CHAIN_DEFINITION_SEEDS must include at least one chain");
+    }
+
+    expect(DEFAULT_CHAIN_DEFINITION_SEEDS).toHaveLength(DEFAULT_CHAIN_METADATA.length);
+    expect(DEFAULT_CHAIN_METADATA[0]).toMatchObject({
+      chainRef: firstSeed.definition.chainRef,
+      namespace: "eip155",
+      chainId: "0x1",
+      displayName: firstSeed.definition.displayName,
+      rpcEndpoints: firstSeed.defaultRpcEndpoints,
+    });
   });
 
   it("rejects namespace mismatches", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type ParsedChainRef, parseChainRef } from "./caip.js";
-import type { ChainIcon, ExplorerLink, NativeCurrency } from "./definition.js";
+import type { ChainDefinition, ChainDefinitionSeed, ChainIcon, ExplorerLink, NativeCurrency } from "./definition.js";
 import { eip155ChainRefFromChainIdHex } from "./eip155/format.js";
 import { type ChainRef, ChainRefSchema } from "./ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
@@ -229,6 +229,63 @@ export const validateChainMetadataList = (metadataList: unknown): ChainMetadata[
   return chainMetadataListSchema.parse(metadataList);
 };
 
+const cloneRpcEndpoint = (endpoint: RpcEndpoint): RpcEndpoint => ({
+  url: endpoint.url,
+  type: endpoint.type,
+  weight: endpoint.weight,
+  headers: endpoint.headers ? { ...endpoint.headers } : undefined,
+});
+
+export const deriveChainDefinitionFromMetadata = (metadata: ChainMetadata): ChainDefinition => ({
+  chainRef: metadata.chainRef,
+  displayName: metadata.displayName,
+  shortName: metadata.shortName,
+  nativeCurrency: {
+    name: metadata.nativeCurrency.name,
+    symbol: metadata.nativeCurrency.symbol,
+    decimals: metadata.nativeCurrency.decimals,
+  },
+  blockExplorers: metadata.blockExplorers
+    ? metadata.blockExplorers.map((explorer) => ({
+        type: explorer.type,
+        url: explorer.url,
+        title: explorer.title,
+      }))
+    : undefined,
+  icon: metadata.icon
+    ? {
+        url: metadata.icon.url,
+        width: metadata.icon.width,
+        height: metadata.icon.height,
+        format: metadata.icon.format,
+      }
+    : undefined,
+});
+
+export const deriveChainDefinitionSeedFromMetadata = (metadata: ChainMetadata): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: deriveChainDefinitionFromMetadata(metadata),
+  defaultRpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
+});
+
+export const deriveChainMetadataFromDefinitionSeed = (params: {
+  seed: ChainDefinitionSeed<RpcEndpoint>;
+  namespace: string;
+  chainId: string;
+}): ChainMetadata => {
+  const { definition, defaultRpcEndpoints } = params.seed;
+  return validateChainMetadata({
+    chainRef: definition.chainRef,
+    namespace: params.namespace,
+    chainId: params.chainId,
+    displayName: definition.displayName,
+    shortName: definition.shortName,
+    nativeCurrency: definition.nativeCurrency,
+    rpcEndpoints: defaultRpcEndpoints ?? [],
+    blockExplorers: definition.blockExplorers,
+    icon: definition.icon,
+  });
+};
+
 const normalizeComparableUrl = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -266,12 +323,7 @@ export const cloneChainMetadata = (metadata: ChainMetadata): ChainMetadata => ({
     symbol: metadata.nativeCurrency.symbol,
     decimals: metadata.nativeCurrency.decimals,
   },
-  rpcEndpoints: metadata.rpcEndpoints.map((endpoint) => ({
-    url: endpoint.url,
-    type: endpoint.type,
-    weight: endpoint.weight,
-    headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-  })),
+  rpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
   blockExplorers: metadata.blockExplorers
     ? metadata.blockExplorers.map((explorer) => ({
         type: explorer.type,

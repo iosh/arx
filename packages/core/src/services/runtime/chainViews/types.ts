@@ -1,10 +1,9 @@
 import type { ApprovalChainContextRecord, ApprovalChainContextRequest } from "../../../approvals/chainContext.js";
+import type { ChainDefinition } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { ChainMetadata } from "../../../chains/metadata.js";
 
 export type ChainView = {
   chainRef: ChainRef;
-  chainId: string;
   namespace: string;
   displayName: string;
   shortName: string | null;
@@ -36,8 +35,8 @@ export type ApprovalReviewChainViewParams = {
 export type ChainViewsService = {
   getSelectedNamespace(): string;
   getSelectedChainView(): ChainView;
-  requireChainMetadata(chainRef: ChainRef): ChainMetadata;
-  requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata;
+  requireChainDefinition(chainRef: ChainRef): ChainDefinition;
+  requireAvailableChainDefinition(chainRef: ChainRef): ChainDefinition;
   getActiveChainViewForNamespace(namespace: string): ChainView;
   getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView;
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;

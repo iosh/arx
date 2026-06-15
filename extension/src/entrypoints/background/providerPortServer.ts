@@ -183,7 +183,6 @@ export const createProviderPortServer = ({
     extensionOrigin,
     getProvider: getCachedProvider,
     getSessionIdForPort: (port) => providerPortSessions.readSessionId(port),
-    getSessionContext: (port) => providerPortSessions.readSessionContext(port),
     getPendingRequestMap: (port) => providerPortSessions.readPendingRequestMap(port),
     clearPendingForPort: (port) => providerPortSessions.dropPendingRequests(port),
     detachPortListeners,

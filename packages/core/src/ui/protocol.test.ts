@@ -6,7 +6,6 @@ import { isUiEventName, isUiMethodName, parseUiMethodParams } from "./protocol/i
 const SNAPSHOT_FIXTURE = {
   chain: {
     chainRef: "eip155:1",
-    chainId: "0x1",
     namespace: "eip155",
     displayName: "Ethereum",
     shortName: "eth",
@@ -23,7 +22,6 @@ const SNAPSHOT_FIXTURE = {
     known: [
       {
         chainRef: "eip155:1",
-        chainId: "0x1",
         namespace: "eip155",
         displayName: "Ethereum",
         shortName: "eth",
@@ -34,7 +32,6 @@ const SNAPSHOT_FIXTURE = {
     available: [
       {
         chainRef: "eip155:1",
-        chainId: "0x1",
         namespace: "eip155",
         displayName: "Ethereum",
         shortName: "eth",

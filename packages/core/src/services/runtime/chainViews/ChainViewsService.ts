@@ -4,9 +4,10 @@ import {
   deriveApprovalReviewContext,
 } from "../../../approvals/chainContext.js";
 import { getChainRefNamespace } from "../../../chains/caip.js";
+import type { ChainDefinition } from "../../../chains/definition.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
+import { cloneChainDefinition } from "../../../chains/metadata.js";
 import type { ChainRpcReader } from "../../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../../chains/runtime/supportedChains/types.js";
 import type { WalletChainSelectionService } from "../../store/walletChainSelection/types.js";
@@ -24,17 +25,16 @@ type CreateChainViewsServiceOptions = {
   selection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 };
 
-const toChainView = (metadata: ChainMetadata): ChainView => ({
-  chainRef: metadata.chainRef,
-  chainId: metadata.chainId,
-  namespace: metadata.namespace,
-  displayName: metadata.displayName,
-  shortName: metadata.shortName ?? null,
-  icon: metadata.icon?.url ?? null,
+const toChainView = (definition: ChainDefinition): ChainView => ({
+  chainRef: definition.chainRef,
+  namespace: getChainRefNamespace(definition.chainRef),
+  displayName: definition.displayName,
+  shortName: definition.shortName ?? null,
+  icon: definition.icon?.url ?? null,
   nativeCurrency: {
-    name: metadata.nativeCurrency.name,
-    symbol: metadata.nativeCurrency.symbol,
-    decimals: metadata.nativeCurrency.decimals,
+    name: definition.nativeCurrency.name,
+    symbol: definition.nativeCurrency.symbol,
+    decimals: definition.nativeCurrency.decimals,
   },
 });
 
@@ -60,19 +60,19 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   getActiveChainViewForNamespace(namespace: string): ChainView {
-    return toChainView(this.requireAvailableChainMetadata(this.#resolveActiveChainRefForNamespace(namespace)));
+    return toChainView(this.requireAvailableChainDefinition(this.#resolveActiveChainRefForNamespace(namespace)));
   }
 
   getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView {
     const context = this.#deriveApprovalReviewContext(params.record, params.request);
-    return toChainView(this.requireChainMetadata(context.reviewChainRef));
+    return toChainView(this.requireChainDefinition(context.reviewChainRef));
   }
 
-  requireChainMetadata(chainRef: ChainRef): ChainMetadata {
-    return this.#getRequiredChainMetadata(chainRef);
+  requireChainDefinition(chainRef: ChainRef): ChainDefinition {
+    return this.#getRequiredChainDefinition(chainRef);
   }
 
-  requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata {
+  requireAvailableChainDefinition(chainRef: ChainRef): ChainDefinition {
     const entry = this.#supportedChains.getChain(chainRef);
     if (!entry) {
       throw new ChainNotFoundError();
@@ -82,13 +82,13 @@ class DefaultChainViewsService implements ChainViewsService {
       throw new ChainNotAvailableError();
     }
 
-    return cloneChainMetadata(entry.metadata);
+    return cloneChainDefinition(entry.definition);
   }
 
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null {
     if (params.chainRef) {
       try {
-        const view = toChainView(this.requireAvailableChainMetadata(params.chainRef));
+        const view = toChainView(this.requireAvailableChainDefinition(params.chainRef));
         if (params.namespace && view.namespace !== params.namespace) {
           return null;
         }
@@ -106,12 +106,12 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   listKnownChainViews(): ChainView[] {
-    const views = this.#supportedChains.getState().chains.map((entry) => toChainView(entry.metadata));
+    const views = this.#supportedChains.getState().chains.map((entry) => toChainView(entry.definition));
     return sortChainViews(views);
   }
 
   listAvailableChainViews(): ChainView[] {
-    const views = this.#listAvailableMetadata().map(toChainView);
+    const views = this.#listAvailableDefinitions().map(toChainView);
     return sortChainViews(views);
   }
 
@@ -127,8 +127,8 @@ class DefaultChainViewsService implements ChainViewsService {
     };
   }
 
-  #listAvailableMetadata(): ChainMetadata[] {
-    return this.#chainRpc.listChainRefs().map((chainRef) => this.requireAvailableChainMetadata(chainRef));
+  #listAvailableDefinitions(): ChainDefinition[] {
+    return this.#chainRpc.listChainRefs().map((chainRef) => this.requireAvailableChainDefinition(chainRef));
   }
 
   #deriveApprovalReviewContext(record: ApprovalChainContextRecord, request?: ApprovalChainContextRequest) {
@@ -187,12 +187,12 @@ class DefaultChainViewsService implements ChainViewsService {
     return selectedNamespace;
   }
 
-  #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {
-    const metadata = this.#supportedChains.getChain(chainRef)?.metadata;
-    if (!metadata) {
+  #getRequiredChainDefinition(chainRef: ChainRef): ChainDefinition {
+    const definition = this.#supportedChains.getChain(chainRef)?.definition;
+    if (!definition) {
       throw new ChainNotFoundError();
     }
-    return cloneChainMetadata(metadata);
+    return cloneChainDefinition(definition);
   }
 }
 

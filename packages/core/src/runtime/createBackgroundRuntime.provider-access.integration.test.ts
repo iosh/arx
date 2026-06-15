@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
+import type { ChainDefinitionSeed } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
@@ -18,6 +19,7 @@ import type {
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import type { CreateBackgroundRuntimeResult } from "./__fixtures__/backgroundTestSetup.js";
 import {
+  createChainDefinitionSeed,
   createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
@@ -38,13 +40,23 @@ import type { ProviderConnectionStateChange } from "./provider/types.js";
 
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
-const SOLANA_CHAIN: ChainMetadata = {
+
+type TestChain = ChainMetadata & {
+  defaultRpcEndpoints: readonly RpcEndpoint[];
+};
+
+const toChainSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: deriveChainDefinitionFromMetadata(chain),
+  defaultRpcEndpoints: chain.defaultRpcEndpoints,
+});
+
+const SOLANA_CHAIN: TestChain = {
   chainRef: "solana:101",
   namespace: "solana",
   chainId: "101",
   displayName: "Solana",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
-  rpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
 const EIP155_ALT_CHAIN = createChainMetadata({
   chainRef: "eip155:10",
@@ -80,9 +92,9 @@ const grantProviderPermission = async (
   runtime: CreateBackgroundRuntimeResult,
   input: { origin: string; chainRef: string; address: string },
 ) => {
-  const chain = runtime.services?.supportedChains?.getChain(input.chainRef)?.metadata;
+  const chain = runtime.services.supportedChains.getChain(input.chainRef as ChainRef);
   if (!chain) {
-    throw new Error(`Missing chain metadata for ${input.chainRef}`);
+    throw new Error(`Missing chain definition for ${input.chainRef}`);
   }
 
   await runtime.services.permissions.grantAuthorization(input.origin, {
@@ -220,17 +232,16 @@ const solanaNamespaceManifest = (() => {
         codec,
         factories: {},
       },
-      chainSeeds: [SOLANA_CHAIN],
+      chainSeeds: [toChainSeed(SOLANA_CHAIN)],
     },
   } satisfies NamespaceManifest);
 })();
 
 const setupNamespaceAwareProviderRuntime = async () => {
-  const mainnetChain = createChainMetadata();
   const chainDefinitionsPort = new MemoryChainDefinitionsPort();
   const runtime = createBackgroundRuntime({
     supportedChains: {
-      seed: [mainnetChain, SOLANA_CHAIN],
+      seed: [createChainDefinitionSeed(), toChainSeed(SOLANA_CHAIN)],
     },
     namespaces: {
       manifests: [eip155NamespaceManifest, solanaNamespaceManifest],
@@ -1215,7 +1226,7 @@ describe("createBackgroundRuntime provider access", () => {
         jsonrpc: "2.0",
         error: {
           kind: "ArxError",
-          code: "global.rpc.unsupported_method",
+          code: "chain.not_supported",
         },
       });
     } finally {

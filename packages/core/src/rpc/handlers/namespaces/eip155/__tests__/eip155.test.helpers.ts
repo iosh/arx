@@ -5,8 +5,9 @@ import {
 } from "../../../../../accounts/addressing/accountKey.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../approvals/index.js";
 import { parseChainRef } from "../../../../../chains/caip.js";
+import { eip155ChainIdHexFromChainRef } from "../../../../../chains/eip155/format.js";
 import type { ChainRef } from "../../../../../chains/ids.js";
-import type { ChainMetadata } from "../../../../../chains/metadata.js";
+import { type ChainMetadata, deriveChainMetadataFromDefinitionSeed } from "../../../../../chains/metadata.js";
 import {
   FakeVault,
   MemoryAccountsPort,
@@ -32,7 +33,6 @@ export const ALT_CHAIN = {
   chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" as const }],
 };
 
 export const ADD_CHAIN_PARAMS = {
@@ -120,7 +120,16 @@ type TestAccountSelectionService = TestRuntime["services"]["accounts"] & {
 };
 
 export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
-  return runtime.services.supportedChains.getChain(chainRef)?.metadata ?? null;
+  const entry = runtime.services.supportedChains.getChain(chainRef);
+  if (!entry) {
+    return null;
+  }
+
+  return deriveChainMetadataFromDefinitionSeed({
+    seed: { definition: entry.definition },
+    namespace: entry.namespace,
+    chainId: eip155ChainIdHexFromChainRef(chainRef),
+  });
 };
 
 export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {

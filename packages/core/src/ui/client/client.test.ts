@@ -5,7 +5,6 @@ import { createUiClient, type UiTransport } from "./index.js";
 const SNAPSHOT_FIXTURE = {
   chain: {
     chainRef: "eip155:1",
-    chainId: "0x1",
     namespace: "eip155",
     displayName: "Ethereum",
     shortName: "eth",
@@ -22,7 +21,6 @@ const SNAPSHOT_FIXTURE = {
     known: [
       {
         chainRef: "eip155:1",
-        chainId: "0x1",
         namespace: "eip155",
         displayName: "Ethereum",
         shortName: "eth",
@@ -33,7 +31,6 @@ const SNAPSHOT_FIXTURE = {
     available: [
       {
         chainRef: "eip155:1",
-        chainId: "0x1",
         namespace: "eip155",
         displayName: "Ethereum",
         shortName: "eth",
@@ -241,7 +238,7 @@ describe("ui client runtime", () => {
       payload: SNAPSHOT_FIXTURE,
     });
 
-    await expect(p).resolves.toMatchObject({ chain: { chainId: "0x1" } });
+    await expect(p).resolves.toMatchObject({ chain: { chainRef: "eip155:1" } });
 
     client.destroy();
   });
@@ -327,7 +324,9 @@ describe("ui client runtime", () => {
         payload: SNAPSHOT_FIXTURE,
       });
 
-      await expect(client.waitForSnapshot({ timeoutMs: 1_000 })).resolves.toMatchObject({ chain: { chainId: "0x1" } });
+      await expect(client.waitForSnapshot({ timeoutMs: 1_000 })).resolves.toMatchObject({
+        chain: { chainRef: "eip155:1" },
+      });
 
       transport.disconnectNow(new Error("port disconnected"));
 
@@ -348,7 +347,6 @@ describe("ui client runtime", () => {
           chain: {
             ...SNAPSHOT_FIXTURE.chain,
             chainRef: "eip155:2",
-            chainId: "0x2",
             displayName: "Sepolia",
             shortName: "sep",
           },
@@ -359,7 +357,6 @@ describe("ui client runtime", () => {
               {
                 ...SNAPSHOT_FIXTURE.networks.known[0],
                 chainRef: "eip155:2",
-                chainId: "0x2",
                 displayName: "Sepolia",
                 shortName: "sep",
               },
@@ -368,7 +365,6 @@ describe("ui client runtime", () => {
               {
                 ...SNAPSHOT_FIXTURE.networks.available[0],
                 chainRef: "eip155:2",
-                chainId: "0x2",
                 displayName: "Sepolia",
                 shortName: "sep",
               },
@@ -377,7 +373,7 @@ describe("ui client runtime", () => {
         },
       });
 
-      await expect(pendingSnapshot).resolves.toMatchObject({ chain: { chainId: "0x2" } });
+      await expect(pendingSnapshot).resolves.toMatchObject({ chain: { chainRef: "eip155:2" } });
     } finally {
       client.destroy();
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds } from "../../../approvals/queue/types.js";
-import type { ChainMetadata } from "../../../chains/metadata.js";
+import { type ChainMetadata, deriveChainDefinitionFromMetadata } from "../../../chains/metadata.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
 const MAINNET: ChainMetadata = {
@@ -9,7 +9,6 @@ const MAINNET: ChainMetadata = {
   chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.ethereum.example", type: "public" }],
 };
 
 const OPTIMISM: ChainMetadata = {
@@ -18,7 +17,6 @@ const OPTIMISM: ChainMetadata = {
   chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
 };
 
 const BASE: ChainMetadata = {
@@ -27,7 +25,6 @@ const BASE: ChainMetadata = {
   chainId: "0x2105",
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
 };
 
 const SOLANA: ChainMetadata = {
@@ -36,7 +33,6 @@ const SOLANA: ChainMetadata = {
   chainId: "101",
   displayName: "Solana Mainnet",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
-  rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
 const setup = (params?: {
@@ -55,7 +51,7 @@ const setup = (params?: {
         chains: known.map((metadata) => ({
           chainRef: metadata.chainRef,
           namespace: metadata.namespace,
-          metadata,
+          definition: deriveChainDefinitionFromMetadata(metadata),
           source: "builtin" as const,
         })),
       }),
@@ -65,7 +61,7 @@ const setup = (params?: {
           ? {
               chainRef: metadata.chainRef,
               namespace: metadata.namespace,
-              metadata,
+              definition: deriveChainDefinitionFromMetadata(metadata),
               source: "builtin" as const,
             }
           : null;
@@ -87,7 +83,8 @@ describe("ChainViewsService", () => {
     const service = setup();
 
     expect(service.getSelectedNamespace()).toBe(MAINNET.namespace);
-    expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
+    expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
+    expect(service.getSelectedChainView()).not.toHaveProperty("chainId");
     expect(service.buildWalletNetworksSnapshot()).toEqual({
       selectedNamespace: MAINNET.namespace,
       active: MAINNET.chainRef,

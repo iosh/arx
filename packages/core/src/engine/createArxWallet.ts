@@ -72,6 +72,7 @@ type WalletRuntimeServices = Readonly<
     accountCodecs: BackgroundBootstrapScope["namespaceBootstrap"]["accountCodecs"];
     walletChainSelection: BackgroundSessionScope["walletChainSelection"];
     providerChainSelection: BackgroundSessionScope["providerChainSelection"];
+    chainRpcDefaultEndpoints: BackgroundSessionScope["chainRpcDefaultEndpoints"];
     chainRpcEndpointOverrides: BackgroundSessionScope["chainRpcEndpointOverrides"];
     namespaceBindings: BackgroundSupportScope["namespaceBindings"];
     namespaceRuntimeSupport: BackgroundSupportScope["namespaceRuntimeSupport"];
@@ -220,8 +221,8 @@ const createWalletUiDeps = (
             runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
           getSelectedNamespace: () => runtime.services.chainViews.getSelectedNamespace(),
           getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
-          requireAvailableChainMetadata: (chainRef) =>
-            runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
+          requireAvailableChainDefinition: (chainRef) =>
+            runtime.services.chainViews.requireAvailableChainDefinition(chainRef),
           selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
         },
         accountCodecs: runtime.services.accountCodecs,
@@ -383,6 +384,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const rpcHandlerDeps: RpcHandlerDeps = {
     ...stateServices,
     walletChainSelection: sessionScope.walletChainSelection,
+    chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
       now: bootstrapScope.storageNow,
@@ -576,6 +578,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     walletChainSelection: sessionScope.walletChainSelection,
     providerChainSelection: sessionScope.providerChainSelection,
+    chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
     namespaceBindings: backgroundSupportScope.namespaceBindings,
     namespaceRuntimeSupport: backgroundSupportScope.namespaceRuntimeSupport,

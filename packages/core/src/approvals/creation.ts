@@ -28,8 +28,8 @@ const deriveApprovalRecordContext = <K extends ApprovalQueueKind>(input: Approva
     const request = input.request as ApprovalRequest<typeof ApprovalKinds.AddChain>;
 
     return {
-      chainRef: request.metadata.chainRef,
-      namespace: request.metadata.namespace,
+      chainRef: request.definition.chainRef,
+      namespace: parseChainRef(request.definition.chainRef).namespace,
     };
   }
 

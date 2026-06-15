@@ -4,7 +4,6 @@ export const createNetworksHandlers = (
   deps: { chains: UiChainsAccess },
   toChainSnapshot: () => {
     chainRef: string;
-    chainId: string;
     namespace: string;
     displayName: string;
     shortName: string | null;

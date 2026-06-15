@@ -1,6 +1,7 @@
+import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import { ChainNotAvailableError, ChainNotSupportedError } from "../../chains/errors.js";
 import type { ProviderRuntimeConnectionQuery, ProviderRuntimeSnapshot } from "../../runtime/provider/types.js";
-import type { ChainView, ChainViewsService } from "../../services/runtime/chainViews/types.js";
+import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 
@@ -10,7 +11,23 @@ export type ProviderChainResolutionDeps = {
 };
 
 export type ResolvedProviderChain = {
-  chain: ChainView;
+  chain: ProviderRuntimeSnapshot["chain"];
+};
+
+const deriveEip155ProviderChain = (
+  input: ProviderRuntimeConnectionQuery,
+  chainRef: ProviderRuntimeSnapshot["chain"]["chainRef"],
+): ProviderRuntimeSnapshot["chain"] => {
+  if (input.namespace !== "eip155") {
+    throw new ChainNotSupportedError({
+      message: `EIP-1193 provider snapshots are not supported for namespace "${input.namespace}"`,
+    });
+  }
+
+  return {
+    chainId: eip155ChainIdHexFromChainRef(chainRef),
+    chainRef,
+  };
 };
 
 export type ProviderSnapshotDeps = {
@@ -42,7 +59,7 @@ export const resolveProviderChain = (
   }
 
   return {
-    chain: providerSelectedChain,
+    chain: deriveEip155ProviderChain(input, providerSelectedChain.chainRef),
   };
 };
 
@@ -56,10 +73,7 @@ export const buildProviderSnapshot = (
 
   return {
     namespace,
-    chain: {
-      chainId: chain.chainId,
-      chainRef: chain.chainRef,
-    },
+    chain,
     isUnlocked: deps.sessionStatus.getStatus().isUnlocked,
   };
 };

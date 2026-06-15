@@ -1,9 +1,17 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
+import { parseChainRef } from "../../chains/caip.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
+import type { ChainDefinitionSeed } from "../../chains/definition.js";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
+import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import {
+  type ChainMetadata,
+  deriveChainDefinitionFromMetadata,
+  deriveChainMetadataFromDefinitionSeed,
+  type RpcEndpoint,
+} from "../../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
@@ -256,8 +264,19 @@ if (!defaultBaseChainMetadata) {
 export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
 
 const requireActiveChainMetadata = (runtime: CreateBackgroundRuntimeResult): ChainMetadata => {
-  const chainRef = runtime.services.chainViews.getSelectedChainView().chainRef;
-  const chain = runtime.services.supportedChains.getChain(chainRef)?.metadata;
+  const view = runtime.services.chainViews.getSelectedChainView();
+  const chainRef = view.chainRef;
+  const entry = runtime.services.supportedChains.getChain(chainRef);
+  const chain = entry
+    ? deriveChainMetadataFromDefinitionSeed({
+        seed: {
+          definition: entry.definition,
+        },
+        namespace: entry.namespace,
+        chainId:
+          entry.namespace === "eip155" ? eip155ChainIdHexFromChainRef(chainRef) : parseChainRef(chainRef).reference,
+      })
+    : null;
   if (!chain) {
     throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
   }
@@ -283,12 +302,6 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
     displayName: overrides.displayName ?? baseChainMetadata.displayName,
     shortName: overrides.shortName ?? baseChainMetadata.shortName,
     nativeCurrency: overrides.nativeCurrency ?? clone(baseChainMetadata.nativeCurrency),
-    rpcEndpoints: overrides.rpcEndpoints ?? [
-      {
-        url: `https://rpc.${(overrides.chainRef ?? baseChainMetadata.chainRef).replace(":", "-")}.example`,
-        type: "public",
-      },
-    ],
   };
 
   if (overrides.blockExplorers) {
@@ -304,6 +317,38 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
   }
 
   return metadata;
+};
+
+type TestChainSeedInput = ChainDefinitionSeed<RpcEndpoint> | ChainMetadata;
+
+const createDefaultRpcEndpointsForTest = (chainRef: ChainRef): RpcEndpoint[] => [
+  {
+    url: `https://rpc.${chainRef.replace(":", "-")}.example`,
+    type: "public",
+  },
+];
+
+export const createChainDefinitionSeed = (
+  overrides: Partial<ChainMetadata> & { defaultRpcEndpoints?: readonly RpcEndpoint[] } = {},
+): ChainDefinitionSeed<RpcEndpoint> => {
+  const metadata = createChainMetadata(overrides);
+  return {
+    definition: deriveChainDefinitionFromMetadata(metadata),
+    defaultRpcEndpoints: overrides.defaultRpcEndpoints
+      ? clone(overrides.defaultRpcEndpoints)
+      : createDefaultRpcEndpointsForTest(metadata.chainRef),
+  };
+};
+
+const toChainDefinitionSeed = (input: TestChainSeedInput): ChainDefinitionSeed<RpcEndpoint> => {
+  if ("definition" in input) {
+    return {
+      definition: clone(input.definition),
+      ...(input.defaultRpcEndpoints ? { defaultRpcEndpoints: clone(input.defaultRpcEndpoints) } : {}),
+    };
+  }
+
+  return createChainDefinitionSeed(input);
 };
 
 export class MemoryWalletChainSelectionPort implements WalletChainSelectionPort {
@@ -635,7 +680,7 @@ export type TestBackgroundContext = {
 
 // Setup options type
 export type SetupBackgroundOptions = {
-  chainSeed?: ChainMetadata[];
+  chainSeed?: TestChainSeedInput[];
   walletChainSelectionSeed?: WalletChainSelectionRecord | null;
   providerChainSelectionSeed?: ProviderChainSelectionRecord[];
   settingsSeed?: SettingsRecord | null;
@@ -664,7 +709,7 @@ export type SetupBackgroundOptions = {
  * like auto-approval for streamlined test scenarios.
  */
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
-  const chainSeed = options.chainSeed ?? [createChainMetadata()];
+  const chainSeed = options.chainSeed ?? [createChainDefinitionSeed()];
   const chainDefinitionsPort = options.chainDefinitionsPort ?? new MemoryChainDefinitionsPort();
   const walletChainSelectionPort = new MemoryWalletChainSelectionPort(options.walletChainSelectionSeed ?? null);
   const providerChainSelectionPort = new MemoryProviderChainSelectionPort(options.providerChainSelectionSeed ?? []);
@@ -710,7 +755,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   const runtime = createBackgroundRuntime({
     supportedChains: {
-      seed: chainSeed,
+      seed: chainSeed.map(toChainDefinitionSeed),
     },
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,

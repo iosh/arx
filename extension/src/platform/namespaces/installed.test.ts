@@ -54,8 +54,10 @@ const createWalletModuleForNamespace = (namespace: string): WalletNamespaceModul
         },
         chainSeeds: module.engine.facts.chainSeeds?.map((chain) => ({
           ...chain,
-          namespace,
-          chainRef: `${namespace}:1`,
+          definition: {
+            ...chain.definition,
+            chainRef: `${namespace}:1`,
+          },
         })),
       },
     },

@@ -1,6 +1,7 @@
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
+import type { ChainDefinition } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 import type {
   RequestPermissionsApprovalPayload,
   RequestPermissionsApprovalResult,
@@ -63,7 +64,11 @@ export type ApprovalRequestByKind = {
     typedData: string;
   };
   [ApprovalKinds.SwitchChain]: { chainRef: ChainRef };
-  [ApprovalKinds.AddChain]: { metadata: ChainMetadata; isUpdate: boolean };
+  [ApprovalKinds.AddChain]: {
+    definition: ChainDefinition;
+    defaultRpcEndpoints: readonly RpcEndpoint[];
+    isUpdate: boolean;
+  };
 };
 
 export type ApprovalAccountSelectionDecision = {

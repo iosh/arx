@@ -4,7 +4,6 @@ import type { UiAccountsAccess, UiSessionAccess } from "./types.js";
 
 const selectedChain = {
   chainRef: "eip155:1",
-  chainId: "0x1",
   namespace: "eip155",
   displayName: "Ethereum",
   shortName: "eth",

@@ -1,40 +1,37 @@
 import { describe, expect, it } from "vitest";
-import type { ChainMetadata } from "../../../../chains/metadata.js";
+import type { ChainDefinition } from "../../../../chains/definition.js";
 import { resolveSwitchEthereumChainTarget } from "./resolveSwitchEthereumChainTarget.js";
 
-const MAINNET: ChainMetadata = {
+const MAINNET = {
   chainRef: "eip155:1",
   namespace: "eip155",
   chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.ethereum.example", type: "public" }],
 };
 
-const BASE: ChainMetadata = {
+const BASE = {
   chainRef: "eip155:8453",
   namespace: "eip155",
   chainId: "0x2105",
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
 };
 
-const SOLANA: ChainMetadata = {
+const SOLANA = {
   chainRef: "eip155:101",
   namespace: "solana",
   chainId: "101",
   displayName: "Solana Mainnet",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
-  rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
-const setup = (available: ChainMetadata[]) => {
+const setup = (available: Array<ChainDefinition & { namespace: string; chainId: string }>) => {
   return {
     supportedChains: {
       getChain: (chainRef: string) => {
-        const metadata = available.find((chain) => chain.chainRef === chainRef);
-        return metadata ? { metadata } : null;
+        const chain = available.find((entry) => entry.chainRef === chainRef);
+        return chain ? { definition: chain, namespace: chain.namespace } : null;
       },
     } as const,
     chainRpc: {

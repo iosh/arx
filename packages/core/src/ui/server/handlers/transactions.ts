@@ -62,7 +62,12 @@ export const createTransactionsHandlers = (deps: {
       assertUnlocked(deps.session);
 
       const resolvedChainRef = chainRef ?? deps.chains.getSelectedChainView().chainRef;
-      const chain = deps.chains.requireAvailableChainMetadata(resolvedChainRef);
+      const chain = deps.chains.findAvailableChainView({ chainRef: resolvedChainRef });
+      if (!chain) {
+        throw new ChainNotSupportedError({
+          message: `Send transaction is not supported for chain "${resolvedChainRef}" yet.`,
+        });
+      }
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
       const sendSupported =
         Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);

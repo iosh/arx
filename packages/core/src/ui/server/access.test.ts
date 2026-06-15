@@ -44,7 +44,6 @@ const createTransactionAccess = () =>
 const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSnapshot => ({
   chain: {
     chainRef,
-    chainId: chainRef === "eip155:10" ? "0xa" : "0x1",
     namespace: "eip155",
     displayName: chainRef === "eip155:10" ? "Optimism" : "Ethereum",
     shortName: null,
@@ -135,11 +134,10 @@ const createUiAccess = (options: { read?: UiWalletSnapshotReadModel } = {}) =>
           getActiveChainViewForNamespace: () => ({ namespace: "eip155", chainRef: "eip155:1" }),
           getSelectedNamespace: () => "eip155",
           getSelectedChainView: () => ({ namespace: "eip155", chainRef: "eip155:1" }),
-          requireAvailableChainMetadata: () => ({
-            namespace: "eip155",
+          requireAvailableChainDefinition: () => ({
             chainRef: "eip155:1",
             displayName: "Ethereum",
-            rpcEndpoints: [],
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
           }),
         },
         accountCodecs: {

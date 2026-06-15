@@ -4,7 +4,6 @@ import type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount } fro
 
 export type ChainSnapshot = {
   chainRef: ChainRef;
-  chainId: string;
   namespace: string;
   displayName: string;
   shortName: string | null;

@@ -1,6 +1,7 @@
 import { deriveApprovalReviewContext } from "../../../approvals/chainContext.js";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../approvals/queue/types.js";
 import { getApprovalSelectableAccounts } from "../../../approvals/shared.js";
+import { eip155ChainIdHexFromChainRef } from "../../../chains/eip155/format.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
 import type { TransactionApproval, TransactionsService } from "../../../transactions/TransactionsService.js";
@@ -68,7 +69,7 @@ const toDetailMeta = (record: ApprovalRecord) => {
 
 const getApprovalRequestChainRef = (record: ApprovalRecord): string | undefined => {
   if (isApprovalRecord(record, ApprovalKinds.AddChain)) {
-    return record.request.metadata.chainRef;
+    return record.request.definition.chainRef;
   }
 
   if (
@@ -194,7 +195,7 @@ const buildStaticDetail = (
         },
         request: {
           chainRef: reviewChain.chainRef,
-          ...(target.chainId ? { chainId: target.chainId } : {}),
+          chainId: eip155ChainIdHexFromChainRef(reviewChain.chainRef),
           ...(target.displayName ? { displayName: target.displayName } : {}),
         },
         review: null,
@@ -202,10 +203,13 @@ const buildStaticDetail = (
     }
 
     case ApprovalKinds.AddChain: {
-      const meta = record.request.metadata;
-      const rpcUrls = Array.from(new Set(meta.rpcEndpoints.map((entry) => entry.url.trim()).filter(Boolean)));
+      const definition = record.request.definition;
+      const rpcUrls = Array.from(
+        new Set(record.request.defaultRpcEndpoints.map((entry) => entry.url.trim()).filter(Boolean)),
+      );
       const blockExplorerUrl =
-        meta.blockExplorers?.find((entry) => entry.type === "default")?.url ?? meta.blockExplorers?.[0]?.url;
+        definition.blockExplorers?.find((entry) => entry.type === "default")?.url ??
+        definition.blockExplorers?.[0]?.url;
 
       return {
         ...toDetailMeta(record),
@@ -216,15 +220,15 @@ const buildStaticDetail = (
         },
         request: {
           chainRef: record.chainRef,
-          chainId: meta.chainId,
-          displayName: meta.displayName,
+          chainId: eip155ChainIdHexFromChainRef(definition.chainRef),
+          displayName: definition.displayName,
           rpcUrls,
-          ...(meta.nativeCurrency
+          ...(definition.nativeCurrency
             ? {
                 nativeCurrency: {
-                  name: meta.nativeCurrency.name,
-                  symbol: meta.nativeCurrency.symbol,
-                  decimals: meta.nativeCurrency.decimals,
+                  name: definition.nativeCurrency.name,
+                  symbol: definition.nativeCurrency.symbol,
+                  decimals: definition.nativeCurrency.decimals,
                 },
               }
             : {}),

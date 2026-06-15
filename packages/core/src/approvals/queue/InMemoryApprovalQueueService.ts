@@ -47,8 +47,8 @@ type CreateInMemoryApprovalQueueServiceOptions = {
 };
 
 const getApprovalRequestChainRef = (request: ApprovalCreateParams): ApprovalCreateParams["chainRef"] => {
-  if ("metadata" in request.request) {
-    return request.request.metadata.chainRef;
+  if ("definition" in request.request) {
+    return request.request.definition.chainRef;
   }
 
   return request.request.chainRef;
@@ -139,16 +139,19 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
     }
   }
 
-  if ("metadata" in request.request && request.request.metadata.namespace !== request.namespace) {
-    throw new RpcInvalidParamsError({
-      message: "Add-chain approval metadata namespace must match the approval record namespace.",
-      details: {
-        approvalId: request.approvalId,
-        kind: request.kind,
-        namespace: request.namespace,
-        metadataNamespace: request.request.metadata.namespace,
-      },
-    });
+  if ("definition" in request.request) {
+    const definitionNamespace = parseChainRef(request.request.definition.chainRef).namespace;
+    if (definitionNamespace !== request.namespace) {
+      throw new RpcInvalidParamsError({
+        message: "Add-chain approval definition namespace must match the approval record namespace.",
+        details: {
+          approvalId: request.approvalId,
+          kind: request.kind,
+          namespace: request.namespace,
+          definitionNamespace,
+        },
+      });
+    }
   }
 };
 

@@ -11,7 +11,6 @@ const CHAIN_VIEWS = {
     return {
       namespace,
       chainRef,
-      chainId: "0x1",
       displayName: chainRef,
       shortName: null,
       icon: null,
@@ -27,7 +26,6 @@ const CHAIN_VIEWS = {
       ? {
           namespace: chainRef.split(":")[0] ?? "eip155",
           chainRef,
-          chainId: "0x1",
           displayName: `Chain ${chainRef}`,
           shortName: null,
           icon: null,
@@ -319,15 +317,13 @@ describe("createApprovalReadService", () => {
         createdAt: 6,
         request: {
           isUpdate: false,
-          metadata: {
+          definition: {
             chainRef: "eip155:8453",
-            namespace: "eip155",
-            chainId: "0x2105",
             displayName: "Base",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcEndpoints: [{ url: "https://mainnet.base.org", type: "public" }],
             blockExplorers: [{ url: "https://basescan.org", type: "default" }],
           },
+          defaultRpcEndpoints: [{ url: "https://mainnet.base.org", type: "public" }],
         },
       }),
     ]);
@@ -350,7 +346,7 @@ describe("createApprovalReadService", () => {
       chainRef: "eip155:10",
       request: {
         chainRef: "eip155:10",
-        chainId: "0x1",
+        chainId: "0xa",
         displayName: "Chain eip155:10",
       },
     });

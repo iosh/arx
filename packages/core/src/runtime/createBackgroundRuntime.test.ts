@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import { ApprovalKinds } from "../approvals/index.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
@@ -29,31 +30,40 @@ import {
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
-const MAINNET_CHAIN: ChainMetadata = {
+type TestChain = ChainMetadata & {
+  defaultRpcEndpoints: readonly RpcEndpoint[];
+};
+
+const toChainDefinitionSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: deriveChainDefinitionFromMetadata(chain),
+  defaultRpcEndpoints: [...chain.defaultRpcEndpoints],
+});
+
+const MAINNET_CHAIN: TestChain = {
   chainRef: "eip155:1",
   namespace: "eip155",
   chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.mainnet", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.mainnet", type: "public" }],
 };
 
-const ALT_CHAIN: ChainMetadata = {
+const ALT_CHAIN: TestChain = {
   chainRef: "eip155:10",
   namespace: "eip155",
   chainId: "0xa",
   displayName: "Alt Chain",
   nativeCurrency: { name: "Alter", symbol: "ALT", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
-const BASE_CHAIN: ChainMetadata = {
+const BASE_CHAIN: TestChain = {
   chainRef: "eip155:8453",
   namespace: "eip155",
   chainId: "0x2105",
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.base", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.base", type: "public" }],
 };
 
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
@@ -80,7 +90,7 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
 });
 
 const createTestRuntime = (params?: {
-  chainSeed?: ChainMetadata[];
+  chainSeed?: TestChain[];
   chainDefinitionsPort?: MemoryChainDefinitionsPort;
   walletChainSelectionPort?: MemoryWalletChainSelectionPort;
   providerChainSelectionPort?: MemoryProviderChainSelectionPort;
@@ -102,7 +112,7 @@ const createTestRuntime = (params?: {
   return createBackgroundRuntime({
     supportedChains: {
       ...(params?.supportedChains ?? {}),
-      ...(params?.chainSeed ? { seed: params.chainSeed } : {}),
+      ...(params?.chainSeed ? { seed: params.chainSeed.map(toChainDefinitionSeed) } : {}),
     },
     namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
     rpcAccessPolicy: params?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY,
@@ -227,7 +237,7 @@ const createHandlersForRuntime = (
         ),
         getSelectedNamespace: runtime.services.chainViews.getSelectedNamespace.bind(runtime.services.chainViews),
         getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
-        requireAvailableChainMetadata: runtime.services.chainViews.requireAvailableChainMetadata.bind(
+        requireAvailableChainDefinition: runtime.services.chainViews.requireAvailableChainDefinition.bind(
           runtime.services.chainViews,
         ),
         selectWalletChain: runtime.services.chainActivation.selectWalletChain.bind(runtime.services.chainActivation),

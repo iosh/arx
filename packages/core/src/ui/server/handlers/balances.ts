@@ -10,11 +10,16 @@ export const createBalancesHandlers = (deps: {
   return {
     "ui.balances.getNative": async ({ chainRef, address }) => {
       assertUnlocked(deps.session);
-      const chain = deps.chains.requireAvailableChainMetadata(chainRef);
-      const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
+      const namespace = deps.chains.findAvailableChainView({ chainRef })?.namespace;
+      if (!namespace) {
+        throw new ChainNotSupportedError({
+          message: `Native balance is not supported for chain "${chainRef}" yet.`,
+        });
+      }
+      const uiBindings = deps.namespaceBindings.getUi(namespace);
       if (!uiBindings?.getNativeBalance) {
         throw new ChainNotSupportedError({
-          message: `Native balance is not supported for namespace "${chain.namespace}" yet.`,
+          message: `Native balance is not supported for namespace "${namespace}" yet.`,
         });
       }
 

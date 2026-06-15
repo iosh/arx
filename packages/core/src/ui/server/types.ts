@@ -112,7 +112,7 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
     | "getActiveChainViewForNamespace"
     | "getSelectedNamespace"
     | "getSelectedChainView"
-    | "requireAvailableChainMetadata"
+    | "requireAvailableChainDefinition"
   >;
 
 export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountKeyFromAddress">;

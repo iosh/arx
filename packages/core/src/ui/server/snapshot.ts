@@ -51,7 +51,6 @@ export const buildUiSnapshot = (deps: {
   const snapshot: UiSnapshot = {
     chain: {
       chainRef: chain.chainRef,
-      chainId: chain.chainId,
       namespace: chain.namespace,
       displayName: chain.displayName,
       shortName: chain.shortName ?? null,

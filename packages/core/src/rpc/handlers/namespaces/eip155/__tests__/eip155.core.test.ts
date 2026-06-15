@@ -2,7 +2,12 @@ import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
 import { ApprovalKinds } from "../../../../../approvals/index.js";
-import type { ChainMetadata } from "../../../../../chains/metadata.js";
+import type { ChainDefinitionSeed } from "../../../../../chains/definition.js";
+import {
+  type ChainMetadata,
+  deriveChainDefinitionFromMetadata,
+  type RpcEndpoint,
+} from "../../../../../chains/metadata.js";
 import type { RequestPermissionsApprovalPayload } from "../../../../../permissions/service/types.js";
 import {
   MemoryChainDefinitionsPort,
@@ -22,6 +27,14 @@ import {
   TEST_MNEMONIC,
   waitForChainInNetwork,
 } from "./eip155.test.helpers.js";
+
+const toChainSeed = (
+  metadata: ChainMetadata,
+  defaultRpcEndpoints: readonly RpcEndpoint[],
+): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: deriveChainDefinitionFromMetadata(metadata),
+  defaultRpcEndpoints,
+});
 
 describe("eip155 handlers - core error paths", () => {
   it("returns chain.not_found for wallet_switchEthereumChain when the chain is unknown", async () => {
@@ -406,15 +419,15 @@ describe("eip155 handlers - core error paths", () => {
 
       const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.displayName).toBe("Base Mainnet");
-      expect(networkChain.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
+      expect(runtime.services.chainRpc.getEndpoints(ADDED_CHAIN_REF)[0]?.url).toBe("https://mainnet.base.org");
 
       const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
-      expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
+      expect(registryEntry?.definition.displayName).toBe("Base Mainnet");
       await expect(chainDefinitionsPort.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
         chainRef: ADDED_CHAIN_REF,
         source: "custom",
         createdByOrigin: ORIGIN,
-        metadata: {
+        definition: {
           chainRef: ADDED_CHAIN_REF,
           displayName: "Base Mainnet",
         },
@@ -594,25 +607,26 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
-      expect(networkChain.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
+      expect(runtime.services.chainRpc.getEndpoints(ADDED_CHAIN_REF)[0]?.url).toBe("https://new-rpc.example");
 
       const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
-      expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
+      expect(registryEntry?.definition.displayName).toBe("Base Mainnet");
+      await expect(runtime.services.chainRpcDefaultEndpoints.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
+        rpcEndpoints: [{ url: "https://new-rpc.example", type: "public" }],
+      });
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
     }
   });
 
-  it("treats semantically equivalent builtin wallet_addEthereumChain requests as a no-op", async () => {
+  it("updates builtin default RPC endpoints without changing the builtin chain definition", async () => {
     const mainnet: ChainMetadata = {
       chainRef: "eip155:1",
       namespace: "eip155",
       chainId: "0x1",
       displayName: "Ethereum",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [{ url: "https://rpc.ethereum.example", type: "public" }],
     };
 
     const existing: ChainMetadata = {
@@ -620,26 +634,24 @@ describe("eip155 handlers - core error paths", () => {
       namespace: "eip155",
       chainId: "0X2105",
       displayName: "Base Mainnet",
-      shortName: "base",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [
-        {
-          url: "https://secondary.base.org/",
-          type: "authenticated",
-          headers: { Authorization: "Bearer token" },
-        },
-        { url: "https://mainnet.base.org", type: "public" },
-      ],
-      blockExplorers: [
-        { type: "secondary", url: "https://basescan.org/", title: "BaseScan" },
-        { type: "default", url: "https://www.base.org" },
-      ],
-      icon: { url: "https://assets.example.com/base.svg", format: "svg" },
+      blockExplorers: [{ type: "default", url: "https://basescan.org", title: "Base Mainnet" }],
     };
 
     const runtime = createRuntime({
       supportedChains: {
-        seed: [mainnet, ALT_CHAIN as ChainMetadata, existing],
+        seed: [
+          toChainSeed(mainnet, [{ url: "https://rpc.ethereum.example", type: "public" }]),
+          toChainSeed(ALT_CHAIN as ChainMetadata, [{ url: "https://rpc.optimism.example", type: "public" }]),
+          toChainSeed(existing, [
+            {
+              url: "https://secondary.base.org/",
+              type: "authenticated",
+              headers: { Authorization: "Bearer token" },
+            },
+            { url: "https://mainnet.base.org", type: "public" },
+          ]),
+        ],
       },
     });
     await runtime.lifecycle.initialize();
@@ -649,6 +661,13 @@ describe("eip155 handlers - core error paths", () => {
     let approvalRequested = false;
     const unsubscribeApproval = runtime.services.approvals.onCreated(() => {
       approvalRequested = true;
+    });
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind === ApprovalKinds.AddChain) {
+        await runtime.services.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
+        return true;
+      }
+      return false;
     });
 
     try {
@@ -660,23 +679,26 @@ describe("eip155 handlers - core error paths", () => {
             params: [
               {
                 ...ADD_CHAIN_PARAMS,
-                rpcUrls: ["https://mainnet.base.org/", "https://secondary.base.org"],
-                blockExplorerUrls: ["https://www.base.org/", "https://basescan.org"],
+                rpcUrls: ["https://mainnet.base.org"],
               },
             ] as unknown as JsonRpcParams,
           },
         }),
       ).resolves.toBeNull();
 
-      expect(approvalRequested).toBe(false);
+      expect(approvalRequested).toBe(true);
       expect(runtime.services.supportedChains.getChain(ADDED_CHAIN_REF)).toMatchObject({
         source: "builtin",
-        metadata: {
+        definition: {
           chainRef: existing.chainRef,
           displayName: existing.displayName,
         },
       });
+      await expect(runtime.services.chainRpcDefaultEndpoints.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
+        rpcEndpoints: [{ url: "https://mainnet.base.org", type: "public" }],
+      });
     } finally {
+      teardownApprovalResponder();
       unsubscribeApproval();
       runtime.lifecycle.shutdown();
     }

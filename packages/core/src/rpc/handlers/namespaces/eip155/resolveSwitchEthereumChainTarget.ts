@@ -1,7 +1,7 @@
 import { eip155ChainRefFromChainIdHex } from "../../../../chains/eip155/format.js";
 import { ChainNotCompatibleError, ChainNotFoundError } from "../../../../chains/errors.js";
 import type { ChainRef } from "../../../../chains/ids.js";
-import { type ChainMetadata, cloneChainMetadata } from "../../../../chains/metadata.js";
+import { type ChainDefinition, cloneChainDefinition } from "../../../../chains/metadata.js";
 
 export type ResolveSwitchEthereumChainTargetParams = {
   chainId: string;
@@ -9,7 +9,7 @@ export type ResolveSwitchEthereumChainTargetParams = {
 
 type SwitchEthereumChainTargetDeps = {
   supportedChains: {
-    getChain(chainRef: ChainRef): { metadata: ChainMetadata } | null;
+    getChain(chainRef: ChainRef): { definition: ChainDefinition; namespace: string } | null;
   };
   chainRpc: {
     hasEndpoints(chainRef: ChainRef): boolean;
@@ -25,7 +25,7 @@ export const resolveSwitchEthereumChainTarget = ({
   supportedChains,
   chainRpc,
   chainId,
-}: ResolveSwitchEthereumChainTargetDeps): ChainMetadata => {
+}: ResolveSwitchEthereumChainTargetDeps): ChainDefinition => {
   const targetChainRef = eip155ChainRefFromChainIdHex(chainId);
 
   if (!chainRpc.hasEndpoints(targetChainRef)) {
@@ -37,12 +37,11 @@ export const resolveSwitchEthereumChainTarget = ({
     throw new ChainNotFoundError();
   }
 
-  const target = cloneChainMetadata(entry.metadata);
-  if (target.namespace !== "eip155") {
+  if (entry.namespace !== "eip155") {
     throw new ChainNotCompatibleError({
       message: "Requested chain is not compatible with wallet_switchEthereumChain",
     });
   }
 
-  return target;
+  return cloneChainDefinition(entry.definition);
 };

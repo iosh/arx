@@ -49,17 +49,14 @@ export type ProviderRuntimeRequestContext = RpcProviderRequestContext;
 
 export type ProviderRuntimeExecutionContext = RpcProviderExecutionContext;
 
-export type ProviderRuntimeRequestExecution = {
-  requestScope: ProviderRuntimeRequestScope;
+export type ProviderRequestScope = ProviderRuntimeRequestScope;
+
+export type ProviderRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
+  namespace: string;
 };
 
 export type ProviderRuntimeRpcContext = {
   namespace: string;
-};
-
-export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
-  context: ProviderRuntimeRpcContext;
-  execution: ProviderRuntimeRequestExecution;
 };
 
 export type ProviderRuntimeRpcError =
@@ -76,12 +73,12 @@ export type ProviderRuntimeRpcError =
 
 export type ProviderRuntimeRpcResponse =
   | {
-      id: ProviderRuntimeRpcRequest["id"];
+      id: ProviderRequestEnvelope["id"];
       jsonrpc: "2.0";
       result: unknown;
     }
   | {
-      id: ProviderRuntimeRpcRequest["id"];
+      id: ProviderRequestEnvelope["id"];
       jsonrpc: "2.0";
       error: ProviderRuntimeRpcError;
     };
@@ -99,7 +96,10 @@ export type ProviderRuntimeAccess = {
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): Unsubscribe;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
-  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
+  request(input: {
+    scope: ProviderRequestScope;
+    request: ProviderRequestEnvelope;
+  }): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   listPermittedAccounts(input: ProviderRuntimeAccountsQuery): Promise<string[]>;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;

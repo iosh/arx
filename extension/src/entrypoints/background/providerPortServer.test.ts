@@ -88,7 +88,7 @@ const buildTestConnectionScopeKey = ({ origin, namespace }: { origin: string; na
 const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
   activateConnectionScope?: WalletProvider["activateConnectionScope"];
-  executeRpcRequest?: WalletProvider["executeRpcRequest"];
+  request?: WalletProvider["request"];
   encodeRuntimeRpcError?: WalletProvider["encodeRuntimeRpcError"];
   cancelRequestScope?: WalletProvider["cancelRequestScope"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
@@ -156,12 +156,12 @@ const createServerHarness = (options?: {
   const deactivateConnectionScope = vi.fn((input: { origin: string; namespace: string }) => {
     activeConnectionScopes.delete(buildTestConnectionScopeKey(input));
   });
-  const executeRpcRequest = vi.fn(
-    options?.executeRpcRequest ??
-      (async (request) =>
+  const request = vi.fn(
+    options?.request ??
+      (async (input) =>
         ({
-          id: request.id,
-          jsonrpc: request.jsonrpc,
+          id: input.request.id,
+          jsonrpc: input.request.jsonrpc,
           result: null,
         }) satisfies ProviderRuntimeRpcResponse),
   );
@@ -186,7 +186,7 @@ const createServerHarness = (options?: {
       connectionStateChangedHandlers.add(listener);
       return () => connectionStateChangedHandlers.delete(listener);
     },
-    executeRpcRequest,
+    request,
     encodeRuntimeRpcError,
     cancelRequestScope,
     subscribeSessionUnlocked: (listener) => {
@@ -220,7 +220,7 @@ const createServerHarness = (options?: {
       getConnectionState,
       activateConnectionScope,
       deactivateConnectionScope,
-      executeRpcRequest,
+      request,
       encodeRuntimeRpcError,
       cancelRequestScope,
     },
@@ -368,10 +368,10 @@ describe("providerPortServer", () => {
 
   it("rejects pending requests on same-scope session rotation without disconnect or reconnect churn", async () => {
     let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
-      throw new Error("executeRpcRequest resolver not initialized");
+      throw new Error("request resolver not initialized");
     };
     const harness = createServerHarness({
-      executeRpcRequest: () =>
+      request: () =>
         new Promise<ProviderRuntimeRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
@@ -395,7 +395,7 @@ describe("providerPortServer", () => {
       },
     });
 
-    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.mocks.request).toHaveBeenCalledTimes(1));
 
     handshake(port, "session-2", "eip155");
 
@@ -454,33 +454,32 @@ describe("providerPortServer", () => {
       },
     });
 
-    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
-    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as Parameters<
-      WalletProvider["executeRpcRequest"]
-    >[0];
+    await vi.waitFor(() => expect(harness.mocks.request).toHaveBeenCalledTimes(1));
+    const input = harness.mocks.request.mock.calls[0]?.[0] as Parameters<WalletProvider["request"]>[0];
 
-    expect(request.context).toMatchObject({
+    expect(input.request).toMatchObject({
+      id: "rpc-1",
+      jsonrpc: "2.0",
+      method: "wallet_requestPermissions",
       namespace: "eip155",
     });
-    expect(request.execution).toMatchObject({
-      requestScope: {
-        transport: "provider",
-        sessionId: "session-1",
-        portId: expect.any(String),
-        origin: "https://example.com",
-      },
+    expect(input.scope).toMatchObject({
+      transport: "provider",
+      sessionId: "session-1",
+      portId: expect.any(String),
+      origin: "https://example.com",
     });
-    expect(request.context).not.toHaveProperty("chainRef");
+    expect(input.request).not.toHaveProperty("chainRef");
   });
 
   it("finalizes disconnect state and cancels provider-scoped approvals when a port disconnects", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
 
     let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
-      throw new Error("executeRpcRequest resolver not initialized");
+      throw new Error("request resolver not initialized");
     };
     const harness = createServerHarness({
-      executeRpcRequest: () =>
+      request: () =>
         new Promise<ProviderRuntimeRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
@@ -503,7 +502,7 @@ describe("providerPortServer", () => {
         method: "eth_chainId",
       },
     });
-    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.mocks.request).toHaveBeenCalledTimes(1));
 
     port.triggerDisconnect();
 
@@ -763,6 +762,6 @@ describe("providerPortServer", () => {
       },
     });
 
-    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.mocks.request).toHaveBeenCalledTimes(1));
   });
 });

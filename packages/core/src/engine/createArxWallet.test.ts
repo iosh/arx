@@ -104,19 +104,6 @@ const createUiPlatform = () => ({
   openNotificationPopup: vi.fn(async () => ({ activationPath: "focus" as const })),
 });
 
-const createProviderContext = () => ({
-  namespace: EIP155_NAMESPACE,
-});
-
-const createProviderExecutionContext = () => ({
-  requestScope: {
-    transport: "provider" as const,
-    origin: ORIGIN,
-    portId: PROVIDER_PORT_ID,
-    sessionId: PROVIDER_SESSION_ID,
-  },
-});
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -523,6 +510,7 @@ describe("createArxWallet", () => {
         },
       );
       expect(stateChanged).toHaveBeenCalled();
+      await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       wallet.session.lock("manual");
 
       await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
@@ -536,12 +524,19 @@ describe("createArxWallet", () => {
         },
       });
       await expect(
-        provider.executeRpcRequest({
-          id: "rpc-accounts-locked",
-          jsonrpc: "2.0",
-          method: "eth_accounts",
-          context: createProviderContext(),
-          execution: createProviderExecutionContext(),
+        provider.request({
+          scope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: PROVIDER_PORT_ID,
+            sessionId: PROVIDER_SESSION_ID,
+          },
+          request: {
+            id: "rpc-accounts-locked",
+            jsonrpc: "2.0",
+            method: "eth_accounts",
+            namespace: EIP155_NAMESPACE,
+          },
         }),
       ).resolves.toMatchObject({
         id: "rpc-accounts-locked",

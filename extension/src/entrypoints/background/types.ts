@@ -1,8 +1,4 @@
-import type {
-  ProviderRuntimeConnectionState,
-  ProviderRuntimeRpcContext,
-  ProviderRuntimeSnapshot,
-} from "@arx/core/runtime";
+import type { ProviderRuntimeConnectionState, ProviderRuntimeSnapshot } from "@arx/core/runtime";
 
 export type ConnectedPortContext = {
   origin: string;
@@ -16,4 +12,3 @@ export type PortContext = ConnectedPortContext | ProviderSessionContext;
 
 export type ProviderBridgeSnapshot = ProviderRuntimeSnapshot;
 export type ProviderBridgeConnectionState = ProviderRuntimeConnectionState;
-export type ProviderBridgeRpcContext = ProviderRuntimeRpcContext;

@@ -42,11 +42,12 @@ import type {
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
   ProviderConnectionStateChangedHandler,
+  ProviderRequestEnvelope,
+  ProviderRequestScope,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcError,
-  ProviderRuntimeRpcRequest,
   ProviderRuntimeRpcResponse,
 } from "../runtime/provider/types.js";
 import type {
@@ -345,7 +346,10 @@ export type WalletProvider = Readonly<{
   activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
   deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): () => void;
-  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse>;
+  request(input: {
+    scope: ProviderRequestScope;
+    request: ProviderRequestEnvelope;
+  }): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;

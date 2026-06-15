@@ -1,13 +1,8 @@
 import type { WalletProvider } from "@arx/core/engine";
-import type { JsonRpcParams } from "@arx/core/rpc";
-import type {
-  ProviderRuntimeRequestExecution,
-  ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcRequest,
-} from "@arx/core/runtime";
+import type { ProviderRuntimeRequestScope } from "@arx/core/runtime";
 import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
-import { buildProviderRpcContext } from "../rpc";
+import { createCoreProviderRequestEnvelope } from "../rpc";
 import type { ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
@@ -31,7 +26,6 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
 
     const sessionContext = getSessionContext(port);
     const origin = sessionContext.origin;
-    const providerContext = buildProviderRpcContext(sessionContext);
     const portId = getOrCreatePortId(port);
 
     const requestScope: ProviderRuntimeRequestScope = {
@@ -40,22 +34,16 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       portId,
       sessionId: envelope.sessionId,
     };
-    const execution: ProviderRuntimeRequestExecution = { requestScope };
-
-    const request: ProviderRuntimeRpcRequest = {
-      id: envelope.payload.id,
-      jsonrpc: envelope.payload.jsonrpc,
-      method: envelope.payload.method,
-      params: envelope.payload.params as JsonRpcParams,
-      context: providerContext,
-      execution,
-    };
+    const request = createCoreProviderRequestEnvelope(sessionContext, envelope.payload);
 
     let provider: WalletProvider | null = null;
 
     try {
       provider = await getProvider();
-      const response = await provider.executeRpcRequest(request);
+      const response = await provider.request({
+        scope: requestScope,
+        request,
+      });
 
       sendReply(port, envelope.sessionId, envelope.id, response as ProviderRpcResponse);
     } catch (error) {

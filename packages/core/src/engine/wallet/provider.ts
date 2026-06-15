@@ -27,7 +27,7 @@ export const createWalletProvider = (deps: {
       dappConnections.remove(input);
     },
     subscribeConnectionStateChanged: (listener) => runtimeAccess.subscribeConnectionStateChanged(listener),
-    executeRpcRequest: (request) => runtimeAccess.executeRpcRequest(request),
+    request: (input) => runtimeAccess.request(input),
     encodeRuntimeRpcError: (error) => runtimeAccess.encodeRuntimeRpcError(error),
     cancelRequestScope: (input) => runtimeAccess.cancelRequestScope(input),
     subscribeSessionUnlocked: (listener) => runtimeAccess.subscribeSessionUnlocked(listener),

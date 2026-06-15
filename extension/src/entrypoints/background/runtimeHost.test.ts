@@ -126,7 +126,7 @@ const makeRuntime = () => {
     })),
     deactivateConnectionScope: vi.fn(),
     subscribeConnectionStateChanged: onConnectionStateChanged,
-    executeRpcRequest: vi.fn(),
+    request: vi.fn(),
     encodeRuntimeRpcError: vi.fn(),
     cancelRequestScope: vi.fn(async () => 0),
   };

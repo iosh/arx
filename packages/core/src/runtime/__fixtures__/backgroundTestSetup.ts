@@ -910,22 +910,28 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     const requestId = `${++nextRequestId}`;
     const hintPayload = buildRpcHint(rpcHint);
     const namespace = deriveMethodNamespace(method, hintPayload);
+    const requestNamespace = namespace ?? hintPayload.namespace ?? "eip155";
 
-    const response = await runtime.providerAccess.executeRpcRequest({
-      id: requestId,
-      jsonrpc: "2.0",
-      method,
-      ...(params !== undefined ? { params } : {}),
-      context: {
-        namespace: namespace ?? hintPayload.namespace ?? "eip155",
+    if (origin !== internalOrigin) {
+      await runtime.providerAccess.activateConnectionScope({
+        origin,
+        namespace: requestNamespace,
+      });
+    }
+
+    const response = await runtime.providerAccess.request({
+      scope: {
+        transport: "provider",
+        origin,
+        portId,
+        sessionId,
       },
-      execution: {
-        requestScope: {
-          transport: "provider",
-          origin,
-          portId,
-          sessionId,
-        },
+      request: {
+        id: requestId,
+        jsonrpc: "2.0",
+        method,
+        ...(params !== undefined ? { params } : {}),
+        namespace: requestNamespace,
       },
     });
 

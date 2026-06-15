@@ -1,9 +1,22 @@
-import type { ProviderBridgeRpcContext, ProviderSessionContext } from "./types";
+import type { JsonRpcParams } from "@arx/core/rpc";
+import type { ProviderRequestEnvelope } from "@arx/core/runtime";
+import type { ProviderRpcRequest } from "@arx/provider/protocol";
+import type { ProviderSessionContext } from "./types";
 
-export type ProviderBridgeRequestContext = ProviderBridgeRpcContext;
-
-export const buildProviderRpcContext = (portContext: ProviderSessionContext): ProviderBridgeRequestContext => {
-  return {
+export const createCoreProviderRequestEnvelope = (
+  portContext: ProviderSessionContext,
+  request: ProviderRpcRequest,
+): ProviderRequestEnvelope => {
+  const coreRequest: ProviderRequestEnvelope = {
+    id: request.id,
+    jsonrpc: request.jsonrpc,
+    method: request.method,
     namespace: portContext.namespace,
   };
+
+  if (request.params !== undefined) {
+    coreRequest.params = request.params as JsonRpcParams;
+  }
+
+  return coreRequest;
 };

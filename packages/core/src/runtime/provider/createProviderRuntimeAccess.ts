@@ -20,6 +20,8 @@ import type {
   ProviderConnectionScope,
   ProviderConnectionStateChange,
   ProviderConnectionStateChangedHandler,
+  ProviderRequestEnvelope,
+  ProviderRequestScope,
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
@@ -29,7 +31,6 @@ import type {
   ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcError,
-  ProviderRuntimeRpcRequest,
   ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
 } from "./types.js";
@@ -422,19 +423,22 @@ export const createProviderRuntimeAccess = ({
     namespace: string;
   }): Promise<RpcInvocationHint> => {
     const scope = parseProviderConnectionScope(args);
-    await initializeProviderChainSelection(scope);
     return {
       namespace: scope.namespace,
       chainRef: resolveProviderChain(scope).chain.chainRef,
     };
   };
 
-  const executeRpcRequest = async ({
-    context,
-    execution,
-    ...request
-  }: ProviderRuntimeRpcRequest): Promise<ProviderRuntimeRpcResponse> => {
-    const origin = execution.requestScope.origin;
+  const request = async ({
+    scope,
+    request: envelope,
+  }: {
+    scope: ProviderRequestScope;
+    request: ProviderRequestEnvelope;
+  }): Promise<ProviderRuntimeRpcResponse> => {
+    const { namespace, ...request } = envelope;
+    const origin = scope.origin;
+    const context: ProviderRuntimeRpcContext = { namespace };
     let providerRequestHandle: ProviderRequestHandle | null = null;
 
     const buildErrorResponse = (error: unknown): ProviderRuntimeRpcResponse => ({
@@ -444,7 +448,7 @@ export const createProviderRuntimeAccess = ({
     });
 
     const prepareRequest = async (): Promise<PreparedProviderRuntimeRequest> => {
-      const requestScope = execution.requestScope;
+      const requestScope = scope;
       if (!getIsInitialized()) {
         throw createRuntimeNotInitializedError();
       }
@@ -648,7 +652,7 @@ export const createProviderRuntimeAccess = ({
     );
   });
   subscribeChainRpcStateChanged(() => {
-    void reconcileAllActiveConnectionScopes("network_state_changed");
+    void reconcileAllActiveConnectionScopes("chain_rpc_state_changed");
   });
   subscribeSessionUnlocked(() => {
     void reconcileAllActiveConnectionScopes("session_unlocked");
@@ -675,7 +679,7 @@ export const createProviderRuntimeAccess = ({
     subscribeConnectionStateChanged,
     subscribeSessionUnlocked,
     subscribeSessionLocked,
-    executeRpcRequest,
+    request,
     encodeRuntimeRpcError,
     listPermittedAccounts,
     cancelRequestScope,

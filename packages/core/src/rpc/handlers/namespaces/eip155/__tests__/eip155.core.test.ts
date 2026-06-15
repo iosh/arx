@@ -285,6 +285,10 @@ describe("eip155 handlers - core error paths", () => {
     const otherOrigin = "https://other.example";
 
     try {
+      await runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
       await execute({
         origin: ORIGIN,
         request: {
@@ -308,53 +312,57 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).toBeNull();
 
-      const switchedChainResponse = await runtime.providerAccess.executeRpcRequest({
-        id: "rpc-chain-switched",
-        jsonrpc: "2.0",
-        method: "eth_chainId",
-        context: { namespace: "eip155" },
-        execution: {
-          requestScope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: "provider-port",
-            sessionId: "provider-session",
-          },
+      const switchedChainResponse = await runtime.providerAccess.request({
+        scope: {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "provider-port",
+          sessionId: "provider-session",
+        },
+        request: {
+          id: "rpc-chain-switched",
+          jsonrpc: "2.0",
+          method: "eth_chainId",
+          namespace: "eip155",
         },
       });
       expect(switchedChainResponse).toMatchObject({ result: ALT_CHAIN.chainId });
 
-      const switchedAccountsResponse = await runtime.providerAccess.executeRpcRequest({
-        id: "rpc-accounts-switched",
-        jsonrpc: "2.0",
-        method: "eth_accounts",
-        context: { namespace: "eip155" },
-        execution: {
-          requestScope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: "provider-port",
-            sessionId: "provider-session",
-          },
+      const switchedAccountsResponse = await runtime.providerAccess.request({
+        scope: {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "provider-port",
+          sessionId: "provider-session",
+        },
+        request: {
+          id: "rpc-accounts-switched",
+          jsonrpc: "2.0",
+          method: "eth_accounts",
+          namespace: "eip155",
         },
       });
       expect(switchedAccountsResponse).toMatchObject({ result: [] });
 
-      const fallbackChainResponse = await runtime.providerAccess.executeRpcRequest({
-        id: "rpc-chain-fallback",
-        jsonrpc: "2.0",
-        method: "eth_chainId",
-        context: { namespace: "eip155" },
-        execution: {
-          requestScope: {
-            transport: "provider",
-            origin: otherOrigin,
-            portId: "provider-port-other",
-            sessionId: "provider-session-other",
-          },
+      await runtime.providerAccess.activateConnectionScope({
+        origin: otherOrigin,
+        namespace: "eip155",
+      });
+      const defaultChainResponse = await runtime.providerAccess.request({
+        scope: {
+          transport: "provider",
+          origin: otherOrigin,
+          portId: "provider-port-other",
+          sessionId: "provider-session-other",
+        },
+        request: {
+          id: "rpc-chain-default",
+          jsonrpc: "2.0",
+          method: "eth_chainId",
+          namespace: "eip155",
         },
       });
-      expect(fallbackChainResponse).toMatchObject({ result: mainnet.chainId });
+      expect(defaultChainResponse).toMatchObject({ result: mainnet.chainId });
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();

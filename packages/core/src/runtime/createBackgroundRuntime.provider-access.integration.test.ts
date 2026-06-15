@@ -172,21 +172,43 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     transactionApprovals: runtime.transactions,
   });
 
-const buildProviderContext = (input: { namespace: string }) => {
-  return {
-    namespace: input.namespace,
-  };
-};
-
-const buildProviderExecutionContext = (input: { origin?: string; portId?: string; sessionId?: string }) => {
-  return {
-    requestScope: {
+const requestProviderRpc = (
+  runtime: CreateBackgroundRuntimeResult,
+  input: {
+    id: string;
+    method: string;
+    namespace: string;
+    params?: JsonRpcParams;
+    origin?: string;
+    portId?: string;
+    sessionId?: string;
+  },
+) => {
+  return runtime.providerAccess.request({
+    scope: {
       transport: "provider" as const,
       origin: input.origin ?? ORIGIN,
       portId: input.portId ?? "port-1",
       sessionId: input.sessionId ?? "session-1",
     },
-  };
+    request: {
+      id: input.id,
+      jsonrpc: "2.0",
+      method: input.method,
+      ...(input.params !== undefined ? { params: input.params } : {}),
+      namespace: input.namespace,
+    },
+  });
+};
+
+const activateProviderConnectionScope = async (
+  runtime: CreateBackgroundRuntimeResult,
+  input: { origin?: string; namespace: string },
+) => {
+  await runtime.providerAccess.activateConnectionScope({
+    origin: input.origin ?? ORIGIN,
+    namespace: input.namespace,
+  });
 };
 
 const createTestAccountCodec = (namespace: string): AccountCodec => ({
@@ -360,6 +382,63 @@ describe("createBackgroundRuntime provider access", () => {
         background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
       ).resolves.toMatchObject({
         chainRef: "eip155:1",
+      });
+    } finally {
+      background.destroy();
+    }
+  });
+
+  it("initializes provider chain selection on connection activation, not provider request execution", async () => {
+    const background = await setupBackground({
+      chainSeed: [createChainMetadata(), EIP155_ALT_CHAIN],
+      walletChainSelectionSeed: {
+        id: "wallet-chain-selection",
+        selectedNamespace: "eip155",
+        chainRefByNamespace: { eip155: EIP155_ALT_CHAIN.chainRef },
+        updatedAt: 0,
+      },
+    });
+
+    try {
+      await expect(
+        background.runtime.providerAccess.request({
+          scope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: "port-1",
+            sessionId: "session-1",
+          },
+          request: {
+            id: "rpc-before-activation",
+            jsonrpc: "2.0",
+            method: "eth_chainId",
+            namespace: "eip155",
+          },
+        }),
+      ).resolves.toMatchObject({
+        id: "rpc-before-activation",
+        jsonrpc: "2.0",
+        error: {
+          kind: "ArxError",
+          code: "chain.not_supported",
+        },
+      });
+      expect(background.providerChainSelectionPort.saved).toEqual([]);
+      await expect(
+        background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
+      ).resolves.toBeNull();
+
+      const state = await background.runtime.providerAccess.activateConnectionScope({
+        origin: ORIGIN,
+        namespace: "eip155",
+      });
+
+      expect(state.snapshot.chain.chainRef).toBe(EIP155_ALT_CHAIN.chainRef);
+      expect(background.providerChainSelectionPort.saved).toHaveLength(1);
+      expect(background.providerChainSelectionPort.saved[0]).toMatchObject({
+        origin: ORIGIN,
+        namespace: "eip155",
+        chainRef: EIP155_ALT_CHAIN.chainRef,
       });
     } finally {
       background.destroy();
@@ -606,15 +685,12 @@ describe("createBackgroundRuntime provider access", () => {
           },
         ],
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
 
-      const response = await background.runtime.providerAccess.executeRpcRequest({
+      const response = await requestProviderRpc(background.runtime, {
         id: "rpc-1",
-        jsonrpc: "2.0",
         method: "eth_accounts",
-        context: buildProviderContext({
-          namespace: chain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
+        namespace: chain.namespace,
       });
 
       expect(response).toMatchObject({
@@ -645,6 +721,7 @@ describe("createBackgroundRuntime provider access", () => {
     try {
       await initializeUnlockedSession(background.runtime);
       const { chain } = await deriveActiveAccount(background.runtime);
+      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
 
       let approvalCreatedResolve: (() => void) | null = null;
       let capturedApprovalRequesterId: string | null = null;
@@ -656,14 +733,10 @@ describe("createBackgroundRuntime provider access", () => {
         approvalCreatedResolve?.();
       });
 
-      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+      const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-2",
-        jsonrpc: "2.0",
         method: "eth_requestAccounts",
-        context: buildProviderContext({
-          namespace: chain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
+        namespace: chain.namespace,
       });
 
       await approvalCreated;
@@ -719,6 +792,7 @@ describe("createBackgroundRuntime provider access", () => {
           },
         ],
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
 
       let capturedApprovalId: string | null = null;
       let capturedTransactionId: string | null = null;
@@ -740,10 +814,10 @@ describe("createBackgroundRuntime provider access", () => {
         );
       });
 
-      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+      const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-3",
-        jsonrpc: "2.0",
         method: "eth_sendTransaction",
+        namespace: chain.namespace,
         params: [
           {
             from: address,
@@ -751,10 +825,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        context: buildProviderContext({
-          namespace: chain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
       });
 
       await approvalCreated;
@@ -857,11 +927,12 @@ describe("createBackgroundRuntime provider access", () => {
         chainRef: activeChain.chainRef,
         address,
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
 
-      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+      const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-send-ready",
-        jsonrpc: "2.0",
         method: "eth_sendTransaction",
+        namespace: activeChain.namespace,
         params: [
           {
             from: address,
@@ -869,10 +940,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        context: buildProviderContext({
-          namespace: activeChain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
       });
 
       await approvalCreated;
@@ -963,11 +1030,12 @@ describe("createBackgroundRuntime provider access", () => {
         chainRef: activeChain.chainRef,
         address,
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
 
-      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+      const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-send-broadcast-cancelled",
-        jsonrpc: "2.0",
         method: "eth_sendTransaction",
+        namespace: activeChain.namespace,
         params: [
           {
             from: address,
@@ -975,10 +1043,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        context: buildProviderContext({
-          namespace: activeChain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
       });
 
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
@@ -1072,11 +1136,12 @@ describe("createBackgroundRuntime provider access", () => {
         chainRef: activeChain.chainRef,
         address,
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
 
-      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+      const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-send-sign-cancelled",
-        jsonrpc: "2.0",
         method: "eth_sendTransaction",
+        namespace: activeChain.namespace,
         params: [
           {
             from: address,
@@ -1084,10 +1149,6 @@ describe("createBackgroundRuntime provider access", () => {
             value: "0x0",
           },
         ],
-        context: buildProviderContext({
-          namespace: activeChain.namespace,
-        }),
-        execution: buildProviderExecutionContext({}),
       });
 
       await vi.waitFor(() => expect(createBroadcastInput).toHaveBeenCalledTimes(1));
@@ -1162,12 +1223,13 @@ describe("createBackgroundRuntime provider access", () => {
         chainRef: activeChain.chainRef,
         address,
       });
+      await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
 
       await expect(
-        background.runtime.providerAccess.executeRpcRequest({
+        requestProviderRpc(background.runtime, {
           id: "rpc-send-broadcast-fail",
-          jsonrpc: "2.0",
           method: "eth_sendTransaction",
+          namespace: activeChain.namespace,
           params: [
             {
               from: address,
@@ -1175,10 +1237,6 @@ describe("createBackgroundRuntime provider access", () => {
               value: "0x0",
             },
           ],
-          context: buildProviderContext({
-            namespace: activeChain.namespace,
-          }),
-          execution: buildProviderExecutionContext({}),
         }),
       ).resolves.toMatchObject({
         id: "rpc-send-broadcast-fail",
@@ -1212,14 +1270,10 @@ describe("createBackgroundRuntime provider access", () => {
 
     try {
       await expect(
-        runtime.providerAccess.executeRpcRequest({
+        requestProviderRpc(runtime, {
           id: "rpc-sol-1",
-          jsonrpc: "2.0",
           method: "sol_getBalance",
-          context: buildProviderContext({
-            namespace: "solana",
-          }),
-          execution: buildProviderExecutionContext({}),
+          namespace: "solana",
         }),
       ).resolves.toEqual({
         id: "rpc-sol-1",

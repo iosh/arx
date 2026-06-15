@@ -27,6 +27,7 @@ export type ChainRpcEndpointOverrideRecord = {
 export type ChainRpcDefaultEndpointsRecord = {
   chainRef: ChainRef;
   rpcEndpoints: RpcEndpoint[];
+  source: "bundle" | "request";
   updatedAt: number;
 };
 

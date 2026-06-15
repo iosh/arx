@@ -6,7 +6,8 @@ import { InMemoryApprovalQueueService } from "../../approvals/queue/InMemoryAppr
 import { APPROVAL_TOPICS } from "../../approvals/queue/topics.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed } from "../../chains/definition.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
 import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
@@ -32,7 +33,7 @@ export type BackgroundStateServiceOptions = {
   };
   supportedChains?: {
     port: ChainDefinitionsPort;
-    seed?: ChainMetadata[];
+    seed?: ChainDefinitionSeed<RpcEndpoint>[];
     now?: () => number;
     logger?: (message: string, error?: unknown) => void;
   };
@@ -78,7 +79,7 @@ export const initBackgroundStateServices = ({
     throw new Error("createBackgroundRuntime requires chainDefinitions port");
   }
 
-  const supportedChainSeed: ChainMetadata[] = (supportedChainsOptions.seed ?? []).map((entry) => ({ ...entry }));
+  const supportedChainSeed = (supportedChainsOptions.seed ?? []).map((seed) => seed.definition);
 
   const chainRpcService = new ChainRpcService({
     messenger: bus.scope({ name: "chainRpc", publish: CHAIN_RPC_TOPICS }),

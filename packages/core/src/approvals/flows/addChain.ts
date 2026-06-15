@@ -6,10 +6,11 @@ export const addChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.AddChain> =
   kind: ApprovalKinds.AddChain,
   parseDecision: (input) => parseNoDecision(ApprovalKinds.AddChain, input),
   async approve(record, _decision, deps) {
-    await deps.supportedChains.addChain(record.request.metadata, { createdByOrigin: record.origin });
+    await deps.supportedChains.addChain(record.request.definition, { createdByOrigin: record.origin });
     await deps.chainRpcDefaultEndpoints.setDefaultEndpoints(
-      record.request.metadata.chainRef,
-      record.request.metadata.rpcEndpoints,
+      record.request.definition.chainRef,
+      record.request.defaultRpcEndpoints,
+      "request",
     );
     return null;
   },

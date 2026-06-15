@@ -31,6 +31,7 @@ export const createChainRpcDefaultEndpointsService = ({
   const toRecord = (record: ChainRpcDefaultEndpointsRecord): ChainRpcDefaultEndpointsRecord => ({
     chainRef: record.chainRef,
     rpcEndpoints: cloneRpcEndpoints(record.rpcEndpoints),
+    source: record.source ?? "request",
     updatedAt: record.updatedAt,
   });
 
@@ -63,16 +64,21 @@ export const createChainRpcDefaultEndpointsService = ({
   const setDefaultEndpoints = async (
     chainRef: ChainRef,
     endpoints: readonly RpcEndpoint[],
+    source: ChainRpcDefaultEndpointsRecord["source"],
   ): Promise<ChainRpcDefaultEndpointsRecord> => {
     const rpcEndpoints = assertNonEmptyRpcEndpoints(chainRef, endpoints);
 
     return await run(async () => {
       const previous = await port.get(chainRef);
       const previousRecord = previous ? toRecord(previous) : null;
-      const shouldWrite = !previousRecord || !areRpcEndpointsEqual(previousRecord.rpcEndpoints, rpcEndpoints);
+      const shouldWrite =
+        !previousRecord ||
+        previousRecord.source !== source ||
+        !areRpcEndpointsEqual(previousRecord.rpcEndpoints, rpcEndpoints);
       const next: ChainRpcDefaultEndpointsRecord = {
         chainRef,
         rpcEndpoints,
+        source,
         updatedAt: shouldWrite ? clock() : previousRecord.updatedAt,
       };
 
@@ -108,6 +114,11 @@ export const createChainRpcDefaultEndpointsService = ({
         const previous = previousByChainRef.get(seed.chainRef) ?? null;
         nextChainRefs.add(seed.chainRef);
 
+        if (previous?.source === "request") {
+          cache.set(seed.chainRef, toRecord(previous));
+          continue;
+        }
+
         if (previous && areRpcEndpointsEqual(previous.rpcEndpoints, rpcEndpoints)) {
           cache.set(seed.chainRef, toRecord(previous));
           continue;
@@ -116,6 +127,7 @@ export const createChainRpcDefaultEndpointsService = ({
         const next: ChainRpcDefaultEndpointsRecord = {
           chainRef: seed.chainRef,
           rpcEndpoints,
+          source: seed.source,
           updatedAt: clock(),
         };
         await port.upsert(next);

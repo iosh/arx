@@ -9,6 +9,7 @@ import type { SupportedChainsService } from "../../chains/runtime/supportedChain
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
+import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
@@ -35,6 +36,7 @@ export type RpcHandlerDeps = {
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   supportedChains?: SupportedChainsService;
+  chainRpcDefaultEndpoints?: Pick<ChainRpcDefaultEndpointsService, "readDefaultEndpoints">;
   chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {
     now: () => number;

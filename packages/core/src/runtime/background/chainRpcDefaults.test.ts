@@ -1,50 +1,56 @@
 import { describe, expect, it } from "vitest";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed } from "../../chains/definition.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 import { buildRuntimeChainAdmission } from "./chainRpcDefaults.js";
 
-const BASE_MAINNET: ChainMetadata = {
-  chainRef: "eip155:8453",
-  namespace: "eip155",
-  chainId: "0x2105",
-  displayName: "Base",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
+const BASE_MAINNET: ChainDefinitionSeed<RpcEndpoint> = {
+  definition: {
+    chainRef: "eip155:8453",
+    displayName: "Base",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  },
+  defaultRpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
 };
 
-const SOLANA_MAINNET: ChainMetadata = {
-  chainRef: "solana:101",
-  namespace: "solana",
-  chainId: "101",
-  displayName: "Solana",
-  nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
-  rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
+const SOLANA_MAINNET: ChainDefinitionSeed<RpcEndpoint> = {
+  definition: {
+    chainRef: "solana:101",
+    displayName: "Solana",
+    nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
+  },
+  defaultRpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
 describe("buildRuntimeChainAdmission", () => {
   it("derives wallet chain selection defaults from admitted chains", () => {
     const admission = buildRuntimeChainAdmission({
-      admittedChains: [BASE_MAINNET, SOLANA_MAINNET],
+      admittedChainSeeds: [BASE_MAINNET, SOLANA_MAINNET],
     });
 
     expect(admission.selectionDefaults).toEqual({
-      selectedNamespace: BASE_MAINNET.namespace,
+      selectedNamespace: "eip155",
       chainRefByNamespace: {
-        eip155: BASE_MAINNET.chainRef,
-        solana: SOLANA_MAINNET.chainRef,
+        eip155: BASE_MAINNET.definition.chainRef,
+        solana: SOLANA_MAINNET.definition.chainRef,
       },
     });
   });
 
   it("returns cloned admitted chain metadata", () => {
-    const admission = buildRuntimeChainAdmission({ admittedChains: [BASE_MAINNET] });
+    const admission = buildRuntimeChainAdmission({
+      admittedChainSeeds: [BASE_MAINNET],
+    });
 
-    admission.admittedChains[0].rpcEndpoints[0].url = "https://mutated.example";
+    const admittedDefaultEndpoint = admission.admittedChainSeeds[0].defaultRpcEndpoints?.[0];
+    expect(admittedDefaultEndpoint).toBeDefined();
 
-    expect(BASE_MAINNET.rpcEndpoints[0]?.url).toBe("https://rpc.base.example");
+    admittedDefaultEndpoint.url = "https://mutated.example";
+
+    expect(BASE_MAINNET.defaultRpcEndpoints?.[0]?.url).toBe("https://rpc.base.example");
   });
 
   it("rejects empty admission with an owner-local runtime config error", () => {
-    expect(() => buildRuntimeChainAdmission({ admittedChains: [] })).toThrowError(
+    expect(() => buildRuntimeChainAdmission({ admittedChainSeeds: [] })).toThrowError(
       expect.objectContaining({
         code: "runtime.config_invalid",
         details: { reason: "missing_admitted_chain" },

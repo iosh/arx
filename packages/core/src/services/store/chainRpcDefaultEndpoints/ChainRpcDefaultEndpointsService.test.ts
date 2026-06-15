@@ -63,11 +63,12 @@ describe("ChainRpcDefaultEndpointsService", () => {
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 
-    const record = await service.setDefaultEndpoints("eip155:1", [endpoint("https://rpc.mainnet.example")]);
+    const record = await service.setDefaultEndpoints("eip155:1", [endpoint("https://rpc.mainnet.example")], "request");
 
     expect(record).toEqual({
       chainRef: "eip155:1",
       rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+      source: "request",
       updatedAt: 1_000,
     });
     expect(port.readRecord("eip155:1")).toEqual(record);
@@ -90,11 +91,13 @@ describe("ChainRpcDefaultEndpointsService", () => {
     const mainnet = {
       chainRef: "eip155:1",
       rpcEndpoints: [endpoint("https://rpc.mainnet.example")],
+      source: "bundle",
       updatedAt: 100,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const solana = {
       chainRef: "solana:101",
       rpcEndpoints: [endpoint("https://rpc.solana.example")],
+      source: "request",
       updatedAt: 200,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([mainnet, solana]);
@@ -105,33 +108,54 @@ describe("ChainRpcDefaultEndpointsService", () => {
     await service.replaceDefaultEndpoints([
       {
         chainRef: mainnet.chainRef,
-        rpcEndpoints: mainnet.rpcEndpoints,
+        rpcEndpoints: [endpoint("https://rpc.mainnet.v2.example")],
+        source: "bundle",
       },
       {
         chainRef: "eip155:10",
         rpcEndpoints: [endpoint("https://rpc.optimism.example")],
+        source: "bundle",
       },
     ]);
 
-    expect(port.readRecord("eip155:1")).toEqual(mainnet);
+    expect(port.readRecord("eip155:1")).toEqual({
+      chainRef: "eip155:1",
+      rpcEndpoints: [{ url: "https://rpc.mainnet.v2.example", type: "public" }],
+      source: "bundle",
+      updatedAt: 1_000,
+    });
     expect(port.readRecord("eip155:10")).toEqual({
       chainRef: "eip155:10",
       rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
+      source: "bundle",
       updatedAt: 1_000,
     });
     expect(port.readRecord("solana:101")).toBeNull();
-    expect(service.readDefaultEndpoints("eip155:1")).toEqual(mainnet.rpcEndpoints);
+    expect(service.readDefaultEndpoints("eip155:1")).toEqual([
+      { url: "https://rpc.mainnet.v2.example", type: "public" },
+    ]);
     expect(service.readDefaultEndpoints("eip155:10")).toEqual([
       { url: "https://rpc.optimism.example", type: "public" },
     ]);
     expect(service.readDefaultEndpoints("solana:101")).toBeNull();
     expect(changed).toEqual([
       {
+        chainRef: "eip155:1",
+        previous: mainnet,
+        next: {
+          chainRef: "eip155:1",
+          rpcEndpoints: [{ url: "https://rpc.mainnet.v2.example", type: "public" }],
+          source: "bundle",
+          updatedAt: 1_000,
+        },
+      },
+      {
         chainRef: "eip155:10",
         previous: null,
         next: {
           chainRef: "eip155:10",
           rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
+          source: "bundle",
           updatedAt: 1_000,
         },
       },
@@ -147,6 +171,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
     const record = {
       chainRef: "eip155:1",
       rpcEndpoints: [endpoint("https://rpc.mainnet.example")],
+      source: "request",
       updatedAt: 100,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([record]);
@@ -154,7 +179,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
     const listener = vi.fn();
     service.subscribeChanged(listener);
 
-    const next = await service.setDefaultEndpoints(record.chainRef, record.rpcEndpoints);
+    const next = await service.setDefaultEndpoints(record.chainRef, record.rpcEndpoints, "request");
 
     expect(next).toEqual(record);
     expect(port.countUpserts()).toBe(0);

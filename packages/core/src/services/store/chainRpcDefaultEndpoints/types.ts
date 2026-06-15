@@ -14,6 +14,7 @@ export type ChainRpcDefaultEndpointsChangedHandler = (payload: ChainRpcDefaultEn
 export type ChainRpcDefaultEndpointsSeed = {
   chainRef: ChainRef;
   rpcEndpoints: readonly RpcEndpoint[];
+  source: ChainRpcDefaultEndpointsRecord["source"];
 };
 
 export type ChainRpcDefaultEndpointsService = {
@@ -21,7 +22,11 @@ export type ChainRpcDefaultEndpointsService = {
   get(chainRef: ChainRef): Promise<ChainRpcDefaultEndpointsRecord | null>;
   getAll(): Promise<ChainRpcDefaultEndpointsRecord[]>;
   readDefaultEndpoints(chainRef: ChainRef): RpcEndpoint[] | null;
-  setDefaultEndpoints(chainRef: ChainRef, endpoints: readonly RpcEndpoint[]): Promise<ChainRpcDefaultEndpointsRecord>;
+  setDefaultEndpoints(
+    chainRef: ChainRef,
+    endpoints: readonly RpcEndpoint[],
+    source: ChainRpcDefaultEndpointsRecord["source"],
+  ): Promise<ChainRpcDefaultEndpointsRecord>;
   replaceDefaultEndpoints(seeds: readonly ChainRpcDefaultEndpointsSeed[]): Promise<void>;
   clearDefaultEndpoints(chainRef: ChainRef): Promise<void>;
 };

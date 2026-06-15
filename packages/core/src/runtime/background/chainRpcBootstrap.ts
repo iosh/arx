@@ -3,7 +3,10 @@ import type { ChainRef } from "../../chains/ids.js";
 import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
 import type { ChainRpcAccess, ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
+import type {
+  ChainRpcDefaultEndpointsSeed,
+  ChainRpcDefaultEndpointsService,
+} from "../../services/store/chainRpcDefaultEndpoints/types.js";
 import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
@@ -14,6 +17,7 @@ export type CreateChainRpcBootstrapOptions = {
   supportedChains: SupportedChainsService;
   selection: WalletChainSelectionService;
   defaultEndpoints: ChainRpcDefaultEndpointsService;
+  defaultEndpointSeeds: readonly ChainRpcDefaultEndpointsSeed[];
   endpointOverrides: ChainRpcEndpointOverridesService;
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   hydrationEnabled: boolean;
@@ -35,6 +39,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
     supportedChains,
     selection,
     defaultEndpoints,
+    defaultEndpointSeeds,
     endpointOverrides,
     selectionDefaults,
     hydrationEnabled,
@@ -52,6 +57,28 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
 
   const listSupportedChainsForRegisteredNamespaces = () =>
     supportedChains.getState().chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace));
+
+  const buildDefaultEndpointReplacementSeeds = async (): Promise<ChainRpcDefaultEndpointsSeed[]> => {
+    const supportedChainRefs = new Set(listSupportedChainsForRegisteredNamespaces().map((entry) => entry.chainRef));
+    const registeredSeedDefaults = defaultEndpointSeeds.filter(
+      (entry) =>
+        getRegisteredNamespaces().has(getChainRefNamespace(entry.chainRef)) && supportedChainRefs.has(entry.chainRef),
+    );
+    const existingRecords = await defaultEndpoints.getAll();
+    const requestEndpointRecords = existingRecords
+      .filter((record) => supportedChainRefs.has(record.chainRef) && record.source === "request")
+      .map((record) => ({
+        chainRef: record.chainRef,
+        rpcEndpoints: record.rpcEndpoints,
+        source: record.source,
+      }));
+    const requestEndpointChainRefs = new Set(requestEndpointRecords.map((record) => record.chainRef));
+
+    return [
+      ...requestEndpointRecords,
+      ...registeredSeedDefaults.filter((entry) => !requestEndpointChainRefs.has(entry.chainRef)),
+    ];
+  };
 
   const readSupportedChainRpcAccesses = (): ChainRpcAccess[] => {
     const accesses: ChainRpcAccess[] = [];
@@ -235,12 +262,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
       await loadPersistedState();
     }
 
-    await defaultEndpoints.replaceDefaultEndpoints(
-      listSupportedChainsForRegisteredNamespaces().map((entry) => ({
-        chainRef: entry.chainRef,
-        rpcEndpoints: entry.metadata.rpcEndpoints,
-      })),
-    );
+    await defaultEndpoints.replaceDefaultEndpoints(await buildDefaultEndpointReplacementSeeds());
 
     const accesses = readSupportedChainRpcAccesses();
     if (accesses.length === 0) {

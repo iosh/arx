@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed } from "../../chains/definition.js";
+import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
@@ -20,32 +21,53 @@ import {
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createChainRpcBootstrap } from "./chainRpcBootstrap.js";
 
-const MAINNET_CHAIN: ChainMetadata = {
+type TestChain = ChainMetadata & {
+  defaultRpcEndpoints: readonly RpcEndpoint[];
+};
+
+const MAINNET_CHAIN: TestChain = {
   chainRef: "eip155:1",
   namespace: "eip155",
   chainId: "0x1",
   displayName: "Ethereum Mainnet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
 };
 
-const ALT_CHAIN: ChainMetadata = {
+const ALT_CHAIN: TestChain = {
   chainRef: "eip155:10",
   namespace: "eip155",
   chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
 };
 
-const SOLANA_CHAIN: ChainMetadata = {
+const SOLANA_CHAIN: TestChain = {
   chainRef: "solana:101",
   namespace: "solana",
   chainId: "101",
   displayName: "Solana",
   nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
-  rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
+  defaultRpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
+
+const toDefinitionSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: deriveChainDefinitionFromMetadata(chain),
+  defaultRpcEndpoints: [...chain.defaultRpcEndpoints],
+});
+
+const toDefaultEndpointSeed = (chain: TestChain) => ({
+  chainRef: chain.chainRef,
+  rpcEndpoints: [...chain.defaultRpcEndpoints],
+  source: "bundle" as const,
+});
+
+const toDefaultEndpointRecord = (chain: TestChain, updatedAt = 10) => ({
+  ...toDefaultEndpointSeed(chain),
+  source: "request" as const,
+  updatedAt,
+});
 
 const createChainRpcService = () => {
   const bus = new Messenger();
@@ -96,21 +118,21 @@ const createChainRpcDefaultEndpoints = (
   return { port, service };
 };
 
-const toCustomChainDefinition = (metadata: ChainMetadata) => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  metadata,
+const toCustomChainDefinition = (chain: TestChain) => ({
+  chainRef: chain.chainRef,
+  namespace: chain.namespace,
+  definition: deriveChainDefinitionFromMetadata(chain),
   schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   source: "custom" as const,
   updatedAt: 0,
 });
 
-const createSupportedChains = async (params: { builtin?: ChainMetadata[]; custom?: ChainMetadata[] }) => {
+const createSupportedChains = async (params: { builtin?: TestChain[]; custom?: TestChain[] }) => {
   const bus = new Messenger();
   const chainDefinitions = new InMemoryChainDefinitionsService({
     messenger: bus.scope({ publish: CHAIN_DEFINITIONS_TOPICS }),
     port: new MemoryChainDefinitionsPort((params.custom ?? []).map(toCustomChainDefinition)),
-    seed: params.builtin ?? [],
+    seed: (params.builtin ?? []).map((chain) => deriveChainDefinitionFromMetadata(chain)),
     now: () => 0,
   });
   const supportedChains = new InMemorySupportedChainsService({
@@ -152,7 +174,8 @@ describe("chainRpcBootstrap", () => {
     const { port: chainRpcDefaultEndpointsPort, service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints([
       {
         chainRef: SOLANA_CHAIN.chainRef,
-        rpcEndpoints: SOLANA_CHAIN.rpcEndpoints,
+        rpcEndpoints: SOLANA_CHAIN.defaultRpcEndpoints,
+        source: "request",
         updatedAt: 10,
       },
     ]);
@@ -162,6 +185,7 @@ describe("chainRpcBootstrap", () => {
       supportedChains,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
+      defaultEndpointSeeds: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN].map(toDefaultEndpointSeed),
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
@@ -204,7 +228,10 @@ describe("chainRpcBootstrap", () => {
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
-    const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints();
+    const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints([
+      toDefaultEndpointRecord(MAINNET_CHAIN),
+      toDefaultEndpointRecord(ALT_CHAIN),
+    ]);
     const { service: chainRpcEndpointOverrides } = createChainRpcEndpointOverrides();
 
     const bootstrap = createChainRpcBootstrap({
@@ -212,6 +239,7 @@ describe("chainRpcBootstrap", () => {
       supportedChains,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
+      defaultEndpointSeeds: [],
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
@@ -253,7 +281,7 @@ describe("chainRpcBootstrap", () => {
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
-    const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints();
+    const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints([toDefaultEndpointRecord(ALT_CHAIN)]);
     const { service: chainRpcEndpointOverrides } = createChainRpcEndpointOverrides();
 
     const bootstrap = createChainRpcBootstrap({
@@ -261,6 +289,7 @@ describe("chainRpcBootstrap", () => {
       supportedChains,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
+      defaultEndpointSeeds: [],
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
@@ -300,6 +329,17 @@ describe("chainRpcBootstrap", () => {
       supportedChains,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
+      defaultEndpointSeeds: [toDefinitionSeed(MAINNET_CHAIN)].flatMap((seed) =>
+        seed.defaultRpcEndpoints
+          ? [
+              {
+                chainRef: seed.definition.chainRef,
+                rpcEndpoints: seed.defaultRpcEndpoints,
+                source: "bundle",
+              },
+            ]
+          : [],
+      ),
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,

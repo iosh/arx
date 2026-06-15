@@ -1,5 +1,7 @@
 import type { ApprovalExecutor } from "../../approvals/types.js";
-import type { ChainMetadata } from "../../chains/metadata.js";
+import { getChainRefNamespace } from "../../chains/caip.js";
+import type { ChainDefinitionSeed } from "../../chains/definition.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
@@ -71,7 +73,7 @@ export type BackgroundBootstrapScope = {
   rpcRegistry: RpcRegistry;
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   registeredNamespaces: ReadonlySet<string>;
-  admittedChains: readonly ChainMetadata[];
+  admittedChainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
   chainAdmission: RuntimeChainAdmission;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
@@ -147,7 +149,9 @@ export const createBackgroundBootstrapScope = ({
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const chainAdmission = buildRuntimeChainAdmission({
-    admittedChains: supportedChainSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
+    admittedChainSeeds: supportedChainSeed.filter((entry) =>
+      registeredNamespaces.has(getChainRefNamespace(entry.definition.chainRef)),
+    ),
   });
 
   const storageNow = storageOptions?.now ?? Date.now;
@@ -164,7 +168,7 @@ export const createBackgroundBootstrapScope = ({
     rpcRegistry,
     namespaceBootstrap,
     registeredNamespaces,
-    admittedChains: chainAdmission.admittedChains,
+    admittedChainSeeds: chainAdmission.admittedChainSeeds,
     chainAdmission,
     storageLogger,
     storageNow,
@@ -356,6 +360,17 @@ export const createBackgroundSupportScope = ({
     supportedChains: sessionScope.stateServices.supportedChains,
     selection: sessionScope.walletChainSelection,
     defaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
+    defaultEndpointSeeds: bootstrapScope.chainAdmission.admittedChainSeeds.flatMap((seed) =>
+      seed.defaultRpcEndpoints
+        ? [
+            {
+              chainRef: seed.definition.chainRef,
+              rpcEndpoints: seed.defaultRpcEndpoints,
+              source: "bundle",
+            },
+          ]
+        : [],
+    ),
     endpointOverrides: sessionScope.chainRpcEndpointOverrides,
     selectionDefaults: bootstrapScope.chainAdmission.selectionDefaults,
     hydrationEnabled: bootstrapScope.hydrationEnabled,

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { type ParsedChainRef, parseChainRef } from "./caip.js";
 import type { ChainDefinition, ChainDefinitionSeed, ChainIcon, ExplorerLink, NativeCurrency } from "./definition.js";
+import { chainIconSchema, cloneChainDefinition, explorerLinkSchema } from "./definition.js";
 import { eip155ChainRefFromChainIdHex } from "./eip155/format.js";
 import { type ChainRef, ChainRefSchema } from "./ids.js";
-import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
+import { isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
 
 export type {
   ChainDefinition,
@@ -12,7 +13,14 @@ export type {
   ExplorerLink,
   NativeCurrency,
 } from "./definition.js";
-export { cloneChainDefinition } from "./definition.js";
+export {
+  chainDefinitionSchema,
+  cloneChainDefinition,
+  createChainDefinitionSchema,
+  isSameChainDefinition,
+  normalizeChainDefinition,
+  validateChainDefinition,
+} from "./definition.js";
 
 export interface RpcEndpoint {
   url: string;
@@ -28,7 +36,6 @@ export interface ChainMetadata {
   displayName: string;
   shortName?: string | undefined;
   nativeCurrency: NativeCurrency;
-  rpcEndpoints: readonly RpcEndpoint[];
   blockExplorers?: readonly ExplorerLink[] | undefined;
   icon?: ChainIcon | undefined;
 }
@@ -49,10 +56,6 @@ const trimmedString = () =>
     .string()
     .min(1)
     .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
-
-const httpUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, HTTP_PROTOCOLS), {
-  message: "URL must use the http or https protocol",
-});
 
 const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PROTOCOLS), {
   message: "URL must use http, https, ws, or wss protocol",
@@ -76,19 +79,6 @@ const nativeCurrencySchema: z.ZodType<NativeCurrency> = z.strictObject({
   decimals: z.number().int().min(0),
 });
 
-export const explorerLinkSchema: z.ZodType<ExplorerLink> = z.strictObject({
-  type: trimmedString(),
-  url: httpUrlSchema,
-  title: trimmedString().optional(),
-});
-
-export const chainIconSchema: z.ZodType<ChainIcon> = z.strictObject({
-  url: httpUrlSchema,
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
-  format: z.enum(["svg", "png", "jpg", "jpeg", "webp"]).optional(),
-});
-
 const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
   chainRef: ChainRefSchema,
   namespace: trimmedString(),
@@ -96,7 +86,6 @@ const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
   displayName: trimmedString(),
   shortName: trimmedString().optional(),
   nativeCurrency: nativeCurrencySchema,
-  rpcEndpoints: z.array(rpcEndpointSchema).min(1),
   blockExplorers: z.array(explorerLinkSchema).optional(),
   icon: chainIconSchema.optional(),
 });
@@ -152,18 +141,6 @@ export const createChainMetadataSchema = (options?: {
 
     const validator = validators[parsed.namespace];
     validator?.({ metadata: value, parsed, ctx });
-
-    const rpcUrls = new Set<string>();
-    for (const endpoint of value.rpcEndpoints) {
-      if (rpcUrls.has(endpoint.url)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `Duplicate RPC endpoint URL: ${endpoint.url}`,
-          path: ["rpcEndpoints"],
-        });
-      }
-      rpcUrls.add(endpoint.url);
-    }
 
     if (value.blockExplorers) {
       const explorerUrls = new Set<string>();
@@ -229,42 +206,18 @@ export const validateChainMetadataList = (metadataList: unknown): ChainMetadata[
   return chainMetadataListSchema.parse(metadataList);
 };
 
-const cloneRpcEndpoint = (endpoint: RpcEndpoint): RpcEndpoint => ({
-  url: endpoint.url,
-  type: endpoint.type,
-  weight: endpoint.weight,
-  headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-});
-
-export const deriveChainDefinitionFromMetadata = (metadata: ChainMetadata): ChainDefinition => ({
-  chainRef: metadata.chainRef,
-  displayName: metadata.displayName,
-  shortName: metadata.shortName,
-  nativeCurrency: {
-    name: metadata.nativeCurrency.name,
-    symbol: metadata.nativeCurrency.symbol,
-    decimals: metadata.nativeCurrency.decimals,
-  },
-  blockExplorers: metadata.blockExplorers
-    ? metadata.blockExplorers.map((explorer) => ({
-        type: explorer.type,
-        url: explorer.url,
-        title: explorer.title,
-      }))
-    : undefined,
-  icon: metadata.icon
-    ? {
-        url: metadata.icon.url,
-        width: metadata.icon.width,
-        height: metadata.icon.height,
-        format: metadata.icon.format,
-      }
-    : undefined,
-});
+export const deriveChainDefinitionFromMetadata = (metadata: ChainMetadata): ChainDefinition =>
+  cloneChainDefinition({
+    chainRef: metadata.chainRef,
+    displayName: metadata.displayName,
+    shortName: metadata.shortName,
+    nativeCurrency: metadata.nativeCurrency,
+    blockExplorers: metadata.blockExplorers,
+    icon: metadata.icon,
+  });
 
 export const deriveChainDefinitionSeedFromMetadata = (metadata: ChainMetadata): ChainDefinitionSeed<RpcEndpoint> => ({
   definition: deriveChainDefinitionFromMetadata(metadata),
-  defaultRpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
 });
 
 export const deriveChainMetadataFromDefinitionSeed = (params: {
@@ -272,7 +225,7 @@ export const deriveChainMetadataFromDefinitionSeed = (params: {
   namespace: string;
   chainId: string;
 }): ChainMetadata => {
-  const { definition, defaultRpcEndpoints } = params.seed;
+  const { definition } = params.seed;
   return validateChainMetadata({
     chainRef: definition.chainRef,
     namespace: params.namespace,
@@ -280,7 +233,6 @@ export const deriveChainMetadataFromDefinitionSeed = (params: {
     displayName: definition.displayName,
     shortName: definition.shortName,
     nativeCurrency: definition.nativeCurrency,
-    rpcEndpoints: defaultRpcEndpoints ?? [],
     blockExplorers: definition.blockExplorers,
     icon: definition.icon,
   });
@@ -323,7 +275,6 @@ export const cloneChainMetadata = (metadata: ChainMetadata): ChainMetadata => ({
     symbol: metadata.nativeCurrency.symbol,
     decimals: metadata.nativeCurrency.decimals,
   },
-  rpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
   blockExplorers: metadata.blockExplorers
     ? metadata.blockExplorers.map((explorer) => ({
         type: explorer.type,
@@ -356,12 +307,6 @@ export const normalizeChainMetadata = (metadata: ChainMetadata): ChainMetadata =
     decimals: cloned.nativeCurrency.decimals,
   };
 
-  cloned.rpcEndpoints = cloned.rpcEndpoints.map((endpoint) => ({
-    ...endpoint,
-    url: endpoint.url.trim(),
-    headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-  }));
-
   if (cloned.blockExplorers) {
     cloned.blockExplorers = cloned.blockExplorers.map((explorer) => ({
       ...explorer,
@@ -383,12 +328,6 @@ export const normalizeChainMetadata = (metadata: ChainMetadata): ChainMetadata =
 
 export const normalizeAddChainComparableMetadata = (metadata: ChainMetadata): ChainMetadata => {
   const normalized = normalizeChainMetadata(metadata);
-  const rpcUrls = normalizeComparableUrlList(normalized.rpcEndpoints.map((endpoint) => endpoint.url));
-
-  if (!rpcUrls || rpcUrls.length === 0) {
-    throw new Error(`Chain ${normalized.chainRef} must declare at least one RPC endpoint`);
-  }
-
   const explorerUrls = normalizeComparableUrlList(normalized.blockExplorers?.map((explorer) => explorer.url));
 
   return {
@@ -401,38 +340,12 @@ export const normalizeAddChainComparableMetadata = (metadata: ChainMetadata): Ch
       symbol: normalized.nativeCurrency.symbol,
       decimals: normalized.nativeCurrency.decimals,
     },
-    rpcEndpoints: rpcUrls.map((url) => ({ url })),
     ...(explorerUrls && explorerUrls.length > 0
       ? {
           blockExplorers: explorerUrls.map((url) => ({ type: "default", url })),
         }
       : {}),
   };
-};
-
-const isSameRecord = <T>(
-  previous: Record<string, T> | undefined,
-  next: Record<string, T> | undefined,
-  comparator: (a: T | undefined, b: T | undefined) => boolean = (a, b) => a === b,
-) => {
-  if (!previous && !next) return true;
-  if (!previous || !next) return false;
-  const prevKeys = Object.keys(previous);
-  const nextKeys = Object.keys(next);
-  if (prevKeys.length !== nextKeys.length) return false;
-  return prevKeys.every((key) => {
-    if (!Object.hasOwn(next, key)) return false;
-    return comparator(previous[key], next[key]);
-  });
-};
-
-const isSameRpcEndpoint = (previous: RpcEndpoint, next: RpcEndpoint) => {
-  return (
-    previous.url === next.url &&
-    previous.type === next.type &&
-    previous.weight === next.weight &&
-    isSameRecord(previous.headers, next.headers)
-  );
 };
 
 const isSameExplorerLink = (previous: ExplorerLink, next: ExplorerLink) => {
@@ -467,19 +380,6 @@ export const isSameChainMetadata = (previous: ChainMetadata, next: ChainMetadata
 
   if (!isSameNativeCurrency(previous.nativeCurrency, next.nativeCurrency)) {
     return false;
-  }
-
-  if (previous.rpcEndpoints.length !== next.rpcEndpoints.length) {
-    return false;
-  }
-
-  for (let i = 0; i < previous.rpcEndpoints.length; i += 1) {
-    const prevEndpoint = previous.rpcEndpoints[i];
-    const nextEndpoint = next.rpcEndpoints[i];
-    if (!prevEndpoint || !nextEndpoint) return false;
-    if (!isSameRpcEndpoint(prevEndpoint, nextEndpoint)) {
-      return false;
-    }
   }
 
   const prevExplorers = previous.blockExplorers;

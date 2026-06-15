@@ -41,8 +41,7 @@ export const assertValidNamespaceManifest = (manifest: NamespaceManifest): void 
   assertChainRefNamespace(manifest, "core.keyring.defaultChainRef", manifest.core.keyring.defaultChainRef);
 
   for (const [index, chain] of manifest.core.chainSeeds?.entries() ?? []) {
-    assertNamespaceField(manifest, `core.chainSeeds[${index}].namespace`, chain.namespace);
-    assertChainRefNamespace(manifest, `core.chainSeeds[${index}].chainRef`, chain.chainRef);
+    assertChainRefNamespace(manifest, `core.chainSeeds[${index}].definition.chainRef`, chain.definition.chainRef);
   }
 };
 

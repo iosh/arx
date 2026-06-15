@@ -161,10 +161,6 @@ export const CONFLUX_NETWORKS = [
     displayName: "Conflux Core Space",
     shortName: "cfx",
     nativeCurrency: { name: "Conflux", symbol: "CFX", decimals: 18 },
-    rpcEndpoints: [
-      { url: "https://main.confluxrpc.com", type: "public" },
-      { url: "https://cfxmain-global.confluxrpc.com", type: "public" },
-    ],
     blockExplorers: [{ type: "default", url: "https://confluxscan.io", title: "ConfluxScan" }],
     icon: {
       url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
@@ -178,10 +174,6 @@ export const CONFLUX_NETWORKS = [
     displayName: "Conflux Core Testnet",
     shortName: "cfxtest",
     nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
-    rpcEndpoints: [
-      { url: "https://test.confluxrpc.com", type: "public" },
-      { url: "https://cfxtest.confluxrpc.com", type: "public" },
-    ],
     blockExplorers: [{ type: "default", url: "https://testnet.confluxscan.io", title: "ConfluxScan Testnet" }],
     icon: {
       url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",

@@ -1,10 +1,16 @@
-import type { ChainMetadata } from "../../chains/metadata.js";
+import { type ChainDefinitionSeed, cloneChainDefinition } from "../../chains/definition.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 import { assembleRuntimeNamespaceStages, type RuntimeNamespaceStageAssembly } from "../../namespaces/assembly.js";
 import type { NamespaceManifest, NamespaceRuntimeManifest } from "../../namespaces/types.js";
 import type { NamespaceEngineFactories, WalletNamespaceModule } from "../types.js";
 
-const cloneChainSeeds = (chainSeeds?: readonly ChainMetadata[]): ChainMetadata[] | undefined => {
-  return chainSeeds?.map((chain) => ({ ...chain }));
+const cloneChainSeeds = (
+  chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[],
+): ChainDefinitionSeed<RpcEndpoint>[] | undefined => {
+  return chainSeeds?.map((seed) => ({
+    definition: cloneChainDefinition(seed.definition),
+    ...(seed.defaultRpcEndpoints ? { defaultRpcEndpoints: structuredClone(seed.defaultRpcEndpoints) } : {}),
+  }));
 };
 
 const cloneKeyringConfig = <T extends { factories: Record<string, unknown> }>(keyring: T): T => {

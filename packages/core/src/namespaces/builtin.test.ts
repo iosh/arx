@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getChainRefNamespace } from "../chains/caip.js";
 import { BUILTIN_RPC_NAMESPACE_MODULES } from "../rpc/namespaces/builtin.js";
 import { createAccountCodecRegistryFromManifests } from "./assembly.js";
 import { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
@@ -12,7 +13,9 @@ describe("builtin namespace manifests", () => {
     expect(manifest?.core.chainAddressCodec.namespace).toBe("eip155");
     expect(manifest?.core.accountCodec.namespace).toBe("eip155");
     expect(manifest?.core.keyring.namespace).toBe("eip155");
-    expect(manifest?.core.chainSeeds?.every((chain) => chain.namespace === "eip155")).toBe(true);
+    expect(
+      manifest?.core.chainSeeds?.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),
+    ).toBe(true);
   });
 
   it("drives rpc builtins and default keyring namespaces from the same source", () => {

@@ -13,8 +13,9 @@ import type {
   ApprovalResolveResult,
   ApprovalState,
 } from "../approvals/queue/types.js";
+import type { ChainDefinition, ChainDefinitionSeed } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
+import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
 import type {
   AddSupportedChainOptions,
@@ -94,7 +95,7 @@ export type NamespaceEngineFacts = Readonly<{
   /** Keyring config. */
   keyring: NamespaceConfig;
   /** Seed chains. */
-  chainSeeds?: readonly ChainMetadata[];
+  chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
 }>;
 
 // Runtime factories contributed by a namespace module to the wallet engine.
@@ -295,7 +296,7 @@ export type WalletNetworks = Readonly<{
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
   getChainRpcState(): ChainRpcState;
   getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
-  addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
+  addChain(chain: ChainDefinition, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
   removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
   setChainRpcEndpointOverride(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;
   clearChainRpcEndpointOverride(chainRef: ChainRef): Promise<void>;

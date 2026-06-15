@@ -1,5 +1,6 @@
 import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accounts/addressing/codec.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import { type ChainDefinitionSeed, cloneChainDefinition } from "../chains/definition.js";
+import type { RpcEndpoint } from "../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { ChainRpcClientPool } from "../rpc/ChainRpcClientPool.js";
 import type { RpcHandlerDeps } from "../rpc/handlers/types.js";
@@ -25,7 +26,7 @@ export type RuntimeBootstrapNamespaceAssembly = Readonly<{
   rpcModules: readonly RpcNamespaceModule[];
   accountCodecs: AccountCodecRegistry;
   chainAddressCodecs: ChainAddressCodecRegistry;
-  chainSeeds: readonly ChainMetadata[];
+  chainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
 }>;
 
 export type RuntimeSessionNamespaceAssembly = Readonly<{
@@ -86,8 +87,15 @@ const collectRpcModulesFromValidatedManifests = (
   return manifests.map((manifest) => manifest.core.rpc);
 };
 
-const collectChainSeedsFromValidatedManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
-  return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map((chain) => ({ ...chain })) ?? []);
+const cloneChainDefinitionSeed = (seed: ChainDefinitionSeed<RpcEndpoint>): ChainDefinitionSeed<RpcEndpoint> => ({
+  definition: cloneChainDefinition(seed.definition),
+  ...(seed.defaultRpcEndpoints ? { defaultRpcEndpoints: structuredClone(seed.defaultRpcEndpoints) } : {}),
+});
+
+const collectChainSeedsFromValidatedManifests = (
+  manifests: readonly NamespaceManifest[],
+): ChainDefinitionSeed<RpcEndpoint>[] => {
+  return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map(cloneChainDefinitionSeed) ?? []);
 };
 
 const createChainAddressCodecRegistryFromValidatedManifests = (
@@ -177,7 +185,9 @@ export const assembleRuntimeNamespaceStages = (
   };
 };
 
-export const collectChainSeedsFromManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
+export const collectChainSeedsFromManifests = (
+  manifests: readonly NamespaceManifest[],
+): ChainDefinitionSeed<RpcEndpoint>[] => {
   return collectChainSeedsFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
 };
 

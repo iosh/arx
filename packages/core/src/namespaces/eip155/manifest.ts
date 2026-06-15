@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
 import { eip155Codec } from "../../accounts/addressing/codec.js";
-import { EIP155_CHAIN_METADATA } from "../../chains/chains.seed.js";
+import { EIP155_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
@@ -12,11 +12,11 @@ import { createEip155Transaction } from "../../transactions/namespace/eip155/tra
 import type { NamespaceManifest } from "../types.js";
 import { defineNamespaceManifest } from "../validation.js";
 
-const DEFAULT_EIP155_CHAIN_REF = EIP155_CHAIN_METADATA[0]?.chainRef;
+const DEFAULT_EIP155_CHAIN_REF = EIP155_CHAIN_DEFINITION_SEEDS[0]?.definition.chainRef;
 const EIP155_CLIENT_FACTORY = eip155Module.clientFactory;
 
 if (!DEFAULT_EIP155_CHAIN_REF) {
-  throw new Error("EIP155_CHAIN_METADATA must include at least one chain");
+  throw new Error("EIP155_CHAIN_DEFINITION_SEEDS must include at least one chain");
 }
 
 if (!EIP155_CLIENT_FACTORY) {
@@ -44,7 +44,7 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
         "private-key": () => new EvmPrivateKeyKeyring(),
       },
     },
-    chainSeeds: EIP155_CHAIN_METADATA,
+    chainSeeds: EIP155_CHAIN_DEFINITION_SEEDS,
   },
   runtime: {
     clientFactory: EIP155_CLIENT_FACTORY,

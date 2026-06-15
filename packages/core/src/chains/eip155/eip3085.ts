@@ -57,7 +57,6 @@ export const createEip155DefinitionSeedFromEip3085 = (input: unknown): ChainDefi
     definition: {
       chainRef,
       displayName: payload.chainName,
-      shortName: payload.nativeCurrency.symbol,
       nativeCurrency: payload.nativeCurrency,
       blockExplorers: explorers,
     },

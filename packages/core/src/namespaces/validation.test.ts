@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import { type ChainMetadata, deriveChainDefinitionSeedFromMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceManifest } from "./types.js";
@@ -39,7 +39,6 @@ const createTestChainMetadata = (namespace: string, chainRef: ChainRef): ChainMe
   chainId: "101",
   displayName: `${namespace} Testnet`,
   nativeCurrency: { name: "Unit", symbol: "UNIT", decimals: 9 },
-  rpcEndpoints: [{ url: `https://${namespace}.rpc.local` }],
 });
 
 const createTestManifest = (namespace = "solana"): NamespaceManifest => {
@@ -59,7 +58,7 @@ const createTestManifest = (namespace = "solana"): NamespaceManifest => {
         codec,
         factories: {},
       },
-      chainSeeds: [createTestChainMetadata(namespace, chainRef)],
+      chainSeeds: [deriveChainDefinitionSeedFromMetadata(createTestChainMetadata(namespace, chainRef))],
     },
   };
 };
@@ -94,8 +93,8 @@ describe("namespace manifest validation", () => {
 
   it("rejects chain seed drift inside a manifest", () => {
     const manifest = createTestManifest("solana");
-    manifest.core.chainSeeds = [createTestChainMetadata("eip155", "eip155:1")];
+    manifest.core.chainSeeds = [deriveChainDefinitionSeedFromMetadata(createTestChainMetadata("eip155", "eip155:1"))];
 
-    expect(() => assertValidNamespaceManifest(manifest)).toThrow(/core\.chainSeeds\[0\]\.namespace/);
+    expect(() => assertValidNamespaceManifest(manifest)).toThrow(/core\.chainSeeds\[0\]\.definition\.chainRef/);
   });
 });

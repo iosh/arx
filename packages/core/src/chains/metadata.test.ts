@@ -4,7 +4,7 @@ import { DEFAULT_CHAIN_DEFINITION_SEEDS, DEFAULT_CHAIN_METADATA } from "./chains
 import {
   createChainMetadataListSchema,
   deriveChainDefinitionSeedFromMetadata,
-  isSameAddChainComparableMetadata,
+  isSameChainMetadata,
   validateChainMetadata,
   validateChainMetadataList,
 } from "./metadata.js";
@@ -16,10 +16,6 @@ const baseEip155Metadata = {
   displayName: "Ethereum Mainnet",
   shortName: "eth",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcEndpoints: [
-    { url: "https://mainnet.infura.io/v3/123..", type: "public" },
-    { url: "https://eth-mainnet.g.alchemy.com/v2/234..", type: "authenticated", weight: 2 },
-  ],
   blockExplorers: [{ type: "default", url: "https://etherscan.io" }],
   icon: { url: "https://assets.example.com/icons/ethereum.svg", width: 64, height: 64, format: "svg" },
 };
@@ -28,7 +24,6 @@ describe("metadata", () => {
   it("accepts a valid eip155 metadata object", () => {
     const value = validateChainMetadata(baseEip155Metadata);
     expect(value.namespace).toBe("eip155");
-    expect(value.rpcEndpoints).toHaveLength(2);
     expect(value.nativeCurrency.symbol).toBe("ETH");
   });
 
@@ -48,9 +43,7 @@ describe("metadata", () => {
     expect(seed.definition).not.toHaveProperty("namespace");
     expect(seed.definition).not.toHaveProperty("chainId");
     expect(seed.definition).not.toHaveProperty("rpcEndpoints");
-    expect(seed.defaultRpcEndpoints).toEqual(metadata.rpcEndpoints);
-    expect(seed.defaultRpcEndpoints).not.toBe(metadata.rpcEndpoints);
-    expect(seed.defaultRpcEndpoints?.[0]).not.toBe(metadata.rpcEndpoints[0]);
+    expect(seed.defaultRpcEndpoints).toBeUndefined();
   });
 
   it("exposes legacy builtin metadata derived from chain definition seeds", () => {
@@ -65,8 +58,8 @@ describe("metadata", () => {
       namespace: "eip155",
       chainId: "0x1",
       displayName: firstSeed.definition.displayName,
-      rpcEndpoints: firstSeed.defaultRpcEndpoints,
     });
+    expect(DEFAULT_CHAIN_METADATA[0]).not.toHaveProperty("rpcEndpoints");
   });
 
   it("rejects namespace mismatches", () => {
@@ -112,28 +105,8 @@ describe("metadata", () => {
     }
   });
 
-  it("rejects duplicate RPC endpoints", () => {
-    const candidate = {
-      ...baseEip155Metadata,
-      rpcEndpoints: [{ url: "https://duplicate.endpoint" }, { url: "https://duplicate.endpoint" }],
-    };
-
-    try {
-      validateChainMetadata(candidate);
-      throw new Error("Expected validation to fail");
-    } catch (error) {
-      if (!(error instanceof ZodError)) throw error;
-      const issue = error.issues[0];
-      expect(issue?.path).toEqual(["rpcEndpoints"]);
-      expect(issue?.message).toBe("Duplicate RPC endpoint URL: https://duplicate.endpoint");
-    }
-  });
-
   it("rejects duplicate chainRef entries in metadata list", () => {
-    const duplicated = [
-      baseEip155Metadata,
-      { ...baseEip155Metadata, displayName: "Ethereum Mainnet Mirror", rpcEndpoints: [{ url: "https://mirror.rpc" }] },
-    ];
+    const duplicated = [baseEip155Metadata, { ...baseEip155Metadata, displayName: "Ethereum Mainnet Mirror" }];
 
     try {
       validateChainMetadataList(duplicated);
@@ -154,7 +127,6 @@ describe("metadata", () => {
         chainId: "0xa",
         displayName: "Optimism",
         shortName: "ETH",
-        rpcEndpoints: [{ url: "https://optimism.rpc" }],
         blockExplorers: [{ type: "default", url: "https://optimism.explorer" }],
       },
     ];
@@ -180,7 +152,6 @@ describe("metadata", () => {
         chainId: "0xa",
         displayName: "Optimism",
         shortName: "ETH",
-        rpcEndpoints: [{ url: "https://optimism.rpc" }],
         blockExplorers: [{ type: "default", url: "https://optimism.explorer" }],
       },
     ];
@@ -192,22 +163,14 @@ describe("metadata", () => {
     expect(() => validateChainMetadataList(DEFAULT_CHAIN_METADATA)).not.toThrow();
   });
 
-  it("treats add-chain comparable metadata as equal across ordering and extra fields", () => {
+  it("compares metadata independently from RPC endpoints", () => {
     const existing = validateChainMetadata({
       chainRef: "eip155:8453",
       namespace: "eip155",
-      chainId: "0X2105",
+      chainId: "0x2105",
       displayName: "Base Mainnet",
       shortName: "base",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [
-        {
-          url: "https://secondary.base.org/",
-          type: "authenticated",
-          headers: { Authorization: "Bearer token" },
-        },
-        { url: "https://mainnet.base.org", type: "public" },
-      ],
       blockExplorers: [
         { type: "secondary", url: "https://basescan.org/", title: "BaseScan" },
         { type: "default", url: "https://www.base.org" },
@@ -220,25 +183,25 @@ describe("metadata", () => {
       namespace: "eip155",
       chainId: "0x2105",
       displayName: "Base Mainnet",
+      shortName: "base",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [{ url: "https://mainnet.base.org/" }, { url: "https://secondary.base.org" }],
       blockExplorers: [
-        { type: "default", url: "https://www.base.org/" },
-        { type: "default", url: "https://basescan.org" },
+        { type: "secondary", url: "https://basescan.org/", title: "BaseScan" },
+        { type: "default", url: "https://www.base.org" },
       ],
+      icon: { url: "https://assets.example.com/base.svg", format: "svg" },
     });
 
-    expect(isSameAddChainComparableMetadata(existing, requested)).toBe(true);
+    expect(isSameChainMetadata(existing, requested)).toBe(true);
   });
 
-  it("detects add-chain comparable metadata differences", () => {
+  it("detects metadata differences", () => {
     const existing = validateChainMetadata({
       chainRef: "eip155:8453",
       namespace: "eip155",
       chainId: "0x2105",
       displayName: "Base Mainnet",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [{ url: "https://mainnet.base.org" }],
     });
 
     const changed = validateChainMetadata({
@@ -247,9 +210,8 @@ describe("metadata", () => {
       chainId: "0x2105",
       displayName: "Base Mainnet",
       nativeCurrency: { name: "Base Ether", symbol: "ETH", decimals: 18 },
-      rpcEndpoints: [{ url: "https://mainnet.base.org" }],
     });
 
-    expect(isSameAddChainComparableMetadata(existing, changed)).toBe(false);
+    expect(isSameChainMetadata(existing, changed)).toBe(false);
   });
 });

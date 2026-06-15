@@ -20,7 +20,6 @@ describe("EIP-3085 chain import", () => {
     expect(seed.definition).toEqual({
       chainRef: "eip155:8453",
       displayName: "Base",
-      shortName: "ETH",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       blockExplorers: [{ type: "default", url: "https://basescan.org", title: "Base" }],
     });
@@ -30,7 +29,7 @@ describe("EIP-3085 chain import", () => {
     expect(seed.defaultRpcEndpoints).toEqual([{ url: "https://mainnet.base.org", type: "public" }]);
   });
 
-  it("keeps the legacy metadata projection available for current callers", () => {
+  it("keeps the legacy metadata projection separate from RPC endpoints", () => {
     const metadata = createEip155MetadataFromEip3085(baseRequest);
 
     expect(metadata).toMatchObject({
@@ -38,7 +37,7 @@ describe("EIP-3085 chain import", () => {
       namespace: "eip155",
       chainId: "0x2105",
       displayName: "Base",
-      rpcEndpoints: [{ url: "https://mainnet.base.org", type: "public" }],
     });
+    expect(metadata).not.toHaveProperty("rpcEndpoints");
   });
 });

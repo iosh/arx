@@ -1,6 +1,7 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { ChainDefinitionSeed } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
@@ -16,7 +17,7 @@ export type NamespaceCoreManifest = {
   chainAddressCodec: ChainAddressCodec;
   accountCodec: AccountCodec;
   keyring: NamespaceConfig;
-  chainSeeds?: readonly ChainMetadata[];
+  chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
 };
 
 export type NamespaceApprovalBindings = {

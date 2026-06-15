@@ -1,10 +1,10 @@
 import type { ChainRef } from "../../ids.js";
-import type { ChainMetadata } from "../../metadata.js";
+import type { ChainDefinition } from "../../metadata.js";
 
 export type SupportedChainEntity = {
   chainRef: ChainRef;
   namespace: string;
-  metadata: ChainMetadata;
+  definition: ChainDefinition;
   source: "builtin" | "custom";
   createdByOrigin?: string;
 };
@@ -31,7 +31,7 @@ export interface SupportedChainsService {
   getState(): SupportedChainsState;
   getChain(chainRef: ChainRef): SupportedChainEntity | null;
   listChains(): SupportedChainEntity[];
-  addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
+  addChain(chain: ChainDefinition, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
   removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
   onStateChanged(handler: (state: SupportedChainsState) => void): () => void;
   onChainUpdated(handler: (update: SupportedChainsUpdate) => void): () => void;

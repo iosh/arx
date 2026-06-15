@@ -1,10 +1,10 @@
-import { type ChainMetadata, cloneChainMetadata, isSameChainMetadata } from "../../metadata.js";
+import { type ChainDefinition, cloneChainDefinition, isSameChainDefinition } from "../../metadata.js";
 import type { SupportedChainEntity, SupportedChainsState } from "./types.js";
 
 export const cloneSupportedChainEntity = (entity: SupportedChainEntity): SupportedChainEntity => ({
   chainRef: entity.chainRef,
   namespace: entity.namespace,
-  metadata: cloneChainMetadata(entity.metadata),
+  definition: cloneChainDefinition(entity.definition),
   source: entity.source,
   ...(entity.createdByOrigin ? { createdByOrigin: entity.createdByOrigin } : {}),
 });
@@ -23,7 +23,7 @@ export const isSameSupportedChainEntity = (previous: SupportedChainEntity, next:
     return false;
   }
 
-  return isSameChainMetadata(previous.metadata, next.metadata);
+  return isSameChainDefinition(previous.definition, next.definition);
 };
 
 export const isSameSupportedChainsState = (previous?: SupportedChainsState, next?: SupportedChainsState): boolean => {
@@ -41,14 +41,15 @@ export const isSameSupportedChainsState = (previous?: SupportedChainsState, next
 };
 
 export const toSupportedChainEntity = (params: {
-  metadata: ChainMetadata;
+  definition: ChainDefinition;
+  namespace: string;
   source: SupportedChainEntity["source"];
   createdByOrigin?: string;
 }): SupportedChainEntity => {
   return {
-    chainRef: params.metadata.chainRef,
-    namespace: params.metadata.namespace,
-    metadata: cloneChainMetadata(params.metadata),
+    chainRef: params.definition.chainRef,
+    namespace: params.namespace,
+    definition: cloneChainDefinition(params.definition),
     source: params.source,
     ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
   };

@@ -1,4 +1,5 @@
 import type { ChainDefinitionEntity } from "../../../storage/index.js";
+import type { ChainDefinition } from "../../definition.js";
 import type { ChainRef } from "../../ids.js";
 
 export type ChainDefinitionsState = {
@@ -25,9 +26,9 @@ export interface ChainDefinitionsService {
   getState(): ChainDefinitionsState;
   getChain(chainRef: ChainRef): ChainDefinitionEntity | null;
   getChains(): ChainDefinitionEntity[];
-  reconcileBuiltinChains(seed: readonly ChainDefinitionEntity["metadata"][]): Promise<void>;
+  reconcileBuiltinChains(seed: readonly ChainDefinition[]): Promise<void>;
   upsertCustomChain(
-    chain: ChainDefinitionEntity["metadata"],
+    chain: ChainDefinition,
     options?: ChainDefinitionsUpsertCustomOptions,
   ): Promise<ChainDefinitionsUpsertCustomResult>;
   removeCustomChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }>;

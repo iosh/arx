@@ -1,6 +1,6 @@
 import type { ChainDefinitionEntity } from "../../../storage/index.js";
 import type { ChainRef } from "../../ids.js";
-import type { ChainMetadata } from "../../metadata.js";
+import type { ChainDefinition } from "../../metadata.js";
 import type { ChainDefinitionsService, ChainDefinitionsUpdate } from "../chainDefinitions/types.js";
 import { cloneSupportedChainEntity, cloneSupportedChainsState, toSupportedChainEntity } from "./state.js";
 import type {
@@ -18,7 +18,8 @@ type SupportedChainsServiceOptions = {
 
 const toSupportedChain = (entity: ChainDefinitionEntity): SupportedChainEntity =>
   toSupportedChainEntity({
-    metadata: entity.metadata,
+    definition: entity.definition,
+    namespace: entity.namespace,
     source: entity.source,
     ...(entity.createdByOrigin ? { createdByOrigin: entity.createdByOrigin } : {}),
   });
@@ -66,7 +67,7 @@ export class InMemorySupportedChainsService implements SupportedChainsService {
     return this.getState().chains;
   }
 
-  async addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult> {
+  async addChain(chain: ChainDefinition, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult> {
     const result = await this.#chainDefinitions.upsertCustomChain(chain, options);
     if (result.kind === "noop") {
       return {

@@ -78,6 +78,7 @@ describe("@arx/storage-dexie", () => {
     const record = {
       chainRef: "eip155:1",
       rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+      source: "request",
       updatedAt: 1_000,
     } satisfies ChainRpcDefaultEndpointsRecord;
 
@@ -99,13 +100,10 @@ describe("@arx/storage-dexie", () => {
       schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
       source: "builtin",
       updatedAt: 1_000,
-      metadata: {
+      definition: {
         chainRef: "eip155:1",
-        namespace: "eip155",
-        chainId: "0x1",
         displayName: "Ethereum",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
       },
     } satisfies ChainDefinitionEntity;
 

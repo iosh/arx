@@ -1,12 +1,11 @@
 import type { ChainDefinitionEntity } from "../../../storage/index.js";
-import type { ChainRef } from "../../ids.js";
 import {
-  type ChainMetadata,
-  cloneChainMetadata,
-  isSameChainMetadata,
-  normalizeChainMetadata,
-  validateChainMetadata,
-} from "../../metadata.js";
+  type ChainDefinition,
+  cloneChainDefinition,
+  isSameChainDefinition,
+  normalizeChainDefinition,
+} from "../../definition.js";
+import type { ChainRef } from "../../ids.js";
 import type { ChainDefinitionsState } from "./types.js";
 
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
@@ -21,13 +20,13 @@ export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, nex
     return false;
   }
 
-  return isSameChainMetadata(previous.metadata, next.metadata);
+  return isSameChainDefinition(previous.definition, next.definition);
 };
 
 export const cloneChainDefinitionEntity = (entity: ChainDefinitionEntity): ChainDefinitionEntity => ({
   chainRef: entity.chainRef,
   namespace: entity.namespace,
-  metadata: cloneChainMetadata(entity.metadata),
+  definition: cloneChainDefinition(entity.definition),
   schemaVersion: entity.schemaVersion,
   updatedAt: entity.updatedAt,
   source: entity.source,
@@ -52,15 +51,14 @@ export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, ne
   return true;
 };
 
-export const prepareChainMetadataForStorage = (metadata: ChainMetadata) => {
-  const validatedMetadata = validateChainMetadata(metadata);
-  return normalizeChainMetadata(validatedMetadata);
+export const prepareChainDefinitionForStorage = (definition: ChainDefinition) => {
+  return normalizeChainDefinition(definition);
 };
 
 export const parseEntity = (params: {
   chainRef: ChainRef;
   namespace: string;
-  metadata: ChainMetadata;
+  definition: ChainDefinition;
   schemaVersion: number;
   updatedAt: number;
   source: ChainDefinitionEntity["source"];
@@ -69,7 +67,7 @@ export const parseEntity = (params: {
   return {
     chainRef: params.chainRef,
     namespace: params.namespace,
-    metadata: params.metadata,
+    definition: params.definition,
     schemaVersion: params.schemaVersion as ChainDefinitionEntity["schemaVersion"],
     updatedAt: params.updatedAt,
     source: params.source,

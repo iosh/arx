@@ -5,32 +5,31 @@ import {
   type ChainDefinitionEntity,
   type ChainDefinitionSource,
 } from "../../../storage/index.js";
-import type { ChainDefinitionsPort, ChainMetadata } from "../../index.js";
+import { getChainRefNamespace } from "../../caip.js";
+import type { ChainDefinition } from "../../definition.js";
+import type { ChainDefinitionsPort } from "../../index.js";
 import { InMemoryChainDefinitionsService } from "./ChainDefinitionsService.js";
 import { CHAIN_DEFINITIONS_TOPICS } from "./topics.js";
 import type { ChainDefinitionsState, ChainDefinitionsUpdate } from "./types.js";
 
-const createEip155Metadata = (reference: number, overrides: Partial<ChainMetadata> = {}): ChainMetadata => {
+const createEip155Definition = (reference: number, overrides: Partial<ChainDefinition> = {}): ChainDefinition => {
   return {
     chainRef: `eip155:${reference}`,
-    namespace: "eip155",
-    chainId: `0x${reference.toString(16)}`,
     displayName: `EIP155 ${reference}`,
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcEndpoints: [{ url: `https://rpc-${reference}.example`, type: "public" }],
     ...overrides,
   };
 };
 
 const toEntity = (
-  metadata: ChainMetadata,
+  definition: ChainDefinition,
   source: ChainDefinitionSource,
   updatedAt = 0,
   createdByOrigin?: string,
 ): ChainDefinitionEntity => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  metadata,
+  chainRef: definition.chainRef,
+  namespace: getChainRefNamespace(definition.chainRef),
+  definition,
   schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   updatedAt,
   source,
@@ -79,10 +78,10 @@ class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
 describe("InMemoryChainDefinitionsService", () => {
   it("reconciles builtin seed on startup and prunes stale builtin entries", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const mainnet = createEip155Metadata(1, { displayName: "Ethereum" });
-    const optimism = createEip155Metadata(10, { displayName: "Optimism" });
-    const custom = createEip155Metadata(8453, { displayName: "Base" });
-    const staleBuiltin = createEip155Metadata(9999, { displayName: "Stale" });
+    const mainnet = createEip155Definition(1, { displayName: "Ethereum" });
+    const optimism = createEip155Definition(10, { displayName: "Optimism" });
+    const custom = createEip155Definition(8453, { displayName: "Base" });
+    const staleBuiltin = createEip155Definition(9999, { displayName: "Stale" });
 
     const port = new MemoryChainDefinitionsPort([
       toEntity({ ...mainnet, displayName: "Old Ethereum" }, "builtin", 10),
@@ -104,7 +103,7 @@ describe("InMemoryChainDefinitionsService", () => {
         expect.objectContaining({
           chainRef: mainnet.chainRef,
           source: "builtin",
-          metadata: expect.objectContaining({ displayName: "Ethereum" }),
+          definition: expect.objectContaining({ displayName: "Ethereum" }),
         }),
         expect.objectContaining({ chainRef: optimism.chainRef, source: "builtin" }),
         expect.objectContaining({
@@ -128,7 +127,7 @@ describe("InMemoryChainDefinitionsService", () => {
     const updates: ChainDefinitionsUpdate[] = [];
     chainDefinitions.onChainUpdated((update) => updates.push(update));
 
-    const base = createEip155Metadata(8453, { displayName: "Base" });
+    const base = createEip155Definition(8453, { displayName: "Base" });
     const added = await chainDefinitions.upsertCustomChain(base, { createdByOrigin: "https://dapp.example" });
     expect(added).toMatchObject({
       kind: "added",
@@ -141,15 +140,15 @@ describe("InMemoryChainDefinitionsService", () => {
     );
     expect(updated).toMatchObject({
       kind: "updated",
-      chain: { metadata: { displayName: "Base Mainnet" }, createdByOrigin: "https://dapp.example" },
-      previous: { metadata: { displayName: "Base" } },
+      chain: { definition: { displayName: "Base Mainnet" }, createdByOrigin: "https://dapp.example" },
+      previous: { definition: { displayName: "Base" } },
     });
 
     expect(updates.map((entry) => entry.kind)).toEqual(["added", "updated"]);
     await expect(port.get(base.chainRef)).resolves.toMatchObject({
       source: "custom",
       createdByOrigin: "https://dapp.example",
-      metadata: { displayName: "Base Mainnet" },
+      definition: { displayName: "Base Mainnet" },
     });
   });
 
@@ -165,7 +164,7 @@ describe("InMemoryChainDefinitionsService", () => {
 
     await chainDefinitions.whenReady();
 
-    const optimism = createEip155Metadata(10);
+    const optimism = createEip155Definition(10);
     await chainDefinitions.upsertCustomChain(optimism, { createdByOrigin: "https://dapp.example" });
     states.length = 0;
     updates.length = 0;
@@ -178,7 +177,7 @@ describe("InMemoryChainDefinitionsService", () => {
 
   it("returns noop for builtin-equivalent custom upserts and rejects builtin conflicts", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const mainnet = createEip155Metadata(1, { displayName: "Ethereum" });
+    const mainnet = createEip155Definition(1, { displayName: "Ethereum" });
     const chainDefinitions = new InMemoryChainDefinitionsService({
       messenger,
       port: new MemoryChainDefinitionsPort(),
@@ -188,24 +187,21 @@ describe("InMemoryChainDefinitionsService", () => {
 
     await chainDefinitions.whenReady();
 
-    const equivalent = await chainDefinitions.upsertCustomChain({
-      ...mainnet,
-      rpcEndpoints: [{ url: "https://rpc-1.example/", type: "public" }],
-    });
+    const equivalent = await chainDefinitions.upsertCustomChain(mainnet);
     expect(equivalent).toMatchObject({ kind: "noop", chain: { source: "builtin", chainRef: mainnet.chainRef } });
 
     await expect(
       chainDefinitions.upsertCustomChain({
         ...mainnet,
-        rpcEndpoints: [{ url: "https://malicious.example", type: "public" }],
+        displayName: "Fake Ethereum",
       }),
     ).rejects.toMatchObject({ code: "chain.definition_conflict" });
   });
 
   it("removes only custom chains", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const mainnet = createEip155Metadata(1);
-    const base = createEip155Metadata(8453);
+    const mainnet = createEip155Definition(1);
+    const base = createEip155Definition(8453);
     const port = new MemoryChainDefinitionsPort([
       toEntity(mainnet, "builtin", 10),
       toEntity(base, "custom", 11, "https://dapp.example"),

@@ -1,13 +1,14 @@
 import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
+import { getChainRefNamespace } from "../../caip.js";
 import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
-import { type ChainMetadata, isSameAddChainComparableMetadata, isSameChainMetadata } from "../../metadata.js";
+import { type ChainDefinition, isSameChainDefinition } from "../../metadata.js";
 import {
   cloneChainDefinitionEntity,
   cloneChainDefinitionsState,
   parseEntity,
-  prepareChainMetadataForStorage,
+  prepareChainDefinitionForStorage,
 } from "./state.js";
 import {
   CHAIN_DEFINITIONS_STATE_CHANGED,
@@ -27,7 +28,7 @@ type SupportedChainsServiceOptions = {
   port: ChainDefinitionsPort;
   now?: () => number;
   logger?: (message: string, error?: unknown) => void;
-  seed?: readonly ChainMetadata[];
+  seed?: readonly ChainDefinition[];
   schemaVersion?: number;
 };
 
@@ -73,17 +74,17 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
     return cloneChainDefinitionsState(this.#chains.values()).chains;
   }
 
-  async reconcileBuiltinChains(seed: readonly ChainMetadata[]): Promise<void> {
+  async reconcileBuiltinChains(seed: readonly ChainDefinition[]): Promise<void> {
     await this.#ready;
     await this.#reconcileBuiltinChains(seed, { publish: true });
   }
 
   async upsertCustomChain(
-    metadata: ChainMetadata,
+    definition: ChainDefinition,
     options?: ChainDefinitionsUpsertCustomOptions,
   ): Promise<ChainDefinitionsUpsertCustomResult> {
     await this.#ready;
-    return await this.#upsertCustomChain(metadata, options);
+    return await this.#upsertCustomChain(definition, options);
   }
 
   async removeCustomChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }> {
@@ -121,7 +122,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
     return this.#ready;
   }
 
-  async #initialize(seed: readonly ChainMetadata[]): Promise<void> {
+  async #initialize(seed: readonly ChainDefinition[]): Promise<void> {
     try {
       const persisted = await this.#port.getAll();
 
@@ -142,32 +143,32 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
     }
   }
 
-  async #reconcileBuiltinChains(seed: readonly ChainMetadata[], options: ReconcileOptions): Promise<void> {
+  async #reconcileBuiltinChains(seed: readonly ChainDefinition[], options: ReconcileOptions): Promise<void> {
     const nextBuiltinRefs = new Set<ChainRef>();
     const nextEntries = new Map<ChainRef, ChainDefinitionEntity>();
     const changedEntries: Array<{ previous: ChainDefinitionEntity | null; next: ChainDefinitionEntity }> = [];
 
-    for (const metadata of seed) {
-      const storedMetadata = prepareChainMetadataForStorage(metadata);
-      if (nextBuiltinRefs.has(storedMetadata.chainRef)) {
-        throw new Error(`Duplicate builtin chain definition for ${storedMetadata.chainRef}`);
+    for (const definition of seed) {
+      const storedDefinition = prepareChainDefinitionForStorage(definition);
+      if (nextBuiltinRefs.has(storedDefinition.chainRef)) {
+        throw new Error(`Duplicate builtin chain definition for ${storedDefinition.chainRef}`);
       }
 
-      nextBuiltinRefs.add(storedMetadata.chainRef);
-      const previous = this.#chains.get(storedMetadata.chainRef) ?? null;
+      nextBuiltinRefs.add(storedDefinition.chainRef);
+      const previous = this.#chains.get(storedDefinition.chainRef) ?? null;
       if (
         previous &&
         previous.source === "builtin" &&
         previous.schemaVersion === this.#defaultSchemaVersion &&
-        isSameChainMetadata(previous.metadata, storedMetadata)
+        isSameChainDefinition(previous.definition, storedDefinition)
       ) {
         continue;
       }
 
       const next = parseEntity({
-        chainRef: storedMetadata.chainRef,
-        namespace: storedMetadata.namespace,
-        metadata: storedMetadata,
+        chainRef: storedDefinition.chainRef,
+        namespace: getChainRefNamespace(storedDefinition.chainRef),
+        definition: storedDefinition,
         schemaVersion: this.#defaultSchemaVersion,
         updatedAt: this.#now(),
         source: "builtin",
@@ -214,18 +215,18 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
   }
 
   async #upsertCustomChain(
-    metadata: ChainMetadata,
+    definition: ChainDefinition,
     options?: ChainDefinitionsUpsertCustomOptions,
   ): Promise<ChainDefinitionsUpsertCustomResult> {
-    const storedMetadata = prepareChainMetadataForStorage(metadata);
-    const previous = this.#chains.get(storedMetadata.chainRef) ?? null;
+    const storedDefinition = prepareChainDefinitionForStorage(definition);
+    const previous = this.#chains.get(storedDefinition.chainRef) ?? null;
 
     if (previous?.source === "builtin") {
-      if (isSameAddChainComparableMetadata(previous.metadata, storedMetadata)) {
+      if (isSameChainDefinition(previous.definition, storedDefinition)) {
         return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
       }
 
-      throw new ChainDefinitionConflictError({ chainRef: storedMetadata.chainRef });
+      throw new ChainDefinitionConflictError({ chainRef: storedDefinition.chainRef });
     }
 
     const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
@@ -235,15 +236,15 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
       previous.schemaVersion === schemaVersion &&
       previous.source === "custom" &&
       previous.createdByOrigin === createdByOrigin &&
-      isSameChainMetadata(previous.metadata, storedMetadata)
+      isSameChainDefinition(previous.definition, storedDefinition)
     ) {
       return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
     }
 
     const entity = parseEntity({
-      chainRef: storedMetadata.chainRef,
-      namespace: storedMetadata.namespace,
-      metadata: storedMetadata,
+      chainRef: storedDefinition.chainRef,
+      namespace: getChainRefNamespace(storedDefinition.chainRef),
+      definition: storedDefinition,
       schemaVersion,
       updatedAt: options?.updatedAt ?? this.#now(),
       source: "custom",

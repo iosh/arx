@@ -280,7 +280,7 @@ describe("createArxWallet", () => {
     );
   });
 
-  it("keeps permissions and dappConnections separated, and clears live connections on permission loss and lock", async () => {
+  it("keeps permissions and dappConnections separated while active provider scopes stay connected", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -308,6 +308,13 @@ describe("createArxWallet", () => {
         },
         accounts: [],
       });
+      expect(wallet.dappConnections.getState().count).toBe(1);
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: true,
+          accounts: [],
+        },
+      );
 
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
@@ -329,10 +336,16 @@ describe("createArxWallet", () => {
 
       await wallet.permissions.revokeOriginPermissions(ORIGIN);
       await flushAsync();
-      expect(wallet.dappConnections.getState().count).toBe(0);
+      expect(wallet.dappConnections.getState().count).toBe(1);
       expect(
         runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(false);
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: true,
+          accounts: [],
+        },
+      );
 
       await wallet.permissions.grantAuthorization(ORIGIN, {
         namespace: EIP155_NAMESPACE,
@@ -349,14 +362,22 @@ describe("createArxWallet", () => {
 
       wallet.session.lock("manual");
       await flushAsync();
-      expect(wallet.dappConnections.getState().count).toBe(0);
+      expect(wallet.dappConnections.getState().count).toBe(1);
       expect(
         runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(true);
       await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
         {
-          connected: false,
+          connected: true,
           accounts: [],
+        },
+      );
+
+      provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      expect(wallet.dappConnections.getState().count).toBe(0);
+      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
+        {
+          connected: false,
         },
       );
     } finally {

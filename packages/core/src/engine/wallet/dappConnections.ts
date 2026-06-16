@@ -87,14 +87,6 @@ export const createWalletDappConnections = (deps: { now?: () => number } = {}): 
     scope: ProviderRuntimeConnectionQuery,
     state: ProviderRuntimeConnectionState,
   ): DappConnectionRecord | null => {
-    if (state.accounts.length === 0) {
-      const removed = deleteConnectionRecord(scope.origin, scope.namespace);
-      if (removed) {
-        emitChanged();
-      }
-      return null;
-    }
-
     const existing = readConnectionRecord(scope.origin, scope.namespace);
     const at = now();
     if (existing?.chainRef === state.snapshot.chain.chainRef) {

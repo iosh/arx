@@ -538,12 +538,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     input: { origin: string; namespace: string },
     state: Parameters<typeof dappConnections.record>[1],
   ) => {
-    if (state.accounts.length > 0) {
-      dappConnections.record(input, state);
-      return;
-    }
-
-    dappConnections.remove(input);
+    dappConnections.record(input, state);
   };
   providerAccess.subscribeConnectionStateChanged((change) => {
     if (change.changed.chain || change.changed.accounts) {

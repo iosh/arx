@@ -13,8 +13,7 @@ export const createWalletProvider = (deps: {
       const state = await runtimeAccess.buildConnectionState(input);
       return {
         ...state,
-        connected:
-          dappConnections.isConnected(input.origin, { namespace: input.namespace }) && state.accounts.length > 0,
+        connected: dappConnections.isConnected(input.origin, { namespace: input.namespace }),
       };
     },
     activateConnectionScope: async (input) => {

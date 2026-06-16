@@ -389,8 +389,6 @@ describe("providerPortServer", () => {
       type: "request",
       id: "transport-1",
       payload: {
-        id: "rpc-1",
-        jsonrpc: "2.0",
         method: "eth_chainId",
       },
     });
@@ -405,8 +403,6 @@ describe("providerPortServer", () => {
           sessionId: "session-1",
           type: "response",
           payload: {
-            id: "rpc-1",
-            jsonrpc: "2.0",
             error: { kind: "ArxError", code: "global.transport.disconnected" },
           },
         }),
@@ -426,7 +422,7 @@ describe("providerPortServer", () => {
 
     const postMessageCallCount = port.postMessage.mock.calls.length;
     resolveRequest({
-      id: "rpc-1",
+      id: "transport-1",
       jsonrpc: "2.0",
       result: "0x1",
     });
@@ -448,8 +444,6 @@ describe("providerPortServer", () => {
       type: "request",
       id: "transport-1",
       payload: {
-        id: "rpc-1",
-        jsonrpc: "2.0",
         method: "wallet_requestPermissions",
       },
     });
@@ -458,11 +452,11 @@ describe("providerPortServer", () => {
     const input = harness.mocks.request.mock.calls[0]?.[0] as Parameters<WalletProvider["request"]>[0];
 
     expect(input.request).toMatchObject({
-      id: "rpc-1",
+      id: "transport-1",
       jsonrpc: "2.0",
       method: "wallet_requestPermissions",
-      namespace: "eip155",
     });
+    expect(input.namespace).toBe("eip155");
     expect(input.scope).toMatchObject({
       transport: "provider",
       sessionId: "session-1",
@@ -497,8 +491,6 @@ describe("providerPortServer", () => {
       type: "request",
       id: "transport-1",
       payload: {
-        id: "rpc-1",
-        jsonrpc: "2.0",
         method: "eth_chainId",
       },
     });
@@ -520,8 +512,6 @@ describe("providerPortServer", () => {
           sessionId: "session-1",
           type: "response",
           payload: {
-            id: "rpc-1",
-            jsonrpc: "2.0",
             error: { kind: "ArxError", code: "global.transport.disconnected" },
           },
         }),
@@ -534,7 +524,7 @@ describe("providerPortServer", () => {
 
     const postMessageCallCount = port.postMessage.mock.calls.length;
     resolveRequest({
-      id: "rpc-1",
+      id: "transport-1",
       jsonrpc: "2.0",
       result: "0x1",
     });
@@ -756,8 +746,6 @@ describe("providerPortServer", () => {
       type: "request",
       id: "transport-after-lock",
       payload: {
-        id: "rpc-after-lock",
-        jsonrpc: "2.0",
         method: "eth_chainId",
       },
     });

@@ -926,12 +926,12 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         portId,
         sessionId,
       },
+      namespace: requestNamespace,
       request: {
         id: requestId,
         jsonrpc: "2.0",
         method,
         ...(params !== undefined ? { params } : {}),
-        namespace: requestNamespace,
       },
     });
 

@@ -2,7 +2,7 @@ import type { WalletProvider } from "@arx/core/engine";
 import type { ProviderRuntimeRequestScope } from "@arx/core/runtime";
 import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
-import { createCoreProviderRequestEnvelope } from "../rpc";
+import { createCoreProviderRpcRequest } from "../rpc";
 import type { ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
@@ -20,9 +20,8 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     deps;
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { id: rpcId, jsonrpc } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
-    pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
+    pendingRequestMap.set(envelope.id, true);
 
     const sessionContext = getSessionContext(port);
     const origin = sessionContext.origin;
@@ -34,7 +33,11 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       portId,
       sessionId: envelope.sessionId,
     };
-    const request = createCoreProviderRequestEnvelope(sessionContext, envelope.payload);
+    const request = createCoreProviderRpcRequest({
+      id: envelope.id,
+      jsonrpc: "2.0",
+      ...envelope.payload,
+    });
 
     let provider: WalletProvider | null = null;
 
@@ -42,18 +45,22 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       provider = await getProvider();
       const response = await provider.request({
         scope: requestScope,
+        namespace: sessionContext.namespace,
         request,
       });
 
-      sendReply(port, envelope.sessionId, envelope.id, response as ProviderRpcResponse);
+      if ("error" in response) {
+        sendReply(port, envelope.sessionId, envelope.id, { error: response.error });
+        return;
+      }
+
+      sendReply(port, envelope.sessionId, envelope.id, { result: response.result });
     } catch (error) {
       const rpcError = provider
         ? provider.encodeRuntimeRpcError(error)
         : ({ kind: "JsonRpcError", code: -32603, message: "Internal error" } as const);
 
       sendReply(port, envelope.sessionId, envelope.id, {
-        id: rpcId,
-        jsonrpc,
         error: rpcError,
       });
     } finally {

@@ -1,16 +1,15 @@
-import type { JsonRpcParams, JsonRpcRequest } from "@arx/core";
+import type { JsonRpcParams } from "@arx/core";
 import type { ProviderRuntimeRpcError } from "@arx/core/runtime";
 
-export type ProviderRpcId = JsonRpcRequest<JsonRpcParams>["id"];
-export type ProviderRpcRequest = JsonRpcRequest<JsonRpcParams>;
+export type ProviderRpcParams = JsonRpcParams;
+export type ProviderRpcRequest = {
+  method: string;
+  params?: ProviderRpcParams;
+};
 export type ProviderRpcResponse =
   | {
-      id: ProviderRpcId;
-      jsonrpc: "2.0";
       result: unknown;
     }
   | {
-      id: ProviderRpcId;
-      jsonrpc: "2.0";
       error: ProviderRuntimeRpcError;
     };

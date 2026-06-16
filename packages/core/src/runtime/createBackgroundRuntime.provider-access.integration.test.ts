@@ -191,12 +191,12 @@ const requestProviderRpc = (
       portId: input.portId ?? "port-1",
       sessionId: input.sessionId ?? "session-1",
     },
+    namespace: input.namespace,
     request: {
       id: input.id,
       jsonrpc: "2.0",
       method: input.method,
       ...(input.params !== undefined ? { params: input.params } : {}),
-      namespace: input.namespace,
     },
   });
 };
@@ -408,11 +408,11 @@ describe("createBackgroundRuntime provider access", () => {
             portId: "port-1",
             sessionId: "session-1",
           },
+          namespace: "eip155",
           request: {
             id: "rpc-before-activation",
             jsonrpc: "2.0",
             method: "eth_chainId",
-            namespace: "eip155",
           },
         }),
       ).resolves.toMatchObject({

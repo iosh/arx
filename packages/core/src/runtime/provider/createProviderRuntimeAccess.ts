@@ -20,8 +20,7 @@ import type {
   ProviderConnectionScope,
   ProviderConnectionStateChange,
   ProviderConnectionStateChangedHandler,
-  ProviderRequestEnvelope,
-  ProviderRequestScope,
+  ProviderRequestInput,
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
@@ -429,14 +428,7 @@ export const createProviderRuntimeAccess = ({
     };
   };
 
-  const request = async ({
-    scope,
-    request: envelope,
-  }: {
-    scope: ProviderRequestScope;
-    request: ProviderRequestEnvelope;
-  }): Promise<ProviderRuntimeRpcResponse> => {
-    const { namespace, ...request } = envelope;
+  const request = async ({ scope, namespace, request }: ProviderRequestInput): Promise<ProviderRuntimeRpcResponse> => {
     const origin = scope.origin;
     const context: ProviderRuntimeRpcContext = { namespace };
     let providerRequestHandle: ProviderRequestHandle | null = null;

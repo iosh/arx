@@ -268,7 +268,7 @@ describe("WindowPostMessageTransport", () => {
         sessionId,
         type: "response",
         id,
-        payload: { jsonrpc: "2.0", id, result: "0x1" },
+        payload: { result: "0x1" },
       });
 
       await expect(pendingRequest).resolves.toBe("0x1");

@@ -1,6 +1,12 @@
 import type { CoreProviderApi } from "@arx/core/engine";
 import { createLogger, extendLogger } from "@arx/core/logger";
-import { CHANNEL, type Envelope, PROVIDER_EVENTS, type ProviderRpcResponse } from "@arx/provider/protocol";
+import {
+  CHANNEL,
+  type Envelope,
+  PROVIDER_EVENTS,
+  type ProviderRpcResponse,
+  parseProviderEnvelope,
+} from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncPortContext } from "./portContext";
@@ -327,8 +333,8 @@ export const createProviderPortServer = ({
     portLog("connect", { origin, portName: port.name, total: providerPortSessions.countConnectedPorts() });
 
     const handleMessage = (message: unknown) => {
-      const envelope = message as Envelope | undefined;
-      if (!envelope || envelope.channel !== CHANNEL) {
+      const envelope = parseProviderEnvelope(message);
+      if (!envelope) {
         return;
       }
 

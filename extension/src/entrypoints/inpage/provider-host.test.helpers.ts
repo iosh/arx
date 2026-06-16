@@ -209,7 +209,7 @@ export class MockContentBridge {
       sessionId,
       type: "response",
       id,
-      payload: { jsonrpc: "2.0", id, result: resultByMethod[method] },
+      payload: { result: resultByMethod[method] },
     });
 
     if (method === "eth_requestAccounts") {

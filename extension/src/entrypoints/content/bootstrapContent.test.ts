@@ -146,7 +146,7 @@ describe("bootstrapContent", () => {
       sessionId: "s1",
       type: "request",
       id: "m1",
-      payload: { jsonrpc: "2.0", id: "1", method: "eth_chainId" },
+      payload: { method: "eth_chainId" },
     });
 
     expect(connectSpy).toHaveBeenCalledTimes(0);
@@ -227,7 +227,7 @@ describe("bootstrapContent", () => {
       sessionId: "s1",
       type: "request",
       id: "m1",
-      payload: { jsonrpc: "2.0", id: "1", method: "eth_chainId" },
+      payload: { method: "eth_chainId" },
     });
     expect(port.postMessage).not.toHaveBeenCalled();
 

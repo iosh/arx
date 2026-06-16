@@ -319,11 +319,11 @@ describe("eip155 handlers - core error paths", () => {
           portId: "provider-port",
           sessionId: "provider-session",
         },
+        namespace: "eip155",
         request: {
           id: "rpc-chain-switched",
           jsonrpc: "2.0",
           method: "eth_chainId",
-          namespace: "eip155",
         },
       });
       expect(switchedChainResponse).toMatchObject({ result: ALT_CHAIN.chainId });
@@ -335,11 +335,11 @@ describe("eip155 handlers - core error paths", () => {
           portId: "provider-port",
           sessionId: "provider-session",
         },
+        namespace: "eip155",
         request: {
           id: "rpc-accounts-switched",
           jsonrpc: "2.0",
           method: "eth_accounts",
-          namespace: "eip155",
         },
       });
       expect(switchedAccountsResponse).toMatchObject({ result: [] });
@@ -355,11 +355,11 @@ describe("eip155 handlers - core error paths", () => {
           portId: "provider-port-other",
           sessionId: "provider-session-other",
         },
+        namespace: "eip155",
         request: {
           id: "rpc-chain-default",
           jsonrpc: "2.0",
           method: "eth_chainId",
-          namespace: "eip155",
         },
       });
       expect(defaultChainResponse).toMatchObject({ result: mainnet.chainId });

@@ -1,4 +1,4 @@
-import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
+import { CHANNEL, type Envelope, PROVIDER_EVENTS, parseProviderEnvelope } from "@arx/provider/protocol";
 import browser, { type Runtime } from "webextension-polyfill";
 
 type SessionPortEntry = {
@@ -93,8 +93,8 @@ export const bootstrapContent = () => {
       namespace,
       port: nextPort,
       onMessage: (data: unknown) => {
-        const envelope = data as Envelope | undefined;
-        if (!envelope || typeof envelope !== "object" || envelope.channel !== CHANNEL) return;
+        const envelope = parseProviderEnvelope(data);
+        if (!envelope) return;
         if (envelope.sessionId !== sessionId) return;
 
         switch (envelope.type) {
@@ -159,9 +159,8 @@ export const bootstrapContent = () => {
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
 
-    const data = event.data as Envelope | undefined;
-    if (!data || typeof data !== "object" || data.channel !== CHANNEL) return;
-    if (typeof data.sessionId !== "string") return;
+    const data = parseProviderEnvelope(event.data);
+    if (!data) return;
 
     switch (data.type) {
       case "handshake": {

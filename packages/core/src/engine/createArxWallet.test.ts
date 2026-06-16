@@ -531,11 +531,11 @@ describe("createArxWallet", () => {
             portId: PROVIDER_PORT_ID,
             sessionId: PROVIDER_SESSION_ID,
           },
+          namespace: EIP155_NAMESPACE,
           request: {
             id: "rpc-accounts-locked",
             jsonrpc: "2.0",
             method: "eth_accounts",
-            namespace: EIP155_NAMESPACE,
           },
         }),
       ).resolves.toMatchObject({

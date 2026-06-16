@@ -1,7 +1,12 @@
 import { EventEmitter } from "eventemitter3";
 import { CHANNEL } from "../protocol/channel.js";
-import { deriveProtocolVersion, type Envelope, type HandshakeAckPayload, isEnvelope } from "../protocol/envelope.js";
-import type { ProviderRpcRequest, ProviderRpcResponse } from "../protocol/rpc.js";
+import {
+  deriveProtocolVersion,
+  type Envelope,
+  type HandshakeAckPayload,
+  parseProviderEnvelope,
+} from "../protocol/envelope.js";
+import type { ProviderRpcResponse } from "../protocol/rpc.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import type { RequestArguments } from "../types/eip1193.js";
 import type { Transport, TransportRequestOptions } from "../types/transport.js";
@@ -107,13 +112,11 @@ export class WindowPostMessageTransport<TSnapshot = unknown, TPatch = unknown>
 
     const { method, params } = args;
 
-    const request: ProviderRpcRequest = {
-      id: (this.#id++).toString(),
-      jsonrpc: "2.0",
+    const id = (this.#id++).toString();
+    const request = {
       method,
       ...(params === undefined ? {} : { params }),
     };
-    const id = request.id as string;
     const envelope: Envelope = {
       channel: CHANNEL,
       sessionId: this.#sessionId,
@@ -288,8 +291,8 @@ export class WindowPostMessageTransport<TSnapshot = unknown, TPatch = unknown>
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
 
-    const data = event.data;
-    if (!isEnvelope(data)) return;
+    const data = parseProviderEnvelope(event.data);
+    if (!data) return;
     if (data.sessionId !== this.#sessionId) return;
 
     switch (data.type) {

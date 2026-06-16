@@ -70,15 +70,13 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     if (!requestMap) return;
 
     const error = encodeDisconnectError(overrideError);
-    for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
+    for (const messageId of requestMap.keys()) {
       postEnvelope(port, {
         channel: CHANNEL,
         sessionId,
         type: "response",
         id: messageId,
         payload: {
-          id: rpcId,
-          jsonrpc,
           error,
         },
       });

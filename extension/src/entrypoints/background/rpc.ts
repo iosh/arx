@@ -1,21 +1,15 @@
-import type { JsonRpcParams } from "@arx/core/rpc";
-import type { ProviderRequestEnvelope } from "@arx/core/runtime";
-import type { ProviderRpcRequest } from "@arx/provider/protocol";
-import type { ProviderSessionContext } from "./types";
+import type { JsonRpcParams, JsonRpcRequest } from "@arx/core";
+import type { ProviderRpcRequest } from "@arx/core/runtime";
 
-export const createCoreProviderRequestEnvelope = (
-  portContext: ProviderSessionContext,
-  request: ProviderRpcRequest,
-): ProviderRequestEnvelope => {
-  const coreRequest: ProviderRequestEnvelope = {
+export const createCoreProviderRpcRequest = (request: JsonRpcRequest<JsonRpcParams>): ProviderRpcRequest => {
+  const coreRequest: ProviderRpcRequest = {
     id: request.id,
     jsonrpc: request.jsonrpc,
     method: request.method,
-    namespace: portContext.namespace,
   };
 
   if (request.params !== undefined) {
-    coreRequest.params = request.params as JsonRpcParams;
+    coreRequest.params = request.params;
   }
 
   return coreRequest;

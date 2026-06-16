@@ -1,7 +1,6 @@
 import type {
   ProviderConnectionStateChangedHandler,
-  ProviderRequestEnvelope,
-  ProviderRequestScope,
+  ProviderRequestInput,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeRequestScope,
@@ -44,10 +43,7 @@ export type CoreProviderApi = Readonly<{
   activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
   deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): CoreUnsubscribe;
-  request(input: {
-    scope: ProviderRequestScope;
-    request: ProviderRequestEnvelope;
-  }): Promise<ProviderRuntimeRpcResponse>;
+  request(input: ProviderRequestInput): Promise<ProviderRuntimeRpcResponse>;
   encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): CoreUnsubscribe;

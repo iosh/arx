@@ -59,8 +59,9 @@ export type ProviderRequestInput = {
   request: ProviderRpcRequest;
 };
 
-export type ProviderRuntimeRpcContext = {
+export type ResolvedProviderRequestContext = ProviderRequestScope & {
   namespace: string;
+  chainRef: ChainRef;
 };
 
 export type ProviderRuntimeRpcError =

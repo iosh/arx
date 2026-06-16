@@ -22,8 +22,8 @@ export type {
   ProviderRuntimeExecutionContext,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcContext,
   ProviderRuntimeRpcError,
   ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
+  ResolvedProviderRequestContext,
 } from "./types.js";

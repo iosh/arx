@@ -21,6 +21,7 @@ import type {
   ProviderConnectionStateChange,
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
+  ProviderRequestScope,
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
@@ -28,10 +29,10 @@ import type {
   ProviderRuntimeExecutionContext,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcContext,
   ProviderRuntimeRpcError,
   ProviderRuntimeRpcResponse,
   ProviderRuntimeSnapshot,
+  ResolvedProviderRequestContext,
 } from "./types.js";
 
 const UNKNOWN_ORIGIN = "unknown://";
@@ -89,7 +90,7 @@ type ProviderRuntimeAccessDeps = {
 type BegunProviderRuntimeRequest = {
   kind: "begun";
   providerRequestHandle: ProviderRequestHandle;
-  resolvedContext: ProviderRuntimeRpcContext;
+  resolvedContext: ResolvedProviderRequestContext;
   resolvedExecutionContext: ProviderRuntimeExecutionContext;
   invocation: ResolvedRpcInvocationDetails;
 };
@@ -98,15 +99,11 @@ type PreparedProviderRuntimeRequest =
   | BegunProviderRuntimeRequest
   | {
       kind: "response";
-      resolvedContext: ProviderRuntimeRpcContext;
+      resolvedContext: ResolvedProviderRequestContext;
       result: Json;
     };
 
 type ProviderAccessPolicyResult = { kind: "continue" } | { kind: "response"; result: Json };
-
-const buildInternalRpcInvocationHint = (context: ProviderRuntimeRpcContext): RpcInvocationHint => ({
-  namespace: context.namespace,
-});
 
 const rejectProviderRequestHandle = (handle: ProviderRequestHandle | null) => {
   return handle ? handle.reject() : false;
@@ -417,20 +414,38 @@ export const createProviderRuntimeAccess = ({
     }
   };
 
-  const buildProviderRpcInvocationHint = async (args: {
-    origin: string;
+  const resolveProviderRequestContext = async (args: {
+    scope: ProviderRequestScope;
+    method: string;
     namespace: string;
-  }): Promise<RpcInvocationHint> => {
-    const scope = parseProviderConnectionScope(args);
+  }): Promise<ResolvedProviderRequestContext> => {
+    const parsedScope = parseProviderConnectionScope({
+      origin: args.scope.origin,
+      namespace: args.namespace,
+    });
+
+    if (isInternalOrigin(parsedScope.origin)) {
+      const invocation = resolveInvocationDetails(args.method, {
+        namespace: parsedScope.namespace,
+      });
+
+      return {
+        ...args.scope,
+        namespace: invocation.namespace,
+        chainRef: invocation.chainRef,
+      };
+    }
+
+    const resolvedProviderChain = resolveProviderChain(parsedScope);
     return {
-      namespace: scope.namespace,
-      chainRef: resolveProviderChain(scope).chain.chainRef,
+      ...args.scope,
+      namespace: parsedScope.namespace,
+      chainRef: resolvedProviderChain.chain.chainRef,
     };
   };
 
   const request = async ({ scope, namespace, request }: ProviderRequestInput): Promise<ProviderRuntimeRpcResponse> => {
     const origin = scope.origin;
-    const context: ProviderRuntimeRpcContext = { namespace };
     let providerRequestHandle: ProviderRequestHandle | null = null;
 
     const buildErrorResponse = (error: unknown): ProviderRuntimeRpcResponse => ({
@@ -444,16 +459,15 @@ export const createProviderRuntimeAccess = ({
       if (!getIsInitialized()) {
         throw createRuntimeNotInitializedError();
       }
-      const invocationHint = isInternalOrigin(origin)
-        ? buildInternalRpcInvocationHint(context)
-        : await buildProviderRpcInvocationHint({
-            origin,
-            namespace: context.namespace,
-          });
-      const invocation = resolveInvocationDetails(request.method, invocationHint);
-      const resolvedContext: ProviderRuntimeRpcContext = {
-        namespace: invocation.namespace,
-      };
+      const resolvedContext = await resolveProviderRequestContext({
+        scope: requestScope,
+        method: request.method,
+        namespace,
+      });
+      const invocation = resolveInvocationDetails(request.method, {
+        namespace: resolvedContext.namespace,
+        chainRef: resolvedContext.chainRef,
+      });
 
       const accessPolicy = applyAccessPolicy({ origin, method: request.method, invocation });
       if (accessPolicy.kind === "response") {

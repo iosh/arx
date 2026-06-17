@@ -49,7 +49,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
         origin: "https://dapp.example",
-        source: "dapp",
+        source: "provider",
         requestId: "request-1",
         accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         status: "submitted",

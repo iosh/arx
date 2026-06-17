@@ -14,7 +14,7 @@ const ORIGIN = "https://dapp.example";
 
 const requester = {
   origin: ORIGIN,
-  initiator: "dapp" as const,
+  source: "provider" as const,
   requestId: "1",
 };
 

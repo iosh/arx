@@ -106,7 +106,7 @@ export const createTransactionsHandlers = (deps: {
         namespace: chain.namespace,
         chainRef: resolvedChainRef,
         origin: deps.surface.origin,
-        source: "wallet",
+        source: "wallet-ui",
         requestId: crypto.randomUUID(),
         accountKey: activeAccount.accountKey,
         approvalId: crypto.randomUUID(),
@@ -118,29 +118,15 @@ export const createTransactionsHandlers = (deps: {
 
       return { approvalId: approval.approval.approvalId };
     },
-    "ui.transactions.rerunPrepare": async ({ transactionId }) => {
+    "ui.transactions.rerunPrepare": async ({ approvalId }) => {
       assertUnlocked(deps.session);
-      const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
-      if (!approval) {
-        throw new RpcInvalidParamsError({
-          message: "Transaction approval was not found.",
-          details: { transactionId },
-        });
-      }
-      await deps.transactions.rerunApprovalPrepare({ approvalId: approval.approvalId });
+      await deps.transactions.rerunApprovalPrepare({ approvalId });
       return null;
     },
-    "ui.transactions.applyDraftEdit": async ({ transactionId, edit, mode }) => {
+    "ui.transactions.applyDraftEdit": async ({ approvalId, edit, mode }) => {
       assertUnlocked(deps.session);
-      const approval = deps.transactions.getTransactionApprovalByTransactionId(transactionId);
-      if (!approval) {
-        throw new RpcInvalidParamsError({
-          message: "Transaction approval was not found.",
-          details: { transactionId },
-        });
-      }
       await deps.transactions.updateApprovalDraft({
-        approvalId: approval.approvalId,
+        approvalId,
         edit,
         ...(mode ? { mode } : {}),
       });

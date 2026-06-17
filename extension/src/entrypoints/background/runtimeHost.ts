@@ -1,7 +1,7 @@
 import {
   type ApprovalKind,
   ApprovalKinds,
-  type ApprovalRequester,
+  type ApprovalSource,
   type ApprovalTerminalReason,
 } from "@arx/core/approvals";
 import {
@@ -58,7 +58,7 @@ export type BackgroundApprovalEntry = {
   namespace: string;
   chainRef: string;
   createdAt: number;
-  requester: ApprovalRequester;
+  source: ApprovalSource;
 };
 
 export type BackgroundApprovalCreatedEvent = {
@@ -97,7 +97,7 @@ const toGenericApprovalEntry = (record: RuntimeApprovalCreatedEvent["record"]): 
   namespace: record.namespace,
   chainRef: record.chainRef,
   createdAt: record.createdAt,
-  requester: record.requester,
+  source: record.requester.source,
 });
 
 const buildTransactionApprovalCancelReason = (reason: ApprovalTerminalReason) =>
@@ -255,27 +255,15 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const getOrInitUiEntryAccess = async (): Promise<BackgroundUiEntryAccess> => {
     const active = await getOrInitRuntimeCache();
 
-    const buildTransactionApprovalEntry = async (
-      approval: RuntimeTransactionApproval,
-    ): Promise<BackgroundApprovalEntry | null> => {
-      const transaction = await active.runtime.transactions.getTransaction(approval.transactionId);
-      if (!transaction) {
-        return null;
-      }
-
-      return {
-        approvalId: approval.approvalId,
-        kind: ApprovalKinds.SendTransaction,
-        origin: approval.origin,
-        namespace: approval.namespace,
-        chainRef: approval.chainRef,
-        createdAt: approval.createdAt,
-        requester: {
-          origin: approval.origin,
-          initiator: transaction.source === "wallet" ? "wallet_ui" : "dapp",
-        },
-      };
-    };
+    const buildTransactionApprovalEntry = (approval: RuntimeTransactionApproval): BackgroundApprovalEntry => ({
+      approvalId: approval.approvalId,
+      kind: ApprovalKinds.SendTransaction,
+      origin: approval.origin,
+      namespace: approval.namespace,
+      chainRef: approval.chainRef,
+      createdAt: approval.createdAt,
+      source: approval.source,
+    });
 
     const cancelApproval = async ({ approvalId, reason }: { approvalId: string; reason: ApprovalTerminalReason }) => {
       const transaction = await active.runtime.transactions.cancelTransactionApproval({
@@ -315,18 +303,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
             }
 
             createdTransactionApprovalIds.add(approvalId);
-            void buildTransactionApprovalEntry(approval)
-              .then((entry) => {
-                if (entry && createdTransactionApprovalIds.has(approvalId)) {
-                  listener({ approval: entry });
-                  return;
-                }
-                createdTransactionApprovalIds.delete(approvalId);
-              })
-              .catch((error) => {
-                createdTransactionApprovalIds.delete(approvalId);
-                hostLog("failed to build transaction approval entry", { approvalId, error });
-              });
+            listener({ approval: buildTransactionApprovalEntry(approval) });
           }
         });
 

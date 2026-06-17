@@ -18,10 +18,7 @@ type ApprovalReadServiceDeps = {
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
-  transactionApprovals?: Pick<
-    TransactionsService,
-    "getTransaction" | "getTransactionApproval" | "listTransactionApprovals"
-  >;
+  transactionApprovals?: Pick<TransactionsService, "getTransactionApproval" | "listTransactionApprovals">;
 };
 
 const isApprovalRecord = <K extends ApprovalRecord["kind"]>(
@@ -32,6 +29,7 @@ const isApprovalRecord = <K extends ApprovalRecord["kind"]>(
 const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
   approvalId: item.approvalId,
   kind: item.kind,
+  source: item.source,
   origin: item.origin,
   namespace: item.namespace,
   chainRef: item.chainRef,
@@ -41,6 +39,7 @@ const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
 const toTransactionApprovalListEntry = (approval: TransactionApproval): ApprovalListEntry => ({
   approvalId: approval.approvalId,
   kind: ApprovalKinds.SendTransaction,
+  source: approval.source,
   origin: approval.origin,
   namespace: approval.namespace,
   chainRef: approval.chainRef,
@@ -60,6 +59,7 @@ const toDetailMeta = (record: ApprovalRecord) => {
 
   return {
     approvalId: record.approvalId,
+    source: record.requester.source,
     origin: record.origin,
     namespace: reviewContext.namespace,
     chainRef: reviewContext.reviewChainRef,
@@ -277,18 +277,14 @@ const buildTransactionOwnedSendTransactionDetail = async (
     return null;
   }
 
-  const transaction = await deps.transactionApprovals.getTransaction(approval.transactionId);
-  if (!transaction) {
-    return null;
-  }
-
   return {
     approvalId: approval.approvalId,
     kind: ApprovalKinds.SendTransaction,
+    source: approval.source,
     origin: approval.origin,
     namespace: approval.namespace,
     chainRef: approval.chainRef,
-    createdAt: transaction.createdAt,
+    createdAt: approval.createdAt,
     actions: {
       canApprove: approval.prepare.status === "ready",
       canReject: true,
@@ -313,8 +309,9 @@ export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
     if (!deps.transactionApprovals) {
       return oldEntries;
     }
+    const transactionApprovals = deps.transactionApprovals;
 
-    return deps.transactionApprovals.listTransactionApprovals().then((approvals) => {
+    return transactionApprovals.listTransactionApprovals().then((approvals) => {
       const transactionEntries = approvals.map(toTransactionApprovalListEntry);
       return [...oldEntries, ...transactionEntries].sort((left, right) => left.createdAt - right.createdAt);
     });

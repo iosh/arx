@@ -96,7 +96,6 @@ export type UiTransactionsAccess = Pick<
   | "approveAndSubmitTransaction"
   | "rejectTransactionApproval"
   | "getTransactionApproval"
-  | "getTransactionApprovalByTransactionId"
   | "getTransaction"
   | "listTransactions"
   | "onTransactionsChanged"

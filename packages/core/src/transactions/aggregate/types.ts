@@ -1,3 +1,4 @@
+import type { ApprovalSource } from "../../approvals/source.js";
 import type { JsonValue } from "./json.js";
 import type { TransactionTerminalReason } from "./terminalReason.js";
 
@@ -24,7 +25,7 @@ export type TransactionSubmissionStatus =
   | "cancelled"
   | "expired";
 
-export type TransactionSource = "dapp" | "wallet";
+export type TransactionSource = ApprovalSource;
 
 /** Local replacement intent for a new transaction. */
 export type TransactionReplacementType = "speed_up" | "cancel";

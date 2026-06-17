@@ -29,7 +29,7 @@ const createTransaction = (service: TransactionAggregateService): TransactionAgg
     namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
-    source: "dapp",
+    source: "provider",
     requestId: "rpc-1",
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     request: {
@@ -90,7 +90,7 @@ describe("TransactionAggregateService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      source: "wallet",
+      source: "wallet-ui",
       accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: {
         kind: "eip155.wallet.speedUp",

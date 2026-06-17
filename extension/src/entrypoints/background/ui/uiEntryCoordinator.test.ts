@@ -13,7 +13,7 @@ type ApprovalRecordLike = Pick<
 
 type ApprovalQueueItemLike = Pick<
   ApprovalQueueItem,
-  "approvalId" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt"
+  "approvalId" | "kind" | "source" | "origin" | "namespace" | "chainRef" | "createdAt"
 >;
 type NotificationOpenResult = Awaited<ReturnType<UiEntryPlatform["openNotificationPopup"]>>;
 type OnboardingOpenResult = Awaited<ReturnType<UiEntryPlatform["openOnboardingTab"]>>;
@@ -89,6 +89,7 @@ class FakeApprovalQueueService {
       {
         approvalId: record.approvalId,
         kind: record.kind,
+        source: record.requester.source,
         origin: record.origin,
         namespace: record.namespace,
         chainRef: record.chainRef,
@@ -133,7 +134,7 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
   createdAt: overrides?.createdAt ?? Date.now(),
   requester: {
     origin: overrides?.requester?.origin ?? "https://dapp.example",
-    initiator: overrides?.requester?.initiator ?? "dapp",
+    source: overrides?.requester?.source ?? "provider",
     requestId: overrides?.requester?.requestId ?? "request-1",
   },
 });
@@ -141,6 +142,7 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
 const createApprovalDetail = (approvalId: string): ApprovalDetail => ({
   approvalId,
   kind: "requestAccounts",
+  source: "provider",
   origin: "https://dapp.example",
   namespace: "eip155",
   chainRef: "eip155:1",
@@ -215,8 +217,24 @@ const buildHarness = (
       return {
         subscribeUnlockAttentionRequested: (handler: (payload: unknown) => void) =>
           bus.subscribe(ATTENTION_REQUESTED, handler),
-        subscribeApprovalCreated: (handler: (event: { approval: ApprovalRecordLike }) => void) =>
-          approvals.onCreated(({ record }) => handler({ approval: record })),
+        subscribeApprovalCreated: (
+          handler: BackgroundUiEntryAccess["subscribeApprovalCreated"] extends (listener: infer Listener) => unknown
+            ? Listener
+            : never,
+        ) =>
+          approvals.onCreated(({ record }) =>
+            handler({
+              approval: {
+                approvalId: record.approvalId,
+                kind: record.kind,
+                source: record.requester.source,
+                origin: record.origin,
+                namespace: record.namespace,
+                chainRef: record.chainRef,
+                createdAt: record.createdAt,
+              },
+            }),
+          ),
         subscribeApprovalFinished: (handler: (event: { approvalId: string }) => void) => approvals.onFinished(handler),
         subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
         subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
@@ -270,7 +288,7 @@ describe("uiEntryCoordinator", () => {
         approvalId: "approval-2",
         requester: {
           origin: "https://dapp.example",
-          initiator: "dapp",
+          source: "provider",
           requestId: "request-2",
         },
       }),
@@ -310,7 +328,7 @@ describe("uiEntryCoordinator", () => {
         approvalId: "ui-approval",
         requester: {
           origin: "chrome-extension://wallet",
-          initiator: "wallet_ui",
+          source: "wallet-ui",
           requestId: "ui-request",
         },
       }),
@@ -349,7 +367,7 @@ describe("uiEntryCoordinator", () => {
         approvalId: "ui-approval",
         requester: {
           origin: "chrome-extension://wallet",
-          initiator: "wallet_ui",
+          source: "wallet-ui",
           requestId: "ui-request",
         },
       }),

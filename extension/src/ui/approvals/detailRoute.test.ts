@@ -5,6 +5,7 @@ import { readApprovalDetailForRoute } from "./detailRoute";
 const INITIAL_DETAIL = {
   approvalId: "approval-1",
   kind: "signMessage",
+  source: "provider",
   origin: "https://example.test",
   namespace: "eip155",
   chainRef: "eip155:1",

@@ -239,7 +239,7 @@ describe("createArxWallet", () => {
         },
         {
           origin: ORIGIN,
-          initiator: "dapp",
+          source: "provider",
           requestId: "request-1",
         },
       );

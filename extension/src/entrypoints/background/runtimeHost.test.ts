@@ -136,12 +136,13 @@ const makeRuntime = () => {
   const addTransactionApproval = () => {
     const transaction = {
       id: "tx-1",
-      source: "dapp",
+      source: "provider",
       origin: "https://dapp.example",
     };
     const approval = {
       approvalId: "transaction-approval-1",
       transactionId: "tx-1",
+      source: "provider",
       origin: "https://dapp.example",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -166,7 +167,7 @@ const makeRuntime = () => {
         onFinished,
         onStateChanged: onApprovalsStateChanged,
         cancel: cancelApproval,
-        getState: () => ({ pending: [{ approvalId: "approval-1" }] }),
+        getState: () => ({ pending: [{ approvalId: "approval-1", source: "provider" }] }),
       },
       permissions: {
         onStateChanged: onPermissionsStateChanged,
@@ -439,10 +440,7 @@ describe("runtimeHost", () => {
         namespace: "eip155",
         chainRef: "eip155:1",
         createdAt: 1_000,
-        requester: {
-          origin: "https://dapp.example",
-          initiator: "dapp",
-        },
+        source: "provider",
       },
     });
     await expect(uiEntryAccess.getPendingApprovalCount()).resolves.toBe(2);

@@ -47,7 +47,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         namespace: "eip155",
         chainRef: prepared.chainRef,
         origin,
-        source: "dapp",
+        source: "provider",
         requestId: requestContext.requestId,
         accountKey: account.accountKey,
         approvalId,

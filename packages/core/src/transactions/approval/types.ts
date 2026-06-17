@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { JsonValue, TransactionTerminalReason } from "../aggregate/index.js";
+import type { JsonValue, TransactionSource, TransactionTerminalReason } from "../aggregate/index.js";
 import type { TransactionAggregate } from "../aggregate/types.js";
 import type { TransactionProposalBlocker, TransactionProposalError } from "../namespace/types.js";
 import type { TransactionReviewDetails } from "../review.js";
@@ -51,6 +51,7 @@ export type TransactionApprovalSession = {
   approvalId: string;
   namespace: string;
   chainRef: ChainRef;
+  source: TransactionSource;
   origin: string;
   accountKey: string;
   from: string;

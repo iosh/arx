@@ -124,6 +124,7 @@ export type TransactionApproval = {
   transactionId: string;
   namespace: string;
   chainRef: ChainRef;
+  source: TransactionSource;
   origin: string;
   account: TransactionAccount;
   review: TransactionReviewDetails | null;
@@ -372,6 +373,7 @@ const buildTransactionApproval = (session: TransactionApprovalSession): Transact
   transactionId: session.transactionId,
   namespace: session.namespace,
   chainRef: session.chainRef,
+  source: session.source,
   origin: session.origin,
   account: buildTransactionApprovalAccount(session),
   review: structuredClone(session.review),

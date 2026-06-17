@@ -372,6 +372,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       {
         approvalId: record.approvalId,
         kind: record.kind,
+        source: record.requester.source,
         origin: record.origin,
         namespace: record.namespace,
         chainRef: record.chainRef,

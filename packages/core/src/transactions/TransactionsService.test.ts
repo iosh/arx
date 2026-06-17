@@ -40,7 +40,7 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   namespace: overrides.namespace ?? "eip155",
   chainRef: overrides.chainRef ?? DEFAULT_CHAIN_REF,
   origin: overrides.origin ?? "https://dapp.example",
-  source: overrides.source ?? "dapp",
+  source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
   accountKey: overrides.accountKey ?? createDefaultAccountKey(),
   request: {
@@ -192,7 +192,7 @@ describe("TransactionsService", () => {
       status: "awaiting_approval",
       namespace: "eip155",
       chainRef: DEFAULT_CHAIN_REF,
-      source: "dapp",
+      source: "provider",
       origin: "https://dapp.example",
       account: {
         accountKey: createDefaultAccountKey(),

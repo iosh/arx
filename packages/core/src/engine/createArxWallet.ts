@@ -206,8 +206,6 @@ const createWalletUiDeps = (
           approveAndSubmitTransaction: (input) => runtime.transactions.approveAndSubmitTransaction(input),
           rejectTransactionApproval: (input) => runtime.transactions.rejectTransactionApproval(input),
           getTransactionApproval: (approvalId) => runtime.transactions.getTransactionApproval(approvalId),
-          getTransactionApprovalByTransactionId: (transactionId) =>
-            runtime.transactions.getTransactionApprovalByTransactionId(transactionId),
           getTransaction: (transactionId) => runtime.transactions.getTransaction(transactionId),
           listTransactions: (query) => runtime.transactions.listTransactions(query),
           onTransactionsChanged: (handler) => runtime.transactions.onTransactionsChanged(handler),

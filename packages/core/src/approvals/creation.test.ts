@@ -13,7 +13,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 const REQUESTER: ApprovalRequester = {
   origin: "https://dapp.example",
-  initiator: "dapp",
+  source: "provider",
   requestId: "rpc-1",
 };
 
@@ -80,7 +80,7 @@ describe("requestApproval", () => {
       }),
       requester: {
         origin: REQUESTER.origin,
-        initiator: REQUESTER.initiator,
+        source: REQUESTER.source,
         requestId: REQUESTER.requestId,
       },
     });
@@ -120,7 +120,7 @@ describe("requestApproval", () => {
       }),
       requester: {
         origin: REQUESTER.origin,
-        initiator: REQUESTER.initiator,
+        source: REQUESTER.source,
         requestId: REQUESTER.requestId,
       },
     });

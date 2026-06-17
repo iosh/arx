@@ -15,6 +15,7 @@ export const cloneState = (state: ApprovalState): ApprovalState => ({
   pending: state.pending.map((item) => ({
     approvalId: item.approvalId,
     kind: item.kind,
+    source: item.source,
     origin: item.origin,
     namespace: item.namespace,
     chainRef: item.chainRef,
@@ -34,6 +35,7 @@ export const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
     const matches =
       current.approvalId === other.approvalId &&
       current.kind === other.kind &&
+      current.source === other.source &&
       current.origin === other.origin &&
       current.namespace === other.namespace &&
       current.chainRef === other.chainRef &&

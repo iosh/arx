@@ -42,7 +42,7 @@ export const requireProviderRequestHandle = (executionContext: RpcExecutionConte
 
 export const buildDappApprovalRequester = (requestContext: RpcProviderRequestContext): ApprovalRequester => ({
   origin: requestContext.origin,
-  initiator: "dapp",
+  source: "provider",
   requestId: requestContext.requestId,
 });
 

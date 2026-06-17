@@ -54,6 +54,7 @@ type RequestAccountsApprovalDetail = Extract<ApprovalDetail, { kind: "requestAcc
 const createApprovalDetail = (overrides?: Partial<RequestAccountsApprovalDetail>): RequestAccountsApprovalDetail => ({
   approvalId: overrides?.approvalId ?? "approval-1",
   kind: "requestAccounts",
+  source: overrides?.source ?? "provider",
   origin: overrides?.origin ?? "https://dapp.example",
   namespace: overrides?.namespace ?? "eip155",
   chainRef: overrides?.chainRef ?? "eip155:1",

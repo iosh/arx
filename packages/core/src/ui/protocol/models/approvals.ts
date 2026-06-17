@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ApprovalAccountSelectionDecisionSchema } from "../../../approvals/decision.js";
 import type { ApprovalKind, ApprovalKinds } from "../../../approvals/queue/types.js";
+import type { ApprovalSource } from "../../../approvals/source.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { AccountKey } from "../../../storage/records.js";
 import type { SendTransactionApprovalReview } from "../../../transactions/review/types.js";
@@ -14,6 +15,7 @@ export type ApprovalSelectableAccount = {
 export type ApprovalListEntry = {
   approvalId: string;
   kind: ApprovalKind;
+  source: ApprovalSource;
   origin: string;
   namespace: string;
   chainRef: ChainRef;
@@ -23,6 +25,7 @@ export type ApprovalListEntry = {
 type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
   approvalId: string;
   kind: K;
+  source: ApprovalSource;
   origin: string;
   namespace: string;
   chainRef: ChainRef;

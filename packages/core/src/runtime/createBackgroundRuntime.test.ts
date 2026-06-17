@@ -517,7 +517,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
       {
         origin: "https://dapp.example",
-        initiator: "dapp",
+        source: "provider",
         requestId: "request-1",
       },
     ).settled;
@@ -621,7 +621,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
       {
         origin: "https://dapp.example",
-        initiator: "dapp",
+        source: "provider",
         requestId: "request-1",
       },
     ).settled;

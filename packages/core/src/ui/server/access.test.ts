@@ -28,7 +28,6 @@ const createTransactionAccess = () =>
       throw new Error("not used");
     },
     getTransactionApproval: () => null,
-    getTransactionApprovalByTransactionId: () => null,
     getTransaction: async () => null,
     listTransactions: async () => [],
     onTransactionsChanged: (handler: (transactionIds: string[]) => void) => {

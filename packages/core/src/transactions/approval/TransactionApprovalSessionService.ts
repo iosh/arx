@@ -139,6 +139,7 @@ export class TransactionApprovalSessionService {
         approvalId: input.approvalId,
         namespace: aggregate.record.namespace,
         chainRef: aggregate.record.chainRef,
+        source: aggregate.record.source,
         origin: aggregate.record.origin,
         accountKey: aggregate.record.accountKey,
         from: this.#accountCodecs.toCanonicalAddressFromAccountKey({

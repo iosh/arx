@@ -7,6 +7,7 @@ import type {
   RequestPermissionsApprovalResult,
 } from "../../permissions/service/types.js";
 import type { AccountKey } from "../../storage/records.js";
+import type { ApprovalSource } from "../source.js";
 import {
   type ApprovalKind,
   ApprovalKinds,
@@ -34,13 +35,14 @@ export type ApprovalFinalStatus = "approved" | "rejected" | "cancelled" | "expir
 
 export type ApprovalRequester = {
   origin: string;
-  initiator: "dapp" | "wallet_ui";
+  source: ApprovalSource;
   requestId?: string | undefined;
 };
 
 export type ApprovalQueueItem = {
   approvalId: string;
   kind: ApprovalQueueKind;
+  source: ApprovalSource;
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;

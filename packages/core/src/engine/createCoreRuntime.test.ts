@@ -120,7 +120,7 @@ const createRecoverableTransactionAggregate = (status: "awaiting_approval" | "su
     namespace: EIP155_NAMESPACE,
     chainRef: EIP155_CHAIN_REF,
     origin: ORIGIN,
-    source: "dapp",
+    source: "provider",
     requestId: "request-1",
     accountKey: ACCOUNT_KEY,
     status,

@@ -123,6 +123,9 @@ describe("ui protocol registry", () => {
     expect(parseUiMethodParams("ui.transactions.getDetail", { transactionId: "tx-1" })).toEqual({
       transactionId: "tx-1",
     });
+    expect(parseUiMethodParams("ui.transactions.rerunPrepare", { approvalId: "approval-1" })).toEqual({
+      approvalId: "approval-1",
+    });
     expect(parseUiMethodParams("ui.entry.getBootstrap", { environment: "notification" })).toEqual({
       environment: "notification",
     });

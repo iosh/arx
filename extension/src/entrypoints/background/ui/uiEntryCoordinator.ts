@@ -242,7 +242,7 @@ export const createUiEntryCoordinator = ({
   };
 
   const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, approval: UiApprovalEntry) => {
-    if (approval.requester.initiator !== "dapp") {
+    if (approval.source !== "provider") {
       return;
     }
 

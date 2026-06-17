@@ -38,14 +38,14 @@ export const transactionsMethods = {
   "ui.transactions.rerunPrepare": defineMethod(
     "command",
     z.strictObject({
-      transactionId: z.string().min(1),
+      approvalId: z.string().min(1),
     }),
     { broadcastSnapshot: false },
   ),
   "ui.transactions.applyDraftEdit": defineMethod(
     "command",
     z.strictObject({
-      transactionId: z.string().min(1),
+      approvalId: z.string().min(1),
       edit: NamespaceTransactionDraftEditSchema,
       mode: z.string().min(1).optional(),
     }),

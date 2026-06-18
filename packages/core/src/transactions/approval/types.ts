@@ -1,5 +1,10 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { JsonValue, TransactionSource, TransactionTerminalReason } from "../aggregate/index.js";
+import type {
+  CreateTransactionReplacementInput,
+  JsonValue,
+  TransactionRequestSnapshot,
+  TransactionSource,
+} from "../aggregate/index.js";
 import type { TransactionAggregate } from "../aggregate/types.js";
 import type { TransactionProposalBlocker, TransactionProposalError } from "../namespace/types.js";
 import type { TransactionReviewDetails } from "../review.js";
@@ -47,7 +52,6 @@ export type TransactionApprovalPrepareState =
   | TransactionApprovalFailedState;
 
 export type TransactionApprovalSession = {
-  transactionId: string;
   approvalId: string;
   namespace: string;
   chainRef: ChainRef;
@@ -55,6 +59,9 @@ export type TransactionApprovalSession = {
   origin: string;
   accountKey: string;
   from: string;
+  requestKind: string;
+  requestId: string | null;
+  replacement: CreateTransactionReplacementInput | null;
   createdAt: number;
   draft: TransactionApprovalDraft;
   review: TransactionReviewDetails | null;
@@ -95,30 +102,33 @@ export type ApproveTransactionApprovalSessionResult =
   | FailedTransactionApprovalSessionResult;
 
 export type OpenTransactionApprovalSessionInput = {
-  transactionId: string;
   approvalId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  source: TransactionSource;
+  origin: string;
+  accountKey: string;
+  from: string;
+  requestId?: string | null;
+  request: TransactionRequestSnapshot;
+  replacement: CreateTransactionReplacementInput | null;
 };
 
 export type PrepareTransactionApprovalSessionInput = {
-  transactionId: string;
   approvalId: string;
 };
 
 export type EditTransactionApprovalSessionInput = {
-  transactionId: string;
   approvalId: string;
   edit: NamespaceTransactionDraftEdit;
   mode?: string;
 };
 
 export type ApproveTransactionApprovalSessionInput = {
-  transactionId: string;
   approvalId: string;
   expectedPrepareId: string;
 };
 
 export type ResolveTransactionApprovalSessionInput = {
-  transactionId: string;
   approvalId: string;
-  reason?: TransactionTerminalReason | null;
 };

@@ -6,9 +6,8 @@ import type {
 } from "./storagePort.js";
 import { TransactionAggregateService } from "./TransactionAggregateService.js";
 import type {
-  ApproveTransactionInput,
   BeginSubmissionSigningInput,
-  CreateTransactionInput,
+  CreateApprovedTransactionInput,
   FailTransactionInput,
   QueueSubmissionBroadcastInput,
   RecordBroadcastAcceptanceInput,
@@ -50,29 +49,10 @@ export class TransactionAggregateStore {
     return aggregate ? cloneAggregate(aggregate) : null;
   }
 
-  async createTransaction(input: CreateTransactionInput): Promise<TransactionAggregate> {
-    const aggregate = this.#service.createTransaction(input);
-    await this.#storage.insertTransactionAggregate(aggregate);
+  async createApprovedTransaction(input: CreateApprovedTransactionInput): Promise<TransactionAggregate> {
+    const aggregate = this.#service.createApprovedTransaction(input);
+    await this.#storage.insertApprovedTransactionAggregate({ aggregate });
     return aggregate;
-  }
-
-  async approveTransaction(input: ApproveTransactionInput): Promise<TransactionAggregate> {
-    const aggregate = await this.#storage.loadTransactionAggregate(input.transactionId);
-    if (!aggregate) {
-      throw new TransactionAggregateNotFoundError(input.transactionId);
-    }
-
-    const next = this.#service.approveTransaction(aggregate, input);
-    await this.#storage.commitApprovedTransactionAggregate({
-      aggregate: next,
-    });
-    return next;
-  }
-
-  async rejectTransaction(input: TerminalTransactionInput): Promise<TransactionAggregate> {
-    return await this.#mutateExistingAggregate(input.transactionId, (aggregate) =>
-      this.#service.rejectTransaction(aggregate, input),
-    );
   }
 
   async cancelTransaction(input: TerminalTransactionInput): Promise<TransactionAggregate> {

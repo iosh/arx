@@ -18,10 +18,11 @@ import type {
   TransactionRecord,
   TransactionsStoragePort,
 } from "./aggregate/index.js";
+import { buildTransactionTerminalReason } from "./aggregate/index.js";
 import { TransactionAggregateStore } from "./aggregate/TransactionAggregateStore.js";
 import { createTransactionServices } from "./createTransactionServices.js";
 import { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
-import type { TransactionApprovalNotFoundError } from "./TransactionsService.js";
+import type { ApproveTransactionResult, Transaction } from "./TransactionsService.js";
 import type { NamespaceTransactionDraftEdit } from "./types.js";
 
 const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate => structuredClone(aggregate);
@@ -85,8 +86,8 @@ const createInMemoryTransactionsStoragePort = (seed: TransactionAggregate[] = []
       }
       store.set(aggregate.record.id, cloneAggregate(aggregate));
     },
-    async commitApprovedTransactionAggregate({ aggregate }) {
-      await port.saveTransactionAggregate(aggregate);
+    async insertApprovedTransactionAggregate({ aggregate }) {
+      await port.insertTransactionAggregate(aggregate);
     },
     async listTransactionHistory(query: ListTransactionHistoryQuery = {}) {
       const records = [...store.values()].map((aggregate) => structuredClone(aggregate.record));
@@ -118,7 +119,7 @@ const createInMemoryTransactionsStoragePort = (seed: TransactionAggregate[] = []
     },
     async listRecoverableTransactionAggregates(query: ListRecoverableTransactionAggregatesQuery = {}) {
       const aggregates = [...store.values()]
-        .filter((aggregate) => ["awaiting_approval", "submitting", "submitted"].includes(aggregate.record.status))
+        .filter((aggregate) => ["submitting", "submitted"].includes(aggregate.record.status))
         .map((aggregate) => cloneAggregate(aggregate))
         .sort((left, right) => compareRecordsNewestFirst(left.record, right.record));
       return aggregates.slice(0, query.limit ?? aggregates.length);
@@ -174,8 +175,16 @@ const createHarness = (params?: {
   };
 };
 
+const requireApprovedTransaction = (result: ApproveTransactionResult): Transaction => {
+  if (result.status !== "approved") {
+    throw new Error("Expected transaction approval to succeed.");
+  }
+
+  return result.transaction;
+};
+
 describe("TransactionsService", () => {
-  it("returns public transaction and approval views without internal fields", async () => {
+  it("opens an approval without creating durable transaction history", async () => {
     const { services } = createHarness();
     const transactionChanges: string[][] = [];
     const approvalChanges: string[][] = [];
@@ -187,51 +196,38 @@ describe("TransactionsService", () => {
       approvalId: APPROVAL_ID,
     });
 
-    expect(result.transaction).toMatchObject({
-      id: "tx-1",
-      status: "awaiting_approval",
-      namespace: "eip155",
-      chainRef: DEFAULT_CHAIN_REF,
-      source: "provider",
-      origin: "https://dapp.example",
-      account: {
-        accountKey: createDefaultAccountKey(),
-        address: DEFAULT_FROM,
-      },
-      requestKind: "eip155.rpc.eth_sendTransaction",
-      submitted: null,
-      receipt: null,
-      replacement: null,
-      terminalReason: null,
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    });
-    expect(result.transaction).not.toHaveProperty("request");
-    expect(result.transaction).not.toHaveProperty("approvedRequest");
-    expect(result.transaction).not.toHaveProperty("conflictKey");
-    expect(result.transaction).not.toHaveProperty("activeSubmissionId");
-
-    expect(result.approval).toMatchObject({
-      approvalId: APPROVAL_ID,
-      transactionId: "tx-1",
-      account: {
-        accountKey: createDefaultAccountKey(),
-        address: DEFAULT_FROM,
-      },
-      prepare: {
-        id: "prepare-1",
-        status: "ready",
-      },
+    expect(result).toEqual({
+      approval: expect.objectContaining({
+        approvalId: APPROVAL_ID,
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        source: "provider",
+        origin: "https://dapp.example",
+        account: {
+          accountKey: createDefaultAccountKey(),
+          address: DEFAULT_FROM,
+        },
+        prepare: expect.objectContaining({
+          id: "prepare-1",
+          status: "ready",
+        }),
+      }),
+      decision: expect.any(Promise),
     });
     expect(result.approval).not.toHaveProperty("draft");
     expect(result.approval.prepare).not.toHaveProperty("approvedPayload");
     expect("getTransactionCapabilities" in services.transactions).toBe(false);
-    expect(transactionChanges).toEqual([["tx-1"]]);
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
+    expect(transactionChanges).toEqual([]);
     expect(approvalChanges).toEqual([[APPROVAL_ID]]);
   });
 
-  it("uses approvalId for approval commands and clears the approval after approval", async () => {
+  it("uses approvalId for approval commands and creates the durable transaction after approval", async () => {
     const { services } = createHarness();
+    const transactionChanges: string[][] = [];
+    const approvalChanges: string[][] = [];
+    services.transactions.onTransactionsChanged((ids) => transactionChanges.push(ids));
+    services.transactions.onTransactionApprovalsChanged((ids) => approvalChanges.push(ids));
     const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput(),
       approvalId: APPROVAL_ID,
@@ -247,13 +243,39 @@ describe("TransactionsService", () => {
       transaction: {
         id: "tx-1",
         status: "submitting",
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        source: "provider",
+        origin: "https://dapp.example",
+        account: {
+          accountKey: createDefaultAccountKey(),
+          address: DEFAULT_FROM,
+        },
+        requestKind: "eip155.rpc.eth_sendTransaction",
+        submitted: null,
+        receipt: null,
+        replacement: null,
+        terminalReason: null,
+        createdAt: 1_000,
+        updatedAt: 1_000,
       },
     });
+    const transaction = requireApprovedTransaction(approved);
+    expect(transaction).not.toHaveProperty("request");
+    expect(transaction).not.toHaveProperty("approvedRequest");
+    expect(transaction).not.toHaveProperty("conflictKey");
+    expect(transaction).not.toHaveProperty("activeSubmissionId");
     expect(services.transactions.getTransactionApproval(APPROVAL_ID)).toBeNull();
-    await expect(services.transactions.getTransaction("tx-1")).resolves.toMatchObject({
-      id: "tx-1",
-      status: "submitting",
+    await expect(services.transactions.getTransaction("tx-1")).resolves.toEqual(transaction);
+    await expect(opened.decision).resolves.toMatchObject({
+      status: "approved",
+      approvalId: APPROVAL_ID,
+      transaction: {
+        id: "tx-1",
+      },
     });
+    expect(transactionChanges).toEqual([["tx-1"]]);
+    expect(approvalChanges).toEqual([[APPROVAL_ID], [APPROVAL_ID]]);
   });
 
   it("approves and submits through one service call", async () => {
@@ -310,7 +332,7 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("rejects a reused approvalId before creating another transaction", async () => {
+  it("rejects a reused approvalId before creating a durable transaction", async () => {
     const { services } = createHarness();
     await services.transactions.requestTransactionApproval({
       ...createTransactionInput(),
@@ -327,12 +349,7 @@ describe("TransactionsService", () => {
     ).rejects.toMatchObject({
       name: "TransactionApprovalSessionInvariantError",
     });
-    await expect(services.transactions.listTransactions()).resolves.toEqual([
-      expect.objectContaining({
-        id: "tx-1",
-        status: "awaiting_approval",
-      }),
-    ]);
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
   });
 
   it("lists public transaction history with filters and cloned JSON summaries", async () => {
@@ -345,6 +362,10 @@ describe("TransactionsService", () => {
         requestId: "request-1",
       }),
       approvalId: "approval-1",
+    });
+    await services.transactions.approveTransaction({
+      approvalId: "approval-1",
+      expectedPrepareId: first.approval.prepare.id,
     });
     const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput({
@@ -366,7 +387,7 @@ describe("TransactionsService", () => {
 
     expect(submittedHistory).toHaveLength(1);
     expect(submittedHistory[0]).toMatchObject({
-      id: "tx-2",
+      id: "tx-3",
       status: "submitted",
       submitted: {
         hash: "0xdeadbeef",
@@ -378,7 +399,7 @@ describe("TransactionsService", () => {
 
     const submittedSummary = submittedHistory[0]?.submitted as { hash: string };
     submittedSummary.hash = "mutated";
-    await expect(services.transactions.getTransaction("tx-2")).resolves.toMatchObject({
+    await expect(services.transactions.getTransaction("tx-3")).resolves.toMatchObject({
       submitted: {
         hash: "0xdeadbeef",
       },
@@ -387,14 +408,14 @@ describe("TransactionsService", () => {
     await expect(
       services.transactions.listTransactions({
         before: {
-          createdAt: first.transaction.createdAt,
-          id: first.transaction.id,
+          createdAt: 1_000,
+          id: "tx-1",
         },
       }),
     ).resolves.toEqual([]);
   });
 
-  it("ignores lifecycle listener failures and honors unsubscribe", async () => {
+  it("ignores transaction listener failures and honors unsubscribe after approval creates a transaction", async () => {
     const { services } = createHarness();
     const changes: string[][] = [];
     const unsubscribeThrowing = services.transactions.onTransactionsChanged(() => {
@@ -404,15 +425,23 @@ describe("TransactionsService", () => {
       changes.push(ids);
     });
 
-    await services.transactions.requestTransactionApproval({
+    const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput(),
       approvalId: APPROVAL_ID,
     });
+    await services.transactions.approveTransaction({
+      approvalId: APPROVAL_ID,
+      expectedPrepareId: opened.approval.prepare.id,
+    });
     unsubscribeThrowing();
     unsubscribe();
-    await services.transactions.requestTransactionApproval({
+    const second = await services.transactions.requestTransactionApproval({
       ...createTransactionInput({ requestId: "request-2" }),
       approvalId: "approval-2",
+    });
+    await services.transactions.approveTransaction({
+      approvalId: "approval-2",
+      expectedPrepareId: second.approval.prepare.id,
     });
 
     expect(changes).toEqual([["tx-1"]]);
@@ -454,26 +483,55 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("uses transactionId for local pending cancellation and discards the active approval", async () => {
+  it("rejects an approval without creating transaction history", async () => {
     const { services } = createHarness();
-    await services.transactions.requestTransactionApproval({
+    const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput(),
       approvalId: APPROVAL_ID,
     });
 
-    const cancelled = await services.transactions.cancelPendingTransaction({
-      transactionId: "tx-1",
+    const rejected = await services.transactions.rejectTransactionApproval({
+      approvalId: APPROVAL_ID,
+      reason: null,
+    });
+
+    expect(rejected).toMatchObject({
+      approvalId: opened.approval.approvalId,
+    });
+    await expect(opened.decision).resolves.toMatchObject({
+      status: "rejected",
+      approvalId: APPROVAL_ID,
+      reason: null,
+    });
+    expect(services.transactions.getTransactionApproval(APPROVAL_ID)).toBeNull();
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
+  });
+
+  it("cancels an approval without creating transaction history", async () => {
+    const { services } = createHarness();
+    const opened = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput(),
+      approvalId: APPROVAL_ID,
+    });
+
+    const cancelled = await services.transactions.cancelTransactionApproval({
+      approvalId: APPROVAL_ID,
       reason: null,
     });
 
     expect(cancelled).toMatchObject({
-      id: "tx-1",
+      approvalId: APPROVAL_ID,
+    });
+    await expect(opened.decision).resolves.toMatchObject({
       status: "cancelled",
+      approvalId: APPROVAL_ID,
+      reason: null,
     });
     expect(services.transactions.getTransactionApproval(APPROVAL_ID)).toBeNull();
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
   });
 
-  it("creates replacement approval views without exposing a capabilities API", async () => {
+  it("creates replacement approval views and writes replacement metadata only after approval", async () => {
     const { services } = createHarness();
 
     const replacement = await services.transactions.createSpeedUpReplacement({
@@ -484,20 +542,33 @@ describe("TransactionsService", () => {
       transactionId: "tx-original",
     });
 
-    expect(replacement.transaction).toMatchObject({
-      id: "tx-1",
-      replacement: {
-        replaces: {
-          transactionId: "tx-original",
-          type: "speed_up",
+    expect(replacement.approval).toMatchObject({
+      approvalId: "replacement-approval",
+    });
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
+
+    const approved = await services.transactions.approveTransaction({
+      approvalId: "replacement-approval",
+      expectedPrepareId: replacement.approval.prepare.id,
+    });
+
+    expect(approved).toMatchObject({
+      status: "approved",
+      transaction: {
+        id: "tx-1",
+        replacement: {
+          replaces: {
+            transactionId: "tx-original",
+            type: "speed_up",
+          },
+          replacedBy: null,
         },
-        replacedBy: null,
       },
     });
     expect("getTransactionCapabilities" in services.transactions).toBe(false);
   });
 
-  it("throws by approvalId when an approval command cannot find an active session", async () => {
+  it("returns approval_stale when an approval command cannot find an active session", async () => {
     const { services } = createHarness();
 
     await expect(
@@ -505,9 +576,38 @@ describe("TransactionsService", () => {
         approvalId: "missing-approval",
         expectedPrepareId: "prepare-1",
       }),
-    ).rejects.toMatchObject({
-      name: "TransactionApprovalNotFoundError",
-      approvalId: "missing-approval",
-    } satisfies Partial<TransactionApprovalNotFoundError>);
+    ).resolves.toMatchObject({
+      status: "approval_stale",
+      approval: null,
+    });
+  });
+
+  it("cancels an approval decision when the bound lifecycle signal aborts", async () => {
+    const { services } = createHarness();
+    const controller = new AbortController();
+    const opened = await services.transactions.requestTransactionApproval({
+      ...createTransactionInput(),
+      approvalId: APPROVAL_ID,
+      cancellation: {
+        signal: controller.signal,
+        reason: buildTransactionTerminalReason({
+          kind: "approval_cancelled",
+          code: "test.lifecycle_aborted",
+          message: "Test lifecycle ended.",
+        }),
+      },
+    });
+
+    controller.abort(new Error("request ended"));
+
+    await expect(opened.decision).resolves.toMatchObject({
+      status: "cancelled",
+      approvalId: APPROVAL_ID,
+      reason: expect.objectContaining({
+        code: "test.lifecycle_aborted",
+      }),
+    });
+    expect(services.transactions.getTransactionApproval(APPROVAL_ID)).toBeNull();
+    await expect(services.transactions.listTransactions()).resolves.toEqual([]);
   });
 });

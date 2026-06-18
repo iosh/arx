@@ -3,7 +3,6 @@ import {
   buildTransactionTerminalReason,
   TransactionAggregateInvariantError,
   TransactionAggregateService,
-  TransactionStatusTransitionError,
 } from "./index.js";
 import type { TransactionAggregate } from "./types.js";
 
@@ -24,8 +23,8 @@ const createService = () => {
   };
 };
 
-const createTransaction = (service: TransactionAggregateService): TransactionAggregate =>
-  service.createTransaction({
+const createApprovedTransactionAggregate = (service: TransactionAggregateService): TransactionAggregate =>
+  service.createApprovedTransaction({
     namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
@@ -40,10 +39,6 @@ const createTransaction = (service: TransactionAggregateService): TransactionAgg
         value: "0x1",
       },
     },
-  });
-
-const approveTransaction = (service: TransactionAggregateService, aggregate: TransactionAggregate) =>
-  service.approveTransaction(aggregate, {
     approvalId: "approval-1",
     submissionId: "submission-1",
     approvedAt: null,
@@ -65,28 +60,40 @@ const approveTransaction = (service: TransactionAggregateService, aggregate: Tra
   });
 
 describe("TransactionAggregateService", () => {
-  it("creates an awaiting approval aggregate before broadcast", () => {
+  it("creates a durable approved transaction with a queued submission", () => {
     const { service } = createService();
 
-    const aggregate = createTransaction(service);
+    const aggregate = createApprovedTransactionAggregate(service);
 
     expect(aggregate.record).toMatchObject({
       id: "tx-1",
-      status: "awaiting_approval",
-      approvedRequest: null,
-      activeSubmissionId: null,
+      status: "submitting",
+      approvedRequest: {
+        approvalId: "approval-1",
+        payload: {
+          nonce: "0x7",
+          gas: "0x5208",
+        },
+      },
+      activeSubmissionId: "submission-1",
       submitted: null,
       terminalReason: null,
       createdAt: 1_000,
       updatedAt: 1_000,
     });
-    expect(aggregate.submissions).toEqual([]);
+    expect(aggregate.submissions).toEqual([
+      expect.objectContaining({
+        id: "submission-1",
+        transactionId: "tx-1",
+        status: "queued",
+      }),
+    ]);
   });
 
   it("stores replacement intent as one input object", () => {
     const { service } = createService();
 
-    const aggregate = service.createTransaction({
+    const aggregate = service.createApprovedTransaction({
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
@@ -96,6 +103,11 @@ describe("TransactionAggregateService", () => {
         kind: "eip155.wallet.speedUp",
         payload: { value: "0x1" },
       },
+      approvalId: "approval-1",
+      approvedAt: null,
+      approvedRequestPayload: { value: "0x1" },
+      submissionId: "submission-1",
+      conflictKey: null,
       replacement: {
         transactionId: "tx-old",
         type: "speed_up",
@@ -106,56 +118,9 @@ describe("TransactionAggregateService", () => {
     expect(aggregate.record.replacementType).toBe("speed_up");
   });
 
-  it("approves a transaction by fixing approved request and creating a queued submission", () => {
-    const { service, tick } = createService();
-    const created = createTransaction(service);
-    tick(2_000);
-
-    const aggregate = approveTransaction(service, created);
-
-    expect(aggregate.record.status).toBe("submitting");
-    expect(aggregate.record.updatedAt).toBe(2_000);
-    expect(aggregate.record.approvedRequest).toMatchObject({
-      approvalId: "approval-1",
-      approvedAt: 2_000,
-      payload: {
-        nonce: "0x7",
-        gas: "0x5208",
-      },
-    });
-    expect(aggregate.record.activeSubmissionId).toBe("submission-1");
-    expect(aggregate.record.conflictKey).toEqual({
-      kind: "eip155.nonce",
-      value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
-    });
-    expect(aggregate.submissions).toEqual([
-      {
-        id: "submission-1",
-        transactionId: "tx-1",
-        status: "queued",
-        terminalReason: null,
-        createdAt: 2_000,
-        updatedAt: 2_000,
-      },
-    ]);
-  });
-
-  it("records user rejection as a terminal transaction", () => {
-    const { service } = createService();
-    const created = createTransaction(service);
-
-    const aggregate = service.rejectTransaction(created, { reason: null });
-
-    expect(aggregate.record.status).toBe("rejected");
-    expect(aggregate.record.terminalReason).toMatchObject({
-      kind: "user_rejected",
-      code: "user_rejected",
-    });
-  });
-
   it("records local cancellation before broadcast as a terminal transaction", () => {
     const { service } = createService();
-    const created = createTransaction(service);
+    const created = createApprovedTransactionAggregate(service);
 
     const aggregate = service.cancelTransaction(created, { reason: null });
 
@@ -167,7 +132,7 @@ describe("TransactionAggregateService", () => {
 
   it("records approval expiration before broadcast as a terminal transaction", () => {
     const { service } = createService();
-    const created = createTransaction(service);
+    const created = createApprovedTransactionAggregate(service);
 
     const aggregate = service.expireTransaction(created, { reason: null });
 
@@ -179,7 +144,7 @@ describe("TransactionAggregateService", () => {
 
   it("records failed-before-broadcast as a terminal transaction", () => {
     const { service } = createService();
-    const created = createTransaction(service);
+    const created = createApprovedTransactionAggregate(service);
 
     const aggregate = service.failTransaction(created, {
       reason: buildTransactionTerminalReason({
@@ -200,24 +165,23 @@ describe("TransactionAggregateService", () => {
 
   it("prevents terminal transactions from continuing", () => {
     const { service } = createService();
-    const created = createTransaction(service);
-    const rejected = service.rejectTransaction(created, { reason: null });
+    const created = createApprovedTransactionAggregate(service);
+    const failed = service.failTransaction(created, {
+      reason: buildTransactionTerminalReason({
+        kind: "internal_failed",
+      }),
+    });
 
     expect(() =>
-      service.approveTransaction(rejected, {
-        approvalId: "approval-1",
-        approvedRequestPayload: { ok: true },
-        submissionId: null,
-        approvedAt: null,
-        conflictKey: null,
+      service.beginSubmissionSigning(failed, {
+        submissionId: "submission-1",
       }),
     ).toThrow(TransactionAggregateInvariantError);
   });
 
   it("advances signing and keeps signed broadcast input out of durable state", () => {
     const { service, tick } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    const aggregate = createApprovedTransactionAggregate(service);
 
     tick(3_000);
     const signing = service.beginSubmissionSigning(aggregate, {
@@ -234,8 +198,7 @@ describe("TransactionAggregateService", () => {
 
   it("rejects submission commands for non-active submission ids", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    const aggregate = createApprovedTransactionAggregate(service);
 
     expect(() =>
       service.beginSubmissionSigning(aggregate, {
@@ -246,8 +209,7 @@ describe("TransactionAggregateService", () => {
 
   it("records broadcast acceptance by accepting the submission and marking the transaction submitted", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    let aggregate = createApprovedTransactionAggregate(service);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
@@ -274,8 +236,7 @@ describe("TransactionAggregateService", () => {
 
   it("prevents cancelling a submitted transaction as local cancellation", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    let aggregate = createApprovedTransactionAggregate(service);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
@@ -287,13 +248,12 @@ describe("TransactionAggregateService", () => {
       submitted: { hash: "0x1111" },
     });
 
-    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(TransactionStatusTransitionError);
+    expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(TransactionAggregateInvariantError);
   });
 
   it("prevents local cancellation after broadcast starts", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    let aggregate = createApprovedTransactionAggregate(service);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
@@ -306,8 +266,7 @@ describe("TransactionAggregateService", () => {
 
   it("records submitted transaction outcomes", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    let aggregate = createApprovedTransactionAggregate(service);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
@@ -335,8 +294,7 @@ describe("TransactionAggregateService", () => {
 
   it("records submitted transaction expiry from tracking", () => {
     const { service } = createService();
-    let aggregate = createTransaction(service);
-    aggregate = approveTransaction(service, aggregate);
+    let aggregate = createApprovedTransactionAggregate(service);
     aggregate = service.beginSubmissionSigning(aggregate, {
       submissionId: "submission-1",
     });
@@ -364,14 +322,13 @@ describe("TransactionAggregateService", () => {
     });
   });
 
-  it("lists restart actions for abandoned approval, incomplete submission, and submitted tracking", () => {
+  it("lists restart actions for incomplete submission and submitted tracking", () => {
     const { service } = createService();
-    const awaiting = createTransaction(service);
-    let submitting = approveTransaction(service, createTransaction(service));
+    let submitting = createApprovedTransactionAggregate(service);
     submitting = service.beginSubmissionSigning(submitting, {
       submissionId: "submission-1",
     });
-    let submitted = approveTransaction(service, createTransaction(service));
+    let submitted = createApprovedTransactionAggregate(service);
     submitted = service.beginSubmissionSigning(submitted, {
       submissionId: "submission-1",
     });
@@ -383,13 +340,6 @@ describe("TransactionAggregateService", () => {
       submitted: { hash: "0x1234" },
     });
 
-    expect(service.listRestartActions(awaiting)).toEqual([
-      expect.objectContaining({
-        kind: "finalize_incomplete_local",
-        transactionId: awaiting.record.id,
-        targetStatus: "cancelled",
-      }),
-    ]);
     expect(service.listRestartActions(submitting)).toEqual([
       expect.objectContaining({
         kind: "finalize_incomplete_local",
@@ -407,13 +357,15 @@ describe("TransactionAggregateService", () => {
 
   it("returns a next aggregate without mutating the current aggregate", () => {
     const { service } = createService();
-    const created = createTransaction(service);
+    const created = createApprovedTransactionAggregate(service);
 
-    const approved = approveTransaction(service, created);
-    approved.record.status = "confirmed";
-    approved.record.request.payload = { mutated: true };
+    const signing = service.beginSubmissionSigning(created, {
+      submissionId: "submission-1",
+    });
+    signing.record.status = "confirmed";
+    signing.record.request.payload = { mutated: true };
 
-    expect(created.record.status).toBe("awaiting_approval");
+    expect(created.record.status).toBe("submitting");
     expect(created.record.request.payload).toEqual({
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

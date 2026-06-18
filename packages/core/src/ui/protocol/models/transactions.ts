@@ -10,8 +10,6 @@ import type {
 } from "../../../transactions/aggregate/index.js";
 
 const TransactionStatusSchema = z.enum([
-  "awaiting_approval",
-  "rejected",
   "cancelled",
   "expired",
   "submitting",

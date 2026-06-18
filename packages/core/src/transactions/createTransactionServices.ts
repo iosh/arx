@@ -38,7 +38,6 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   const approvals = new TransactionApprovalSessionService({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountCodecs: options.accountCodecs,
     resourceLock,
     ...options.approvalSessionOptions,
   });

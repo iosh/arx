@@ -1,8 +1,9 @@
 import {
-  type CommitApprovedTransactionAggregateInput,
+  type InsertApprovedTransactionAggregateInput,
   type ListRecoverableTransactionAggregatesQuery,
   type ListTransactionHistoryQuery,
   type TransactionAggregate,
+  TransactionAggregateAlreadyExistsError,
   TransactionAggregateNotFoundError,
   type TransactionConflictKey,
   TransactionConflictKeyCollisionError,
@@ -12,7 +13,7 @@ import {
 } from "@arx/core/transactions/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 
-const RECOVERABLE_TRANSACTION_STATUSES = ["awaiting_approval", "submitting", "submitted"] as const;
+const RECOVERABLE_TRANSACTION_STATUSES = ["submitting", "submitted"] as const;
 
 const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRecord): number =>
   right.createdAt - left.createdAt || right.id.localeCompare(left.id);
@@ -67,15 +68,15 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
     });
   }
 
-  async commitApprovedTransactionAggregate(input: CommitApprovedTransactionAggregateInput): Promise<void> {
+  async insertApprovedTransactionAggregate(input: InsertApprovedTransactionAggregateInput): Promise<void> {
     await this.ctx.ready;
     const aggregate = input.aggregate;
     const transactionId = aggregate.record.id;
 
     await this.ctx.db.transaction("rw", this.records, this.submissions, async () => {
       const existing = await this.records.get(transactionId);
-      if (!existing) {
-        throw new TransactionAggregateNotFoundError(transactionId);
+      if (existing) {
+        throw new TransactionAggregateAlreadyExistsError(transactionId);
       }
 
       const conflictKey = aggregate.record.conflictKey;
@@ -110,8 +111,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
         }
       }
 
-      await this.records.put(aggregate.record);
-      await this.submissions.where("transactionId").equals(transactionId).delete();
+      await this.records.add(aggregate.record);
       if (aggregate.submissions.length > 0) {
         await this.submissions.bulkAdd(aggregate.submissions);
       }

@@ -4,8 +4,6 @@ import type { TransactionTerminalReason } from "./terminalReason.js";
 
 /** State of the wallet transaction shown in history and recovery. */
 export type TransactionStatus =
-  | "awaiting_approval"
-  | "rejected"
   | "cancelled"
   | "expired"
   | "submitting"
@@ -116,9 +114,8 @@ export type CreateTransactionInput = {
   replacement?: CreateTransactionReplacementInput | null;
 };
 
-/** Approval result that fixes the payload used for submission. */
-export type ApproveTransactionInput = {
-  transactionId: string;
+/** Approved request that creates a durable wallet transaction. */
+export type CreateApprovedTransactionInput = CreateTransactionInput & {
   approvalId: string;
   approvedRequestPayload: JsonValue;
   /** Null lets the aggregate allocate the first submission id. */

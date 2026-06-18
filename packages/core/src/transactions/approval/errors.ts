@@ -1,29 +1,29 @@
 export class TransactionApprovalSessionNotFoundError extends Error {
-  readonly transactionId: string;
+  readonly approvalId: string;
 
-  constructor(transactionId: string) {
-    super(`Transaction approval session "${transactionId}" was not found.`);
+  constructor(approvalId: string) {
+    super(`Transaction approval session "${approvalId}" was not found.`);
     this.name = "TransactionApprovalSessionNotFoundError";
-    this.transactionId = transactionId;
+    this.approvalId = approvalId;
   }
 }
 
 export class TransactionApprovalSessionConflictError extends Error {
-  readonly transactionId: string;
+  readonly approvalId: string;
 
-  constructor(transactionId: string, message: string) {
+  constructor(approvalId: string, message: string) {
     super(message);
     this.name = "TransactionApprovalSessionConflictError";
-    this.transactionId = transactionId;
+    this.approvalId = approvalId;
   }
 }
 
 export class TransactionApprovalSessionInvariantError extends Error {
-  readonly transactionId: string;
+  readonly approvalId: string;
 
-  constructor(transactionId: string, message: string) {
+  constructor(approvalId: string, message: string) {
     super(message);
     this.name = "TransactionApprovalSessionInvariantError";
-    this.transactionId = transactionId;
+    this.approvalId = approvalId;
   }
 }

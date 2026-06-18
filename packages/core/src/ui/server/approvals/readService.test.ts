@@ -110,10 +110,9 @@ const createRecord = <K extends ApprovalRecord["kind"]>(
 });
 
 const createTransactionApproval = (
-  approval: Partial<TransactionApproval> & Pick<TransactionApproval, "approvalId" | "transactionId">,
+  approval: Partial<TransactionApproval> & Pick<TransactionApproval, "approvalId">,
 ): TransactionApproval => ({
   approvalId: approval.approvalId,
-  transactionId: approval.transactionId,
   namespace: approval.namespace ?? "eip155",
   chainRef: approval.chainRef ?? "eip155:1",
   source: approval.source ?? "provider",
@@ -390,7 +389,6 @@ describe("createApprovalReadService", () => {
         approvals: [
           createTransactionApproval({
             approvalId: "approval-send-ready",
-            transactionId: "tx-ready",
             createdAt: 7,
             updatedAt: SEND_TRANSACTION_REVIEW_READY.updatedAt,
             review: SEND_TRANSACTION_REVIEW_READY.details,
@@ -405,7 +403,6 @@ describe("createApprovalReadService", () => {
           }),
           createTransactionApproval({
             approvalId: "approval-send-blocked",
-            transactionId: "tx-blocked",
             source: "wallet-ui",
             createdAt: 8,
             origin: "arx://ui",
@@ -432,7 +429,7 @@ describe("createApprovalReadService", () => {
         canReject: true,
       },
       request: {
-        transactionId: "tx-ready",
+        approvalId: "approval-send-ready",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
         prepareId: "prepare-ready",
@@ -451,7 +448,7 @@ describe("createApprovalReadService", () => {
         canReject: true,
       },
       request: {
-        transactionId: "tx-blocked",
+        approvalId: "approval-send-blocked",
         chainRef: "eip155:1",
         origin: "arx://ui",
         prepareId: "prepare-blocked",
@@ -486,12 +483,10 @@ describe("createApprovalReadService", () => {
           approvals: [
             createTransactionApproval({
               approvalId: "approval-send-1",
-              transactionId: "tx-1",
               createdAt: 9,
             }),
             createTransactionApproval({
               approvalId: "approval-send-2",
-              transactionId: "tx-2",
               source: "wallet-ui",
               origin: "arx://ui",
               createdAt: 10,
@@ -526,12 +521,10 @@ describe("createApprovalReadService", () => {
         approvals: [
           createTransactionApproval({
             approvalId: "approval-send-1",
-            transactionId: "tx-1",
             createdAt: 9,
           }),
           createTransactionApproval({
             approvalId: "approval-send-2",
-            transactionId: "tx-2",
             createdAt: 10,
           }),
         ],
@@ -542,14 +535,14 @@ describe("createApprovalReadService", () => {
       approvalId: "approval-send-1",
       kind: ApprovalKinds.SendTransaction,
       request: {
-        transactionId: "tx-1",
+        approvalId: "approval-send-1",
       },
     });
     await expect(readService.getDetail("approval-send-2")).resolves.toMatchObject({
       approvalId: "approval-send-2",
       kind: ApprovalKinds.SendTransaction,
       request: {
-        transactionId: "tx-2",
+        approvalId: "approval-send-2",
       },
     });
   });

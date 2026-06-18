@@ -1,4 +1,5 @@
 export {
+  TransactionAggregateAlreadyExistsError,
   TransactionAggregateInvariantError,
   TransactionAggregateNotFoundError,
   TransactionConflictKeyCollisionError,
@@ -14,7 +15,7 @@ export {
   TransactionStatusTransitionError,
 } from "./stateMachine.js";
 export type {
-  CommitApprovedTransactionAggregateInput,
+  InsertApprovedTransactionAggregateInput,
   ListRecoverableTransactionAggregatesQuery,
   ListTransactionHistoryCursor,
   ListTransactionHistoryQuery,
@@ -32,8 +33,8 @@ export {
   TRANSACTION_TERMINAL_REASON_KINDS,
 } from "./terminalReason.js";
 export type {
-  ApproveTransactionInput,
   BeginSubmissionSigningInput,
+  CreateApprovedTransactionInput,
   CreateTransactionInput,
   CreateTransactionReplacementInput,
   FailTransactionInput,

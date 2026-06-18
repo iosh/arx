@@ -6,7 +6,8 @@ import {
   DEFAULT_TO,
 } from "../__fixtures__/transactionServices.js";
 import {
-  type CreateTransactionInput,
+  buildTransactionTerminalReason,
+  type CreateApprovedTransactionInput,
   type JsonValue,
   type ListRecoverableTransactionAggregatesQuery,
   type ListTransactionHistoryQuery,
@@ -23,18 +24,20 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
 const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRecord): number =>
   right.createdAt - left.createdAt || right.id.localeCompare(left.id);
 
-type CreateTransactionInputOverrides = Omit<Partial<CreateTransactionInput>, "request"> & {
+type CreateApprovedTransactionInputOverrides = Omit<Partial<CreateApprovedTransactionInput>, "request"> & {
   request?: {
-    kind?: CreateTransactionInput["request"]["kind"];
+    kind?: CreateApprovedTransactionInput["request"]["kind"];
     payload?: JsonValue;
   };
 };
 
-const createTransactionInput = (overrides: CreateTransactionInputOverrides = {}): CreateTransactionInput => ({
+const createApprovedTransactionInput = (
+  overrides: CreateApprovedTransactionInputOverrides = {},
+): CreateApprovedTransactionInput => ({
   namespace: overrides.namespace ?? "eip155",
   chainRef: overrides.chainRef ?? DEFAULT_CHAIN_REF,
   origin: overrides.origin ?? "https://dapp.example",
-  source: overrides.source ?? "dapp",
+  source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
   accountKey: overrides.accountKey ?? createDefaultAccountKey(),
   request: {
@@ -48,6 +51,23 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
       },
     ),
   },
+  approvalId: overrides.approvalId ?? "approval-1",
+  approvedAt: overrides.approvedAt ?? null,
+  approvedRequestPayload:
+    overrides.approvedRequestPayload ??
+    structuredClone({
+      chainId: "0xa",
+      from: DEFAULT_FROM,
+      to: DEFAULT_TO,
+      value: "0x1",
+      data: "0x",
+      gas: "0x5208",
+      nonce: "0x7",
+      type: "legacy",
+      gasPrice: "0x3b9aca00",
+    }),
+  submissionId: overrides.submissionId ?? "submission-1",
+  conflictKey: overrides.conflictKey ?? null,
   ...(overrides.replacement !== undefined ? { replacement: overrides.replacement } : {}),
 });
 
@@ -86,8 +106,8 @@ const createInMemoryTransactionsStoragePort = (
       }
       store.set(transactionId, cloneAggregate(aggregate));
     },
-    async commitApprovedTransactionAggregate({ aggregate }) {
-      await port.saveTransactionAggregate(aggregate);
+    async insertApprovedTransactionAggregate({ aggregate }) {
+      await port.insertTransactionAggregate(aggregate);
     },
     async listTransactionHistory(query: ListTransactionHistoryQuery = {}) {
       const records = [...store.values()].map((aggregate) => structuredClone(aggregate.record));
@@ -119,7 +139,7 @@ const createInMemoryTransactionsStoragePort = (
     },
     async listRecoverableTransactionAggregates(query: ListRecoverableTransactionAggregatesQuery = {}) {
       const aggregates = [...store.values()]
-        .filter((aggregate) => ["awaiting_approval", "submitting", "submitted"].includes(aggregate.record.status))
+        .filter((aggregate) => ["submitting", "submitted"].includes(aggregate.record.status))
         .map((aggregate) => cloneAggregate(aggregate))
         .sort((left, right) => compareRecordsNewestFirst(left.record, right.record));
       return aggregates.slice(0, query.limit ?? aggregates.length);
@@ -154,20 +174,22 @@ const createService = () => {
 };
 
 describe("TransactionAggregateStore", () => {
-  it("persists a newly created awaiting-approval aggregate", async () => {
+  it("persists a newly created approved aggregate", async () => {
     const { store, storage } = createService();
 
-    const created = await store.createTransaction(createTransactionInput());
+    const created = await store.createApprovedTransaction(createApprovedTransactionInput());
     const stored = storage.readAggregate("tx-1");
 
-    expect(created.record.status).toBe("awaiting_approval");
+    expect(created.record.status).toBe("submitting");
+    expect(created.record.approvedRequest?.approvalId).toBe("approval-1");
+    expect(created.record.activeSubmissionId).toBe("submission-1");
     expect(stored).toEqual(created);
   });
 
-  it("hydrates a stored aggregate before approving and saving the queued submission", async () => {
+  it("hydrates a stored aggregate before mutating and saving it", async () => {
     const { store, tick } = createService();
 
-    await store.createTransaction(createTransactionInput());
+    await store.createApprovedTransaction(createApprovedTransactionInput());
     tick(2_000);
 
     const stored = await store.loadTransactionAggregate("tx-1");
@@ -179,47 +201,29 @@ describe("TransactionAggregateStore", () => {
     const freshProcess = new TransactionAggregateStore({
       storage: seededStorage.port,
       now: () => 2_000,
-      createId: () => "submission-1",
+      createId: () => "unused-id",
     });
 
-    const approved = await freshProcess.approveTransaction({
+    const signing = await freshProcess.beginSubmissionSigning({
       transactionId: "tx-1",
-      approvalId: "approval-1",
-      approvedAt: null,
-      submissionId: null,
-      approvedRequestPayload: {
-        chainId: "0xa",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        value: "0x1",
-        data: "0x",
-        gas: "0x5208",
-        nonce: "0x7",
-        type: "legacy",
-        gasPrice: "0x3b9aca00",
-      },
-      conflictKey: {
-        kind: "eip155.nonce",
-        value: "eip155:10:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
-      },
+      submissionId: "submission-1",
     });
 
-    expect(approved.record.status).toBe("submitting");
-    expect(approved.record.approvedRequest?.approvalId).toBe("approval-1");
-    expect(approved.record.activeSubmissionId).toBe("submission-1");
-    expect(approved.submissions).toEqual([
+    expect(signing.record.status).toBe("submitting");
+    expect(signing.record.activeSubmissionId).toBe("submission-1");
+    expect(signing.submissions).toEqual([
       expect.objectContaining({
         id: "submission-1",
-        status: "queued",
+        status: "signing",
       }),
     ]);
-    expect(seededStorage.readAggregate("tx-1")).toEqual(approved);
+    expect(seededStorage.readAggregate("tx-1")).toEqual(signing);
   });
 
   it("rethrows aggregate not-found when mutating a missing stored transaction", async () => {
     const { store } = createService();
 
-    await expect(store.rejectTransaction({ transactionId: "missing", reason: null })).rejects.toThrow(
+    await expect(store.cancelTransaction({ transactionId: "missing", reason: null })).rejects.toThrow(
       TransactionAggregateNotFoundError,
     );
   });
@@ -227,41 +231,65 @@ describe("TransactionAggregateStore", () => {
   it("lists restart actions from recoverable aggregates only", async () => {
     const { store, tick } = createService();
 
-    await store.createTransaction(createTransactionInput());
+    await store.createApprovedTransaction(createApprovedTransactionInput());
+    await store.beginSubmissionSigning({
+      transactionId: "tx-1",
+      submissionId: "submission-1",
+    });
+
     tick(2_000);
-    await store.createTransaction(createTransactionInput({ requestId: "request-2" }));
-    await store.approveTransaction({
+    await store.createApprovedTransaction(
+      createApprovedTransactionInput({
+        requestId: "request-2",
+        approvalId: "approval-2",
+        submissionId: "submission-2",
+      }),
+    );
+    await store.beginSubmissionSigning({
       transactionId: "tx-2",
-      approvalId: "approval-2",
-      approvedAt: null,
       submissionId: "submission-2",
-      approvedRequestPayload: {
-        chainId: "0xa",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        value: "0x1",
-        data: "0x",
-        gas: "0x5208",
-        nonce: "0x8",
-        type: "legacy",
-        gasPrice: "0x3b9aca00",
-      },
-      conflictKey: null,
+    });
+    await store.queueSubmissionBroadcast({
+      transactionId: "tx-2",
+      submissionId: "submission-2",
+    });
+    await store.recordBroadcastAcceptance({
+      transactionId: "tx-2",
+      submissionId: "submission-2",
+      submitted: { hash: "0x2222" },
+    });
+
+    await store.failTransaction({
+      transactionId: "tx-1",
+      reason: buildTransactionTerminalReason({ kind: "internal_failed" }),
+    });
+    await store.createApprovedTransaction(
+      createApprovedTransactionInput({
+        requestId: "request-3",
+        approvalId: "approval-3",
+        submissionId: "submission-3",
+      }),
+    );
+    await store.beginSubmissionSigning({
+      transactionId: "tx-3",
+      submissionId: "submission-3",
     });
 
     const actions = await store.listRestartActions();
 
     expect(actions).toEqual([
-      expect.objectContaining({
+      {
         kind: "finalize_incomplete_local",
-        transactionId: "tx-2",
+        transactionId: "tx-3",
         targetStatus: "failed",
-      }),
-      expect.objectContaining({
-        kind: "finalize_incomplete_local",
-        transactionId: "tx-1",
-        targetStatus: "cancelled",
-      }),
+        reason: expect.objectContaining({
+          kind: "broadcast_outcome_unknown",
+        }),
+      },
+      {
+        kind: "resume_tracking",
+        transactionId: "tx-2",
+      },
     ]);
   });
 });

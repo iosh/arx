@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 
 import {
   type TransactionAggregate,
+  TransactionAggregateAlreadyExistsError,
   TransactionAggregateNotFoundError,
   TransactionConflictKeyCollisionError,
   type TransactionTerminalReason,
@@ -25,7 +26,7 @@ afterEach(async () => {
   await Dexie.delete(DB_NAME);
 });
 
-const createAwaitingApprovalAggregate = (
+const createSubmittedAggregateRecord = (
   transactionId: string,
   overrides: Partial<TransactionAggregate["record"]> = {},
 ): TransactionAggregate => ({
@@ -34,10 +35,10 @@ const createAwaitingApprovalAggregate = (
     namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
-    source: "dapp",
+    source: "provider",
     requestId: "rpc-1",
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    status: "awaiting_approval",
+    status: "submitted",
     request: {
       kind: "eip155.rpc.eth_sendTransaction",
       payload: {
@@ -46,9 +47,26 @@ const createAwaitingApprovalAggregate = (
         value: "0x1",
       },
     },
-    approvedRequest: null,
+    approvedRequest: {
+      approvalId: `approval:${transactionId}`,
+      payload: {
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        value: "0x1",
+        data: "0x",
+        gas: "0x5208",
+        nonce: "0x7",
+      },
+      approvedAt: 1_100,
+    },
     activeSubmissionId: null,
-    submitted: null,
+    submitted: {
+      hash: `0x${transactionId
+        .replace(/[^a-f0-9]/gi, "")
+        .padEnd(64, "0")
+        .slice(0, 64)}`,
+    },
     receipt: null,
     conflictKey: null,
     replacesTransactionId: null,
@@ -68,7 +86,7 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
     namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
-    source: "dapp",
+    source: "provider",
     requestId: "rpc-1",
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitting",
@@ -180,7 +198,7 @@ describe("DexieTransactionAggregatesPort", () => {
     const storage = createTestStorage();
     const port = storage.ports.transactions;
 
-    await expect(port.saveTransactionAggregate(createAwaitingApprovalAggregate("missing-tx"))).rejects.toThrow(
+    await expect(port.saveTransactionAggregate(createSubmittedAggregateRecord("missing-tx"))).rejects.toThrow(
       TransactionAggregateNotFoundError,
     );
   });
@@ -257,17 +275,17 @@ describe("DexieTransactionAggregatesPort", () => {
       kind: "eip155.nonce",
       value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     };
-    const older = createAwaitingApprovalAggregate("tx-older", {
+    const older = createSubmittedAggregateRecord("tx-older", {
       conflictKey,
       createdAt: 1_000,
       updatedAt: 1_000,
     });
-    const newer = createAwaitingApprovalAggregate("tx-newer", {
+    const newer = createSubmittedAggregateRecord("tx-newer", {
       conflictKey,
       createdAt: 2_000,
       updatedAt: 2_000,
     });
-    const unrelated = createAwaitingApprovalAggregate("tx-unrelated", {
+    const unrelated = createSubmittedAggregateRecord("tx-unrelated", {
       conflictKey: {
         ...conflictKey,
         value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x8",
@@ -284,93 +302,44 @@ describe("DexieTransactionAggregatesPort", () => {
     expect(records.map((record) => record.id)).toEqual(["tx-newer", "tx-older"]);
   });
 
-  it("commitApprovedTransactionAggregate() rejects conflicting active records atomically", async () => {
+  it("insertApprovedTransactionAggregate() rejects conflicting active records atomically", async () => {
     const storage = createTestStorage();
     const port = storage.ports.transactions;
 
-    const first = createAwaitingApprovalAggregate("tx-1", {
-      status: "submitting",
-      approvedRequest: {
-        approvalId: "approval-1",
-        approvedAt: 1_100,
-        payload: {
-          chainId: "0x1",
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x1",
-          data: "0x",
-          gas: "0x5208",
-          nonce: "0x7",
-        },
-      },
-      activeSubmissionId: "submission-1",
-      conflictKey: {
-        kind: "eip155.nonce",
-        value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
-      },
-    });
-    first.submissions.push({
-      id: "submission-1",
-      transactionId: "tx-1",
-      status: "queued",
-      terminalReason: null,
-      createdAt: 1_100,
-      updatedAt: 1_100,
-    });
-
-    const second = createAwaitingApprovalAggregate("tx-2");
-    await port.insertTransactionAggregate(first);
-    await port.insertTransactionAggregate(second);
-
-    const approvedSecond: TransactionAggregate = {
-      record: {
-        ...second.record,
-        status: "submitting",
-        approvedRequest: {
-          approvalId: "approval-2",
-          approvedAt: 2_000,
-          payload: {
-            chainId: "0x1",
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x1",
-            data: "0x",
-            gas: "0x5208",
-            nonce: "0x7",
-          },
-        },
-        activeSubmissionId: "submission-2",
-        conflictKey: {
-          kind: "eip155.nonce",
-          value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
-        },
-        updatedAt: 2_000,
-      },
-      submissions: [
-        {
-          id: "submission-2",
-          transactionId: "tx-2",
-          status: "queued",
-          terminalReason: null,
-          createdAt: 2_000,
-          updatedAt: 2_000,
-        },
-      ],
+    const first = createSubmittingAggregate("tx-1");
+    first.record.conflictKey = {
+      kind: "eip155.nonce",
+      value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     };
+    const second = createSubmittingAggregate("tx-2");
+    second.record.conflictKey = {
+      kind: "eip155.nonce",
+      value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+    };
+    await port.insertTransactionAggregate(first);
 
-    await expect(port.commitApprovedTransactionAggregate({ aggregate: approvedSecond })).rejects.toBeInstanceOf(
+    await expect(port.insertApprovedTransactionAggregate({ aggregate: second })).rejects.toBeInstanceOf(
       TransactionConflictKeyCollisionError,
     );
-    await expect(port.loadTransactionAggregate("tx-2")).resolves.toEqual(second);
+    await expect(port.loadTransactionAggregate("tx-2")).resolves.toBeNull();
+  });
+
+  it("insertApprovedTransactionAggregate() rejects duplicate transaction ids", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.transactions;
+
+    const first = createSubmittingAggregate("tx-1");
+    const duplicate = createSubmittingAggregate("tx-1");
+    await port.insertTransactionAggregate(first);
+
+    await expect(port.insertApprovedTransactionAggregate({ aggregate: duplicate })).rejects.toBeInstanceOf(
+      TransactionAggregateAlreadyExistsError,
+    );
   });
 
   it("listRecoverableTransactionAggregates() includes active candidates and excludes terminal records", async () => {
     const storage = createTestStorage();
     const port = storage.ports.transactions;
-    const awaiting = createAwaitingApprovalAggregate("tx-awaiting", {
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    });
     const submitting = createSubmittingAggregate("tx-submitting", 2_000);
     const submittedBase = createSubmittingAggregate("tx-submitted", 3_000);
     const submitted: TransactionAggregate = {
@@ -391,24 +360,19 @@ describe("DexieTransactionAggregatesPort", () => {
         },
       ],
     };
-    const confirmed = createAwaitingApprovalAggregate("tx-confirmed", {
+    const confirmed = createSubmittedAggregateRecord("tx-confirmed", {
       status: "confirmed",
       terminalReason: createTerminalReason("on_chain_failed"),
       createdAt: 4_000,
       updatedAt: 4_000,
     });
 
-    await port.insertTransactionAggregate(awaiting);
     await port.insertTransactionAggregate(submitting);
     await port.insertTransactionAggregate(submitted);
     await port.insertTransactionAggregate(confirmed);
 
     const candidates = await port.listRecoverableTransactionAggregates();
 
-    expect(candidates.map((aggregate) => aggregate.record.id)).toEqual([
-      "tx-submitted",
-      "tx-submitting",
-      "tx-awaiting",
-    ]);
+    expect(candidates.map((aggregate) => aggregate.record.id)).toEqual(["tx-submitted", "tx-submitting"]);
   });
 });

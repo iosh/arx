@@ -1,6 +1,6 @@
 import type {
-  ApproveTransactionInput,
   BeginSubmissionSigningInput,
+  CreateApprovedTransactionInput,
   FailTransactionInput,
   QueueSubmissionBroadcastInput,
   RecordBroadcastAcceptanceInput,
@@ -17,9 +17,7 @@ import type { TransactionAggregateStore } from "./aggregate/TransactionAggregate
 import type { TransactionInvalidations } from "./TransactionInvalidations.js";
 
 type TransactionLifecycleMutation =
-  | "createTransaction"
-  | "approveTransaction"
-  | "rejectTransaction"
+  | "createApprovedTransaction"
   | "cancelTransaction"
   | "expireTransaction"
   | "failTransaction"
@@ -56,20 +54,8 @@ export const notifyTransactionChanges = (
   listRecoverableTransactionAggregates: (query) => store.listRecoverableTransactionAggregates(query),
   listRestartActions: (query) => store.listRestartActions(query),
 
-  async createTransaction(input) {
-    const aggregate = await store.createTransaction(input);
-    publishAggregateChange(invalidations, aggregate);
-    return aggregate;
-  },
-
-  async approveTransaction(input: ApproveTransactionInput) {
-    const aggregate = await store.approveTransaction(input);
-    publishAggregateChange(invalidations, aggregate);
-    return aggregate;
-  },
-
-  async rejectTransaction(input: TerminalTransactionInput) {
-    const aggregate = await store.rejectTransaction(input);
+  async createApprovedTransaction(input: CreateApprovedTransactionInput) {
+    const aggregate = await store.createApprovedTransaction(input);
     publishAggregateChange(invalidations, aggregate);
     return aggregate;
   },

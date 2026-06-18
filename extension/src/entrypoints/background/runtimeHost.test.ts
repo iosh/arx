@@ -85,17 +85,16 @@ const makeRuntime = () => {
   const getTransaction = vi.fn(async (transactionId: string) => transactions.get(transactionId) ?? null);
   const listTransactionApprovals = vi.fn(async () => Array.from(transactionApprovals.values()));
   const cancelTransactionApproval = vi.fn(async ({ approvalId }: { approvalId: string }) => {
-    const approval = transactionApprovals.get(approvalId) as { transactionId?: string } | undefined;
-    if (!approval?.transactionId) {
+    const approval = transactionApprovals.get(approvalId) ?? null;
+    if (!approval) {
       return null;
     }
 
-    const transaction = transactions.get(approval.transactionId) ?? null;
     transactionApprovals.delete(approvalId);
     for (const handler of transactionApprovalHandlers) {
       handler([approvalId]);
     }
-    return transaction;
+    return approval;
   });
   const onChainRpcStateChanged = vi.fn(() => vi.fn());
   const onAccountsStateChanged = vi.fn(() => vi.fn());
@@ -134,14 +133,8 @@ const makeRuntime = () => {
   const createProvider = vi.fn(() => provider);
   const getApprovalDetail = vi.fn(async () => null);
   const addTransactionApproval = () => {
-    const transaction = {
-      id: "tx-1",
-      source: "provider",
-      origin: "https://dapp.example",
-    };
     const approval = {
       approvalId: "transaction-approval-1",
-      transactionId: "tx-1",
       source: "provider",
       origin: "https://dapp.example",
       namespace: "eip155",
@@ -149,7 +142,6 @@ const makeRuntime = () => {
       createdAt: 1_000,
     };
 
-    transactions.set("tx-1", transaction);
     transactionApprovals.set("transaction-approval-1", approval);
     for (const handler of transactionApprovalHandlers) {
       handler(["transaction-approval-1"]);

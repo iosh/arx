@@ -43,6 +43,10 @@ import type {
   TransactionConflictKey,
   TransactionsStoragePort,
 } from "../../transactions/storage/index.js";
+import {
+  TransactionAggregateAlreadyExistsError,
+  TransactionAggregateNotFoundError,
+} from "../../transactions/storage/index.js";
 import { VaultInvalidPasswordError, VaultLockedError, VaultNotInitializedError } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
 import type { BackgroundRpcAccessPolicyHooks } from "../background/rpcAccessPolicy.js";
@@ -138,20 +142,20 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
 
   async insertTransactionAggregate(aggregate: TransactionAggregate): Promise<void> {
     if (this.#aggregates.has(aggregate.record.id)) {
-      throw new Error(`Duplicate transaction aggregate "${aggregate.record.id}"`);
+      throw new TransactionAggregateAlreadyExistsError(aggregate.record.id);
     }
     this.#aggregates.set(aggregate.record.id, clone(aggregate));
   }
 
   async saveTransactionAggregate(aggregate: TransactionAggregate): Promise<void> {
     if (!this.#aggregates.has(aggregate.record.id)) {
-      throw new Error(`Missing transaction aggregate "${aggregate.record.id}"`);
+      throw new TransactionAggregateNotFoundError(aggregate.record.id);
     }
     this.#aggregates.set(aggregate.record.id, clone(aggregate));
   }
 
-  async commitApprovedTransactionAggregate(input: { aggregate: TransactionAggregate }): Promise<void> {
-    await this.saveTransactionAggregate(input.aggregate);
+  async insertApprovedTransactionAggregate(input: { aggregate: TransactionAggregate }): Promise<void> {
+    await this.insertTransactionAggregate(input.aggregate);
   }
 
   async listTransactionHistory(query: ListTransactionHistoryQuery = {}): Promise<AggregateTransactionRecord[]> {
@@ -181,7 +185,7 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
     query: ListRecoverableTransactionAggregatesQuery = {},
   ): Promise<TransactionAggregate[]> {
     const aggregates = Array.from(this.#aggregates.values())
-      .filter((aggregate) => ["awaiting_approval", "submitting", "submitted"].includes(aggregate.record.status))
+      .filter((aggregate) => ["submitting", "submitted"].includes(aggregate.record.status))
       .map((aggregate) => clone(aggregate))
       .sort(
         (left, right) =>

@@ -12,9 +12,8 @@ import {
   type TransactionTerminalReason,
 } from "./terminalReason.js";
 import type {
-  ApproveTransactionInput,
   BeginSubmissionSigningInput,
-  CreateTransactionInput,
+  CreateApprovedTransactionInput,
   FailTransactionInput,
   QueueSubmissionBroadcastInput,
   RecordBroadcastAcceptanceInput,
@@ -54,10 +53,11 @@ export class TransactionAggregateService {
     this.#createId = options.createId ?? (() => crypto.randomUUID());
   }
 
-  /** Creates the record before approval or broadcast. */
-  createTransaction(input: CreateTransactionInput): TransactionAggregate {
+  /** Creates the durable wallet transaction after user approval. */
+  createApprovedTransaction(input: CreateApprovedTransactionInput): TransactionAggregate {
     const id = this.#createId();
     const at = this.#now();
+    const submissionId = input.submissionId ?? this.#createId();
 
     return {
       record: {
@@ -68,16 +68,20 @@ export class TransactionAggregateService {
         source: input.source,
         requestId: input.requestId ?? null,
         accountKey: input.accountKey,
-        status: "awaiting_approval",
+        status: "submitting",
         request: {
           kind: input.request.kind,
           payload: cloneJsonValue(input.request.payload),
         },
-        approvedRequest: null,
-        activeSubmissionId: null,
+        approvedRequest: {
+          approvalId: input.approvalId,
+          payload: cloneJsonValue(input.approvedRequestPayload),
+          approvedAt: input.approvedAt ?? at,
+        },
+        activeSubmissionId: submissionId,
         submitted: null,
         receipt: null,
-        conflictKey: null,
+        conflictKey: input.conflictKey,
         replacesTransactionId: input.replacement?.transactionId ?? null,
         replacementType: input.replacement?.type ?? null,
         replacedByTransactionId: null,
@@ -85,94 +89,49 @@ export class TransactionAggregateService {
         createdAt: at,
         updatedAt: at,
       },
-      submissions: [],
+      submissions: [
+        {
+          id: submissionId,
+          transactionId: id,
+          status: "queued",
+          terminalReason: null,
+          createdAt: at,
+          updatedAt: at,
+        },
+      ],
     };
   }
 
-  /**
-   * Commits approval and queues the first submission.
-   *
-   * Broadcast-input creation, broadcast, and tracking happen in later commands.
-   */
-  approveTransaction(
-    current: TransactionAggregate,
-    input: LoadedAggregateInput<ApproveTransactionInput>,
-  ): TransactionAggregate {
-    return this.#updateAggregate(current, (aggregate, at) => {
-      const { record } = aggregate;
-      assertTransactionStatusTransition(record.status, "submitting");
-
-      const submissionId = input.submissionId ?? this.#createId();
-      record.status = "submitting";
-      record.approvedRequest = {
-        approvalId: input.approvalId,
-        payload: cloneJsonValue(input.approvedRequestPayload),
-        approvedAt: input.approvedAt ?? at,
-      };
-      record.activeSubmissionId = submissionId;
-      record.conflictKey = input.conflictKey;
-      aggregate.submissions.push({
-        id: submissionId,
-        transactionId: record.id,
-        status: "queued",
-        terminalReason: null,
-        createdAt: at,
-        updatedAt: at,
-      });
-    });
-  }
-
-  /** Records explicit user rejection. */
-  rejectTransaction(
-    current: TransactionAggregate,
-    input: LoadedAggregateInput<TerminalTransactionInput>,
-  ): TransactionAggregate {
-    return this.#finalizeAwaitingApprovalTransaction(
-      current,
-      "rejected",
-      input.reason ??
-        buildTransactionTerminalReason({
-          kind: "user_rejected",
-        }),
-    );
-  }
-
-  /** Cancels before network acceptance. */
+  /** Locally cancels a durable transaction before network acceptance. */
   cancelTransaction(
     current: TransactionAggregate,
     input: LoadedAggregateInput<TerminalTransactionInput>,
   ): TransactionAggregate {
-    return this.#finalizeBeforeNetworkAcceptance(
+    return this.#finalizeActiveTransaction(
       current,
+      input.reason ?? this.#buildDefaultTerminalReason("cancelled"),
       "cancelled",
-      input.reason ??
-        buildTransactionTerminalReason({
-          kind: "approval_cancelled",
-        }),
     );
   }
 
-  /** Expires an approval or submission window before network acceptance. */
+  /** Expires a durable transaction before network acceptance. */
   expireTransaction(
     current: TransactionAggregate,
     input: LoadedAggregateInput<TerminalTransactionInput>,
   ): TransactionAggregate {
-    return this.#finalizeBeforeNetworkAcceptance(
+    return this.#finalizeActiveTransaction(
       current,
+      input.reason ?? this.#buildDefaultTerminalReason("expired"),
       "expired",
-      input.reason ??
-        buildTransactionTerminalReason({
-          kind: "approval_expired",
-        }),
     );
   }
 
-  /** Fails before network acceptance. */
+  /** Fails a durable transaction before network acceptance. */
   failTransaction(
     current: TransactionAggregate,
     input: LoadedAggregateInput<FailTransactionInput>,
   ): TransactionAggregate {
-    return this.#finalizeBeforeNetworkAcceptance(current, "failed", input.reason);
+    return this.#finalizeActiveTransaction(current, input.reason, "failed");
   }
 
   /** Starts broadcast-input creation for the active submission. */
@@ -303,28 +262,12 @@ export class TransactionAggregateService {
   /**
    * Recovery flowchart:
    *
-   * awaiting_approval -> cancel local-only work
    * submitting(queued|signing|broadcasting) -> fail incomplete local work
    * submitted(accepted) -> resume tracking
    * terminal -> no work
    */
   listRestartActions(aggregate: TransactionAggregate): TransactionRestartAction[] {
     const { record } = aggregate;
-
-    if (record.status === "awaiting_approval") {
-      return [
-        {
-          kind: "finalize_incomplete_local",
-          transactionId: record.id,
-          targetStatus: "cancelled",
-          reason: buildTransactionTerminalReason({
-            kind: "approval_cancelled",
-            code: "recovery.awaiting_approval_abandoned",
-            message: "Transaction approval session was abandoned during restart.",
-          }),
-        },
-      ];
-    }
 
     if (record.status === "submitting") {
       return [
@@ -356,41 +299,6 @@ export class TransactionAggregateService {
     return [];
   }
 
-  #finalizeAwaitingApprovalTransaction(
-    current: TransactionAggregate,
-    status: "rejected" | "expired" | "cancelled" | "failed",
-    reason: TransactionTerminalReason,
-  ): TransactionAggregate {
-    return this.#updateAggregate(current, (aggregate) => {
-      assertTransactionStatusTransition(aggregate.record.status, status);
-      aggregate.record.status = status;
-      aggregate.record.terminalReason = cloneTransactionTerminalReason(reason);
-    });
-  }
-
-  #finalizeBeforeNetworkAcceptance(
-    current: TransactionAggregate,
-    status: PreSubmittedTerminalStatus,
-    reason: TransactionTerminalReason,
-  ): TransactionAggregate {
-    return this.#updateAggregate(current, (aggregate, at) => {
-      if (aggregate.record.status !== "submitting") {
-        assertTransactionStatusTransition(aggregate.record.status, status);
-        aggregate.record.status = status;
-        aggregate.record.terminalReason = cloneTransactionTerminalReason(reason);
-        return;
-      }
-
-      const activeSubmission = this.#requireActiveSubmission(aggregate);
-      this.#assertPreSubmittedTerminalAllowed(aggregate.record.id, activeSubmission, status);
-      assertTransactionStatusTransition(aggregate.record.status, status);
-      this.#writeSubmissionTerminal(activeSubmission, status, reason, at);
-      aggregate.record.activeSubmissionId = null;
-      aggregate.record.status = status;
-      aggregate.record.terminalReason = cloneTransactionTerminalReason(reason);
-    });
-  }
-
   #transitionActiveSubmission(
     current: TransactionAggregate,
     input: LoadedAggregateInput<BeginSubmissionSigningInput>,
@@ -419,6 +327,29 @@ export class TransactionAggregateService {
       aggregate.record.activeSubmissionId = null;
       aggregate.record.status = status;
       aggregate.record.terminalReason = cloneTransactionTerminalReason(input.reason);
+    });
+  }
+
+  #finalizeActiveTransaction(
+    current: TransactionAggregate,
+    reason: TransactionTerminalReason,
+    status: PreSubmittedTerminalStatus,
+  ): TransactionAggregate {
+    return this.#updateAggregate(current, (aggregate, at) => {
+      this.#requireSubmittingRecord(aggregate.record);
+      const submission = this.#requireActiveSubmission(aggregate);
+      this.#assertPreSubmittedTerminalAllowed(aggregate.record.id, submission, status);
+      assertTransactionStatusTransition(aggregate.record.status, status);
+      this.#writeSubmissionTerminal(submission, status, reason, at);
+      aggregate.record.activeSubmissionId = null;
+      aggregate.record.status = status;
+      aggregate.record.terminalReason = cloneTransactionTerminalReason(reason);
+    });
+  }
+
+  #buildDefaultTerminalReason(status: Exclude<PreSubmittedTerminalStatus, "failed">): TransactionTerminalReason {
+    return buildTransactionTerminalReason({
+      kind: status === "cancelled" ? "approval_cancelled" : "approval_expired",
     });
   }
 

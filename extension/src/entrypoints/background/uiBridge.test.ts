@@ -18,6 +18,7 @@ import {
 } from "@arx/core/runtime";
 import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
+import type { TransactionApprovalDecision } from "@arx/core/transactions";
 import {
   UI_CHANNEL,
   UI_EVENT_APPROVALS_CHANGED,
@@ -559,7 +560,7 @@ const createRuntimeServices = () => {
   };
   const mockTransaction = {
     id: "tx-1",
-    status: "awaiting_approval" as const,
+    status: "submitting" as const,
     namespace: CHAIN.namespace,
     chainRef: CHAIN.chainRef,
     source: "wallet-ui" as const,
@@ -578,7 +579,6 @@ const createRuntimeServices = () => {
   };
   const mockTransactionApproval = {
     approvalId: "approval-id",
-    transactionId: "tx-1",
     namespace: CHAIN.namespace,
     chainRef: CHAIN.chainRef,
     source: "wallet-ui" as const,
@@ -598,13 +598,13 @@ const createRuntimeServices = () => {
   };
   const transactionAccess = {
     requestTransactionApproval: vi.fn(async () => ({
-      transaction: mockTransaction,
       approval: mockTransactionApproval,
+      decision: new Promise<TransactionApprovalDecision>(() => {}),
     })),
     updateApprovalDraft: vi.fn(async () => mockTransactionApproval),
     rerunApprovalPrepare: vi.fn(async () => mockTransactionApproval),
     approveAndSubmitTransaction: vi.fn(async () => ({ status: "submitted" as const, transaction: mockTransaction })),
-    rejectTransactionApproval: vi.fn(async () => ({ ...mockTransaction, status: "rejected" as const })),
+    rejectTransactionApproval: vi.fn(async () => mockTransactionApproval),
     getTransactionApproval: vi.fn(() => null),
     getTransaction: vi.fn(async () => mockTransaction),
     listTransactions: vi.fn(async () => [mockTransaction]),

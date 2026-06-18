@@ -85,7 +85,7 @@ type AddChainRequest = {
 };
 
 type SendTransactionRequest = {
-  transactionId: string;
+  approvalId: string;
   chainRef: ChainRef;
   origin: string;
   prepareId: string | null;

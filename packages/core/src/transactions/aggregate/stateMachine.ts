@@ -23,13 +23,12 @@ export class TransactionStatusTransitionError extends Error {
 /**
  * Transaction:
  *
- * awaiting_approval -> rejected | cancelled | expired | failed | submitting
- * submitting        -> submitted | failed | cancelled | expired
- * submitted         -> confirmed | failed | replaced | dropped | expired
+ * cancelled  -> terminal
+ * expired    -> terminal
+ * submitting -> submitted | failed | cancelled | expired
+ * submitted  -> confirmed | failed | replaced | dropped | expired
  */
 const TRANSACTION_STATUS_TRANSITIONS = {
-  awaiting_approval: ["rejected", "cancelled", "expired", "failed", "submitting"],
-  rejected: [],
   cancelled: [],
   expired: [],
   submitting: ["submitted", "failed", "cancelled", "expired"],

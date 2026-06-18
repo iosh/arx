@@ -114,7 +114,7 @@ const createSeededPermissionsPort = () =>
     },
   ]);
 
-const createRecoverableTransactionAggregate = (status: "awaiting_approval" | "submitting"): TransactionAggregate => ({
+const createRecoverableTransactionAggregate = (status: "submitting" | "submitted"): TransactionAggregate => ({
   record: {
     id: `tx-${status}`,
     namespace: EIP155_NAMESPACE,
@@ -133,9 +133,27 @@ const createRecoverableTransactionAggregate = (status: "awaiting_approval" | "su
         data: "0x",
       },
     },
-    approvedRequest: null,
+    approvedRequest: {
+      approvalId: "approval-1",
+      payload: {
+        chainId: "0x1",
+        from: ACCOUNT_ADDRESS,
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        value: "0x1",
+        data: "0x",
+        gas: "0x5208",
+        nonce: "0x7",
+      },
+      approvedAt: 1,
+    },
     activeSubmissionId: status === "submitting" ? "submission-1" : null,
-    submitted: null,
+    submitted:
+      status === "submitted"
+        ? {
+            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            nonce: "0x7",
+          }
+        : null,
     receipt: null,
     conflictKey: null,
     replacesTransactionId: null,
@@ -145,19 +163,16 @@ const createRecoverableTransactionAggregate = (status: "awaiting_approval" | "su
     createdAt: 1,
     updatedAt: 1,
   },
-  submissions:
-    status === "submitting"
-      ? [
-          {
-            id: "submission-1",
-            transactionId: "tx-submitting",
-            status: "queued",
-            terminalReason: null,
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ]
-      : [],
+  submissions: [
+    {
+      id: "submission-1",
+      transactionId: `tx-${status}`,
+      status: status === "submitting" ? "queued" : "accepted",
+      terminalReason: null,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ],
 });
 
 describe("createCoreRuntime", () => {
@@ -253,32 +268,32 @@ describe("createCoreRuntime", () => {
 
   it("runs transaction restart recovery by default and can skip it explicitly", async () => {
     const runPort = new MemoryTransactionAggregatesPort();
-    await runPort.insertTransactionAggregate(createRecoverableTransactionAggregate("awaiting_approval"));
+    await runPort.insertTransactionAggregate(createRecoverableTransactionAggregate("submitting"));
     await createCoreRuntime(
       createCoreRuntimeInput({
         transactionAggregatesPort: runPort,
       }),
     );
-    await expect(runPort.loadTransactionAggregate("tx-awaiting_approval")).resolves.toMatchObject({
+    await expect(runPort.loadTransactionAggregate("tx-submitting")).resolves.toMatchObject({
       record: {
-        status: "cancelled",
+        status: "failed",
         terminalReason: {
-          code: "recovery.awaiting_approval_abandoned",
+          code: "incomplete_at_startup",
         },
       },
     });
 
     const skipPort = new MemoryTransactionAggregatesPort();
-    await skipPort.insertTransactionAggregate(createRecoverableTransactionAggregate("submitting"));
+    await skipPort.insertTransactionAggregate(createRecoverableTransactionAggregate("submitted"));
     await createCoreRuntime(
       createCoreRuntimeInput({
         transactionAggregatesPort: skipPort,
         boot: { transactionRestartRecovery: "skip" },
       }),
     );
-    await expect(skipPort.loadTransactionAggregate("tx-submitting")).resolves.toMatchObject({
+    await expect(skipPort.loadTransactionAggregate("tx-submitted")).resolves.toMatchObject({
       record: {
-        status: "submitting",
+        status: "submitted",
         terminalReason: null,
       },
     });

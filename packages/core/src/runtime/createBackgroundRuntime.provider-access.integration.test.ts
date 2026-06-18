@@ -795,7 +795,6 @@ describe("createBackgroundRuntime provider access", () => {
       await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
 
       let capturedApprovalId: string | null = null;
-      let capturedTransactionId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
         const unsubscribeApprovalChange = background.runtime.transactions.onTransactionApprovalsChanged(
           (approvalIds) => {
@@ -805,7 +804,6 @@ describe("createBackgroundRuntime provider access", () => {
                 continue;
               }
               capturedApprovalId = approval.approvalId;
-              capturedTransactionId = approval.transactionId;
               unsubscribeApprovalChange();
               resolve();
               return;
@@ -850,12 +848,7 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
       expect(background.runtime.transactions.getTransactionApproval(capturedApprovalId ?? "")).toBeNull();
-      await expect(background.runtime.transactions.getTransaction(capturedTransactionId ?? "")).resolves.toMatchObject({
-        status: "cancelled",
-        terminalReason: {
-          code: "provider.caller_disconnected",
-        },
-      });
+      await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([]);
     } finally {
       background.destroy();
     }

@@ -87,7 +87,6 @@ export type {
   ApproveTransactionInput,
   ApproveTransactionResult,
   BlockedTransactionApprovalResult,
-  CancelPendingTransactionInput,
   CancelTransactionApprovalInput,
   CreateReplacementTransactionApprovalInput,
   FailedTransactionApprovalResult,
@@ -101,6 +100,7 @@ export type {
   TransactionAccount,
   TransactionApproval,
   TransactionApprovalBlocked,
+  TransactionApprovalDecision,
   TransactionApprovalFailed,
   TransactionApprovalPrepare,
   TransactionApprovalPreparing,
@@ -117,10 +117,7 @@ export type {
   UpdateApprovalDraftInput,
   WaitForTransactionSubmissionOutcomeInput,
 } from "./TransactionsService.js";
-export {
-  TransactionApprovalNotFoundError,
-  TransactionsService,
-} from "./TransactionsService.js";
+export { TransactionsService } from "./TransactionsService.js";
 export type {
   Eip155TransactionRequest,
   NamespaceTransactionDraftEdit,

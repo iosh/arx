@@ -10,12 +10,7 @@ import {
 } from "./stateMachine.js";
 
 describe("transaction aggregate state machine", () => {
-  it("allows transaction lifecycle transitions defined by the redesign blueprint", () => {
-    expect(canTransitionTransactionStatus("awaiting_approval", "rejected")).toBe(true);
-    expect(canTransitionTransactionStatus("awaiting_approval", "cancelled")).toBe(true);
-    expect(canTransitionTransactionStatus("awaiting_approval", "expired")).toBe(true);
-    expect(canTransitionTransactionStatus("awaiting_approval", "failed")).toBe(true);
-    expect(canTransitionTransactionStatus("awaiting_approval", "submitting")).toBe(true);
+  it("allows durable transaction transitions after approval", () => {
     expect(canTransitionTransactionStatus("submitting", "submitted")).toBe(true);
     expect(canTransitionTransactionStatus("submitting", "failed")).toBe(true);
     expect(canTransitionTransactionStatus("submitting", "cancelled")).toBe(true);
@@ -28,18 +23,16 @@ describe("transaction aggregate state machine", () => {
   });
 
   it("rejects transaction transitions that skip required lifecycle facts", () => {
-    expect(() => assertTransactionStatusTransition("awaiting_approval", "submitted")).toThrow(
+    expect(() => assertTransactionStatusTransition("submitting", "confirmed")).toThrow(
       TransactionStatusTransitionError,
     );
     expect(() => assertTransactionStatusTransition("submitted", "cancelled")).toThrow(TransactionStatusTransitionError);
     expect(() => assertTransactionStatusTransition("confirmed", "failed")).toThrow(TransactionStatusTransitionError);
   });
 
-  it("treats all local and chain outcomes as terminal except awaiting/submitting/submitted", () => {
-    expect(isTransactionStatusTerminal("awaiting_approval")).toBe(false);
+  it("treats all local and chain outcomes as terminal except submitting/submitted", () => {
     expect(isTransactionStatusTerminal("submitting")).toBe(false);
     expect(isTransactionStatusTerminal("submitted")).toBe(false);
-    expect(isTransactionStatusTerminal("rejected")).toBe(true);
     expect(isTransactionStatusTerminal("cancelled")).toBe(true);
     expect(isTransactionStatusTerminal("expired")).toBe(true);
     expect(isTransactionStatusTerminal("confirmed")).toBe(true);

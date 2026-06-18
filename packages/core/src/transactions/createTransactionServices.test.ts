@@ -89,7 +89,7 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   namespace: overrides.namespace ?? "eip155",
   chainRef: overrides.chainRef ?? "eip155:1",
   origin: overrides.origin ?? "https://dapp.example",
-  source: overrides.source ?? "dapp",
+  source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
   accountKey: overrides.accountKey ?? "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   request: {
@@ -141,7 +141,7 @@ const createInMemoryTransactionsStoragePort = (
       }
       store.set(transactionId, cloneAggregate(aggregate));
     },
-    async commitApprovedTransactionAggregate({ aggregate }) {
+    async insertApprovedTransactionAggregate({ aggregate }) {
       const conflicting = findConflictingActiveRecords(
         aggregate.record,
         [...store.values()].map((candidate) => structuredClone(candidate.record)),
@@ -157,7 +157,7 @@ const createInMemoryTransactionsStoragePort = (
           conflictingTransactionIds: conflicting.map((candidate) => candidate.id),
         });
       }
-      await port.saveTransactionAggregate(aggregate);
+      await port.insertTransactionAggregate(aggregate);
     },
     async listTransactionHistory(query: ListTransactionHistoryQuery = {}) {
       const records = [...store.values()].map((aggregate) => structuredClone(aggregate.record));
@@ -179,7 +179,7 @@ const createInMemoryTransactionsStoragePort = (
     },
     async listRecoverableTransactionAggregates(query: ListRecoverableTransactionAggregatesQuery = {}) {
       const aggregates = [...store.values()]
-        .filter((aggregate) => ["awaiting_approval", "submitting", "submitted"].includes(aggregate.record.status))
+        .filter((aggregate) => ["submitting", "submitted"].includes(aggregate.record.status))
         .map((aggregate) => cloneAggregate(aggregate))
         .sort((left, right) => compareRecordsNewestFirst(left.record, right.record));
       return aggregates.slice(0, query.limit ?? aggregates.length);
@@ -261,27 +261,43 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
   };
 };
 
+type CreatedServices = ReturnType<typeof createServices>;
+
+const approveTransactionReview = async (params: {
+  services: CreatedServices["services"];
+  approvalId: string;
+  input?: CreateTransactionInput;
+}) => {
+  const requested = await params.services.transactions.requestTransactionApproval({
+    ...(params.input ?? createTransactionInput()),
+    approvalId: params.approvalId,
+  });
+  const approved = await params.services.transactions.approveTransaction({
+    approvalId: params.approvalId,
+    expectedPrepareId: requested.approval.prepare.id,
+  });
+  if (approved.status !== "approved") {
+    throw new Error(`Expected approval "${params.approvalId}" to create a transaction.`);
+  }
+
+  return {
+    approval: requested.approval,
+    transaction: approved.transaction,
+  };
+};
+
 describe("createTransactionServices", () => {
   it("submits an approved transaction through createBroadcastInput and broadcast", async () => {
-    const { services, aggregateStore, tick } = createServices();
+    const { services, tick } = createServices();
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
-    await aggregateStore.createTransaction(createTransactionInput());
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-1",
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-1",
     });
-    expect(opened.prepare.status).toBe("ready");
 
     tick(2_000);
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
-
-    const result = await services.submission.submitApprovedTransaction("tx-1");
+    const result = await services.submission.submitApprovedTransaction(approved.transaction.id);
 
     expect(result.broadcastInput).toEqual({
       kind: "eip155.raw_transaction",
@@ -293,11 +309,16 @@ describe("createTransactionServices", () => {
       nonce: "0x7",
     });
     expect(result.aggregate.submissions[0]?.status).toBe("accepted");
-    expect(changes).toEqual([["tx-1"], ["tx-1"], ["tx-1"], ["tx-1"]]);
+    expect(changes).toEqual([
+      [approved.transaction.id],
+      [approved.transaction.id],
+      [approved.transaction.id],
+      [approved.transaction.id],
+    ]);
   });
 
   it("inspects a submitted transaction and advances it to confirmed", async () => {
-    const { services, aggregateStore, tick } = createServices({
+    const { services, tick } = createServices({
       getTransactionReceipt: vi.fn(async () =>
         createRpcReceipt({
           transactionHash: DEFAULT_BROADCAST_HASH,
@@ -309,21 +330,14 @@ describe("createTransactionServices", () => {
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
-    await aggregateStore.createTransaction(createTransactionInput());
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-1",
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-1",
     });
     tick(2_000);
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-1");
+    await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction("tx-1");
+    const result = await services.tracking.inspectSubmittedTransaction(approved.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("confirmed");
@@ -332,35 +346,31 @@ describe("createTransactionServices", () => {
       status: "0x1",
       blockNumber: "0x123",
     });
-    expect(changes.at(-1)).toEqual(["tx-1"]);
+    expect(changes.at(-1)).toEqual([approved.transaction.id]);
   });
 
-  it("resumes recovery by cancelling abandoned approval work and failing incomplete submissions", async () => {
-    const { services, aggregateStore, tick } = createServices();
+  it("resumes recovery by failing incomplete approved submissions", async () => {
+    const { services, tick } = createServices();
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
-    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
-    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-2",
+    await services.transactions.requestTransactionApproval({
+      ...createTransactionInput({ requestId: "request-1" }),
+      approvalId: "approval-1",
+    });
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-2",
+      input: createTransactionInput({ requestId: "request-2" }),
     });
     tick(2_000);
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-2",
-      approvalId: "approval-2",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
 
     const results = await services.recovery.recoverAfterRestart();
 
     expect(results.map((entry) => [entry.action.transactionId, entry.status, entry.aggregate?.record.status])).toEqual([
-      ["tx-2", "applied", "failed"],
-      ["tx-1", "applied", "cancelled"],
+      [approved.transaction.id, "applied", "failed"],
     ]);
-    expect(changes.slice(-2)).toEqual([["tx-2"], ["tx-1"]]);
+    expect(changes.at(-1)).toEqual([approved.transaction.id]);
   });
 
   it("keeps submitted transactions durable-submitted when one tracking attempt fails", async () => {
@@ -371,22 +381,15 @@ describe("createTransactionServices", () => {
       getTransactionReceipt,
     });
 
-    await aggregateStore.createTransaction(createTransactionInput());
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-1",
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-1",
     });
     tick(2_000);
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-1");
+    await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction("tx-1");
-    const aggregate = await aggregateStore.loadTransactionAggregate("tx-1");
+    const result = await services.tracking.inspectSubmittedTransaction(approved.transaction.id);
+    const aggregate = await aggregateStore.loadTransactionAggregate(approved.transaction.id);
 
     expect(result.status).toBe("retry_later");
     expect(result.aggregate.record.status).toBe("submitted");
@@ -448,27 +451,20 @@ describe("createTransactionServices", () => {
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
-    await aggregateStore.createTransaction(createTransactionInput());
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-1",
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-1",
     });
     now = 2_000;
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
 
-    await expect(services.submission.submitApprovedTransaction("tx-1")).rejects.toBeInstanceOf(
+    await expect(services.submission.submitApprovedTransaction(approved.transaction.id)).rejects.toBeInstanceOf(
       TransactionAcceptanceCommitError,
     );
 
-    const aggregate = await aggregateStore.loadTransactionAggregate("tx-1");
+    const aggregate = await aggregateStore.loadTransactionAggregate(approved.transaction.id);
     expect(aggregate?.record.status).toBe("submitting");
     expect(aggregate?.submissions[0]?.status).toBe("broadcasting");
-    expect(changes).toEqual([["tx-1"], ["tx-1"], ["tx-1"]]);
+    expect(changes).toEqual([[approved.transaction.id], [approved.transaction.id], [approved.transaction.id]]);
   });
 
   it("marks a dropped transaction as replaced when another local winner shares the conflict key", async () => {
@@ -538,8 +534,10 @@ describe("createTransactionServices", () => {
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
 
-    await aggregateStore.createTransaction(
-      createTransactionInput({
+    const firstApproved = await approveTransactionReview({
+      services,
+      approvalId: "approval-1",
+      input: createTransactionInput({
         request: {
           payload: {
             from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -550,19 +548,9 @@ describe("createTransactionServices", () => {
           },
         },
       }),
-    );
-    const openedFirst = await services.approvals.openSession({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
     });
     now = 2_000;
-    const approvedFirst = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: openedFirst.prepare.prepareId,
-    });
-    expect(approvedFirst.status).toBe("approved");
-    const firstSubmission = await services.submission.submitApprovedTransaction("tx-1");
+    const firstSubmission = await services.submission.submitApprovedTransaction(firstApproved.transaction.id);
     expect(firstSubmission.aggregate.record.submitted).toMatchObject({
       nonce: "0x7",
     });
@@ -571,8 +559,8 @@ describe("createTransactionServices", () => {
       value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     });
 
-    await aggregateStore.createTransaction(
-      createTransactionInput({
+    const secondReview = await services.transactions.createSpeedUpReplacement({
+      ...createTransactionInput({
         requestId: "request-2",
         request: {
           payload: {
@@ -583,26 +571,21 @@ describe("createTransactionServices", () => {
             nonce: "0x7",
           },
         },
-        replacement: {
-          transactionId: "tx-1",
-          type: "speed_up",
-        },
       }),
-    );
-    const openedSecond = await services.approvals.openSession({
-      transactionId: "tx-4",
       approvalId: "approval-2",
+      transactionId: firstApproved.transaction.id,
     });
     now = 3_000;
-    const approvedSecond = await services.approvals.approveTransaction({
-      transactionId: "tx-4",
+    const approvedSecond = await services.transactions.approveTransaction({
       approvalId: "approval-2",
-      expectedPrepareId: openedSecond.prepare.prepareId,
+      expectedPrepareId: secondReview.approval.prepare.id,
     });
-    expect(approvedSecond.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-4");
+    if (approvedSecond.status !== "approved") {
+      throw new Error("Expected replacement approval to create a transaction.");
+    }
+    await services.submission.submitApprovedTransaction(approvedSecond.transaction.id);
     await aggregateStore.recordTransactionConfirmed({
-      transactionId: "tx-4",
+      transactionId: approvedSecond.transaction.id,
       receipt: {
         transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         status: "0x1",
@@ -610,12 +593,12 @@ describe("createTransactionServices", () => {
       },
     });
 
-    const result = await services.tracking.inspectSubmittedTransaction("tx-1");
+    const result = await services.tracking.inspectSubmittedTransaction(firstApproved.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("replaced");
-    expect(result.aggregate.record.replacedByTransactionId).toBe("tx-4");
-    expect(changes.at(-1)).toEqual(["tx-1"]);
+    expect(result.aggregate.record.replacedByTransactionId).toBe(approvedSecond.transaction.id);
+    expect(changes.at(-1)).toEqual([firstApproved.transaction.id]);
   });
 
   it("replaces other submitted local transactions as soon as the winner is confirmed", async () => {
@@ -630,8 +613,10 @@ describe("createTransactionServices", () => {
         .mockResolvedValue(null),
     });
 
-    await aggregateStore.createTransaction(
-      createTransactionInput({
+    const firstApproved = await approveTransactionReview({
+      services,
+      approvalId: "approval-1",
+      input: createTransactionInput({
         request: {
           payload: {
             from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -642,22 +627,12 @@ describe("createTransactionServices", () => {
           },
         },
       }),
-    );
-    const openedFirst = await services.approvals.openSession({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
     });
     tick(2_000);
-    const approvedFirst = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: openedFirst.prepare.prepareId,
-    });
-    expect(approvedFirst.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-1");
+    await services.submission.submitApprovedTransaction(firstApproved.transaction.id);
 
-    await aggregateStore.createTransaction(
-      createTransactionInput({
+    const secondReview = await services.transactions.createSpeedUpReplacement({
+      ...createTransactionInput({
         requestId: "request-2",
         request: {
           payload: {
@@ -668,33 +643,28 @@ describe("createTransactionServices", () => {
             nonce: "0x7",
           },
         },
-        replacement: {
-          transactionId: "tx-1",
-          type: "speed_up",
-        },
       }),
-    );
-    const openedSecond = await services.approvals.openSession({
-      transactionId: "tx-4",
       approvalId: "approval-2",
+      transactionId: firstApproved.transaction.id,
     });
     tick(3_000);
-    const approvedSecond = await services.approvals.approveTransaction({
-      transactionId: "tx-4",
+    const approvedSecond = await services.transactions.approveTransaction({
       approvalId: "approval-2",
-      expectedPrepareId: openedSecond.prepare.prepareId,
+      expectedPrepareId: secondReview.approval.prepare.id,
     });
-    expect(approvedSecond.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-4");
+    if (approvedSecond.status !== "approved") {
+      throw new Error("Expected replacement approval to create a transaction.");
+    }
+    await services.submission.submitApprovedTransaction(approvedSecond.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction("tx-4");
+    const result = await services.tracking.inspectSubmittedTransaction(approvedSecond.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("confirmed");
 
-    const loser = await aggregateStore.loadTransactionAggregate("tx-1");
+    const loser = await aggregateStore.loadTransactionAggregate(firstApproved.transaction.id);
     expect(loser?.record.status).toBe("replaced");
-    expect(loser?.record.replacedByTransactionId).toBe("tx-4");
+    expect(loser?.record.replacedByTransactionId).toBe(approvedSecond.transaction.id);
   });
 
   it("continues restart recovery after one submitted tracking attempt should retry later", async () => {
@@ -702,31 +672,27 @@ describe("createTransactionServices", () => {
       .fn()
       .mockRejectedValueOnce(new Error("temporary rpc outage"))
       .mockResolvedValue(null);
-    const { services, aggregateStore, tick } = createServices({
+    const { services, tick } = createServices({
       getTransactionReceipt,
     });
 
-    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-1" }));
-    const opened = await services.approvals.openSession({
-      transactionId: "tx-1",
+    const approved = await approveTransactionReview({
+      services,
       approvalId: "approval-1",
+      input: createTransactionInput({ requestId: "request-1" }),
     });
     tick(2_000);
-    const approved = await services.approvals.approveTransaction({
-      transactionId: "tx-1",
-      approvalId: "approval-1",
-      expectedPrepareId: opened.prepare.prepareId,
-    });
-    expect(approved.status).toBe("approved");
-    await services.submission.submitApprovedTransaction("tx-1");
+    await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    await aggregateStore.createTransaction(createTransactionInput({ requestId: "request-2" }));
+    await services.transactions.requestTransactionApproval({
+      ...createTransactionInput({ requestId: "request-2" }),
+      approvalId: "approval-2",
+    });
 
     const results = await services.recovery.recoverAfterRestart();
 
     expect(results.map((entry) => [entry.action.transactionId, entry.status, entry.aggregate?.record.status])).toEqual([
-      ["tx-4", "applied", "cancelled"],
-      ["tx-1", "deferred", "submitted"],
+      [approved.transaction.id, "deferred", "submitted"],
     ]);
   });
 });

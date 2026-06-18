@@ -1,6 +1,6 @@
 import { ApprovalRejectedError } from "../../../../approvals/errors.js";
 import { TransportDisconnectedError } from "../../../../runtime/provider/errors.js";
-import type { JsonValue } from "../../../../transactions/aggregate/index.js";
+import { buildTransactionTerminalReason, type JsonValue } from "../../../../transactions/aggregate/index.js";
 import type { Eip155SubmittedTransaction } from "../../../../transactions/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
@@ -42,7 +42,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
     const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
 
-    const approval = await providerRequestHandle.attachBlockingApproval(({ approvalId }) =>
+    const { decision } = await providerRequestHandle.attachBlockingApproval(({ approvalId }) =>
       services.transactions.requestTransactionApproval({
         namespace: "eip155",
         chainRef: prepared.chainRef,
@@ -51,6 +51,15 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         requestId: requestContext.requestId,
         accountKey: account.accountKey,
         approvalId,
+        cancellation: {
+          signal: providerRequestHandle.signal,
+          reason: buildTransactionTerminalReason({
+            kind: "approval_cancelled",
+            code: "provider.caller_disconnected",
+            message: "Provider caller disconnected before transaction approval completed.",
+            details: { reason: "caller_disconnected" },
+          }),
+        },
         request: {
           kind: ETH_SEND_TRANSACTION_REQUEST_KIND,
           payload: prepared.payload as JsonValue,
@@ -58,17 +67,29 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       }),
     );
 
+    const approvalDecision = await decision;
+    if (approvalDecision.status === "rejected") {
+      throw new ApprovalRejectedError({
+        message: approvalDecision.reason?.message ?? "Transaction approval was rejected.",
+      });
+    }
+    if (approvalDecision.status === "cancelled") {
+      if (approvalDecision.reason?.code === "provider.caller_disconnected") {
+        throw new TransportDisconnectedError({
+          message: approvalDecision.reason.message,
+        });
+      }
+      throw new RpcInternalError({
+        message: approvalDecision.reason?.message ?? "Transaction approval was cancelled.",
+      });
+    }
+
     const outcome = await services.transactions.waitForTransactionSubmissionOutcome({
-      transactionId: approval.transaction.id,
+      transactionId: approvalDecision.transaction.id,
       signal: providerRequestHandle.signal,
     });
     if (outcome.kind === "terminal") {
       const reason = outcome.transaction.terminalReason;
-      if (outcome.transaction.status === "rejected" && reason?.kind === "user_rejected") {
-        throw new ApprovalRejectedError({
-          message: reason.message,
-        });
-      }
       if (outcome.transaction.status === "cancelled" && reason?.code === "provider.caller_disconnected") {
         throw new TransportDisconnectedError({
           message: reason.message,

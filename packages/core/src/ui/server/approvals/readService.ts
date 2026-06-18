@@ -290,7 +290,7 @@ const buildTransactionOwnedSendTransactionDetail = async (
       canReject: true,
     },
     request: {
-      transactionId: approval.transactionId,
+      approvalId: approval.approvalId,
       chainRef: approval.chainRef,
       origin: approval.origin,
       prepareId: approval.prepare.id,

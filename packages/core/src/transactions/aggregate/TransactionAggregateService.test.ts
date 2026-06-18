@@ -179,7 +179,7 @@ describe("TransactionAggregateService", () => {
     ).toThrow(TransactionAggregateInvariantError);
   });
 
-  it("advances signing and keeps signed broadcast input out of durable state", () => {
+  it("advances signing and keeps signed broadcast artifact out of durable state", () => {
     const { service, tick } = createService();
     const aggregate = createApprovedTransactionAggregate(service);
 

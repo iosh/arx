@@ -54,8 +54,8 @@ export const createNamespaceTransactionStub = (
     deriveApprovalResourceKey: (...args: never[]) => unknown;
     finalizeApproval: (...args: never[]) => unknown;
     deriveConflictKey: (...args: never[]) => unknown;
-    createBroadcastInput: (...args: never[]) => unknown;
-    submitBroadcastInput: (...args: never[]) => unknown;
+    createBroadcastArtifact: (...args: never[]) => unknown;
+    broadcast: (...args: never[]) => unknown;
     inspectSubmittedTransaction: (...args: never[]) => unknown;
     tracking: unknown;
   }>,
@@ -81,14 +81,14 @@ export const createNamespaceTransactionStub = (
     ...(overrides?.deriveConflictKey ? { deriveConflictKey: overrides.deriveConflictKey as never } : {}),
   },
   submission: {
-    createBroadcastInput:
-      (overrides?.createBroadcastInput as never) ??
+    createBroadcastArtifact:
+      (overrides?.createBroadcastArtifact as never) ??
       vi.fn(async () => ({
         kind: "eip155.raw_transaction",
         payload: { raw: "0x" },
       })),
     broadcast:
-      (overrides?.submitBroadcastInput as never) ??
+      (overrides?.broadcast as never) ??
       vi.fn(async () => ({
         broadcastIdentity: { hash: DEFAULT_SUBMITTED.hash },
         submitted: DEFAULT_SUBMITTED,

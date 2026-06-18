@@ -77,7 +77,7 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
     prepare: async () => ({ status: "ready", prepared: {} }),
   },
   submission: {
-    createBroadcastInput: async () => ({ kind: "test.raw", payload: { raw: "0x1111" } }),
+    createBroadcastArtifact: async () => ({ kind: "test.raw", payload: { raw: "0x1111" } }),
     broadcast: async (context) => ({
       broadcastIdentity: { hash: "0x1111111111111111111111111111111111111111111111111111111111111111" },
       submitted: {

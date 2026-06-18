@@ -63,11 +63,11 @@ const createApprovedPayload = () => ({
 });
 
 describe("createEip155Transaction", () => {
-  it("creates a broadcast input from the approved payload", async () => {
+  it("creates a broadcast artifact from the approved payload", async () => {
     const { adapter, signer } = createAdapter();
     if (!adapter.submission) throw new Error("Expected submission contract");
 
-    const broadcastInput = await adapter.submission.createBroadcastInput({
+    const broadcastArtifact = await adapter.submission.createBroadcastArtifact({
       transactionId: "tx-1",
       namespace: "eip155",
       chainRef: TEST_CHAINS.MAINNET,
@@ -88,7 +88,7 @@ describe("createEip155Transaction", () => {
     });
 
     expect(signer.signTransaction).toHaveBeenCalledTimes(1);
-    expect(broadcastInput).toEqual({
+    expect(broadcastArtifact).toEqual({
       kind: "eip155.raw_transaction",
       payload: { raw: "0xdeadbeef" },
     });
@@ -116,7 +116,7 @@ describe("createEip155Transaction", () => {
         },
       },
       approvedPayload: createApprovedPayload(),
-      broadcastInput: {
+      broadcastArtifact: {
         kind: "eip155.raw_transaction",
         payload: { raw: "0xdeadbeef" },
       },

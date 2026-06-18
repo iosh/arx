@@ -1,9 +1,9 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
-import type { TransactionAggregate } from "./aggregate/index.js";
+import { type TransactionAggregate, TransactionAggregateInvariantError } from "./aggregate/index.js";
 import type {
-  BroadcastInput,
+  BroadcastArtifact,
+  TransactionBroadcastArtifactContext,
   TransactionBroadcastContext,
-  TransactionBroadcastInputContext,
 } from "./namespace/types.js";
 
 const readAggregateFromAddress = (
@@ -18,15 +18,18 @@ const readAggregateFromAddress = (
 const requireApprovedPayload = (aggregate: TransactionAggregate) => {
   const approvedRequest = aggregate.record.approvedRequest;
   if (!approvedRequest) {
-    throw new Error(`Transaction "${aggregate.record.id}" is missing an approved request payload.`);
+    throw new TransactionAggregateInvariantError(
+      aggregate.record.id,
+      `Transaction "${aggregate.record.id}" is missing an approved request payload.`,
+    );
   }
   return approvedRequest.payload;
 };
 
-export const buildBroadcastInputContext = (
+export const buildBroadcastArtifactContext = (
   aggregate: TransactionAggregate,
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">,
-): TransactionBroadcastInputContext => ({
+): TransactionBroadcastArtifactContext => ({
   transactionId: aggregate.record.id,
   namespace: aggregate.record.namespace,
   chainRef: aggregate.record.chainRef,
@@ -43,9 +46,9 @@ export const buildBroadcastInputContext = (
 
 export const buildBroadcastContext = (
   aggregate: TransactionAggregate,
-  broadcastInput: BroadcastInput,
+  broadcastArtifact: BroadcastArtifact,
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">,
 ): TransactionBroadcastContext => ({
-  ...buildBroadcastInputContext(aggregate, accountCodecs),
-  broadcastInput: structuredClone(broadcastInput),
+  ...buildBroadcastArtifactContext(aggregate, accountCodecs),
+  broadcastArtifact: structuredClone(broadcastArtifact),
 });

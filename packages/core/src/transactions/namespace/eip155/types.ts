@@ -3,15 +3,15 @@ import type { AccountAddress } from "../../../accounts/runtime/types.js";
 import type { TransactionConflictKey } from "../../aggregate/types.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type {
-  BroadcastInput,
+  BroadcastArtifact,
   BroadcastResult,
   SignedTransactionPayload,
   SubmittedTransactionInspection,
   TransactionApprovalFinalizeContext,
   TransactionApprovalFinalizeResult,
   TransactionApprovalReviewContext,
+  TransactionBroadcastArtifactContext,
   TransactionBroadcastContext,
-  TransactionBroadcastInputContext,
   TransactionDraftEditContext,
   TransactionFailure,
   TransactionPrepareContext,
@@ -56,8 +56,8 @@ export type Eip155ApprovalFinalizeContext = Omit<
 
 export type Eip155ApprovalFinalizeResult = TransactionApprovalFinalizeResult<"eip155">;
 
-export type Eip155BroadcastInputContext = Omit<
-  TransactionBroadcastInputContext<"eip155">,
+export type Eip155BroadcastArtifactContext = Omit<
+  TransactionBroadcastArtifactContext<"eip155">,
   "approvedPayload" | "request"
 > & {
   request: Eip155TransactionRequest;
@@ -110,7 +110,10 @@ export type Eip155BroadcasterContract = {
 };
 
 export type Eip155SubmissionContract = {
-  createBroadcastInput(context: Eip155BroadcastInputContext, options?: TransactionSignOptions): Promise<BroadcastInput>;
+  createBroadcastArtifact(
+    context: Eip155BroadcastArtifactContext,
+    options?: TransactionSignOptions,
+  ): Promise<BroadcastArtifact>;
   broadcast(context: Eip155BroadcastContext): Promise<BroadcastResult<"eip155">>;
 };
 

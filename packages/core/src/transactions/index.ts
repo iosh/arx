@@ -54,7 +54,7 @@ export type {
 export { buildEip155TransactionConflictKey } from "./namespace/eip155/unsignedTransaction.js";
 export { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 export type {
-  BroadcastInput,
+  BroadcastArtifact,
   BroadcastResult,
   NamespaceTransaction,
   NamespaceTransactionProposal,
@@ -64,8 +64,8 @@ export type {
   SignedTransactionPayload,
   SubmittedTransactionInspection,
   TransactionApprovalReviewContext,
+  TransactionBroadcastArtifactContext,
   TransactionBroadcastContext,
-  TransactionBroadcastInputContext,
   TransactionDraftEditContext,
   TransactionFailure,
   TransactionPrepareContext,

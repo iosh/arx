@@ -9,7 +9,7 @@ import {
   type TransactionRecord,
 } from "../aggregate/index.js";
 import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
-import { buildBroadcastInputContext } from "../broadcastContexts.js";
+import { buildBroadcastArtifactContext } from "../broadcastContexts.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
 import type { NamespaceTransactionTracking, SubmittedTransactionInspection } from "../namespace/types.js";
@@ -222,7 +222,7 @@ export class SubmittedTransactionTrackingService {
   }
 
   #buildTrackingContext(aggregate: TransactionAggregate) {
-    const context = buildBroadcastInputContext(aggregate, this.#accountCodecs);
+    const context = buildBroadcastArtifactContext(aggregate, this.#accountCodecs);
     return {
       recordId: aggregate.record.id,
       namespace: aggregate.record.namespace,

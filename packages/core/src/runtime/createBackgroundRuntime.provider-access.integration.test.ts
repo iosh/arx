@@ -128,12 +128,12 @@ const buildEip155Submitted = (params: {
 
 const createNamespaceTransactionMock = (params: {
   prepareTransaction: NamespaceTransactionProposal["prepare"];
-  createBroadcastInput?: NamespaceTransactionSubmission["createBroadcastInput"];
+  createBroadcastArtifact?: NamespaceTransactionSubmission["createBroadcastArtifact"];
   broadcastTransaction?: NamespaceTransactionSubmission["broadcast"];
   tracking?: NamespaceTransactionTracking;
 }): NamespaceTransaction => {
-  const createBroadcastInput =
-    params.createBroadcastInput ??
+  const createBroadcastArtifact =
+    params.createBroadcastArtifact ??
     vi.fn(async () => ({
       kind: "test.signed_transaction",
       payload: { raw: "0x1111" },
@@ -157,7 +157,7 @@ const createNamespaceTransactionMock = (params: {
       prepare: params.prepareTransaction,
     },
     submission: {
-      createBroadcastInput,
+      createBroadcastArtifact,
       broadcast: broadcastTransaction,
     },
     ...(params.tracking ? { tracking: params.tracking } : {}),
@@ -867,7 +867,7 @@ describe("createBackgroundRuntime provider access", () => {
         nonce: "0x7",
       },
     }));
-    const createBroadcastInput = vi.fn<NamespaceTransactionSubmission["createBroadcastInput"]>(async () => ({
+    const createBroadcastArtifact = vi.fn<NamespaceTransactionSubmission["createBroadcastArtifact"]>(async () => ({
       kind: "test.signed_transaction",
       payload: { raw: "0x1111" },
     }));
@@ -885,7 +885,7 @@ describe("createBackgroundRuntime provider access", () => {
         chain.namespace,
         createNamespaceTransactionMock({
           prepareTransaction,
-          createBroadcastInput,
+          createBroadcastArtifact,
           broadcastTransaction,
         }),
       ],
@@ -967,7 +967,7 @@ describe("createBackgroundRuntime provider access", () => {
         jsonrpc: "2.0",
         result: txHash,
       });
-      expect(createBroadcastInput).toHaveBeenCalledTimes(1);
+      expect(createBroadcastArtifact).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(1);
     } finally {
       background.destroy();
@@ -1075,7 +1075,7 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
-  it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast input creation", async () => {
+  it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast artifact creation", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -1085,7 +1085,7 @@ describe("createBackgroundRuntime provider access", () => {
     const signReleased = new Promise<void>((resolve) => {
       releaseSign = resolve;
     });
-    const createBroadcastInput = vi.fn<NamespaceTransactionSubmission["createBroadcastInput"]>(async () => {
+    const createBroadcastArtifact = vi.fn<NamespaceTransactionSubmission["createBroadcastArtifact"]>(async () => {
       await signReleased;
       return {
         kind: "test.signed_transaction",
@@ -1109,7 +1109,7 @@ describe("createBackgroundRuntime provider access", () => {
             status: "ready",
             prepared: { nonce: "0xa" },
           })),
-          createBroadcastInput,
+          createBroadcastArtifact,
           broadcastTransaction,
         }),
       ],
@@ -1144,7 +1144,7 @@ describe("createBackgroundRuntime provider access", () => {
         ],
       });
 
-      await vi.waitFor(() => expect(createBroadcastInput).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(createBroadcastArtifact).toHaveBeenCalledTimes(1));
       await expect(
         background.runtime.providerAccess.cancelRequestScope({
           transport: "provider",

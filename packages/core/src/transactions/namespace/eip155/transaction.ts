@@ -66,14 +66,14 @@ const buildEip155SubmittedTransaction = (params: {
       };
 };
 
-const toBroadcastInputPayload = (signed: { raw: string }) => ({
+const toBroadcastArtifactPayload = (signed: { raw: string }) => ({
   raw: signed.raw,
 });
 
-const readSignedTransactionPayload = (broadcastInput: { kind: string; payload: Record<string, unknown> }) => {
-  const raw = broadcastInput.payload.raw;
+const readSignedTransactionPayload = (broadcastArtifact: { kind: string; payload: Record<string, unknown> }) => {
+  const raw = broadcastArtifact.payload.raw;
   if (typeof raw !== "string" || !raw.startsWith("0x")) {
-    throw new Error(`EIP-155 broadcast input "${broadcastInput.kind}" is missing a raw transaction payload.`);
+    throw new Error(`EIP-155 broadcast artifact "${broadcastArtifact.kind}" is missing a raw transaction payload.`);
   }
 
   return {
@@ -233,7 +233,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       },
     },
     submission: {
-      async createBroadcastInput(context, options) {
+      async createBroadcastArtifact(context, options) {
         const signed = await deps.signer.signTransaction(
           {
             namespace: "eip155",
@@ -248,7 +248,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
 
         return {
           kind: "eip155.raw_transaction",
-          payload: toBroadcastInputPayload(signed),
+          payload: toBroadcastArtifactPayload(signed),
         };
       },
       async broadcast(context) {
@@ -260,7 +260,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
             from: context.from,
             request: context.request,
           },
-          readSignedTransactionPayload(context.broadcastInput),
+          readSignedTransactionPayload(context.broadcastArtifact),
         );
         const txHash = broadcast.hash as `0x${string}`;
         const submitted = buildEip155SubmittedTransaction({

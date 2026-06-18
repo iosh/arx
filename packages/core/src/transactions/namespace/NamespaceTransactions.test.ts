@@ -7,7 +7,7 @@ const dummy = (): NamespaceTransaction => ({
     prepare: async () => ({ status: "ready", prepared: {} }),
   },
   submission: {
-    createBroadcastInput: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
+    createBroadcastArtifact: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
     broadcast: async () => ({
       broadcastIdentity: { hash: "0xhash" },
       submitted: { hash: "0xhash" },

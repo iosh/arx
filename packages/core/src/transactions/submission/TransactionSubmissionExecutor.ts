@@ -3,12 +3,17 @@ import { isArxBaseError } from "../../error.js";
 import type { JsonValue, TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
 import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
-import { buildBroadcastContext, buildBroadcastInputContext } from "../broadcastContexts.js";
+import { buildBroadcastArtifactContext, buildBroadcastContext } from "../broadcastContexts.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
-import type { BroadcastInput, BroadcastResult, NamespaceTransactionSubmission } from "../namespace/types.js";
+import type { BroadcastArtifact, BroadcastResult, NamespaceTransactionSubmission } from "../namespace/types.js";
 import type { TransactionResourceLock } from "../TransactionResourceLock.js";
-import { TransactionAcceptanceCommitError } from "./errors.js";
+import {
+  TransactionAcceptanceCommitError,
+  TransactionSubmissionActiveSubmissionMissingError,
+  TransactionSubmissionNotSubmittableError,
+  TransactionSubmissionTransactionNotFoundError,
+} from "./errors.js";
 
 type TransactionSubmissionExecutorDeps = {
   transactions: Pick<
@@ -26,7 +31,7 @@ type TransactionSubmissionExecutorDeps = {
 
 export type TransactionSubmissionResult = {
   aggregate: TransactionAggregate;
-  broadcastInput: BroadcastInput;
+  broadcastArtifact: BroadcastArtifact;
 };
 
 export class TransactionSubmissionExecutor {
@@ -51,9 +56,9 @@ export class TransactionSubmissionExecutor {
 
   /**
    * Flow:
-   * queued -> signing(createBroadcastInput) -> broadcasting(broadcast) -> accepted/submitted
-   *                                      \-> failed
-   *                         broadcast    \-> failed
+   * queued -> signing(createBroadcastArtifact) -> broadcasting(broadcast) -> accepted/submitted
+   *                                         \-> failed
+   *                            broadcast    \-> failed
    */
   async submitApprovedTransaction(transactionId: string): Promise<TransactionSubmissionResult> {
     const current = await this.#loadSubmittingAggregate(transactionId);
@@ -61,7 +66,7 @@ export class TransactionSubmissionExecutor {
     const namespaceTransaction = this.#namespaces.require(current.record.namespace);
     const submission = requireNamespaceTransactionOperation<NamespaceTransactionSubmission>({
       namespace: current.record.namespace,
-      operation: "submission.createBroadcastInput",
+      operation: "submission.createBroadcastArtifact",
       value: namespaceTransaction.submission,
     });
 
@@ -70,16 +75,18 @@ export class TransactionSubmissionExecutor {
       submissionId,
     });
 
-    let broadcastInput: BroadcastInput;
+    let broadcastArtifact: BroadcastArtifact;
     try {
-      broadcastInput = await submission.createBroadcastInput(buildBroadcastInputContext(signing, this.#accountCodecs));
+      broadcastArtifact = await submission.createBroadcastArtifact(
+        buildBroadcastArtifactContext(signing, this.#accountCodecs),
+      );
     } catch (error) {
       await this.#failSubmissionWithResourceLock({
         aggregate: current,
         submissionId,
         reason: this.#buildFailureReason({
           error,
-          phase: "create_broadcast_input",
+          phase: "create_broadcast_artifact",
           namespace: signing.record.namespace,
         }),
       });
@@ -98,7 +105,7 @@ export class TransactionSubmissionExecutor {
         operation: "submission.broadcast",
         value: namespaceTransaction.submission?.broadcast,
       });
-      broadcastResult = await broadcast(buildBroadcastContext(broadcasting, broadcastInput, this.#accountCodecs));
+      broadcastResult = await broadcast(buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountCodecs));
     } catch (error) {
       await this.#failSubmissionWithResourceLock({
         aggregate: current,
@@ -121,14 +128,14 @@ export class TransactionSubmissionExecutor {
 
       return {
         aggregate: accepted,
-        broadcastInput,
+        broadcastArtifact,
       };
     } catch (error) {
       throw new TransactionAcceptanceCommitError({
         transactionId: current.record.id,
         submissionId,
-        broadcastIdentity: structuredClone(broadcastResult.broadcastIdentity as JsonValue),
-        submitted: structuredClone(broadcastResult.submitted as JsonValue),
+        broadcastIdentity: broadcastResult.broadcastIdentity as JsonValue,
+        submitted: broadcastResult.submitted as JsonValue,
         cause: error,
       });
     }
@@ -137,10 +144,13 @@ export class TransactionSubmissionExecutor {
   async #loadSubmittingAggregate(transactionId: string) {
     const aggregate = await this.#transactions.loadTransactionAggregate(transactionId);
     if (!aggregate) {
-      throw new Error(`Transaction "${transactionId}" was not found.`);
+      throw new TransactionSubmissionTransactionNotFoundError(transactionId);
     }
     if (aggregate.record.status !== "submitting") {
-      throw new Error(`Transaction "${transactionId}" is not submitting.`);
+      throw new TransactionSubmissionNotSubmittableError({
+        transactionId,
+        status: aggregate.record.status,
+      });
     }
     return aggregate;
   }
@@ -148,7 +158,7 @@ export class TransactionSubmissionExecutor {
   #requireActiveSubmissionId(aggregate: TransactionAggregate) {
     const submissionId = aggregate.record.activeSubmissionId;
     if (!submissionId) {
-      throw new Error(`Transaction "${aggregate.record.id}" is missing an active submission.`);
+      throw new TransactionSubmissionActiveSubmissionMissingError(aggregate.record.id);
     }
     return submissionId;
   }
@@ -167,7 +177,7 @@ export class TransactionSubmissionExecutor {
     });
   }
 
-  #buildFailureReason(params: { error: unknown; phase: "create_broadcast_input" | "broadcast"; namespace: string }) {
+  #buildFailureReason(params: { error: unknown; phase: "create_broadcast_artifact" | "broadcast"; namespace: string }) {
     const details =
       isArxBaseError(params.error) && params.error.details && typeof params.error.details === "object"
         ? (structuredClone(params.error.details) as JsonValue)

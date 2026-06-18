@@ -131,7 +131,7 @@ const createInMemoryTransactionsStoragePort = (seed: TransactionAggregate[] = []
 
 const createHarness = (params?: {
   applyDraftEdit?: (context: { edit: NamespaceTransactionDraftEdit }) => CreateTransactionInput["request"];
-  submitBroadcastInput?: (...args: never[]) => unknown;
+  broadcast?: (...args: never[]) => unknown;
 }) => {
   let nextTransactionId = 0;
   let nextPrepareId = 0;
@@ -150,9 +150,9 @@ const createHarness = (params?: {
           applyDraftEdit: params.applyDraftEdit as never,
         }
       : {}),
-    ...(params?.submitBroadcastInput
+    ...(params?.broadcast
       ? {
-          submitBroadcastInput: params.submitBroadcastInput as never,
+          broadcast: params.broadcast as never,
         }
       : {}),
   });
@@ -304,10 +304,10 @@ describe("TransactionsService", () => {
   });
 
   it("keeps the failed transaction visible when submit fails", async () => {
-    const submitBroadcastInput = vi.fn(async () => {
+    const broadcast = vi.fn(async () => {
       throw new Error("RPC unavailable");
     });
-    const { services } = createHarness({ submitBroadcastInput });
+    const { services } = createHarness({ broadcast });
     const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput(),
       approvalId: APPROVAL_ID,
@@ -320,7 +320,7 @@ describe("TransactionsService", () => {
       }),
     ).rejects.toThrow("RPC unavailable");
 
-    expect(submitBroadcastInput).toHaveBeenCalledOnce();
+    expect(broadcast).toHaveBeenCalledOnce();
     await expect(services.transactions.getTransaction("tx-1")).resolves.toMatchObject({
       id: "tx-1",
       status: "failed",

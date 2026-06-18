@@ -23,7 +23,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         receipt: { status: "0x1", blockNumber: "0x10" },
       }),
     );
-    const createBroadcastInput = vi.fn(async () => ({ kind: "test.raw", payload: { raw: "0x" } }));
+    const createBroadcastArtifact = vi.fn(async () => ({ kind: "test.raw", payload: { raw: "0x" } }));
     const broadcastTransaction = vi.fn(async () => ({
       broadcastIdentity: { hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
       submitted: {
@@ -36,7 +36,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
 
     const adapter: NamespaceTransaction = {
       submission: {
-        createBroadcastInput,
+        createBroadcastArtifact,
         broadcast: broadcastTransaction,
       },
       tracking: { inspectSubmittedTransaction },
@@ -108,7 +108,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     try {
       await flushAsync();
 
-      expect(createBroadcastInput).toHaveBeenCalledTimes(0);
+      expect(createBroadcastArtifact).toHaveBeenCalledTimes(0);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
       expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(1);
 

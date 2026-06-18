@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../accounts/addressing/codec.js";
 import { eip155AddressCodec } from "../chains/eip155/addressCodec.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
+import { isArxBaseError } from "../error.js";
 import type { Eip155RpcClient } from "../rpc/namespaceClients/eip155.js";
 import type {
   CreateTransactionInput,
@@ -207,7 +208,10 @@ const createRpcClientStub = (params?: {
   sendRawTransaction: vi.fn(async () => DEFAULT_BROADCAST_HASH),
 });
 
-const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getTransactionReceipt"] }) => {
+const createServices = (params?: {
+  getTransactionReceipt?: Eip155RpcClient["getTransactionReceipt"];
+  signTransaction?: Parameters<typeof createEip155Transaction>[0]["signer"]["signTransaction"];
+}) => {
   let now = 1_000;
   let nextId = 0;
   const storage = createInMemoryTransactionsStoragePort();
@@ -219,7 +223,7 @@ const createServices = (params?: { getTransactionReceipt?: Eip155RpcClient["getT
         chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
         rpcClientFactory: () => rpc,
         signer: {
-          signTransaction: vi.fn(async () => ({ raw: "0xdeadbeef" })),
+          signTransaction: params?.signTransaction ?? vi.fn(async () => ({ raw: "0xdeadbeef" })),
         },
         broadcaster: {
           broadcast: vi.fn(async () => ({
@@ -287,7 +291,7 @@ const approveTransactionReview = async (params: {
 };
 
 describe("createTransactionServices", () => {
-  it("submits an approved transaction through createBroadcastInput and broadcast", async () => {
+  it("submits an approved transaction through createBroadcastArtifact and broadcast", async () => {
     const { services, tick } = createServices();
     const changes: string[][] = [];
     services.transactions.onTransactionsChanged((ids) => changes.push(ids));
@@ -299,7 +303,7 @@ describe("createTransactionServices", () => {
     tick(2_000);
     const result = await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    expect(result.broadcastInput).toEqual({
+    expect(result.broadcastArtifact).toEqual({
       kind: "eip155.raw_transaction",
       payload: { raw: "0xdeadbeef" },
     });
@@ -315,6 +319,34 @@ describe("createTransactionServices", () => {
       [approved.transaction.id],
       [approved.transaction.id],
     ]);
+  });
+
+  it("fails the transaction when broadcast artifact creation fails", async () => {
+    const signTransaction = vi.fn(async () => {
+      throw new Error("signing unavailable");
+    });
+    const { services, aggregateStore, tick } = createServices({ signTransaction });
+    const approved = await approveTransactionReview({
+      services,
+      approvalId: "approval-1",
+    });
+
+    tick(2_000);
+
+    await expect(services.submission.submitApprovedTransaction(approved.transaction.id)).rejects.toThrow(
+      "signing unavailable",
+    );
+
+    const aggregate = await aggregateStore.loadTransactionAggregate(approved.transaction.id);
+    expect(aggregate?.record.status).toBe("failed");
+    expect(aggregate?.submissions[0]).toMatchObject({
+      status: "failed",
+      terminalReason: expect.objectContaining({
+        kind: "signing_failed",
+        code: "eip155.create_broadcast_artifact",
+        message: "signing unavailable",
+      }),
+    });
   });
 
   it("inspects a submitted transaction and advances it to confirmed", async () => {
@@ -457,9 +489,25 @@ describe("createTransactionServices", () => {
     });
     now = 2_000;
 
-    await expect(services.submission.submitApprovedTransaction(approved.transaction.id)).rejects.toBeInstanceOf(
-      TransactionAcceptanceCommitError,
-    );
+    let capturedError: unknown;
+    try {
+      await services.submission.submitApprovedTransaction(approved.transaction.id);
+    } catch (error) {
+      capturedError = error;
+    }
+    expect(capturedError).toBeInstanceOf(TransactionAcceptanceCommitError);
+    expect(isArxBaseError(capturedError)).toBe(true);
+    expect(capturedError).toMatchObject({
+      name: "TransactionAcceptanceCommitError",
+      code: TransactionAcceptanceCommitError.code,
+      details: expect.objectContaining({
+        transactionId: approved.transaction.id,
+        submissionId: expect.any(String),
+        submitted: expect.objectContaining({
+          hash: DEFAULT_BROADCAST_HASH,
+        }),
+      }),
+    });
 
     const aggregate = await aggregateStore.loadTransactionAggregate(approved.transaction.id);
     expect(aggregate?.record.status).toBe("submitting");

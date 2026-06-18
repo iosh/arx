@@ -50,7 +50,7 @@ export type SignedTransactionPayload = {
   hash?: string | null;
 };
 
-export type BroadcastInput = {
+export type BroadcastArtifact = {
   kind: string;
   payload: Record<string, unknown>;
 };
@@ -216,7 +216,7 @@ export type TransactionApprovalFinalizeResult<TNamespace extends string = string
       reviewSnapshot?: TransactionReviewSnapshot<TNamespace> | null;
     };
 
-export type TransactionBroadcastInputContext<TNamespace extends string = string> = {
+export type TransactionBroadcastArtifactContext<TNamespace extends string = string> = {
   transactionId: string;
   namespace: TNamespace;
   chainRef: ChainRef;
@@ -227,12 +227,10 @@ export type TransactionBroadcastInputContext<TNamespace extends string = string>
   approvedPayload: TransactionPrepared<TNamespace>;
 };
 
-export type TransactionBroadcastContext<TNamespace extends string = string> = Omit<
-  TransactionBroadcastInputContext<TNamespace>,
-  never
-> & {
-  broadcastInput: BroadcastInput;
-};
+export type TransactionBroadcastContext<TNamespace extends string = string> =
+  TransactionBroadcastArtifactContext<TNamespace> & {
+    broadcastArtifact: BroadcastArtifact;
+  };
 
 export type NamespaceTransactionRequest<TNamespace extends string = string> = {
   deriveForChain?(request: TransactionRequest<TNamespace>, chainRef: ChainRef): TransactionRequest<TNamespace>;
@@ -255,10 +253,10 @@ export type NamespaceTransactionProposal<TNamespace extends string = string> = {
 };
 
 export type NamespaceTransactionSubmission<TNamespace extends string = string> = {
-  createBroadcastInput(
-    context: TransactionBroadcastInputContext<TNamespace>,
+  createBroadcastArtifact(
+    context: TransactionBroadcastArtifactContext<TNamespace>,
     options?: TransactionSignOptions,
-  ): Promise<BroadcastInput>;
+  ): Promise<BroadcastArtifact>;
   broadcast(context: TransactionBroadcastContext<TNamespace>): Promise<BroadcastResult<TNamespace>>;
 };
 

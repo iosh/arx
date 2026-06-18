@@ -4,7 +4,7 @@ export type NamespaceTransactionOperation =
   | "proposal.prepare"
   | "proposal.buildReview"
   | "proposal.applyDraftEdit"
-  | "submission.createBroadcastInput"
+  | "submission.createBroadcastArtifact"
   | "submission.broadcast"
   | "tracking.inspectSubmittedTransaction";
 

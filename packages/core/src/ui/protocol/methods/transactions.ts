@@ -1,19 +1,7 @@
 import { z } from "zod";
-import { ChainRefSchema } from "../../../chains/ids.js";
+import { WalletApiSchemas } from "../../../wallet/schemas.js";
 import { ListTransactionsQuerySchema } from "../models/transactions.js";
 import { defineMethod } from "./types.js";
-
-const Eip155TransactionDraftChangeSchema = z.strictObject({
-  field: z.enum(["gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce"]),
-  value: z.string().min(1).nullable(),
-});
-
-const NamespaceTransactionDraftEditSchema = z.discriminatedUnion("namespace", [
-  z.strictObject({
-    namespace: z.literal("eip155"),
-    changes: z.array(Eip155TransactionDraftChangeSchema),
-  }),
-]);
 
 export const transactionsMethods = {
   "ui.transactions.listHistory": defineMethod("query", ListTransactionsQuerySchema, {
@@ -28,27 +16,13 @@ export const transactionsMethods = {
   ),
   "ui.transactions.requestSendTransactionApproval": defineMethod(
     "command",
-    z.strictObject({
-      to: z.string().min(1),
-      valueEther: z.string().min(1),
-      chainRef: ChainRefSchema.optional(),
-    }),
+    WalletApiSchemas.transactions.requestSendTransactionApproval,
     { broadcastSnapshot: true },
   ),
-  "ui.transactions.rerunPrepare": defineMethod(
-    "command",
-    z.strictObject({
-      approvalId: z.string().min(1),
-    }),
-    { broadcastSnapshot: false },
-  ),
-  "ui.transactions.applyDraftEdit": defineMethod(
-    "command",
-    z.strictObject({
-      approvalId: z.string().min(1),
-      edit: NamespaceTransactionDraftEditSchema,
-      mode: z.string().min(1).optional(),
-    }),
-    { broadcastSnapshot: false },
-  ),
+  "ui.transactions.rerunPrepare": defineMethod("command", WalletApiSchemas.transactions.rerunPrepare, {
+    broadcastSnapshot: false,
+  }),
+  "ui.transactions.applyDraftEdit": defineMethod("command", WalletApiSchemas.transactions.applyDraftEdit, {
+    broadcastSnapshot: false,
+  }),
 } as const;

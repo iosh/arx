@@ -1,5 +1,3 @@
-import { z } from "zod";
-import { ApprovalAccountSelectionDecisionSchema } from "../../../approvals/decision.js";
 import type { ApprovalKind, ApprovalKinds } from "../../../approvals/queue/types.js";
 import type { ApprovalSource } from "../../../approvals/source.js";
 import type { ChainRef } from "../../../chains/ids.js";
@@ -109,20 +107,5 @@ export type ApprovalSendTransactionDetail = ApprovalDetailBase<
 
 export type ApprovalDetail = ApprovalAccountSelectionDetail | ApprovalStaticDetail | ApprovalSendTransactionDetail;
 
-export const ApprovalResolveRequestSchema = z.discriminatedUnion("action", [
-  z.strictObject({
-    approvalId: z.string().min(1),
-    action: z.literal("approve"),
-    decision: ApprovalAccountSelectionDecisionSchema.optional(),
-    expectedPrepareId: z.string().min(1).optional(),
-  }),
-  z.strictObject({
-    approvalId: z.string().min(1),
-    action: z.literal("reject"),
-    reason: z.string().min(1).optional(),
-  }),
-]);
-
-export type ApprovalResolveRequest = z.infer<typeof ApprovalResolveRequestSchema>;
 export type ApprovalResolveResult = null;
 export type { SendTransactionApprovalReview };

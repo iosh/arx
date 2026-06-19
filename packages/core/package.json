@@ -25,6 +25,7 @@
     "./transactions/storage": "./src/transactions/storage/index.ts",
     "./ui": "./src/ui/index.ts",
     "./ui/server": "./src/ui/server/index.ts",
+    "./wallet": "./src/wallet/index.ts",
     "./keyring": "./src/keyring/index.ts",
     "./services": "./src/services/index.ts"
   },

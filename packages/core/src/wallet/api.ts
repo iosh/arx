@@ -1,0 +1,111 @@
+import type { z } from "zod";
+import type { SessionLockState } from "../runtime/session/unlock/types.js";
+import type { WalletApiEip155TransactionDraftChangeSchema } from "./schemas/transactions.js";
+import type { WalletApiSchemas } from "./schemas.js";
+import type {
+  WalletApiAutoLockResult,
+  WalletApiChainSnapshot,
+  WalletApiCreationResult,
+  WalletApiExportMnemonicResult,
+  WalletApiExportPrivateKeyResult,
+  WalletApiGenerateMnemonicResult,
+  WalletApiImportPrivateKeyResult,
+  WalletApiKeyringAccount,
+  WalletApiOwnedAccountSummary,
+  WalletApiRequestSendTransactionApprovalResult,
+  WalletApiResolveApprovalResult,
+} from "./types.js";
+
+type WalletApiInput<TSchema extends z.ZodTypeAny> = z.infer<TSchema>;
+
+export type UnlockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.unlock>;
+export type LockSessionInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.session.lock>>;
+export type SetAutoLockDurationInput = WalletApiInput<typeof WalletApiSchemas.session.setAutoLockDuration>;
+
+export type GenerateMnemonicInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.onboarding.generateMnemonic>>;
+export type CreateWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.onboarding.createWalletFromMnemonic>;
+export type ImportWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.onboarding.importWalletFromMnemonic>;
+export type ImportWalletFromPrivateKeyInput = WalletApiInput<
+  typeof WalletApiSchemas.onboarding.importWalletFromPrivateKey
+>;
+
+export type SwitchActiveAccountInput = WalletApiInput<typeof WalletApiSchemas.accounts.switchActive>;
+export type SelectWalletChainInput = WalletApiInput<typeof WalletApiSchemas.chains.selectWalletChain>;
+
+export type ResolveApprovalInput = WalletApiInput<typeof WalletApiSchemas.approvals.resolve>;
+
+export type ConfirmNewMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.confirmNewMnemonic>;
+export type ImportMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importMnemonic>;
+export type ImportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importPrivateKey>;
+export type DeriveAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.deriveAccount>;
+export type RenameKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.renameKeyring>;
+export type RenameAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.renameAccount>;
+export type MarkBackedUpInput = WalletApiInput<typeof WalletApiSchemas.keyrings.markBackedUp>;
+export type HideHdAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.hideHdAccount>;
+export type UnhideHdAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.unhideHdAccount>;
+export type RemovePrivateKeyKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.removePrivateKeyKeyring>;
+export type ExportMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.exportMnemonic>;
+export type ExportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyrings.exportPrivateKey>;
+
+export type RequestSendTransactionApprovalInput = WalletApiInput<
+  typeof WalletApiSchemas.transactions.requestSendTransactionApproval
+>;
+export type RerunTransactionPrepareInput = WalletApiInput<typeof WalletApiSchemas.transactions.rerunPrepare>;
+export type Eip155TransactionDraftChange = WalletApiInput<typeof WalletApiEip155TransactionDraftChangeSchema>;
+export type NamespaceTransactionDraftEdit = Omit<
+  WalletApiInput<typeof WalletApiSchemas.transactions.applyDraftEdit>["edit"],
+  "changes"
+> & {
+  readonly changes: readonly Eip155TransactionDraftChange[];
+};
+export type ApplyTransactionDraftEditInput = Omit<
+  WalletApiInput<typeof WalletApiSchemas.transactions.applyDraftEdit>,
+  "edit"
+> & {
+  edit: NamespaceTransactionDraftEdit;
+};
+
+export type WalletApi = Readonly<{
+  unlockSession(input: UnlockSessionInput): Promise<SessionLockState>;
+  lockSession(input?: LockSessionInput): Promise<SessionLockState>;
+  resetAutoLockTimer(): Promise<SessionLockState>;
+  setAutoLockDuration(input: SetAutoLockDurationInput): Promise<WalletApiAutoLockResult>;
+
+  generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
+  createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
+  importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
+  importWalletFromPrivateKey(input: ImportWalletFromPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+
+  switchActiveAccount(input: SwitchActiveAccountInput): Promise<WalletApiOwnedAccountSummary | null>;
+  selectWalletChain(input: SelectWalletChainInput): Promise<WalletApiChainSnapshot>;
+  resolveApproval(input: ResolveApprovalInput): Promise<WalletApiResolveApprovalResult>;
+
+  confirmNewMnemonic(input: ConfirmNewMnemonicInput): Promise<WalletApiCreationResult>;
+  importMnemonic(input: ImportMnemonicInput): Promise<WalletApiCreationResult>;
+  importPrivateKey(input: ImportPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+  deriveAccount(input: DeriveAccountInput): Promise<WalletApiKeyringAccount>;
+  renameKeyring(input: RenameKeyringInput): Promise<null>;
+  renameAccount(input: RenameAccountInput): Promise<null>;
+  markBackedUp(input: MarkBackedUpInput): Promise<null>;
+  hideHdAccount(input: HideHdAccountInput): Promise<null>;
+  unhideHdAccount(input: UnhideHdAccountInput): Promise<null>;
+  removePrivateKeyKeyring(input: RemovePrivateKeyKeyringInput): Promise<null>;
+  exportMnemonic(input: ExportMnemonicInput): Promise<WalletApiExportMnemonicResult>;
+  exportPrivateKey(input: ExportPrivateKeyInput): Promise<WalletApiExportPrivateKeyResult>;
+
+  requestSendTransactionApproval(
+    input: RequestSendTransactionApprovalInput,
+  ): Promise<WalletApiRequestSendTransactionApprovalResult>;
+  rerunTransactionPrepare(input: RerunTransactionPrepareInput): Promise<null>;
+  applyTransactionDraftEdit(input: ApplyTransactionDraftEditInput): Promise<null>;
+}>;
+
+type AssertNever<T extends never> = T;
+type WalletApiForbiddenKey =
+  | "dispatch"
+  | "dispatchRequest"
+  | "buildSnapshotEvent"
+  | "getRequestBroadcastPolicy"
+  | "subscribeUiEvents";
+
+type _WalletApiDoesNotExposeProtocolKeys = AssertNever<Extract<keyof WalletApi, WalletApiForbiddenKey>>;

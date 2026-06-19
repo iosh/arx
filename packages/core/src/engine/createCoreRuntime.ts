@@ -1,12 +1,8 @@
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
+import type { UiMethodParams } from "../ui/protocol/index.js";
 import type { UiPlatformAdapter } from "../ui/server/types.js";
-import type {
-  CoreReadApi,
-  CoreRuntime,
-  CoreUnsubscribe,
-  CoreWalletUiApi,
-  CreateCoreRuntimeInput,
-} from "./coreRuntime.js";
+import type { ApplyTransactionDraftEditInput, WalletApi } from "../wallet/api.js";
+import type { CoreReadApi, CoreRuntime, CoreUnsubscribe, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { type CreateArxWalletRuntimeInput, createArxWalletRuntime } from "./createArxWallet.js";
 import type { WalletUi } from "./types.js";
 
@@ -136,14 +132,41 @@ const createCoreReadApi = (runtime: Awaited<ReturnType<typeof createArxWalletRun
   subscribe: subscribeReadChanges(runtime),
 });
 
-const createCoreWalletUiApi = (ui: WalletUi): CoreWalletUiApi => ({
-  session: {
-    unlock: (input) => ui.dispatch({ method: "ui.session.unlock", params: input }),
-    lock: (input) => ui.dispatch({ method: "ui.session.lock", params: input }),
+type ApplyTransactionDraftEditProtocolInput = UiMethodParams<"ui.transactions.applyDraftEdit">;
+
+const assertNeverTransactionDraftEditNamespace = (namespace: never): never => {
+  throw new Error(`Unsupported transaction draft edit namespace: ${String(namespace)}`);
+};
+
+const buildTransactionDraftEditProtocolEdit = (
+  edit: ApplyTransactionDraftEditInput["edit"],
+): ApplyTransactionDraftEditProtocolInput["edit"] => {
+  switch (edit.namespace) {
+    case "eip155":
+      return {
+        ...edit,
+        changes: [...edit.changes],
+      };
+  }
+
+  return assertNeverTransactionDraftEditNamespace(edit.namespace);
+};
+
+const buildTransactionDraftEditProtocolInput = (
+  input: ApplyTransactionDraftEditInput,
+): ApplyTransactionDraftEditProtocolInput => ({
+  approvalId: input.approvalId,
+  edit: buildTransactionDraftEditProtocolEdit(input.edit),
+  ...(input.mode !== undefined ? { mode: input.mode } : {}),
+});
+
+const createWalletApiFromUiDispatch = (ui: WalletUi): WalletApi =>
+  ({
+    unlockSession: (input) => ui.dispatch({ method: "ui.session.unlock", params: input }),
+    lockSession: (input) => ui.dispatch({ method: "ui.session.lock", params: input }),
     resetAutoLockTimer: () => ui.dispatch({ method: "ui.session.resetAutoLockTimer" }),
     setAutoLockDuration: (input) => ui.dispatch({ method: "ui.session.setAutoLockDuration", params: input }),
-  },
-  wallet: {
+
     generateMnemonic: (input) => ui.dispatch({ method: "ui.onboarding.generateMnemonic", params: input }),
     createWalletFromMnemonic: (input) =>
       ui.dispatch({ method: "ui.onboarding.createWalletFromMnemonic", params: input }),
@@ -151,23 +174,15 @@ const createCoreWalletUiApi = (ui: WalletUi): CoreWalletUiApi => ({
       ui.dispatch({ method: "ui.onboarding.importWalletFromMnemonic", params: input }),
     importWalletFromPrivateKey: (input) =>
       ui.dispatch({ method: "ui.onboarding.importWalletFromPrivateKey", params: input }),
-  },
-  accounts: {
-    switchActive: (input) => ui.dispatch({ method: "ui.accounts.switchActive", params: input }),
-  },
-  chains: {
+
+    switchActiveAccount: (input) => ui.dispatch({ method: "ui.accounts.switchActive", params: input }),
     selectWalletChain: (input) => ui.dispatch({ method: "ui.networks.switchActive", params: input }),
-  },
-  approvals: {
-    resolve: (input) => ui.dispatch({ method: "ui.approvals.resolve", params: input }),
-  },
-  keyrings: {
+    resolveApproval: (input) => ui.dispatch({ method: "ui.approvals.resolve", params: input }),
+
     confirmNewMnemonic: (input) => ui.dispatch({ method: "ui.keyrings.confirmNewMnemonic", params: input }),
     importMnemonic: (input) => ui.dispatch({ method: "ui.keyrings.importMnemonic", params: input }),
     importPrivateKey: (input) => ui.dispatch({ method: "ui.keyrings.importPrivateKey", params: input }),
     deriveAccount: (input) => ui.dispatch({ method: "ui.keyrings.deriveAccount", params: input }),
-    list: () => ui.dispatch({ method: "ui.keyrings.list" }),
-    getAccountsByKeyring: (input) => ui.dispatch({ method: "ui.keyrings.getAccountsByKeyring", params: input }),
     renameKeyring: (input) => ui.dispatch({ method: "ui.keyrings.renameKeyring", params: input }),
     renameAccount: (input) => ui.dispatch({ method: "ui.keyrings.renameAccount", params: input }),
     markBackedUp: (input) => ui.dispatch({ method: "ui.keyrings.markBackedUp", params: input }),
@@ -176,14 +191,16 @@ const createCoreWalletUiApi = (ui: WalletUi): CoreWalletUiApi => ({
     removePrivateKeyKeyring: (input) => ui.dispatch({ method: "ui.keyrings.removePrivateKeyKeyring", params: input }),
     exportMnemonic: (input) => ui.dispatch({ method: "ui.keyrings.exportMnemonic", params: input }),
     exportPrivateKey: (input) => ui.dispatch({ method: "ui.keyrings.exportPrivateKey", params: input }),
-  },
-  transactions: {
+
     requestSendTransactionApproval: (input) =>
       ui.dispatch({ method: "ui.transactions.requestSendTransactionApproval", params: input }),
-    rerunPrepare: (input) => ui.dispatch({ method: "ui.transactions.rerunPrepare", params: input }),
-    applyDraftEdit: (input) => ui.dispatch({ method: "ui.transactions.applyDraftEdit", params: input }),
-  },
-});
+    rerunTransactionPrepare: (input) => ui.dispatch({ method: "ui.transactions.rerunPrepare", params: input }),
+    applyTransactionDraftEdit: (input) =>
+      ui.dispatch({
+        method: "ui.transactions.applyDraftEdit",
+        params: buildTransactionDraftEditProtocolInput(input),
+      }),
+  }) satisfies WalletApi;
 
 export const createCoreRuntimeFromArxWalletRuntime = (
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>,
@@ -195,7 +212,7 @@ export const createCoreRuntimeFromArxWalletRuntime = (
 
   return {
     provider: runtime.provider,
-    ui: createCoreWalletUiApi(ui),
+    wallet: createWalletApiFromUiDispatch(ui),
     read: createCoreReadApi(runtime),
   };
 };

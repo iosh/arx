@@ -21,7 +21,7 @@ const {
     coreReadMock,
     createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
       provider: runtime.provider,
-      ui: {},
+      wallet: {},
       read: coreReadMock,
     })),
     getExtensionStorageMock: vi.fn(),

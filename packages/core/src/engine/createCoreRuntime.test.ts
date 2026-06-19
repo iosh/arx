@@ -176,10 +176,10 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
 });
 
 describe("createCoreRuntime", () => {
-  it("returns a ready core runtime with only provider, ui, and read surfaces", async () => {
+  it("returns a ready core runtime with only provider, wallet, and read surfaces", async () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
-    expect(Object.keys(core).sort()).toEqual(["provider", "read", "ui"]);
+    expect(Object.keys(core).sort()).toEqual(["provider", "read", "wallet"]);
     expect(core.read.getWalletSnapshot()).toMatchObject({
       vault: { initialized: false },
       session: { isUnlocked: false },
@@ -196,15 +196,15 @@ describe("createCoreRuntime", () => {
     });
   });
 
-  it("exposes typed wallet UI methods without raw UI dispatch", async () => {
+  it("exposes typed wallet API methods without raw UI dispatch", async () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
-    expect("dispatch" in core.ui).toBe(false);
-    await expect(core.ui.wallet.generateMnemonic()).resolves.toMatchObject({
+    expect("dispatch" in core.wallet).toBe(false);
+    await expect(core.wallet.generateMnemonic()).resolves.toMatchObject({
       words: expect.arrayContaining([expect.any(String)]),
     });
     await expect(
-      core.ui.wallet.createWalletFromMnemonic({
+      core.wallet.createWalletFromMnemonic({
         password: PASSWORD,
         words: TEST_MNEMONIC.split(" "),
       }),
@@ -223,7 +223,7 @@ describe("createCoreRuntime", () => {
     const listener = vi.fn();
     const unsubscribe = core.read.subscribe(listener);
 
-    await core.ui.wallet.createWalletFromMnemonic({
+    await core.wallet.createWalletFromMnemonic({
       password: PASSWORD,
       words: TEST_MNEMONIC.split(" "),
     });

@@ -1,6 +1,16 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { SessionLockState } from "../../runtime/session/unlock/types.js";
 import type {
+  WalletApiAutoLockResult,
+  WalletApiCreationResult,
+  WalletApiExportMnemonicResult,
+  WalletApiExportPrivateKeyResult,
+  WalletApiGenerateMnemonicResult,
+  WalletApiImportPrivateKeyResult,
+  WalletApiKeyringAccount,
+  WalletApiRequestSendTransactionApprovalResult,
+} from "../../wallet/types.js";
+import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
@@ -19,48 +29,26 @@ export type UiNativeBalanceResult = {
   fetchedAt: number;
 };
 
-export type UiSetAutoLockDurationResult = {
-  autoLockDurationMs: number;
-  nextAutoLockAt: number | null;
-};
+export type UiSetAutoLockDurationResult = WalletApiAutoLockResult;
 
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
   tabId?: number | undefined;
 };
 
-export type UiGenerateMnemonicResult = {
-  words: string[];
-};
+export type UiGenerateMnemonicResult = WalletApiGenerateMnemonicResult;
 
-export type UiKeyringAccount = {
-  address: string;
-  derivationPath: string | null;
-  derivationIndex: number | null;
-  source: "derived" | "imported";
-};
+export type UiKeyringAccount = WalletApiKeyringAccount;
 
-export type UiWalletCreationResult = {
-  keyringId: string;
-  address: string;
-};
+export type UiWalletCreationResult = WalletApiCreationResult;
 
-export type UiImportPrivateKeyResult = {
-  keyringId: string;
-  account: UiKeyringAccount;
-};
+export type UiImportPrivateKeyResult = WalletApiImportPrivateKeyResult;
 
-export type UiExportMnemonicResult = {
-  words: string[];
-};
+export type UiExportMnemonicResult = WalletApiExportMnemonicResult;
 
-export type UiExportPrivateKeyResult = {
-  privateKey: string;
-};
+export type UiExportPrivateKeyResult = WalletApiExportPrivateKeyResult;
 
-export type UiRequestSendTransactionApprovalResult = {
-  approvalId: string;
-};
+export type UiRequestSendTransactionApprovalResult = WalletApiRequestSendTransactionApprovalResult;
 
 export type UiMethodResultMap = {
   "ui.snapshot.get": UiSnapshot;

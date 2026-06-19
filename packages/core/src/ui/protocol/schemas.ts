@@ -1,25 +1,12 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { ChainView } from "../../services/runtime/chainViews/types.js";
 import type { AccountKey } from "../../storage/records.js";
+import type { WalletApiOwnedAccountSummary } from "../../wallet/types.js";
 import type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount } from "./models/approvals.js";
 
-export type ChainSnapshot = {
-  chainRef: ChainRef;
-  namespace: string;
-  displayName: string;
-  shortName: string | null;
-  icon: string | null;
-  nativeCurrency: {
-    name: string;
-    symbol: string;
-    decimals: number;
-  };
-};
+export type ChainSnapshot = ChainView;
 
-export type UiOwnedAccountSummary = {
-  accountKey: AccountKey;
-  canonicalAddress: string;
-  displayAddress: string;
-};
+export type UiOwnedAccountSummary = WalletApiOwnedAccountSummary;
 
 export type AccountsSnapshot = {
   totalCount: number;

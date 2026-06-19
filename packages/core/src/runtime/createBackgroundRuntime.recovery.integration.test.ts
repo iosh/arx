@@ -10,7 +10,7 @@ import {
 } from "./__fixtures__/backgroundTestSetup.js";
 
 describe("createBackgroundRuntime (recovery integration)", () => {
-  it("resumes submitted transaction tracking during initialization", async () => {
+  it("refreshes submitted transaction monitoring during initialization", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -19,7 +19,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
 
     const inspectSubmittedTransaction = vi.fn<NonNullable<NamespaceTransactionTracking["inspectSubmittedTransaction"]>>(
       async () => ({
-        chainStatus: "confirmed",
+        trackingStatus: "confirmed",
         receipt: { status: "0x1", blockNumber: "0x10" },
       }),
     );
@@ -39,7 +39,12 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         createBroadcastArtifact,
         broadcast: broadcastTransaction,
       },
-      tracking: { inspectSubmittedTransaction },
+      tracking: {
+        inspectSubmittedTransaction,
+        getInitialInspectionDelay: () => 0,
+        getPendingInspectionDelay: () => 1_000,
+        getRetryInspectionDelay: () => 1_000,
+      },
     };
 
     const txId = "11111111-1111-4111-8111-111111111111";
@@ -110,6 +115,10 @@ describe("createBackgroundRuntime (recovery integration)", () => {
 
       expect(createBroadcastArtifact).toHaveBeenCalledTimes(0);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+      expect(context.runtime.transactionMonitor.getNextWakeAt()).not.toBeNull();
+      expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(0);
+
+      await context.runtime.transactionMonitor.runDue();
       expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(1);
 
       await expect(context.runtime.transactions.getTransaction(txId)).resolves.toMatchObject({

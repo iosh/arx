@@ -87,6 +87,7 @@ type WalletRuntimeServices = Readonly<
 type ArxWalletRuntimeCore = Readonly<{
   bus: BackgroundBootstrapScope["bus"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
+  transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
 }>;
 
@@ -111,6 +112,7 @@ type ArxWalletRuntime = Readonly<{
   shutdown(): Promise<void>;
   bus: BackgroundBootstrapScope["bus"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
+  transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
@@ -372,6 +374,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     hydrationEnabled: bootstrapScope.hydrationEnabled,
     permissionsReady: sessionScope.permissionsReady,
     transactionRecovery: transactionServices.recovery,
+    submittedTransactionMonitor: transactionServices.monitor,
     transactionRestartRecovery: input.runtime?.transactionRestartRecovery ?? "run",
     chainRpcBootstrap: backgroundSupportScope.chainRpcBootstrap,
     sessionLayer: sessionScope.sessionLayer,
@@ -584,6 +587,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
     transactions: transactionServices.transactions,
+    transactionMonitor: transactionServices.monitor,
     services,
   };
   const provider = createWalletProvider({
@@ -627,6 +631,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     shutdown,
     bus: bootstrapScope.bus,
     transactions: transactionServices.transactions,
+    transactionMonitor: transactionServices.monitor,
     services,
     lifecycle,
     rpc: {

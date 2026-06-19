@@ -286,10 +286,6 @@ describe("TransactionAggregateStore", () => {
           kind: "broadcast_outcome_unknown",
         }),
       },
-      {
-        kind: "resume_tracking",
-        transactionId: "tx-2",
-      },
     ]);
   });
 });

@@ -259,6 +259,7 @@ const createServices = (params?: {
   return {
     services,
     aggregateStore,
+    rpc,
     tick(value: number) {
       now = value;
     },
@@ -369,7 +370,7 @@ describe("createTransactionServices", () => {
     tick(2_000);
     await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction(approved.transaction.id);
+    const result = await services.tracker.inspectSubmittedTransaction(approved.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("confirmed");
@@ -379,6 +380,80 @@ describe("createTransactionServices", () => {
       blockNumber: "0x123",
     });
     expect(changes.at(-1)).toEqual([approved.transaction.id]);
+  });
+
+  it("reschedules pending and retry-later submitted transactions from namespace cadence", async () => {
+    const getTransactionReceipt = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("rpc down"));
+    const { services, tick } = createServices({
+      getTransactionReceipt,
+    });
+    const approved = await approveTransactionReview({
+      services,
+      approvalId: "approval-1",
+    });
+    tick(2_000);
+    await services.submission.submitApprovedTransaction(approved.transaction.id);
+    await services.monitor.refresh({ now: 2_000, transactionIds: [approved.transaction.id] });
+
+    const firstWakeAt = services.monitor.getNextWakeAt();
+    if (firstWakeAt === null) {
+      throw new Error("Expected submitted transaction to schedule tracking.");
+    }
+    const pending = await services.monitor.runDue({ now: firstWakeAt });
+    expect(pending).toMatchObject({
+      checked: 1,
+      pending: [approved.transaction.id],
+      retryLater: [],
+      checkFailures: [],
+    });
+    expect(services.monitor.getNextWakeAt()).toBe(firstWakeAt + 12_000);
+
+    const secondWakeAt = services.monitor.getNextWakeAt();
+    if (secondWakeAt === null) {
+      throw new Error("Expected pending transaction to schedule another tracking attempt.");
+    }
+    const retry = await services.monitor.runDue({ now: secondWakeAt });
+    expect(retry.retryLater).toEqual([
+      {
+        transactionId: approved.transaction.id,
+        reason: "eip155.tracking",
+        nextWakeAt: secondWakeAt + 10_000,
+      },
+    ]);
+    expect(services.monitor.getNextWakeAt()).toBe(secondWakeAt + 10_000);
+  });
+
+  it("removes stale watched transactions without treating them as failures", async () => {
+    const { services, aggregateStore, tick } = createServices();
+    const approved = await approveTransactionReview({
+      services,
+      approvalId: "approval-1",
+    });
+    tick(2_000);
+    await services.submission.submitApprovedTransaction(approved.transaction.id);
+    await services.monitor.refresh({ now: 2_000, transactionIds: [approved.transaction.id] });
+    await aggregateStore.recordTransactionDropped({
+      transactionId: approved.transaction.id,
+      reason: {
+        kind: "tracking_failed",
+        code: "test.stale",
+        message: "test stale",
+        details: null,
+      },
+    });
+
+    const wakeAt = services.monitor.getNextWakeAt();
+    if (wakeAt === null) {
+      throw new Error("Expected submitted transaction to schedule tracking.");
+    }
+    const run = await services.monitor.runDue({ now: wakeAt });
+
+    expect(run).toMatchObject({
+      stale: [approved.transaction.id],
+      checkFailures: [],
+      nextWakeAt: null,
+    });
+    expect(services.monitor.getNextWakeAt()).toBeNull();
   });
 
   it("resumes recovery by failing incomplete approved submissions", async () => {
@@ -420,7 +495,7 @@ describe("createTransactionServices", () => {
     tick(2_000);
     await services.submission.submitApprovedTransaction(approved.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction(approved.transaction.id);
+    const result = await services.tracker.inspectSubmittedTransaction(approved.transaction.id);
     const aggregate = await aggregateStore.loadTransactionAggregate(approved.transaction.id);
 
     expect(result.status).toBe("retry_later");
@@ -641,7 +716,7 @@ describe("createTransactionServices", () => {
       },
     });
 
-    const result = await services.tracking.inspectSubmittedTransaction(firstApproved.transaction.id);
+    const result = await services.tracker.inspectSubmittedTransaction(firstApproved.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("replaced");
@@ -705,7 +780,7 @@ describe("createTransactionServices", () => {
     }
     await services.submission.submitApprovedTransaction(approvedSecond.transaction.id);
 
-    const result = await services.tracking.inspectSubmittedTransaction(approvedSecond.transaction.id);
+    const result = await services.tracker.inspectSubmittedTransaction(approvedSecond.transaction.id);
 
     expect(result.status).toBe("advanced");
     expect(result.aggregate.record.status).toBe("confirmed");
@@ -713,34 +788,5 @@ describe("createTransactionServices", () => {
     const loser = await aggregateStore.loadTransactionAggregate(firstApproved.transaction.id);
     expect(loser?.record.status).toBe("replaced");
     expect(loser?.record.replacedByTransactionId).toBe(approvedSecond.transaction.id);
-  });
-
-  it("continues restart recovery after one submitted tracking attempt should retry later", async () => {
-    const getTransactionReceipt = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("temporary rpc outage"))
-      .mockResolvedValue(null);
-    const { services, tick } = createServices({
-      getTransactionReceipt,
-    });
-
-    const approved = await approveTransactionReview({
-      services,
-      approvalId: "approval-1",
-      input: createTransactionInput({ requestId: "request-1" }),
-    });
-    tick(2_000);
-    await services.submission.submitApprovedTransaction(approved.transaction.id);
-
-    await services.transactions.requestTransactionApproval({
-      ...createTransactionInput({ requestId: "request-2" }),
-      approvalId: "approval-2",
-    });
-
-    const results = await services.recovery.recoverAfterRestart();
-
-    expect(results.map((entry) => [entry.action.transactionId, entry.status, entry.aggregate?.record.status])).toEqual([
-      [approved.transaction.id, "deferred", "submitted"],
-    ]);
   });
 });

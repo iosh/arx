@@ -36,12 +36,15 @@ export const DEFAULT_UNSIGNED_TRANSACTION: Eip155UnsignedTransaction = {
 export const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const pendingSubmittedInspection = {
-  chainStatus: "pending",
+  trackingStatus: "pending",
   evidence: null,
 } satisfies SubmittedTransactionInspection;
 
 export const createReceiptTrackingStub = () => ({
   inspectSubmittedTransaction: vi.fn(async () => pendingSubmittedInspection),
+  getInitialInspectionDelay: vi.fn(() => 0),
+  getPendingInspectionDelay: vi.fn(() => 12_000),
+  getRetryInspectionDelay: vi.fn(() => 10_000),
 });
 
 export const createNamespaceTransactionStub = (

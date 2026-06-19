@@ -62,26 +62,31 @@ export type BroadcastResult<TNamespace extends string = string> = {
 
 export type SubmittedTransactionInspection<TNamespace extends string = string> =
   | {
-      chainStatus: "pending";
+      trackingStatus: "pending";
       evidence: Record<string, unknown> | null;
     }
   | {
-      chainStatus: "confirmed";
+      trackingStatus: "confirmed";
       receipt: TransactionReceipt<TNamespace>;
     }
   | {
-      chainStatus: "failed";
+      trackingStatus: "failed";
       receipt: TransactionReceipt<TNamespace> | null;
       error: TransactionFailure;
     }
   | {
-      chainStatus: "dropped";
+      trackingStatus: "dropped";
       evidence: Record<string, unknown> | null;
     }
   | {
-      chainStatus: "expired";
+      trackingStatus: "expired";
       evidence: Record<string, unknown> | null;
     };
+
+export type PendingSubmittedTransactionInspection<TNamespace extends string = string> = Extract<
+  SubmittedTransactionInspection<TNamespace>,
+  { trackingStatus: "pending" }
+>;
 
 export type TransactionSignOptions = {
   signal?: AbortSignal | undefined;
@@ -124,6 +129,18 @@ export type TransactionRecordContext<TNamespace extends string = string> = {
 export type TransactionTrackingContext<TNamespace extends string = string> = TransactionRecordContext<TNamespace> & {
   submitted: TransactionSubmitted<TNamespace>;
 };
+
+export type TransactionPendingInspectionDelayContext<TNamespace extends string = string> =
+  TransactionTrackingContext<TNamespace> & {
+    attempt: number;
+    inspection: PendingSubmittedTransactionInspection<TNamespace>;
+  };
+
+export type TransactionRetryInspectionDelayContext<TNamespace extends string = string> =
+  TransactionTrackingContext<TNamespace> & {
+    attempt: number;
+    failure: TransactionFailure;
+  };
 
 export type TransactionApprovalReviewContext<TNamespace extends string = string> = {
   transactionId: string;
@@ -261,9 +278,12 @@ export type NamespaceTransactionSubmission<TNamespace extends string = string> =
 };
 
 export type NamespaceTransactionTracking<TNamespace extends string = string> = {
-  inspectSubmittedTransaction?(
+  inspectSubmittedTransaction(
     context: TransactionTrackingContext<TNamespace>,
   ): Promise<SubmittedTransactionInspection<TNamespace>>;
+  getInitialInspectionDelay(context: TransactionTrackingContext<TNamespace>): number;
+  getPendingInspectionDelay(context: TransactionPendingInspectionDelayContext<TNamespace>): number;
+  getRetryInspectionDelay(context: TransactionRetryInspectionDelayContext<TNamespace>): number;
 };
 
 export type NamespaceTransaction<TNamespace extends string = string> = {

@@ -263,7 +263,7 @@ export class TransactionAggregateService {
    * Recovery flowchart:
    *
    * submitting(queued|signing|broadcasting) -> fail incomplete local work
-   * submitted(accepted) -> resume tracking
+   * submitted(accepted) -> monitor refresh resumes tracking
    * terminal -> no work
    */
   listRestartActions(aggregate: TransactionAggregate): TransactionRestartAction[] {
@@ -282,18 +282,6 @@ export class TransactionAggregateService {
           }),
         },
       ];
-    }
-
-    if (record.status === "submitted") {
-      const acceptedSubmission = aggregate.submissions.find((submission) => submission.status === "accepted");
-      if (acceptedSubmission) {
-        return [
-          {
-            kind: "resume_tracking",
-            transactionId: record.id,
-          },
-        ];
-      }
     }
 
     return [];

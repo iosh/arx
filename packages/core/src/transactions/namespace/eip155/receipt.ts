@@ -154,13 +154,13 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       if (receipt) {
         if (receipt.status === "success") {
           return {
-            chainStatus: "confirmed",
+            trackingStatus: "confirmed",
             receipt: receipt.receipt,
           };
         }
 
         return {
-          chainStatus: "failed",
+          trackingStatus: "failed",
           receipt: receipt.receipt,
           error: {
             reason: "on_chain_failed",
@@ -176,7 +176,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       const replacement = await inspectNonceConsumption(context);
       if (replacement) {
         return {
-          chainStatus: "dropped",
+          trackingStatus: "dropped",
           evidence: {
             reason: replacement.status,
           },
@@ -184,7 +184,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       }
 
       return {
-        chainStatus: "pending",
+        trackingStatus: "pending",
         evidence: null,
       };
     },

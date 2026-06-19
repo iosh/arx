@@ -28,6 +28,11 @@ type AdapterDeps = {
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
 };
 
+const EIP155_INITIAL_INSPECTION_DELAY_MS = 3_000;
+const EIP155_PENDING_INSPECTION_DELAY_MS = 12_000;
+const EIP155_RETRY_BASE_DELAY_MS = 5_000;
+const EIP155_RETRY_MAX_DELAY_MS = 60_000;
+
 const requireEip155Request = (request: {
   namespace: string;
   payload?: unknown;
@@ -276,6 +281,10 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
     },
     tracking: {
       inspectSubmittedTransaction: (context) => receiptService.inspectSubmittedTransaction(context),
+      getInitialInspectionDelay: () => EIP155_INITIAL_INSPECTION_DELAY_MS,
+      getPendingInspectionDelay: () => EIP155_PENDING_INSPECTION_DELAY_MS,
+      getRetryInspectionDelay: (context) =>
+        Math.min(EIP155_RETRY_MAX_DELAY_MS, EIP155_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, context.attempt - 1)),
     },
   };
 };

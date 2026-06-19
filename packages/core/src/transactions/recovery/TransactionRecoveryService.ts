@@ -1,12 +1,10 @@
 import type { TransactionAggregate, TransactionAggregateStore, TransactionRestartAction } from "../aggregate/index.js";
-import type { SubmittedTransactionTrackingService } from "../tracking/SubmittedTransactionTrackingService.js";
 
 type TransactionRecoveryServiceDeps = {
   transactions: Pick<
     TransactionAggregateStore,
     "listRestartActions" | "cancelTransaction" | "expireTransaction" | "failTransaction"
   >;
-  tracking: Pick<SubmittedTransactionTrackingService, "inspectSubmittedTransaction">;
 };
 
 export type TransactionRecoveryResult = {
@@ -21,11 +19,9 @@ export class TransactionRecoveryService {
     TransactionAggregateStore,
     "listRestartActions" | "cancelTransaction" | "expireTransaction" | "failTransaction"
   >;
-  #tracking: Pick<SubmittedTransactionTrackingService, "inspectSubmittedTransaction">;
 
   constructor(deps: TransactionRecoveryServiceDeps) {
     this.#transactions = deps.transactions;
-    this.#tracking = deps.tracking;
   }
 
   async recoverAfterRestart(): Promise<TransactionRecoveryResult[]> {
@@ -34,17 +30,6 @@ export class TransactionRecoveryService {
 
     for (const action of actions) {
       try {
-        if (action.kind === "resume_tracking") {
-          const tracking = await this.#tracking.inspectSubmittedTransaction(action.transactionId);
-          results.push({
-            action,
-            status: tracking.status === "advanced" ? "applied" : "deferred",
-            aggregate: tracking.aggregate,
-            error: tracking.status === "retry_later" ? tracking.failure : null,
-          });
-          continue;
-        }
-
         let aggregate = null;
         if (action.targetStatus === "cancelled") {
           aggregate = await this.#transactions.cancelTransaction({

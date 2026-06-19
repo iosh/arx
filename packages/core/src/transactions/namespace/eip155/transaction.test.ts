@@ -163,7 +163,7 @@ describe("createEip155Transaction", () => {
     });
 
     expect(inspection).toEqual({
-      chainStatus: "confirmed",
+      trackingStatus: "confirmed",
       receipt: {
         transactionHash: TEST_TX_HASH,
         status: "0x1",

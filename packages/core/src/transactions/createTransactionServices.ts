@@ -8,7 +8,8 @@ import { TransactionSubmissionExecutor } from "./submission/TransactionSubmissio
 import { TransactionInvalidations } from "./TransactionInvalidations.js";
 import { TransactionResourceLock } from "./TransactionResourceLock.js";
 import { TransactionsService } from "./TransactionsService.js";
-import { SubmittedTransactionTrackingService } from "./tracking/SubmittedTransactionTrackingService.js";
+import { SubmittedTransactionMonitor } from "./tracking/SubmittedTransactionMonitor.js";
+import { SubmittedTransactionTracker } from "./tracking/SubmittedTransactionTracker.js";
 
 type CreateApprovalSessionOptions = {
   now?: () => number;
@@ -27,7 +28,8 @@ export type TransactionServices = {
   transactions: TransactionsService;
   approvals: TransactionApprovalSessionService;
   submission: TransactionSubmissionExecutor;
-  tracking: SubmittedTransactionTrackingService;
+  tracker: SubmittedTransactionTracker;
+  monitor: SubmittedTransactionMonitor;
   recovery: TransactionRecoveryService;
 };
 
@@ -55,23 +57,34 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
     invalidations,
   });
 
-  const tracking = new SubmittedTransactionTrackingService({
+  const tracker = new SubmittedTransactionTracker({
     transactions: transactionsStore,
     namespaces: options.namespaces,
     accountCodecs: options.accountCodecs,
     resourceLock,
   });
+  const monitor = new SubmittedTransactionMonitor({
+    transactions: transactionsStore,
+    namespaces: options.namespaces,
+    accountCodecs: options.accountCodecs,
+    tracker,
+  });
+  invalidations.onTransactionsChanged((transactionIds) => {
+    void monitor.refresh({ transactionIds }).catch(() => {
+      // Explicit refresh/runDue calls surface monitor errors; invalidation must not create unhandled rejections.
+    });
+  });
 
   const recovery = new TransactionRecoveryService({
     transactions: transactionsStore,
-    tracking,
   });
 
   return {
     transactions,
     approvals,
     submission,
-    tracking,
+    tracker,
+    monitor,
     recovery,
   };
 };

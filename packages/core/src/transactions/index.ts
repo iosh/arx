@@ -118,6 +118,15 @@ export type {
   WaitForTransactionSubmissionOutcomeInput,
 } from "./TransactionsService.js";
 export { TransactionsService } from "./TransactionsService.js";
+export {
+  SubmittedTransactionTrackingCadenceError,
+  SubmittedTransactionTrackingInvariantError,
+  SubmittedTransactionTrackingUnsupportedError,
+} from "./tracking/errors.js";
+export type { SubmittedTransactionMonitorRunResult } from "./tracking/SubmittedTransactionMonitor.js";
+export { SubmittedTransactionMonitor } from "./tracking/SubmittedTransactionMonitor.js";
+export type { SubmittedTransactionTrackerResult } from "./tracking/SubmittedTransactionTracker.js";
+export { SubmittedTransactionTracker } from "./tracking/SubmittedTransactionTracker.js";
 export type {
   Eip155TransactionRequest,
   NamespaceTransactionDraftEdit,

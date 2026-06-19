@@ -52,7 +52,7 @@ describe("createEip155ReceiptService", () => {
 
     const result = await service.inspectSubmittedTransaction(BASE_CONTEXT);
     expect(result).toEqual({
-      chainStatus: "confirmed",
+      trackingStatus: "confirmed",
       receipt: { blockNumber: "0x123" },
     });
   });
@@ -72,7 +72,7 @@ describe("createEip155ReceiptService", () => {
 
     const result = await service.inspectSubmittedTransaction(context);
     expect(result).toEqual({
-      chainStatus: "dropped",
+      trackingStatus: "dropped",
       evidence: { reason: "replaced" },
     });
   });
@@ -92,7 +92,7 @@ describe("createEip155ReceiptService", () => {
 
     const result = await service.inspectSubmittedTransaction(context);
     expect(result).toEqual({
-      chainStatus: "pending",
+      trackingStatus: "pending",
       evidence: null,
     });
   });

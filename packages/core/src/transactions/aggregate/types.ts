@@ -191,14 +191,9 @@ export type RecordTransactionExpiredInput = {
   reason: TransactionTerminalReason;
 };
 
-export type TransactionRestartAction =
-  | {
-      kind: "finalize_incomplete_local";
-      transactionId: string;
-      targetStatus: "cancelled" | "expired" | "failed";
-      reason: TransactionTerminalReason;
-    }
-  | {
-      kind: "resume_tracking";
-      transactionId: string;
-    };
+export type TransactionRestartAction = {
+  kind: "finalize_incomplete_local";
+  transactionId: string;
+  targetStatus: "cancelled" | "expired" | "failed";
+  reason: TransactionTerminalReason;
+};

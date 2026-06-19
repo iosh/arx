@@ -86,6 +86,7 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
 export type BackgroundRuntime = {
   bus: Messenger;
   transactions: ReturnType<typeof assembleArxWalletRuntime>["transactions"];
+  transactionMonitor: ReturnType<typeof assembleArxWalletRuntime>["transactionMonitor"];
   services: BackgroundStateServices & {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
@@ -186,6 +187,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   return {
     bus: runtime.bus,
     transactions: runtime.transactions,
+    transactionMonitor: runtime.transactionMonitor,
     services: runtime.services,
     rpc: {
       registry: runtime.rpc.namespaceIndex,

@@ -322,7 +322,7 @@ describe("TransactionAggregateService", () => {
     });
   });
 
-  it("lists restart actions for incomplete submission and submitted tracking", () => {
+  it("lists restart actions only for incomplete local submission", () => {
     const { service } = createService();
     let submitting = createApprovedTransactionAggregate(service);
     submitting = service.beginSubmissionSigning(submitting, {
@@ -347,12 +347,7 @@ describe("TransactionAggregateService", () => {
         targetStatus: "failed",
       }),
     ]);
-    expect(service.listRestartActions(submitted)).toEqual([
-      {
-        kind: "resume_tracking",
-        transactionId: submitted.record.id,
-      },
-    ]);
+    expect(service.listRestartActions(submitted)).toEqual([]);
   });
 
   it("returns a next aggregate without mutating the current aggregate", () => {

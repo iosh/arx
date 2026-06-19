@@ -2,20 +2,22 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { isArxBaseError } from "../../error.js";
 import {
   buildTransactionTerminalReason,
+  isTransactionStatusTerminal,
   type JsonValue,
   type TransactionAggregate,
+  TransactionAggregateNotFoundError,
   type TransactionAggregateStore,
   type TransactionConflictKey,
   type TransactionRecord,
 } from "../aggregate/index.js";
 import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
-import { buildBroadcastArtifactContext } from "../broadcastContexts.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
-import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
-import type { NamespaceTransactionTracking, SubmittedTransactionInspection } from "../namespace/types.js";
+import type { SubmittedTransactionInspection } from "../namespace/types.js";
 import type { TransactionResourceLock } from "../TransactionResourceLock.js";
+import { buildSubmittedTransactionTrackingContext } from "./contexts.js";
+import { SubmittedTransactionTrackingInvariantError, SubmittedTransactionTrackingUnsupportedError } from "./errors.js";
 
-type SubmittedTransactionTrackingServiceDeps = {
+type SubmittedTransactionTrackerDeps = {
   transactions: Pick<
     TransactionAggregateStore,
     | "loadTransactionAggregate"
@@ -31,7 +33,7 @@ type SubmittedTransactionTrackingServiceDeps = {
   resourceLock: TransactionResourceLock;
 };
 
-export type SubmittedTransactionTrackingResult =
+export type SubmittedTransactionTrackerResult =
   | {
       status: "pending";
       inspection: SubmittedTransactionInspection;
@@ -40,6 +42,10 @@ export type SubmittedTransactionTrackingResult =
   | {
       status: "advanced";
       inspection: SubmittedTransactionInspection;
+      aggregate: TransactionAggregate;
+    }
+  | {
+      status: "stale";
       aggregate: TransactionAggregate;
     }
   | {
@@ -52,7 +58,7 @@ export type SubmittedTransactionTrackingResult =
       aggregate: TransactionAggregate;
     };
 
-export class SubmittedTransactionTrackingService {
+export class SubmittedTransactionTracker {
   #transactions: Pick<
     TransactionAggregateStore,
     | "loadTransactionAggregate"
@@ -67,7 +73,7 @@ export class SubmittedTransactionTrackingService {
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #resourceLock: TransactionResourceLock;
 
-  constructor(deps: SubmittedTransactionTrackingServiceDeps) {
+  constructor(deps: SubmittedTransactionTrackerDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
     this.#accountCodecs = deps.accountCodecs;
@@ -83,114 +89,21 @@ export class SubmittedTransactionTrackingService {
    *           -> dropped    => dropped
    *           -> expired    => expired
    */
-  async inspectSubmittedTransaction(transactionId: string): Promise<SubmittedTransactionTrackingResult> {
+  async inspectSubmittedTransaction(transactionId: string): Promise<SubmittedTransactionTrackerResult> {
     const aggregate = await this.#loadSubmittedAggregate(transactionId);
-    const namespaceTransaction = this.#namespaces.require(aggregate.record.namespace);
-    const inspectSubmittedTransaction = requireNamespaceTransactionOperation<
-      NonNullable<NamespaceTransactionTracking["inspectSubmittedTransaction"]>
-    >({
-      namespace: aggregate.record.namespace,
-      operation: "tracking.inspectSubmittedTransaction",
-      value: namespaceTransaction.tracking?.inspectSubmittedTransaction,
-    });
+    if (aggregate.record.status !== "submitted") {
+      return {
+        status: "stale",
+        aggregate,
+      };
+    }
 
+    const namespaceTracking = this.#requireNamespaceTracking(aggregate.record.namespace);
+    const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountCodecs);
+
+    let inspection: SubmittedTransactionInspection;
     try {
-      const inspection = await inspectSubmittedTransaction(this.#buildTrackingContext(aggregate));
-      switch (inspection.chainStatus) {
-        case "pending":
-          return {
-            status: "pending",
-            inspection,
-            aggregate,
-          };
-        case "confirmed": {
-          const next = await this.#withTrackingResourceLock(
-            aggregate,
-            async () =>
-              await this.#transactions.recordTransactionConfirmed({
-                transactionId,
-                receipt: inspection.receipt as never,
-              }),
-          );
-          await this.#tryReplaceOtherSubmittedTransactions(next);
-          return { status: "advanced", inspection, aggregate: next };
-        }
-        case "failed": {
-          const next = await this.#withTrackingResourceLock(
-            aggregate,
-            async () =>
-              await this.#transactions.recordTransactionFailedOnChain({
-                transactionId,
-                receipt: inspection.receipt as never,
-                reason: buildTransactionTerminalReason({
-                  kind: "on_chain_failed",
-                  namespace: aggregate.record.namespace,
-                  code: inspection.error.reason,
-                  message: inspection.error.message,
-                  details: inspection.error.data as never,
-                }),
-              }),
-          );
-          return { status: "advanced", inspection, aggregate: next };
-        }
-        case "dropped": {
-          const replacement = await this.#findConfirmedReplacementRecord(aggregate);
-          if (replacement) {
-            const next = await this.#withTrackingResourceLock(
-              aggregate,
-              async () =>
-                await this.#transactions.recordTransactionReplaced({
-                  transactionId,
-                  replacedByTransactionId: replacement.id,
-                  reason: buildTransactionTerminalReason({
-                    kind: "tracking_failed",
-                    namespace: aggregate.record.namespace,
-                    code: "replaced",
-                    message: "Transaction was replaced by another local transaction.",
-                    details: {
-                      replacedByTransactionId: replacement.id,
-                      conflictKey: structuredClone(aggregate.record.conflictKey),
-                    } as JsonValue,
-                  }),
-                }),
-            );
-            return { status: "advanced", inspection, aggregate: next };
-          }
-
-          const next = await this.#withTrackingResourceLock(
-            aggregate,
-            async () =>
-              await this.#transactions.recordTransactionDropped({
-                transactionId,
-                reason: buildTransactionTerminalReason({
-                  kind: "tracking_failed",
-                  namespace: aggregate.record.namespace,
-                  code: "dropped",
-                  message: "Transaction is no longer expected to confirm.",
-                  details: inspection.evidence as never,
-                }),
-              }),
-          );
-          return { status: "advanced", inspection, aggregate: next };
-        }
-        case "expired": {
-          const next = await this.#withTrackingResourceLock(
-            aggregate,
-            async () =>
-              await this.#transactions.recordTransactionExpired({
-                transactionId,
-                reason: buildTransactionTerminalReason({
-                  kind: "tracking_failed",
-                  namespace: aggregate.record.namespace,
-                  code: "expired",
-                  message: "Transaction submission expired on chain.",
-                  details: inspection.evidence as never,
-                }),
-              }),
-          );
-          return { status: "advanced", inspection, aggregate: next };
-        }
-      }
+      inspection = await namespaceTracking.inspectSubmittedTransaction(context);
     } catch (error) {
       const details =
         isArxBaseError(error) && error.details && typeof error.details === "object"
@@ -208,29 +121,132 @@ export class SubmittedTransactionTrackingService {
         aggregate,
       };
     }
+
+    switch (inspection.trackingStatus) {
+      case "pending":
+        return {
+          status: "pending",
+          inspection,
+          aggregate,
+        };
+      case "confirmed": {
+        const next = await this.#withTrackingResourceLock(
+          aggregate,
+          async () =>
+            await this.#transactions.recordTransactionConfirmed({
+              transactionId,
+              receipt: inspection.receipt as never,
+            }),
+        );
+        await this.#tryReplaceOtherSubmittedTransactions(next);
+        return { status: "advanced", inspection, aggregate: next };
+      }
+      case "failed": {
+        const next = await this.#withTrackingResourceLock(
+          aggregate,
+          async () =>
+            await this.#transactions.recordTransactionFailedOnChain({
+              transactionId,
+              receipt: inspection.receipt as never,
+              reason: buildTransactionTerminalReason({
+                kind: "on_chain_failed",
+                namespace: aggregate.record.namespace,
+                code: inspection.error.reason,
+                message: inspection.error.message,
+                details: inspection.error.data as never,
+              }),
+            }),
+        );
+        return { status: "advanced", inspection, aggregate: next };
+      }
+      case "dropped": {
+        const replacement = await this.#findConfirmedReplacementRecord(aggregate);
+        if (replacement) {
+          const next = await this.#withTrackingResourceLock(
+            aggregate,
+            async () =>
+              await this.#transactions.recordTransactionReplaced({
+                transactionId,
+                replacedByTransactionId: replacement.id,
+                reason: buildTransactionTerminalReason({
+                  kind: "tracking_failed",
+                  namespace: aggregate.record.namespace,
+                  code: "replaced",
+                  message: "Transaction was replaced by another local transaction.",
+                  details: {
+                    replacedByTransactionId: replacement.id,
+                    conflictKey: structuredClone(aggregate.record.conflictKey),
+                  } as JsonValue,
+                }),
+              }),
+          );
+          return { status: "advanced", inspection, aggregate: next };
+        }
+
+        const next = await this.#withTrackingResourceLock(
+          aggregate,
+          async () =>
+            await this.#transactions.recordTransactionDropped({
+              transactionId,
+              reason: buildTransactionTerminalReason({
+                kind: "tracking_failed",
+                namespace: aggregate.record.namespace,
+                code: "dropped",
+                message: "Transaction is no longer expected to confirm.",
+                details: inspection.evidence as never,
+              }),
+            }),
+        );
+        return { status: "advanced", inspection, aggregate: next };
+      }
+      case "expired": {
+        const next = await this.#withTrackingResourceLock(
+          aggregate,
+          async () =>
+            await this.#transactions.recordTransactionExpired({
+              transactionId,
+              reason: buildTransactionTerminalReason({
+                kind: "tracking_failed",
+                namespace: aggregate.record.namespace,
+                code: "expired",
+                message: "Transaction submission expired on chain.",
+                details: inspection.evidence as never,
+              }),
+            }),
+        );
+        return { status: "advanced", inspection, aggregate: next };
+      }
+    }
   }
 
   async #loadSubmittedAggregate(transactionId: string) {
     const aggregate = await this.#transactions.loadTransactionAggregate(transactionId);
     if (!aggregate) {
-      throw new Error(`Transaction "${transactionId}" was not found.`);
+      throw new TransactionAggregateNotFoundError(transactionId);
     }
     if (aggregate.record.status !== "submitted") {
-      throw new Error(`Transaction "${transactionId}" is not submitted.`);
+      if (isTransactionStatusTerminal(aggregate.record.status)) {
+        return aggregate;
+      }
+
+      throw new SubmittedTransactionTrackingInvariantError(
+        transactionId,
+        `Transaction "${transactionId}" is not submitted.`,
+      );
     }
     return aggregate;
   }
 
-  #buildTrackingContext(aggregate: TransactionAggregate) {
-    const context = buildBroadcastArtifactContext(aggregate, this.#accountCodecs);
-    return {
-      recordId: aggregate.record.id,
-      namespace: aggregate.record.namespace,
-      chainRef: aggregate.record.chainRef,
-      origin: aggregate.record.origin,
-      from: context.from,
-      submitted: structuredClone(aggregate.record.submitted as Record<string, unknown>),
-    };
+  #requireNamespaceTracking(namespace: string) {
+    const tracking = this.#namespaces.require(namespace).tracking;
+    if (tracking) {
+      return tracking;
+    }
+
+    throw new SubmittedTransactionTrackingUnsupportedError({
+      namespace,
+      operation: "tracking",
+    });
   }
 
   async #withTrackingResourceLock<T>(aggregate: TransactionAggregate, run: () => Promise<T>) {

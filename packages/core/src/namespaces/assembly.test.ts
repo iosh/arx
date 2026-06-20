@@ -104,10 +104,8 @@ describe("namespace stage assembly", () => {
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(materialized.namespaceTransactions.require("eip155")).toBe(overriddenTransaction);
-    expect(materialized.bindings.hasTransaction("eip155")).toBe(true);
     expect(materialized.bindings.hasTransactionReceiptTracking("eip155")).toBe(false);
     expect(materialized.runtimeSupport.get("eip155")).toMatchObject({
-      hasTransaction: true,
       hasTransactionReceiptTracking: false,
     });
   });

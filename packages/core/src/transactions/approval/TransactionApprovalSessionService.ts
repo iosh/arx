@@ -99,7 +99,6 @@ export class TransactionApprovalSessionService {
         origin: input.origin,
         accountKey: input.accountKey,
         from: input.from,
-        requestKind: input.request.kind,
         requestId: input.requestId ?? null,
         replacement: structuredClone(input.replacement),
         createdAt: openedAt,
@@ -252,7 +251,6 @@ export class TransactionApprovalSessionService {
           requestId: currentAfterFinalize.requestId,
           accountKey: currentAfterFinalize.accountKey,
           request: {
-            kind: currentAfterFinalize.requestKind,
             payload: cloneJsonValue(currentAfterFinalize.draft.payload),
           },
           replacement: currentAfterFinalize.replacement,

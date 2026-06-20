@@ -63,8 +63,6 @@ export const buildUiSnapshot = (deps: {
     },
     chainCapabilities: {
       nativeBalance: Boolean(uiBindings?.getNativeBalance),
-      sendTransaction:
-        Boolean(uiBindings?.createSendTransactionRequest) && namespaceBindings.hasTransaction(chain.namespace),
     },
     networks: {
       ...networks,

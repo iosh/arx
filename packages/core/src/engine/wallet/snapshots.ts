@@ -25,10 +25,7 @@ export const createWalletSnapshots = (deps: {
     "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "getKeyrings" | "setActiveAccount"
   >;
   approvals: UiApprovalsAccess;
-  namespaceBindings: Pick<
-    NamespaceRuntimeBindingsRegistry,
-    "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
-  >;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransactionReceiptTracking">;
 }): WalletSnapshots => {
   const { session, sessionStatus, keyring, attention, chainViews, permissionViews, accounts, namespaceBindings } = deps;
   const uiSessionAccess = createUiSessionAccess({

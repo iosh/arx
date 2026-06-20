@@ -22,7 +22,6 @@ export type SessionSnapshot = {
 
 export type UiChainCapabilities = {
   nativeBalance: boolean;
-  sendTransaction: boolean;
 };
 
 export type VaultSnapshot = {

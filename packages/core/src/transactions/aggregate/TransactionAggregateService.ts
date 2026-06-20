@@ -70,7 +70,6 @@ export class TransactionAggregateService {
         accountKey: input.accountKey,
         status: "submitting",
         request: {
-          kind: input.request.kind,
           payload: cloneJsonValue(input.request.payload),
         },
         approvedRequest: {

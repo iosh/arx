@@ -10,6 +10,7 @@ import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { AnyNamespaceTransaction } from "../transactions/namespace/types.js";
+import { NamespaceTransactionModuleMissingError, NamespaceTransactionSignerMissingError } from "./errors.js";
 import type {
   NamespaceApprovalBindings,
   NamespaceManifest,
@@ -135,15 +136,13 @@ const createRuntimeSupportSpecsFromValidatedManifests = (
 const createNamespaceRuntimeBindingsRegistry = (params: {
   approvalByNamespace: ReadonlyMap<string, NamespaceApprovalBindings>;
   uiByNamespace: ReadonlyMap<string, NamespaceUiBindings>;
-  transactionNamespaces: ReadonlySet<string>;
   receiptTrackingNamespaces: ReadonlySet<string>;
 }): NamespaceRuntimeBindingsRegistry => {
-  const { approvalByNamespace, uiByNamespace, transactionNamespaces, receiptTrackingNamespaces } = params;
+  const { approvalByNamespace, uiByNamespace, receiptTrackingNamespaces } = params;
 
   return {
     getApproval: (namespace) => approvalByNamespace.get(namespace),
     getUi: (namespace) => uiByNamespace.get(namespace),
-    hasTransaction: (namespace) => transactionNamespaces.has(namespace),
     hasTransactionReceiptTracking: (namespace) => receiptTrackingNamespaces.has(namespace),
   };
 };
@@ -295,12 +294,12 @@ const materializeNamespaceTransactions = (params: {
 
     const createTransaction = spec.createTransaction;
     if (!createTransaction) {
-      continue;
+      throw new NamespaceTransactionModuleMissingError({ namespace: spec.namespace });
     }
 
     const signer = params.signerByNamespace.get(spec.namespace);
     if (!signer) {
-      throw new Error(`Namespace transaction for namespace "${spec.namespace}" requires a signer binding`);
+      throw new NamespaceTransactionSignerMissingError({ namespace: spec.namespace });
     }
 
     const transaction = createTransaction({
@@ -368,7 +367,6 @@ export const materializeNamespaceRuntimeSupport = (params: {
     signerByNamespace,
     ...(transactionOverrides ? { transactionOverrides } : {}),
   });
-  const transactionNamespaces = new Set(namespaceTransactions.listNamespaces());
   const receiptTrackingNamespaces = new Set<string>();
   for (const spec of runtimeSupport.namespaces) {
     const approvalBindings = approvalByNamespace.get(spec.namespace);
@@ -384,8 +382,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
       hasRpcClient: rpcClientNamespaces.has(spec.namespace),
       hasSigner: signerByNamespace.has(spec.namespace),
       hasApprovalBindings: Boolean(approvalBindings?.signMessage || approvalBindings?.signTypedData),
-      hasUiBindings: Boolean(uiBindings?.getNativeBalance || uiBindings?.createSendTransactionRequest),
-      hasTransaction: transactionNamespaces.has(spec.namespace),
+      hasUiBindings: Boolean(uiBindings?.getNativeBalance),
       hasTransactionReceiptTracking: Boolean(tracking?.inspectSubmittedTransaction),
     });
   }
@@ -396,7 +393,6 @@ export const materializeNamespaceRuntimeSupport = (params: {
     bindings: createNamespaceRuntimeBindingsRegistry({
       approvalByNamespace,
       uiByNamespace,
-      transactionNamespaces,
       receiptTrackingNamespaces,
     }),
     runtimeSupport: createNamespaceRuntimeSupportIndex(supportByNamespace),

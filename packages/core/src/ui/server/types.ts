@@ -117,7 +117,7 @@ export type UiAttentionAccess = Pick<AttentionService, "getSnapshot">;
 
 export type UiNamespaceBindingsAccess = Pick<
   NamespaceRuntimeBindingsRegistry,
-  "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
+  "getUi" | "hasTransactionReceiptTracking"
 >;
 
 export type UiServerAccess = {

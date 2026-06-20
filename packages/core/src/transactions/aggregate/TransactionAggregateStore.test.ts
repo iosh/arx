@@ -26,7 +26,6 @@ const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRe
 
 type CreateApprovedTransactionInputOverrides = Omit<Partial<CreateApprovedTransactionInput>, "request"> & {
   request?: {
-    kind?: CreateApprovedTransactionInput["request"]["kind"];
     payload?: JsonValue;
   };
 };
@@ -41,7 +40,6 @@ const createApprovedTransactionInput = (
   requestId: overrides.requestId ?? "request-1",
   accountKey: overrides.accountKey ?? createDefaultAccountKey(),
   request: {
-    kind: overrides.request?.kind ?? "eip155.rpc.eth_sendTransaction",
     payload: structuredClone(
       overrides.request?.payload ?? {
         from: DEFAULT_FROM,

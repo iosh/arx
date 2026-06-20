@@ -16,6 +16,7 @@ export {
 } from "./assembly.js";
 export { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
 export { eip155NamespaceManifest } from "./eip155/manifest.js";
+export { NamespaceTransactionModuleMissingError, NamespaceTransactionSignerMissingError } from "./errors.js";
 export type {
   NamespaceApprovalBindings,
   NamespaceCoreManifest,

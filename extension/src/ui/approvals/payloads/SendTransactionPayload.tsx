@@ -2,36 +2,27 @@ import type { ApprovalDetail } from "@arx/core/ui";
 import { Card, Paragraph, XStack, YStack } from "tamagui";
 
 type SendTransactionApproval = Extract<ApprovalDetail, { kind: "sendTransaction" }>;
+type SendTransactionReviewDetails = NonNullable<SendTransactionApproval["review"]["details"]>;
+type Eip155SendTransactionReviewDetails = Extract<SendTransactionReviewDetails, { namespace: "eip155" }>;
 
 export function SendTransactionPayload({ approval }: { approval: SendTransactionApproval }) {
   const details = approval.review.details;
   const prepare = approval.review.prepare;
-  const toLabel = details ? (details.kind === "contract_deployment" ? "Contract Creation" : (details.to ?? "")) : "";
+  const body =
+    details === null ? (
+      <YStack gap="$1" />
+    ) : details.namespace === "eip155" ? (
+      <Eip155SendTransactionPayload details={details} />
+    ) : (
+      <Paragraph color="$red10" fontSize="$2">
+        Unsupported transaction namespace.
+      </Paragraph>
+    );
 
   return (
     <Card padded bordered gap="$2">
       <Paragraph fontWeight="600">Send Transaction</Paragraph>
-      <YStack gap="$1">
-        <DetailRow label="From" value={details?.from ?? ""} mono />
-        <DetailRow label="To" value={toLabel} mono />
-        {details ? <DetailRow label="Value" value={details.value} /> : null}
-        {details?.gasLimit ? <DetailRow label="Gas Limit" value={details.gasLimit} /> : null}
-        {details?.fees.gasPrice ? <DetailRow label="Gas Price" value={details.fees.gasPrice} /> : null}
-        {details?.fees.maxFeePerGas ? <DetailRow label="Max Fee" value={details.fees.maxFeePerGas} /> : null}
-        {details?.fees.maxPriorityFeePerGas ? (
-          <DetailRow label="Priority Fee" value={details.fees.maxPriorityFeePerGas} />
-        ) : null}
-        {details?.data && (
-          <YStack marginTop="$2">
-            <Paragraph fontSize="$2" color="$color10">
-              Data:
-            </Paragraph>
-            <Paragraph fontFamily="$mono" fontSize="$1" numberOfLines={3}>
-              {details.data}
-            </Paragraph>
-          </YStack>
-        )}
-      </YStack>
+      {body}
       {prepare.state === "preparing" ? (
         <Paragraph color="$color10" fontSize="$2">
           Checking gas and balance...
@@ -48,6 +39,34 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
         </Paragraph>
       ) : null}
     </Card>
+  );
+}
+
+function Eip155SendTransactionPayload({ details }: { details: Eip155SendTransactionReviewDetails }) {
+  const toLabel = details ? (details.kind === "contract_deployment" ? "Contract Creation" : (details.to ?? "")) : "";
+
+  return (
+    <YStack gap="$1">
+      <DetailRow label="From" value={details.from} mono />
+      <DetailRow label="To" value={toLabel} mono />
+      <DetailRow label="Value" value={details.value} />
+      {details.gasLimit ? <DetailRow label="Gas Limit" value={details.gasLimit} /> : null}
+      {details.fees.gasPrice ? <DetailRow label="Gas Price" value={details.fees.gasPrice} /> : null}
+      {details.fees.maxFeePerGas ? <DetailRow label="Max Fee" value={details.fees.maxFeePerGas} /> : null}
+      {details.fees.maxPriorityFeePerGas ? (
+        <DetailRow label="Priority Fee" value={details.fees.maxPriorityFeePerGas} />
+      ) : null}
+      {details.data ? (
+        <YStack marginTop="$2">
+          <Paragraph fontSize="$2" color="$color10">
+            Data:
+          </Paragraph>
+          <Paragraph fontFamily="$mono" fontSize="$1" numberOfLines={3}>
+            {details.data}
+          </Paragraph>
+        </YStack>
+      ) : null}
+    </YStack>
   );
 }
 

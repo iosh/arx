@@ -36,7 +36,6 @@ export type TransactionConflictKey = {
 
 /** Original dApp request or wallet intent. */
 export type TransactionRequestSnapshot = {
-  kind: string;
   payload: JsonValue;
 };
 

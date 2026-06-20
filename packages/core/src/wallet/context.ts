@@ -13,6 +13,6 @@ export type WalletApiContext = {
   surface: {
     origin: string;
   };
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
   transactions: WalletTransactionAccess;
 };

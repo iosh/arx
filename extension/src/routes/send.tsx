@@ -1,3 +1,4 @@
+import { eip155Request } from "@arx/core/transactions/eip155";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
@@ -28,9 +29,10 @@ function SendPage() {
       onCancel={() => router.navigate({ to: ROUTES.HOME })}
       onSubmit={(params) => {
         void submitSendApproval({
-          to: params.to,
-          valueEther: params.valueEther,
-          chainRef: snapshot.chain.chainRef,
+          request: eip155Request({
+            to: params.to,
+            value: params.value,
+          }),
         });
       }}
     />

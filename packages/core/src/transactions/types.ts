@@ -47,6 +47,14 @@ type NamespaceShape<
   TFallback,
 > = TNamespace extends TransactionNamespace ? NamespaceTransactionShapeMap[TNamespace][TKey] : TFallback;
 
+export type WalletTransactionRequest<
+  TNamespace extends string = string,
+  TPayload extends TransactionPayload = NamespaceShape<TNamespace, "payload", TransactionPayload>,
+> = {
+  namespace: TNamespace;
+  payload: TPayload;
+};
+
 export type TransactionRequest<
   TNamespace extends string = string,
   TPayload extends TransactionPayload = NamespaceShape<TNamespace, "payload", TransactionPayload>,

@@ -13,7 +13,6 @@ import { eip155NamespaceManifest } from "../namespaces/index.js";
 import { createCoreReadApi } from "../read/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
-import type { TransactionRequest } from "../transactions/types.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
@@ -639,7 +638,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasSigner: true,
       hasApprovalBindings: true,
       hasUiBindings: true,
-      hasTransaction: true,
       hasTransactionReceiptTracking: true,
     });
 
@@ -744,51 +742,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasSigner: true,
       hasApprovalBindings: true,
       hasUiBindings: true,
-      hasTransaction: true,
       hasTransactionReceiptTracking: true,
-    });
-
-    runtime.lifecycle.shutdown();
-  });
-
-  it("derives selected-chain UI capabilities from transaction submission support", async () => {
-    const runtime = createTestRuntime({
-      chainSeed: [MAINNET_CHAIN],
-      namespaces: {
-        manifests: [
-          {
-            ...eip155NamespaceManifest,
-            runtime: {
-              ...eip155NamespaceManifest.runtime,
-              createTransaction: createNamespaceTransactionWithoutTracking,
-              createUiBindings: () => ({
-                getNativeBalance: async () => 0n,
-                createSendTransactionRequest: () => ({
-                  namespace: "eip155",
-                  chainRef: MAINNET_CHAIN.chainRef,
-                  payload: {
-                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    value: "0x0",
-                  },
-                }),
-              }),
-            },
-          },
-        ],
-      },
-    });
-
-    await runtime.lifecycle.initialize();
-    runtime.lifecycle.start();
-    await initializeUnlockedSession(runtime);
-
-    const handlers = createHandlersForRuntime(runtime);
-
-    await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
-      chainCapabilities: {
-        nativeBalance: true,
-        sendTransaction: true,
-      },
     });
 
     runtime.lifecycle.shutdown();
@@ -805,14 +759,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
               ...eip155NamespaceManifest.runtime,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
-                createSendTransactionRequest: () => ({
-                  namespace: "eip155",
-                  chainRef: MAINNET_CHAIN.chainRef,
-                  payload: {
-                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    value: "0x0",
-                  },
-                }),
               }),
               createTransaction: createNamespaceTransactionWithoutTracking,
             },
@@ -830,9 +776,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await expect(
       handlers["ui.transactions.requestSendTransactionApproval"]({
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        valueEther: "0.01",
-        chainRef: MAINNET_CHAIN.chainRef,
+        request: {
+          namespace: "eip155",
+          payload: {
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x2386f26fc10000",
+          },
+        },
       }),
     ).resolves.toMatchObject({
       approvalId: expect.any(String),
@@ -855,14 +805,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
               ...eip155NamespaceManifest.runtime,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
-                createSendTransactionRequest: () => ({
-                  namespace: "eip155",
-                  chainRef: MAINNET_CHAIN.chainRef,
-                  payload: {
-                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    value: "0x0",
-                  },
-                }),
               }),
             },
           },
@@ -878,17 +820,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
 
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      hasTransaction: true,
       hasTransactionReceiptTracking: false,
     });
-    expect(runtime.services.namespaceBindings.hasTransaction("eip155")).toBe(true);
     expect(runtime.services.namespaceBindings.hasTransactionReceiptTracking("eip155")).toBe(false);
 
     const handlers = createHandlersForRuntime(runtime);
     await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
       chainCapabilities: {
         nativeBalance: true,
-        sendTransaction: true,
       },
     });
 
@@ -923,26 +862,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      hasTransaction: true,
       hasTransactionReceiptTracking: false,
     });
 
     runtime.lifecycle.shutdown();
   });
 
-  it("builds send-transaction requests through namespace UI bindings", async () => {
-    const createSendTransactionRequest = vi.fn(
-      ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
-        ({
-          namespace: "eip155",
-          chainRef,
-          payload: {
-            to,
-            value: `0x${valueWei.toString(16)}` as `0x${string}`,
-          },
-        }) satisfies TransactionRequest,
-    );
-
+  it("creates send-transaction approvals from wallet transaction requests", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -953,7 +879,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
               ...eip155NamespaceManifest.runtime,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
-                createSendTransactionRequest,
               }),
             },
           },
@@ -969,24 +894,28 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const handlers = createHandlersForRuntime(runtime);
 
     const result = await handlers["ui.transactions.requestSendTransactionApproval"]({
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      valueEther: "0.01",
-      chainRef: MAINNET_CHAIN.chainRef,
+      request: {
+        namespace: "eip155",
+        payload: {
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x2386f26fc10000",
+        },
+      },
     });
     await flushAsync();
 
-    expect(createSendTransactionRequest).toHaveBeenCalledWith({
-      chainRef: MAINNET_CHAIN.chainRef,
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      valueWei: 10_000_000_000_000_000n,
-    });
     expect(result).toEqual({ approvalId: expect.any(String) });
     await expect(runtime.transactions.listTransactionApprovals()).resolves.toEqual([
       expect.objectContaining({
         approvalId: result.approvalId,
+        namespace: "eip155",
+        chainRef: MAINNET_CHAIN.chainRef,
         origin: "chrome-extension://arx",
         account: expect.objectContaining({
           address: from,
+        }),
+        review: expect.objectContaining({
+          namespace: "eip155",
         }),
       }),
     ]);
@@ -1042,18 +971,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("reuses one UI surface correlation token per UiRuntimeAccess instance", async () => {
-    const createSendTransactionRequest = vi.fn(
-      ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
-        ({
-          namespace: "eip155",
-          chainRef,
-          payload: {
-            to,
-            value: `0x${valueWei.toString(16)}` as `0x${string}`,
-          },
-        }) satisfies TransactionRequest,
-    );
-
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -1064,7 +981,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
               ...eip155NamespaceManifest.runtime,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
-                createSendTransactionRequest,
               }),
             },
           },
@@ -1092,9 +1008,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       id: "1",
       method: "ui.transactions.requestSendTransactionApproval",
       params: {
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        valueEther: "0.01",
-        chainRef: MAINNET_CHAIN.chainRef,
+        request: {
+          namespace: "eip155",
+          payload: {
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x2386f26fc10000",
+          },
+        },
       },
     });
     await firstUiAccess.dispatchRequest({
@@ -1102,9 +1022,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       id: "2",
       method: "ui.transactions.requestSendTransactionApproval",
       params: {
-        to: "0xcccccccccccccccccccccccccccccccccccccccc",
-        valueEther: "0.02",
-        chainRef: MAINNET_CHAIN.chainRef,
+        request: {
+          namespace: "eip155",
+          payload: {
+            to: "0xcccccccccccccccccccccccccccccccccccccccc",
+            value: "0x470de4df820000",
+          },
+        },
       },
     });
 
@@ -1118,13 +1042,16 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       id: "3",
       method: "ui.transactions.requestSendTransactionApproval",
       params: {
-        to: "0xdddddddddddddddddddddddddddddddddddddddd",
-        valueEther: "0.03",
-        chainRef: MAINNET_CHAIN.chainRef,
+        request: {
+          namespace: "eip155",
+          payload: {
+            to: "0xdddddddddddddddddddddddddddddddddddddddd",
+            value: "0x6a94d74f430000",
+          },
+        },
       },
     });
 
-    expect(createSendTransactionRequest).toHaveBeenCalledTimes(3);
     await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(3);
 
     runtime.lifecycle.shutdown();
@@ -1146,9 +1073,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await expect(
       handlers["ui.transactions.requestSendTransactionApproval"]({
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        valueEther: "0.01",
-        chainRef: MAINNET_CHAIN.chainRef,
+        request: {
+          namespace: "eip155",
+          payload: {
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x2386f26fc10000",
+          },
+        },
       }),
     ).rejects.toThrow("create approval failed");
 

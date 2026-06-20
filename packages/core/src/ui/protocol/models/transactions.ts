@@ -49,7 +49,6 @@ export type UiTransaction = {
     accountKey: AccountKey;
     address: string;
   };
-  requestKind: string;
   submitted: JsonValue | null;
   receipt: JsonValue | null;
   replacement: {

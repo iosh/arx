@@ -34,6 +34,11 @@ export type { Eip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export { createEip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export type { Eip155PrepareTransaction } from "./namespace/eip155/prepareTransaction.js";
 export { createEip155PrepareTransaction } from "./namespace/eip155/prepareTransaction.js";
+export {
+  deriveEip155HexChainIdFromChainRef,
+  deriveEip155TransactionRequestForChain,
+  eip155Request,
+} from "./namespace/eip155/request.js";
 export type { Eip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Transaction } from "./namespace/eip155/transaction.js";
@@ -134,4 +139,5 @@ export type {
   TransactionPrepared,
   TransactionRequest,
   TransactionReviewSnapshot,
+  WalletTransactionRequest,
 } from "./types.js";

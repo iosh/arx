@@ -83,7 +83,6 @@ const createDeps = () => ({
   },
   namespaceBindings: {
     getUi: () => undefined,
-    hasTransaction: () => false,
     hasTransactionReceiptTracking: () => false,
   },
 });

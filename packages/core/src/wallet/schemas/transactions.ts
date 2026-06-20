@@ -1,9 +1,13 @@
 import { z } from "zod";
-import { ChainRefSchema } from "../../chains/ids.js";
 
 export const WalletApiEip155TransactionDraftChangeSchema = z.strictObject({
   field: z.enum(["gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce"]),
   value: z.string().min(1).nullable(),
+});
+
+export const WalletApiWalletTransactionRequestSchema = z.strictObject({
+  namespace: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
 });
 
 export const WalletApiNamespaceTransactionDraftEditSchema = z.discriminatedUnion("namespace", [
@@ -15,9 +19,7 @@ export const WalletApiNamespaceTransactionDraftEditSchema = z.discriminatedUnion
 
 export const WalletApiTransactionsSchemas = {
   requestSendTransactionApproval: z.strictObject({
-    to: z.string().min(1),
-    valueEther: z.string().min(1),
-    chainRef: ChainRefSchema.optional(),
+    request: WalletApiWalletTransactionRequestSchema,
   }),
   rerunPrepare: z.strictObject({
     approvalId: z.string().min(1),

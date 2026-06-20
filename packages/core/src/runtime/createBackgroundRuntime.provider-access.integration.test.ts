@@ -237,6 +237,12 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
   },
 });
 
+const createTestNamespaceTransaction = (): NamespaceTransaction => ({
+  proposal: {
+    prepare: async () => ({ status: "ready", prepared: {} }),
+  },
+});
+
 const solanaNamespaceManifest = (() => {
   const namespace = "solana";
   const codec = createTestAccountCodec(namespace);
@@ -255,6 +261,10 @@ const solanaNamespaceManifest = (() => {
         factories: {},
       },
       chainSeeds: [toChainSeed(SOLANA_CHAIN)],
+    },
+    runtime: {
+      createSigner: () => ({}),
+      createTransaction: () => createTestNamespaceTransaction(),
     },
   } satisfies NamespaceManifest);
 })();

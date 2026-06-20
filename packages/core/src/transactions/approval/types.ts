@@ -59,7 +59,6 @@ export type TransactionApprovalSession = {
   origin: string;
   accountKey: string;
   from: string;
-  requestKind: string;
   requestId: string | null;
   replacement: CreateTransactionReplacementInput | null;
   createdAt: number;

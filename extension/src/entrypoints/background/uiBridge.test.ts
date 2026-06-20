@@ -574,7 +574,6 @@ const createRuntimeServices = () => {
       accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     },
-    requestKind: "eip155.wallet.native_transfer",
     submitted: null,
     receipt: null,
     replacement: null,
@@ -720,7 +719,6 @@ const createUiAccessForTest = (input: {
   transactionsAccess?: Partial<UiTransactionsAccess>;
   namespaceBindings?: {
     getUi: (namespace: string) => NamespaceUiBindings | undefined;
-    hasTransaction: (namespace: string) => boolean;
     hasTransactionReceiptTracking: (namespace: string) => boolean;
   };
   installSurfaceActivationExtension?: boolean;
@@ -764,7 +762,6 @@ const createUiAccessForTest = (input: {
     getUi: () => ({
       getNativeBalance: vi.fn(async () => 0n),
     }),
-    hasTransaction: () => false,
     hasTransactionReceiptTracking: () => false,
   };
   const buildSnapshot = (): UiSnapshot => {

@@ -15,8 +15,6 @@ import { buildEip155TransactionRequest } from "./transactionRequest.js";
 
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
-const ETH_SEND_TRANSACTION_REQUEST_KIND = "eip155.rpc.eth_sendTransaction";
-
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
   requestKind: RpcRequestKinds.TransactionSubmission,
   locked: lockedQueue(),
@@ -61,7 +59,6 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
           }),
         },
         request: {
-          kind: ETH_SEND_TRANSACTION_REQUEST_KIND,
           payload: prepared.payload as JsonValue,
         },
       }),

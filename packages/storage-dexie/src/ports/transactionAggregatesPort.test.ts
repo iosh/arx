@@ -40,7 +40,6 @@ const createSubmittedAggregateRecord = (
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitted",
     request: {
-      kind: "eip155.rpc.eth_sendTransaction",
       payload: {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -91,7 +90,6 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitting",
     request: {
-      kind: "eip155.rpc.eth_sendTransaction",
       payload: {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

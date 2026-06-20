@@ -1,5 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { ArrowUpRight } from "lucide-react";
+import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
 import { useMemo, useState } from "react";
 import { Paragraph, XStack, YStack } from "tamagui";
@@ -18,13 +19,12 @@ type SendScreenProps = {
   snapshot: UiSnapshot;
   pending: boolean;
   errorMessage: string | null;
-  onSubmit: (params: { to: string; valueEther: string }) => void;
+  onSubmit: (params: { to: string; value: Hex.Hex }) => void;
   onCancel: () => void;
 };
 
 export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel }: SendScreenProps) {
   const { chain, accounts } = snapshot;
-  const sendSupported = snapshot.chainCapabilities.sendTransaction;
   const [to, setTo] = useState("");
   const [valueEther, setValueEther] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -39,29 +39,30 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
           : "Invalid EVM address";
 
     const trimmedValue = valueEther.trim();
+    let valueWei: bigint | null = null;
     let valueError: string | null = null;
     if (trimmedValue.length === 0) {
       valueError = "Enter an amount";
     } else {
       try {
-        const wei = Value.fromEther(trimmedValue);
-        if (wei <= 0n) valueError = "Amount must be greater than 0";
+        valueWei = Value.fromEther(trimmedValue);
+        if (valueWei <= 0n) valueError = "Amount must be greater than 0";
       } catch {
         valueError = "Invalid amount";
       }
     }
 
-    return { normalizedTo, toError, valueError };
+    return { normalizedTo, toError, valueError, valueWei };
   }, [to, valueEther]);
 
-  const canSubmit = sendSupported && !errors.toError && !errors.valueError && accounts.active && !pending;
+  const canSubmit = !errors.toError && !errors.valueError && accounts.active && !pending;
 
   const handleSubmit = () => {
     setSubmitted(true);
-    if (!sendSupported) return;
     if (!accounts.active) return;
     if (errors.toError || errors.valueError) return;
-    onSubmit({ to: errors.normalizedTo, valueEther: valueEther.trim() });
+    if (errors.valueWei === null) return;
+    onSubmit({ to: errors.normalizedTo, value: Hex.fromNumber(errors.valueWei) });
   };
 
   return (
@@ -120,7 +121,7 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
             autoCorrect={false}
             value={to}
             onChangeText={(next) => setTo(next)}
-            disabled={pending || !sendSupported}
+            disabled={pending}
             errorText={submitted ? (errors.toError ?? undefined) : undefined}
           />
 
@@ -132,16 +133,10 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
             inputMode="decimal"
             value={valueEther}
             onChangeText={(next) => setValueEther(next)}
-            disabled={pending || !sendSupported}
+            disabled={pending}
             errorText={submitted ? (errors.valueError ?? undefined) : undefined}
           />
         </YStack>
-
-        {!sendSupported ? (
-          <Paragraph color="$mutedText" fontSize="$3">
-            Send is not supported on this network yet.
-          </Paragraph>
-        ) : null}
 
         {errorMessage ? (
           <Paragraph color="$danger" fontSize="$3">

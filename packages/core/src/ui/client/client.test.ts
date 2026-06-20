@@ -13,7 +13,6 @@ const SNAPSHOT_FIXTURE = {
   },
   chainCapabilities: {
     nativeBalance: true,
-    sendTransaction: true,
   },
   networks: {
     selectedNamespace: "eip155",

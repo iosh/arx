@@ -57,7 +57,6 @@ const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSn
   },
   chainCapabilities: {
     nativeBalance: true,
-    sendTransaction: true,
   },
   networks: {
     selectedNamespace: "eip155",
@@ -207,7 +206,6 @@ const createUiAccess = (options: { read?: CoreReadApi } = {}) => {
         },
         namespaceBindings: {
           getUi: () => null,
-          hasTransaction: () => false,
           hasTransactionReceiptTracking: () => false,
         },
       },

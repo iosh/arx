@@ -6,6 +6,7 @@ import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint
 import type { ChainAddressCodec } from "../chains/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
+import type { NamespaceTransaction } from "../transactions/index.js";
 import {
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -73,6 +74,12 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
   },
 });
 
+const createTestNamespaceTransaction = (): NamespaceTransaction => ({
+  proposal: {
+    prepare: async () => ({ status: "ready", prepared: {} }),
+  },
+});
+
 const solanaNamespaceManifest = (() => {
   const namespace = "solana";
   const codec = createTestAccountCodec(namespace);
@@ -91,6 +98,10 @@ const solanaNamespaceManifest = (() => {
         factories: {},
       },
       chainSeeds: [toChainSeed(SOLANA_CHAIN)],
+    },
+    runtime: {
+      createSigner: () => ({}),
+      createTransaction: () => createTestNamespaceTransaction(),
     },
   } satisfies NamespaceManifest);
 })();
@@ -146,20 +157,17 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       hasSigner: true,
       hasApprovalBindings: true,
       hasUiBindings: true,
-      hasTransaction: true,
       hasTransactionReceiptTracking: true,
     });
     expect(runtime.services.namespaceRuntimeSupport.get("solana")).toMatchObject({
       namespace: "solana",
       hasRpcClient: false,
-      hasSigner: false,
+      hasSigner: true,
       hasApprovalBindings: false,
       hasUiBindings: false,
-      hasTransaction: false,
       hasTransactionReceiptTracking: false,
     });
     expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
-    expect(runtime.services.namespaceBindings.hasTransaction("solana")).toBe(false);
     runtime.lifecycle.shutdown();
   });
 });

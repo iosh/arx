@@ -180,8 +180,8 @@ export const HomeScreen = ({
           <QuickAction
             icon={<ArrowUpRight size={24} color={theme.text.get()} />}
             label="Send"
-            onPress={accounts.active && snapshot.chainCapabilities.sendTransaction ? onNavigateSend : undefined}
-            disabled={!accounts.active || !snapshot.chainCapabilities.sendTransaction}
+            onPress={accounts.active ? onNavigateSend : undefined}
+            disabled={!accounts.active}
           />
           <QuickAction icon={<ArrowDownLeft size={24} color={theme.mutedText.get()} />} label="Receive" disabled />
           <QuickAction icon={<RefreshCcw size={24} color={theme.mutedText.get()} />} label="Swap" disabled />

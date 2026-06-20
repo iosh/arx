@@ -38,7 +38,6 @@ type RpcBlock = Awaited<ReturnType<Eip155RpcClient["getBlockByNumber"]>>;
 
 type CreateTransactionInputOverrides = Omit<Partial<CreateTransactionInput>, "request"> & {
   request?: {
-    kind?: CreateTransactionInput["request"]["kind"];
     payload?: JsonValue;
   };
 };
@@ -104,7 +103,6 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   requestId: overrides.requestId ?? "request-1",
   accountKey: overrides.accountKey ?? createDefaultAccountKey(),
   request: {
-    kind: overrides.request?.kind ?? "eip155.rpc.eth_sendTransaction",
     payload: structuredClone(
       overrides.request?.payload ?? {
         from: DEFAULT_FROM,

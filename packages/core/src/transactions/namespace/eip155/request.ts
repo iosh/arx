@@ -1,7 +1,15 @@
 import * as Hex from "ox/Hex";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { Eip155TransactionRequest } from "../../types.js";
+import type { Eip155TransactionRequest, WalletTransactionRequest } from "../../types.js";
+import type { Eip155TransactionPayload } from "./transactionTypes.js";
+
+export const eip155Request = (
+  input: Eip155TransactionPayload,
+): WalletTransactionRequest<"eip155", Eip155TransactionPayload> => ({
+  namespace: "eip155",
+  payload: { ...input },
+});
 
 export const deriveEip155HexChainIdFromChainRef = (chainRef: ChainRef): `0x${string}` => {
   const parsed = parseChainRef(chainRef);

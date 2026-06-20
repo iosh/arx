@@ -126,7 +126,6 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
     accountKey: ACCOUNT_KEY,
     status,
     request: {
-      kind: "eip155.rpc.eth_sendTransaction",
       payload: {
         from: ACCOUNT_ADDRESS,
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

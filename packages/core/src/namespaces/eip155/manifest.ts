@@ -71,14 +71,6 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
         Hex.assert(balanceHex as Hex.Hex, { strict: false });
         return Hex.toBigInt(balanceHex as Hex.Hex);
       },
-      createSendTransactionRequest: ({ chainRef, to, valueWei }) => ({
-        namespace: EIP155_NAMESPACE,
-        chainRef,
-        payload: {
-          to,
-          value: Hex.fromNumber(valueWei),
-        },
-      }),
     }),
     createTransaction: ({ rpcClients, chains, signer }) => {
       const typedSigner = signer as Pick<Eip155Signer, "signTransaction">;

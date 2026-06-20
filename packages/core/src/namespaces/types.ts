@@ -9,7 +9,6 @@ import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
-import type { TransactionRequest } from "../transactions/types.js";
 
 export type NamespaceCoreManifest = {
   namespace: string;
@@ -27,13 +26,11 @@ export type NamespaceApprovalBindings = {
 
 export type NamespaceUiBindings = {
   getNativeBalance?: (params: { chainRef: ChainRef; address: string }) => Promise<bigint>;
-  createSendTransactionRequest?: (params: { chainRef: ChainRef; to: string; valueWei: bigint }) => TransactionRequest;
 };
 
 export type NamespaceRuntimeBindingsRegistry = {
   getApproval(namespace: string): NamespaceApprovalBindings | undefined;
   getUi(namespace: string): NamespaceUiBindings | undefined;
-  hasTransaction(namespace: string): boolean;
   hasTransactionReceiptTracking(namespace: string): boolean;
 };
 
@@ -43,7 +40,6 @@ export type NamespaceRuntimeSupport = Readonly<{
   hasSigner: boolean;
   hasApprovalBindings: boolean;
   hasUiBindings: boolean;
-  hasTransaction: boolean;
   hasTransactionReceiptTracking: boolean;
 }>;
 

@@ -67,7 +67,6 @@ export type Transaction = {
   source: TransactionSource;
   origin: string;
   account: TransactionAccount;
-  requestKind: string;
   submitted: TransactionSubmittedSummary | null;
   receipt: TransactionReceiptSummary | null;
   replacement: TransactionReplacementSummary | null;
@@ -342,7 +341,6 @@ const buildTransaction = (
   source: record.source,
   origin: record.origin,
   account: buildTransactionAccount(accountCodecs, record),
-  requestKind: record.request.kind,
   submitted: cloneNullableSummary(record.submitted),
   receipt: cloneNullableSummary(record.receipt),
   replacement: buildReplacementSummary(record),

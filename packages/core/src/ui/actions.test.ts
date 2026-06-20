@@ -79,9 +79,13 @@ describe("ui actions", () => {
     void actions.transactions.listHistory({ status: "submitted", limit: 10 });
     void actions.transactions.getDetail({ transactionId: "tx-1" });
     void actions.transactions.requestSendTransactionApproval({
-      to: "0x0000000000000000000000000000000000000000",
-      valueEther: "0.01",
-      chainRef: "eip155:1",
+      request: {
+        namespace: "eip155",
+        payload: {
+          to: "0x0000000000000000000000000000000000000000",
+          value: "0x2386f26fc10000",
+        },
+      },
     });
     void actions.transactions.rerunPrepare({ approvalId: "approval-1" });
     void actions.transactions.applyDraftEdit({

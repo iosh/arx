@@ -12,6 +12,7 @@ describe("eip155 transaction request helpers", () => {
       deriveEip155TransactionRequestForChain(
         {
           namespace: "eip155",
+          chainRef: TEST_CHAINS.SEPOLIA,
           payload: {
             from: TEST_ADDRESSES.FROM_A,
             to: TEST_ADDRESSES.TO_B,
@@ -39,6 +40,7 @@ describe("eip155 transaction request helpers", () => {
       deriveEip155TransactionRequestForChain(
         {
           namespace: "eip155",
+          chainRef: TEST_CHAINS.SEPOLIA,
           payload: {
             from: TEST_ADDRESSES.FROM_A,
             chainId: "0xa",

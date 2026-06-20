@@ -32,7 +32,6 @@ const createApprovedTransactionAggregate = (service: TransactionAggregateService
     requestId: "rpc-1",
     accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     request: {
-      kind: "eip155.rpc.eth_sendTransaction",
       payload: {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

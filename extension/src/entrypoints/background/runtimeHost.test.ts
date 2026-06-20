@@ -6,23 +6,15 @@ import { createBackgroundRuntimeHost } from "./runtimeHost";
 const {
   createArxWalletRuntimeMock,
   createCoreRuntimeFromArxWalletRuntimeMock,
-  coreReadMock,
   getExtensionStorageMock,
   disableDebugNamespacesMock,
   enableDebugNamespacesMock,
 } = vi.hoisted(() => {
-  const coreReadMock = {
-    getWalletSnapshot: vi.fn(),
-    subscribe: vi.fn(),
-  };
-
   return {
     createArxWalletRuntimeMock: vi.fn(),
-    coreReadMock,
     createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
       provider: runtime.provider,
       wallet: {},
-      read: coreReadMock,
     })),
     getExtensionStorageMock: vi.fn(),
     disableDebugNamespacesMock: vi.fn(),
@@ -347,7 +339,6 @@ describe("runtimeHost", () => {
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
-      read: coreReadMock,
       extensions: [expect.objectContaining({ id: "extension.uiActivation" })],
     });
     expect(runtimeHarness.createProvider).not.toHaveBeenCalled();

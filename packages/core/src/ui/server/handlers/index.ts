@@ -10,17 +10,17 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap => {
-  const { wallet, read, buildSnapshot } = deps;
+  const { wallet } = deps;
 
   return {
-    ...createSnapshotHandlers(buildSnapshot),
-    ...createBalancesHandlers({ read }),
+    ...createSnapshotHandlers({ wallet }),
+    ...createBalancesHandlers({ wallet }),
     ...createSessionHandlers({ wallet }),
     ...createOnboardingHandlers({ wallet }),
     ...createAccountsHandlers({ wallet }),
     ...createNetworksHandlers({ wallet }),
-    ...createApprovalsHandlers({ wallet, read }),
-    ...createKeyringsHandlers({ wallet, read }),
-    ...createTransactionsHandlers({ wallet, read }),
+    ...createApprovalsHandlers({ wallet }),
+    ...createKeyringsHandlers({ wallet }),
+    ...createTransactionsHandlers({ wallet }),
   } as const satisfies UiMethodHandlerMap;
 };

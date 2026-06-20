@@ -1,10 +1,10 @@
-import type { CoreReadApi } from "../../../read/types.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
 import type { UiHandlers } from "../types.js";
 
 export const createBalancesHandlers = (deps: {
-  read: Pick<CoreReadApi, "getNativeBalance">;
+  wallet: TrustedWalletApi;
 }): Pick<UiHandlers, "ui.balances.getNative"> => {
   return {
-    "ui.balances.getNative": async (input) => await deps.read.getNativeBalance(input),
+    "ui.balances.getNative": async (input) => await deps.wallet.balances.getNative(input),
   };
 };

@@ -217,21 +217,6 @@ const createHandlersForRuntime = (
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  const wallet = createTrustedWalletApi({
-    session: walletSession,
-    accounts: walletAccounts,
-    networks: walletNetworks,
-    approvals: createWalletApprovals({
-      approvals: runtime.services.approvals,
-    }),
-    accountCodecs: runtime.services.accountCodecs,
-    createId: () => crypto.randomUUID(),
-    surface: {
-      origin: "chrome-extension://arx",
-    },
-    namespaceBindings: runtime.services.namespaceBindings,
-    transactions: runtime.transactions,
-  });
   const read = createCoreReadApi({
     getWalletSnapshot: () =>
       buildUiSnapshot({
@@ -271,10 +256,25 @@ const createHandlersForRuntime = (
       (listener) => runtime.transactions.onTransactionApprovalsChanged(listener),
     ],
   });
+  const wallet = createTrustedWalletApi({
+    read,
+    session: walletSession,
+    accounts: walletAccounts,
+    networks: walletNetworks,
+    approvals: createWalletApprovals({
+      approvals: runtime.services.approvals,
+    }),
+    accountCodecs: runtime.services.accountCodecs,
+    createId: () => crypto.randomUUID(),
+    surface: {
+      origin: "chrome-extension://arx",
+    },
+    namespaceBindings: runtime.services.namespaceBindings,
+    transactions: runtime.transactions,
+  });
 
   return createUiServerRuntime({
     wallet,
-    read,
     access: {
       accounts: runtime.services.accounts,
       approvals: {

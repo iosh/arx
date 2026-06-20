@@ -1,4 +1,3 @@
-import type { CoreReadApi } from "../../../read/types.js";
 import type { ListTransactionsQuery } from "../../../transactions/TransactionsService.js";
 import type { TrustedWalletApi } from "../../../wallet/api.js";
 import type { ListTransactionsQuery as UiListTransactionsQuery } from "../../protocol/models/transactions.js";
@@ -6,7 +5,6 @@ import type { UiHandlers } from "../types.js";
 
 export const createTransactionsHandlers = (deps: {
   wallet: TrustedWalletApi;
-  read: CoreReadApi;
 }): Pick<
   UiHandlers,
   | "ui.transactions.listHistory"
@@ -18,7 +16,7 @@ export const createTransactionsHandlers = (deps: {
   return {
     "ui.transactions.listHistory": async (input: UiListTransactionsQuery) => {
       if (input === undefined) {
-        return await deps.read.listTransactions();
+        return await deps.wallet.transactions.listHistory();
       }
 
       const query: ListTransactionsQuery = {};
@@ -41,12 +39,12 @@ export const createTransactionsHandlers = (deps: {
         query.before = input.before;
       }
 
-      return await deps.read.listTransactions(query);
+      return await deps.wallet.transactions.listHistory(query);
     },
-    "ui.transactions.getDetail": async (input) => await deps.read.getTransactionDetail(input),
+    "ui.transactions.getDetail": async (input) => await deps.wallet.transactions.getDetail(input),
     "ui.transactions.requestSendTransactionApproval": async (input) =>
-      await deps.wallet.requestSendTransactionApproval(input),
-    "ui.transactions.rerunPrepare": async (input) => await deps.wallet.rerunTransactionPrepare(input),
-    "ui.transactions.applyDraftEdit": async (input) => await deps.wallet.applyTransactionDraftEdit(input),
+      await deps.wallet.transactions.requestSendTransactionApproval(input),
+    "ui.transactions.rerunPrepare": async (input) => await deps.wallet.transactions.rerunPrepare(input),
+    "ui.transactions.applyDraftEdit": async (input) => await deps.wallet.transactions.applyDraftEdit(input),
   };
 };

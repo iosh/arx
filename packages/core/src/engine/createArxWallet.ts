@@ -143,8 +143,13 @@ type ArxWalletRuntime = Readonly<{
   getApprovalDetail(approvalId: string): Promise<ApprovalDetail | null>;
 }>;
 
-const createUiTrustedWalletApi = (runtime: ArxWalletRuntimeCore, options: WalletCreateUiOptions): TrustedWalletApi => {
+const createUiTrustedWalletApi = (
+  runtime: ArxWalletRuntimeCore,
+  read: CoreReadApi,
+  options: WalletCreateUiOptions,
+): TrustedWalletApi => {
   return createTrustedWalletApi({
+    read,
     session: createWalletSession({
       session: runtime.services.session,
       sessionStatus: runtime.services.sessionStatus,
@@ -260,13 +265,11 @@ const createWalletUiDeps = (
     sessionStatus: runtime.services.sessionStatus,
     keyring: runtime.services.keyring,
   });
-  const wallet = createUiTrustedWalletApi(runtime, options);
-  const uiRead = options.read ?? read;
+  const wallet = createUiTrustedWalletApi(runtime, read, options);
 
   return {
     server: {
       wallet,
-      read: uiRead,
       access: {
         accounts: runtime.services.accounts,
         approvals: {

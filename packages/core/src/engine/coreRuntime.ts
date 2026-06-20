@@ -1,4 +1,3 @@
-import type { CoreReadApi, CoreReadUnsubscribe } from "../read/types.js";
 import type {
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
@@ -12,9 +11,7 @@ import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/sess
 import type { TrustedWalletApi } from "../wallet/api.js";
 import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionState } from "./types.js";
 
-export type { CoreReadApi, CoreReadChangeListener } from "../read/types.js";
-
-export type CoreUnsubscribe = CoreReadUnsubscribe;
+export type CoreUnsubscribe = () => void;
 
 export type CoreLogger = (message: string, error?: unknown) => void;
 
@@ -55,7 +52,6 @@ export type CoreProviderApi = Readonly<{
 export type CoreRuntime = Readonly<{
   provider: CoreProviderApi;
   wallet: TrustedWalletApi;
-  read: CoreReadApi;
 }>;
 
 type AssertNever<T extends never> = T;

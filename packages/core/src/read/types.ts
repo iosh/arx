@@ -1,60 +1,56 @@
-import type { NativeCurrency } from "../chains/definition.js";
-import type { ChainRef } from "../chains/ids.js";
-import type { AccountKey } from "../storage/records.js";
-import type { ListTransactionsQuery } from "../transactions/TransactionsService.js";
-import type { ApprovalDetail, ApprovalListEntry } from "../ui/protocol/models/approvals.js";
-import type { UiTransaction } from "../ui/protocol/models/transactions.js";
-import type { UiAccountMeta, UiBackupStatus, UiKeyringMeta, UiSnapshot } from "../ui/protocol/schemas.js";
+import type {
+  WalletApiAccountsByKeyringInput,
+  WalletApiAccountsByKeyringResult,
+  WalletApiApprovalDetailInput,
+  WalletApiApprovalDetailResult,
+  WalletApiBackupStatusResult,
+  WalletApiKeyringListResult,
+  WalletApiNativeBalanceInput,
+  WalletApiNativeBalanceResult,
+  WalletApiPendingApprovalsResult,
+  WalletApiSnapshot,
+  WalletApiSnapshotChangeListener,
+  WalletApiTransactionDetailInput,
+  WalletApiTransactionDetailResult,
+  WalletApiTransactionsInput,
+  WalletApiTransactionsResult,
+  WalletApiUnsubscribe,
+} from "../wallet/types.js";
 
-export type CoreReadUnsubscribe = () => void;
+export type CoreReadUnsubscribe = WalletApiUnsubscribe;
 
 /** Payloadless invalidation signal; consumers should re-read the snapshot they need. */
-export type CoreReadChangeListener = () => void;
+export type CoreReadChangeListener = WalletApiSnapshotChangeListener;
 
-export type CoreReadKeyringListResult = UiKeyringMeta[];
+export type CoreReadKeyringListResult = WalletApiKeyringListResult;
 
-export type CoreReadAccountsByKeyringInput = {
-  keyringId: string;
-  includeHidden?: boolean;
-};
+export type CoreReadAccountsByKeyringInput = WalletApiAccountsByKeyringInput;
 
-export type CoreReadAccountsByKeyringResult = UiAccountMeta[];
+export type CoreReadAccountsByKeyringResult = WalletApiAccountsByKeyringResult;
 
-export type CoreReadBackupStatusResult = UiBackupStatus;
+export type CoreReadBackupStatusResult = WalletApiBackupStatusResult;
 
-export type CoreReadNativeBalanceInput = {
-  accountKey: AccountKey;
-  chainRef: ChainRef;
-};
+export type CoreReadNativeBalanceInput = WalletApiNativeBalanceInput;
 
-export type CoreReadNativeBalanceResult = {
-  accountKey: AccountKey;
-  chainRef: ChainRef;
-  amount: string;
-  currency: NativeCurrency;
-};
+export type CoreReadNativeBalanceResult = WalletApiNativeBalanceResult;
 
-export type CoreReadPendingApprovalsResult = ApprovalListEntry[];
+export type CoreReadPendingApprovalsResult = WalletApiPendingApprovalsResult;
 
-export type CoreReadApprovalDetailInput = {
-  approvalId: string;
-};
+export type CoreReadApprovalDetailInput = WalletApiApprovalDetailInput;
 
-export type CoreReadApprovalDetailResult = ApprovalDetail | null;
+export type CoreReadApprovalDetailResult = WalletApiApprovalDetailResult;
 
-export type CoreReadTransactionsInput = ListTransactionsQuery;
+export type CoreReadTransactionsInput = WalletApiTransactionsInput;
 
-export type CoreReadTransactionsResult = UiTransaction[];
+export type CoreReadTransactionsResult = WalletApiTransactionsResult;
 
-export type CoreReadTransactionDetailInput = {
-  transactionId: string;
-};
+export type CoreReadTransactionDetailInput = WalletApiTransactionDetailInput;
 
-export type CoreReadTransactionDetailResult = UiTransaction | null;
+export type CoreReadTransactionDetailResult = WalletApiTransactionDetailResult;
 
 export type CoreReadApi = Readonly<{
   /** Wallet UI read model, detached from mutable owner state. */
-  getWalletSnapshot(): UiSnapshot;
+  getWalletSnapshot(): WalletApiSnapshot;
   listKeyrings(): CoreReadKeyringListResult;
   getAccountsByKeyring(input: CoreReadAccountsByKeyringInput): CoreReadAccountsByKeyringResult;
   getBackupStatus(): CoreReadBackupStatusResult;

@@ -90,20 +90,36 @@ const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSn
   },
 });
 
-const createTrustedWalletStub = (): TrustedWalletApi =>
+const createUnexpectedWalletGroup = (group: string) =>
   new Proxy(
     {},
     {
       get(_target, prop) {
         if (typeof prop === "string") {
           return async () => {
-            throw new Error(`Unexpected TrustedWalletApi method in ui access test: ${prop}`);
+            throw new Error(`Unexpected TrustedWalletApi method in ui access test: ${group}.${prop}`);
           };
         }
         return undefined;
       },
     },
-  ) as TrustedWalletApi;
+  );
+
+const createTrustedWalletStub = (read: CoreReadApi): TrustedWalletApi =>
+  ({
+    snapshot: {
+      get: () => read.getWalletSnapshot(),
+      subscribe: (listener) => read.subscribe(listener),
+    },
+    session: createUnexpectedWalletGroup("session"),
+    onboarding: createUnexpectedWalletGroup("onboarding"),
+    accounts: createUnexpectedWalletGroup("accounts"),
+    networks: createUnexpectedWalletGroup("networks"),
+    balances: createUnexpectedWalletGroup("balances"),
+    approvals: createUnexpectedWalletGroup("approvals"),
+    keyrings: createUnexpectedWalletGroup("keyrings"),
+    transactions: createUnexpectedWalletGroup("transactions"),
+  }) as TrustedWalletApi;
 
 const createReadModel = (options: { snapshot?: UiSnapshot; listeners?: Set<() => void> } = {}) =>
   ({
@@ -134,8 +150,7 @@ const createUiAccess = (options: { read?: CoreReadApi } = {}) => {
 
   return createUiRuntimeAccess({
     server: {
-      wallet: createTrustedWalletStub(),
-      read,
+      wallet: createTrustedWalletStub(read),
       access: {
         accounts: {
           getState: () => ({ namespaces: {}, updatedAt: 0 }),

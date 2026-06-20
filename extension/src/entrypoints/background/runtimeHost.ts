@@ -215,7 +215,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       const access = active.runtime.createUiAccess({
         platform,
         uiOrigin,
-        read: active.core.read,
         extensions: [createUiActivationExtension({ entries: activation })],
       });
 

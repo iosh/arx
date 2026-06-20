@@ -3,7 +3,6 @@ import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { PermissionsEvents } from "../../permissions/service/types.js";
-import type { CoreReadApi } from "../../read/types.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
@@ -165,7 +164,6 @@ export type UiRuntimeBridgeAccess = {
 export type UiRuntimeServerDeps = {
   access: UiServerAccess;
   wallet: TrustedWalletApi;
-  read: CoreReadApi;
   platform: UiPlatformAdapter;
   uiOrigin: string;
   createId?: () => string;
@@ -175,7 +173,6 @@ export type UiRuntimeServerDeps = {
 export type UiServerRuntimeDeps = {
   access: UiServerAccess;
   wallet: TrustedWalletApi;
-  read: CoreReadApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
   extensions?: readonly UiServerExtension[];
@@ -189,10 +186,8 @@ export type UiRuntimeDeps = {
 export type UiHandlerDeps = {
   access: UiServerAccess;
   wallet: TrustedWalletApi;
-  read: CoreReadApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
-  buildSnapshot: UiSnapshotBuilder;
 };
 
 export type UiServerExtension = {

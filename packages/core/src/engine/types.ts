@@ -32,7 +32,6 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
-import type { CoreReadApi } from "../read/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -360,7 +359,6 @@ export type WalletCreateUiOptions = Readonly<{
   platform: UiPlatformAdapter;
   uiOrigin: string;
   createId?: () => string;
-  read?: CoreReadApi;
   extensions?: readonly UiServerExtension[];
 }>;
 

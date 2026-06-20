@@ -8,7 +8,6 @@ import {
 import { ApprovalKinds } from "@arx/core/approvals";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import type { NamespaceUiBindings } from "@arx/core/namespaces";
-import { type CoreReadApi, createCoreNativeBalanceReader, createCoreReadApi } from "@arx/core/read";
 import type { RpcHandlerDeps } from "@arx/core/rpc";
 import {
   type BackgroundSessionServices,
@@ -26,6 +25,9 @@ import {
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
+  type UiAccountMeta,
+  type UiBackupStatus,
+  type UiKeyringMeta,
   type UiMethodName,
   type UiMethodParams,
   type UiPermissionsSnapshot,
@@ -689,21 +691,53 @@ type UiBridgeTestRuntimeServices = ReturnType<typeof createRuntimeServices>;
 const bytesToLowerHex = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-const createTrustedWalletApiForBridgeTest = (methods: Partial<TrustedWalletApi>): TrustedWalletApi =>
-  new Proxy(methods, {
-    get(target, prop, receiver) {
-      if (prop in target) {
-        return Reflect.get(target, prop, receiver);
-      }
+const buildUiKeyringMeta = (record: KeyringMetaRecord): UiKeyringMeta => ({
+  id: record.id,
+  type: record.type,
+  createdAt: record.createdAt,
+  ...(record.alias !== undefined ? { alias: record.alias } : {}),
+  ...(record.type === "hd"
+    ? { backedUp: record.needsBackup !== true, derivedCount: record.nextDerivationIndex ?? 0 }
+    : {}),
+});
 
-      if (typeof prop === "string") {
-        return async () => {
-          throw new Error(`Unexpected TrustedWalletApi method in uiBridge test: ${prop}`);
-        };
-      }
+const buildUiAccountMeta = (record: AccountRecord): UiAccountMeta => ({
+  accountKey: record.accountKey,
+  canonicalAddress: toCanonicalAddressFromAccountKey({ accountKey: record.accountKey, accountCodecs }),
+  keyringId: record.keyringId,
+  createdAt: record.createdAt,
+  ...(record.derivationIndex !== undefined ? { derivationIndex: record.derivationIndex } : {}),
+  ...(record.alias !== undefined ? { alias: record.alias } : {}),
+  ...(record.hidden !== undefined ? { hidden: record.hidden } : {}),
+});
 
-      return Reflect.get(target, prop, receiver);
+const createUnexpectedWalletGroup = (group: string) =>
+  new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop === "string") {
+          return async () => {
+            throw new Error(`Unexpected TrustedWalletApi method in uiBridge test: ${group}.${prop}`);
+          };
+        }
+
+        return undefined;
+      },
     },
+  );
+
+const createTrustedWalletApiForBridgeTest = (groups: Partial<TrustedWalletApi>): TrustedWalletApi =>
+  ({
+    snapshot: groups.snapshot ?? createUnexpectedWalletGroup("snapshot"),
+    session: groups.session ?? createUnexpectedWalletGroup("session"),
+    onboarding: groups.onboarding ?? createUnexpectedWalletGroup("onboarding"),
+    accounts: groups.accounts ?? createUnexpectedWalletGroup("accounts"),
+    networks: groups.networks ?? createUnexpectedWalletGroup("networks"),
+    balances: groups.balances ?? createUnexpectedWalletGroup("balances"),
+    approvals: groups.approvals ?? createUnexpectedWalletGroup("approvals"),
+    keyrings: groups.keyrings ?? createUnexpectedWalletGroup("keyrings"),
+    transactions: groups.transactions ?? createUnexpectedWalletGroup("transactions"),
   }) as TrustedWalletApi;
 
 const createUiAccessForTest = (input: {
@@ -792,85 +826,195 @@ const createUiAccessForTest = (input: {
       namespaceBindings,
     });
   };
-  const read = createCoreReadApi({
+  const read = {
     getWalletSnapshot: buildSnapshot,
-    listKeyringRecords: () => input.keyring.getKeyrings(),
-    listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
-      input.keyring.getAccountsByKeyring(keyringId, includeHidden),
-    getBackupStatus: () => buildSnapshot().backup,
-    listPendingApprovals: async () => [],
-    getApprovalDetail: async () => null,
-    getNativeBalance: createCoreNativeBalanceReader({
-      accounts: input.services.accounts,
-      chainViews: readChainViews,
-      namespaceBindings,
-      sessionStatus,
-    }),
-    listTransactions: async (query) => await transactionsAccess.listTransactions(query),
-    getTransactionDetail: async (transactionId) => await transactionsAccess.getTransaction(transactionId),
-    accountCodecs,
-    subscribeSources: [
-      (listener) => input.services.accounts.onStateChanged(() => listener()),
-      (listener) => input.services.permissions.onStateChanged(() => listener()),
-      (listener) => input.services.chainRpc.onStateChanged(listener),
-      (listener) => input.walletChainSelection.subscribeChanged(listener),
-      (listener) => sessionAccess.onStateChanged(listener),
-      (listener) => input.subscribeAttentionStateChanged(listener),
-    ],
-  }) satisfies CoreReadApi;
-  const wallet = createTrustedWalletApiForBridgeTest({
-    unlockSession: (input) => sessionAccess.unlock(input),
-    lockSession: async (input) => sessionAccess.lock(input?.reason ?? "manual"),
-    generateMnemonic: (params) =>
-      Promise.resolve({ words: input.keyring.generateMnemonic(params?.wordCount ?? 12).split(" ") }),
-    createWalletFromMnemonic: async ({ password, words, alias, skipBackup, namespace }) =>
-      await walletSetupAccess.createWalletFromMnemonic({
-        password,
-        mnemonic: words.join(" "),
-        ...(alias !== undefined ? { alias } : {}),
-        ...(skipBackup !== undefined ? { skipBackup } : {}),
-        ...(namespace !== undefined ? { namespace } : {}),
-      }),
-    confirmNewMnemonic: async ({ words, alias, skipBackup, namespace }) => {
-      const result = await keyringsAccess.confirmNewMnemonic({
-        mnemonic: words.join(" "),
-        ...(alias !== undefined ? { alias } : {}),
-        ...(skipBackup !== undefined ? { skipBackup } : {}),
-        ...(namespace !== undefined ? { namespace } : {}),
-      });
-      await input.services.accounts.setActiveAccount({
-        namespace: namespace ?? CHAIN.namespace,
-        chainRef: CHAIN.chainRef,
-        accountKey: toAccountKeyFromAddress({ chainRef: CHAIN.chainRef, address: result.address, accountCodecs }),
-      });
-      return result;
-    },
-    deriveAccount: async ({ keyringId }) => {
-      return await keyringsAccess.deriveAccount(keyringId);
-    },
-    hideHdAccount: async ({ accountKey }) => {
-      const active = input.services.accounts.getActiveAccountForNamespace({
+    listKeyrings: () => input.keyring.getKeyrings().map(buildUiKeyringMeta),
+    getAccountsByKeyring: ({ keyringId, includeHidden }: { keyringId: string; includeHidden?: boolean }) =>
+      input.keyring.getAccountsByKeyring(keyringId, includeHidden ?? false).map(buildUiAccountMeta),
+    getBackupStatus: (): UiBackupStatus => buildSnapshot().backup,
+    getNativeBalance: async ({ accountKey, chainRef }: { accountKey: AccountKey; chainRef: ChainRef }) => {
+      const account = input.services.accounts.getOwnedAccount({
         namespace: CHAIN.namespace,
-        chainRef: CHAIN.chainRef,
+        chainRef,
+        accountKey,
       });
-      if (active?.accountKey === accountKey) {
+      if (!account) {
         throw new PermissionDeniedError();
       }
-      await keyringsAccess.hideHdAccount(accountKey);
-      return null;
+
+      const getNativeBalance = namespaceBindings.getUi(CHAIN.namespace)?.getNativeBalance;
+      if (!getNativeBalance) {
+        throw new Error(`Native balance is not supported for namespace "${CHAIN.namespace}" in uiBridge test`);
+      }
+
+      const amount = await getNativeBalance({ chainRef, address: account.canonicalAddress });
+      const definition = readChainViews.requireAvailableChainDefinition();
+      return {
+        accountKey,
+        chainRef,
+        amount: amount.toString(10),
+        currency: { ...definition.nativeCurrency },
+      };
     },
-    unhideHdAccount: async ({ accountKey }) => {
-      await keyringsAccess.unhideHdAccount(accountKey);
-      return null;
+    listPendingApprovals: async () => [],
+    getApprovalDetail: async (_params: { approvalId: string }) => null,
+    listTransactions: async (query: Parameters<UiTransactionsAccess["listTransactions"]>[0]) =>
+      await transactionsAccess.listTransactions(query),
+    getTransactionDetail: async ({ transactionId }: { transactionId: string }) =>
+      await transactionsAccess.getTransaction(transactionId),
+    subscribe: (listener: () => void) => {
+      const unsubscribers = [
+        input.services.accounts.onStateChanged(() => listener()),
+        input.services.permissions.onStateChanged(() => listener()),
+        input.services.chainRpc.onStateChanged(listener),
+        input.walletChainSelection.subscribeChanged(listener),
+        sessionAccess.onStateChanged(listener),
+        input.subscribeAttentionStateChanged(listener),
+      ];
+      return () => {
+        for (const unsubscribe of unsubscribers) {
+          unsubscribe();
+        }
+      };
     },
-    exportMnemonic: async ({ keyringId, password }) => ({
-      words: (await keyringsAccess.exportMnemonic(keyringId, password)).split(" "),
-    }),
-    exportPrivateKey: async ({ accountKey, password }) => {
-      const bytes = await keyringsAccess.exportPrivateKeyByAccountKey(accountKey, password);
-      return { privateKey: bytesToLowerHex(bytes) };
+  };
+  const wallet = createTrustedWalletApiForBridgeTest({
+    snapshot: {
+      get: () => read.getWalletSnapshot(),
+      subscribe: (listener) => read.subscribe(listener),
     },
-  } satisfies Partial<TrustedWalletApi>);
+    session: {
+      unlock: (input) => sessionAccess.unlock(input),
+      lock: async (input) => sessionAccess.lock(input?.reason ?? "manual"),
+      resetAutoLockTimer: async () => input.session.unlock.syncVaultStatus(),
+      setAutoLockDuration: async ({ durationMs }) => {
+        input.session.unlock.setAutoLockDuration(durationMs);
+        const nextAutoLockAt = input.session.unlock.scheduleAutoLock(durationMs);
+        return { autoLockDurationMs: durationMs, nextAutoLockAt };
+      },
+    },
+    onboarding: {
+      generateMnemonic: (params) =>
+        Promise.resolve({ words: input.keyring.generateMnemonic(params?.wordCount ?? 12).split(" ") }),
+      createWalletFromMnemonic: async ({ password, words, alias, skipBackup, namespace }) =>
+        await walletSetupAccess.createWalletFromMnemonic({
+          password,
+          mnemonic: words.join(" "),
+          ...(alias !== undefined ? { alias } : {}),
+          ...(skipBackup !== undefined ? { skipBackup } : {}),
+          ...(namespace !== undefined ? { namespace } : {}),
+        }),
+      importWalletFromMnemonic: async ({ password, words, alias, namespace }) =>
+        await walletSetupAccess.createWalletFromMnemonic({
+          password,
+          mnemonic: words.join(" "),
+          ...(alias !== undefined ? { alias } : {}),
+          ...(namespace !== undefined ? { namespace } : {}),
+        }),
+      importWalletFromPrivateKey: async () => {
+        throw new Error("Unexpected TrustedWalletApi method in uiBridge test: onboarding.importWalletFromPrivateKey");
+      },
+    },
+    accounts: {
+      switchActive: async ({ chainRef, accountKey }) =>
+        await input.services.accounts.setActiveAccount({
+          namespace: CHAIN.namespace,
+          chainRef,
+          accountKey,
+        }),
+    },
+    networks: {
+      select: async ({ chainRef }) => {
+        await (input.selectWalletChain ?? vi.fn(async () => {}))(chainRef);
+        return {
+          chainRef,
+          namespace: CHAIN.namespace,
+          displayName: CHAIN.displayName,
+          shortName: CHAIN.shortName,
+          icon: null,
+          nativeCurrency: CHAIN.nativeCurrency,
+        };
+      },
+    },
+    balances: {
+      getNative: (params) => read.getNativeBalance(params),
+    },
+    approvals: {
+      listPending: () => read.listPendingApprovals(),
+      getDetail: (params) => read.getApprovalDetail(params),
+      resolve: async () => null,
+    },
+    keyrings: {
+      list: () => read.listKeyrings(),
+      getAccountsByKeyring: (params) => read.getAccountsByKeyring(params),
+      getBackupStatus: () => read.getBackupStatus(),
+      confirmNewMnemonic: async ({ words, alias, skipBackup, namespace }) => {
+        const result = await keyringsAccess.confirmNewMnemonic({
+          mnemonic: words.join(" "),
+          ...(alias !== undefined ? { alias } : {}),
+          ...(skipBackup !== undefined ? { skipBackup } : {}),
+          ...(namespace !== undefined ? { namespace } : {}),
+        });
+        await input.services.accounts.setActiveAccount({
+          namespace: namespace ?? CHAIN.namespace,
+          chainRef: CHAIN.chainRef,
+          accountKey: toAccountKeyFromAddress({ chainRef: CHAIN.chainRef, address: result.address, accountCodecs }),
+        });
+        return result;
+      },
+      importMnemonic: async ({ words, alias, namespace }) =>
+        await keyringsAccess.confirmNewMnemonic({
+          mnemonic: words.join(" "),
+          ...(alias !== undefined ? { alias } : {}),
+          ...(namespace !== undefined ? { namespace } : {}),
+        }),
+      importPrivateKey: async () => {
+        throw new Error("Unexpected TrustedWalletApi method in uiBridge test: keyrings.importPrivateKey");
+      },
+      deriveAccount: async ({ keyringId }) => {
+        return await keyringsAccess.deriveAccount(keyringId);
+      },
+      renameKeyring: async () => null,
+      renameAccount: async () => null,
+      markBackedUp: async () => null,
+      hideHdAccount: async ({ accountKey }) => {
+        const active = input.services.accounts.getActiveAccountForNamespace({
+          namespace: CHAIN.namespace,
+          chainRef: CHAIN.chainRef,
+        });
+        if (active?.accountKey === accountKey) {
+          throw new PermissionDeniedError();
+        }
+        await keyringsAccess.hideHdAccount(accountKey);
+        return null;
+      },
+      unhideHdAccount: async ({ accountKey }) => {
+        await keyringsAccess.unhideHdAccount(accountKey);
+        return null;
+      },
+      removePrivateKeyKeyring: async () => null,
+      exportMnemonic: async ({ keyringId, password }) => ({
+        words: (await keyringsAccess.exportMnemonic(keyringId, password)).split(" "),
+      }),
+      exportPrivateKey: async ({ accountKey, password }) => {
+        const bytes = await keyringsAccess.exportPrivateKeyByAccountKey(accountKey, password);
+        return { privateKey: bytesToLowerHex(bytes) };
+      },
+    },
+    transactions: {
+      listHistory: (query) => read.listTransactions(query),
+      getDetail: (params) => read.getTransactionDetail(params),
+      requestSendTransactionApproval: async () => ({ approvalId: "approval-id" }),
+      rerunPrepare: async (params) => {
+        await transactionsAccess.rerunApprovalPrepare(params);
+        return null;
+      },
+      applyDraftEdit: async (params) => {
+        await transactionsAccess.updateApprovalDraft(params);
+        return null;
+      },
+    },
+  });
   const activationEntries = input.activationEntries ?? {
     ...input.platform,
     getEntryLaunchContext: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
@@ -909,7 +1053,6 @@ const createUiAccessForTest = (input: {
   return createUiRuntimeAccess({
     server: {
       wallet,
-      read,
       access: {
         accounts: input.services.accounts,
         approvals: {

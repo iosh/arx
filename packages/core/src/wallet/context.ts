@@ -1,9 +1,11 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { WalletAccounts, WalletApprovals, WalletNetworks, WalletSession } from "../engine/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
+import type { CoreReadApi } from "../read/types.js";
 import type { WalletTransactionAccess } from "../transactions/TransactionsService.js";
 
 export type WalletApiContext = {
+  read: CoreReadApi;
   session: WalletSession;
   accounts: WalletAccounts;
   networks: WalletNetworks;

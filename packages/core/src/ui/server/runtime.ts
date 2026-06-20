@@ -26,21 +26,19 @@ const registerUiHandlers = (
   }
 };
 
-const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "read">) => {
-  const chain = deps.read.getWalletSnapshot().chain;
+const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "wallet">) => {
+  const chain = deps.wallet.snapshot.get().chain;
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 
 export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
-  const buildSnapshot = () => deps.read.getWalletSnapshot();
+  const buildSnapshot = () => deps.wallet.snapshot.get();
 
   const handlerDeps = {
     access: deps.access,
     wallet: deps.wallet,
-    read: deps.read,
     platform: deps.platform,
     surface: deps.surface,
-    buildSnapshot,
   } as const;
 
   const handlers: UiMethodHandlerMap = {};

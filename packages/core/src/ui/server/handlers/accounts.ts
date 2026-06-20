@@ -17,7 +17,7 @@ export const createAccountsHandlers = (deps: {
 }): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
     "ui.accounts.switchActive": async (input) => {
-      const active = await deps.wallet.switchActiveAccount(input);
+      const active = await deps.wallet.accounts.switchActive(input);
       return active ? toUiOwnedAccountSummary(active) : null;
     },
   };

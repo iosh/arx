@@ -3,7 +3,12 @@ import type { SessionLockState } from "../runtime/session/unlock/types.js";
 import type { WalletApiEip155TransactionDraftChangeSchema } from "./schemas/transactions.js";
 import type { WalletApiSchemas } from "./schemas.js";
 import type {
+  WalletApiAccountsByKeyringInput,
+  WalletApiAccountsByKeyringResult,
+  WalletApiApprovalDetailInput,
+  WalletApiApprovalDetailResult,
   WalletApiAutoLockResult,
+  WalletApiBackupStatusResult,
   WalletApiChainSnapshot,
   WalletApiCreationResult,
   WalletApiExportMnemonicResult,
@@ -11,9 +16,20 @@ import type {
   WalletApiGenerateMnemonicResult,
   WalletApiImportPrivateKeyResult,
   WalletApiKeyringAccount,
+  WalletApiKeyringListResult,
+  WalletApiNativeBalanceInput,
+  WalletApiNativeBalanceResult,
   WalletApiOwnedAccountSummary,
+  WalletApiPendingApprovalsResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
+  WalletApiSnapshot,
+  WalletApiSnapshotChangeListener,
+  WalletApiTransactionDetailInput,
+  WalletApiTransactionDetailResult,
+  WalletApiTransactionsInput,
+  WalletApiTransactionsResult,
+  WalletApiUnsubscribe,
 } from "./types.js";
 
 type WalletApiInput<TSchema extends z.ZodTypeAny> = z.input<TSchema>;
@@ -66,42 +82,75 @@ export type ApplyTransactionDraftEditInput = Omit<
 };
 
 export type TrustedWalletApi = Readonly<{
-  unlockSession(input: UnlockSessionInput): Promise<SessionLockState>;
-  lockSession(input?: LockSessionInput): Promise<SessionLockState>;
-  resetAutoLockTimer(): Promise<SessionLockState>;
-  setAutoLockDuration(input: SetAutoLockDurationInput): Promise<WalletApiAutoLockResult>;
+  snapshot: Readonly<{
+    get(): WalletApiSnapshot;
+    subscribe(listener: WalletApiSnapshotChangeListener): WalletApiUnsubscribe;
+  }>;
 
-  generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
-  createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
-  importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
-  importWalletFromPrivateKey(input: ImportWalletFromPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+  session: Readonly<{
+    unlock(input: UnlockSessionInput): Promise<SessionLockState>;
+    lock(input?: LockSessionInput): Promise<SessionLockState>;
+    resetAutoLockTimer(): Promise<SessionLockState>;
+    setAutoLockDuration(input: SetAutoLockDurationInput): Promise<WalletApiAutoLockResult>;
+  }>;
 
-  switchActiveAccount(input: SwitchActiveAccountInput): Promise<WalletApiOwnedAccountSummary | null>;
-  selectWalletChain(input: SelectWalletChainInput): Promise<WalletApiChainSnapshot>;
-  resolveApproval(input: ResolveApprovalInput): Promise<WalletApiResolveApprovalResult>;
+  onboarding: Readonly<{
+    generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
+    createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
+    importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
+    importWalletFromPrivateKey(input: ImportWalletFromPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+  }>;
 
-  confirmNewMnemonic(input: ConfirmNewMnemonicInput): Promise<WalletApiCreationResult>;
-  importMnemonic(input: ImportMnemonicInput): Promise<WalletApiCreationResult>;
-  importPrivateKey(input: ImportPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
-  deriveAccount(input: DeriveAccountInput): Promise<WalletApiKeyringAccount>;
-  renameKeyring(input: RenameKeyringInput): Promise<null>;
-  renameAccount(input: RenameAccountInput): Promise<null>;
-  markBackedUp(input: MarkBackedUpInput): Promise<null>;
-  hideHdAccount(input: HideHdAccountInput): Promise<null>;
-  unhideHdAccount(input: UnhideHdAccountInput): Promise<null>;
-  removePrivateKeyKeyring(input: RemovePrivateKeyKeyringInput): Promise<null>;
-  exportMnemonic(input: ExportMnemonicInput): Promise<WalletApiExportMnemonicResult>;
-  exportPrivateKey(input: ExportPrivateKeyInput): Promise<WalletApiExportPrivateKeyResult>;
+  accounts: Readonly<{
+    switchActive(input: SwitchActiveAccountInput): Promise<WalletApiOwnedAccountSummary | null>;
+  }>;
 
-  requestSendTransactionApproval(
-    input: RequestSendTransactionApprovalInput,
-  ): Promise<WalletApiRequestSendTransactionApprovalResult>;
-  rerunTransactionPrepare(input: RerunTransactionPrepareInput): Promise<null>;
-  applyTransactionDraftEdit(input: ApplyTransactionDraftEditInput): Promise<null>;
+  networks: Readonly<{
+    select(input: SelectWalletChainInput): Promise<WalletApiChainSnapshot>;
+  }>;
+
+  balances: Readonly<{
+    getNative(input: WalletApiNativeBalanceInput): Promise<WalletApiNativeBalanceResult>;
+  }>;
+
+  approvals: Readonly<{
+    listPending(): Promise<WalletApiPendingApprovalsResult>;
+    getDetail(input: WalletApiApprovalDetailInput): Promise<WalletApiApprovalDetailResult>;
+    resolve(input: ResolveApprovalInput): Promise<WalletApiResolveApprovalResult>;
+  }>;
+
+  keyrings: Readonly<{
+    list(): WalletApiKeyringListResult;
+    getAccountsByKeyring(input: WalletApiAccountsByKeyringInput): WalletApiAccountsByKeyringResult;
+    getBackupStatus(): WalletApiBackupStatusResult;
+    confirmNewMnemonic(input: ConfirmNewMnemonicInput): Promise<WalletApiCreationResult>;
+    importMnemonic(input: ImportMnemonicInput): Promise<WalletApiCreationResult>;
+    importPrivateKey(input: ImportPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+    deriveAccount(input: DeriveAccountInput): Promise<WalletApiKeyringAccount>;
+    renameKeyring(input: RenameKeyringInput): Promise<null>;
+    renameAccount(input: RenameAccountInput): Promise<null>;
+    markBackedUp(input: MarkBackedUpInput): Promise<null>;
+    hideHdAccount(input: HideHdAccountInput): Promise<null>;
+    unhideHdAccount(input: UnhideHdAccountInput): Promise<null>;
+    removePrivateKeyKeyring(input: RemovePrivateKeyKeyringInput): Promise<null>;
+    exportMnemonic(input: ExportMnemonicInput): Promise<WalletApiExportMnemonicResult>;
+    exportPrivateKey(input: ExportPrivateKeyInput): Promise<WalletApiExportPrivateKeyResult>;
+  }>;
+
+  transactions: Readonly<{
+    listHistory(input?: WalletApiTransactionsInput): Promise<WalletApiTransactionsResult>;
+    getDetail(input: WalletApiTransactionDetailInput): Promise<WalletApiTransactionDetailResult>;
+    requestSendTransactionApproval(
+      input: RequestSendTransactionApprovalInput,
+    ): Promise<WalletApiRequestSendTransactionApprovalResult>;
+    rerunPrepare(input: RerunTransactionPrepareInput): Promise<null>;
+    applyDraftEdit(input: ApplyTransactionDraftEditInput): Promise<null>;
+  }>;
 }>;
 
 type AssertNever<T extends never> = T;
 type WalletApiForbiddenKey =
+  | "read"
   | "dispatch"
   | "dispatchRequest"
   | "buildSnapshotEvent"

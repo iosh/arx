@@ -44,7 +44,7 @@ const createUiSurfaceIdentity = (uiOrigin: string, createId: () => string): UiSu
 const createUiStateChangedSubscription = ({
   server,
 }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeStateChanged"] => {
-  return (listener) => server.read.subscribe(listener);
+  return (listener) => server.wallet.snapshot.subscribe(listener);
 };
 
 const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeUiEvents"] => {
@@ -58,7 +58,7 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
     };
 
     const getContext = () => {
-      const chain = server.read.getWalletSnapshot().chain;
+      const chain = server.wallet.snapshot.get().chain;
       return {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
@@ -129,7 +129,6 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
   const uiRuntime = createUiServerRuntime({
     access: server.access,
     wallet: server.wallet,
-    read: server.read,
     platform: server.platform,
     surface,
     ...(server.extensions ? { extensions: server.extensions } : {}),

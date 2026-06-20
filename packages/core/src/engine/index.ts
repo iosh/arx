@@ -3,8 +3,6 @@ export type { TrustedWalletApi } from "../wallet/index.js";
 export type {
   CoreLogger,
   CoreProviderApi,
-  CoreReadApi,
-  CoreReadChangeListener,
   CoreRuntime,
   CoreRuntimeBootOptions,
   CoreRuntimeEnvironment,

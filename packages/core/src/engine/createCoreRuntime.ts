@@ -89,6 +89,7 @@ export const createCoreRuntimeFromArxWalletRuntime = (
   options?: CreateCoreRuntimeFromArxWalletRuntimeOptions,
 ): CoreRuntime => {
   const wallet = createTrustedWalletApi({
+    read: runtime.read,
     session: runtime.wallet.session,
     accounts: runtime.wallet.accounts,
     networks: runtime.wallet.networks,
@@ -105,7 +106,6 @@ export const createCoreRuntimeFromArxWalletRuntime = (
   return {
     provider: runtime.provider,
     wallet,
-    read: runtime.read,
   };
 };
 

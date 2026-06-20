@@ -6,7 +6,7 @@ export const createNetworksHandlers = (deps: {
 }): Pick<UiHandlers, "ui.networks.switchActive"> => {
   return {
     "ui.networks.switchActive": async (input) => {
-      return await deps.wallet.selectWalletChain(input);
+      return await deps.wallet.networks.select(input);
     },
   };
 };

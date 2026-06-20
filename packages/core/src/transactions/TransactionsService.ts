@@ -244,6 +244,16 @@ export type CreateReplacementTransactionApprovalInput = Omit<RequestTransactionA
 
 export type ListTransactionsQuery = ListTransactionHistoryQuery;
 
+export type WalletTransactionAccess = Pick<
+  TransactionsService,
+  | "requestTransactionApproval"
+  | "rerunApprovalPrepare"
+  | "updateApprovalDraft"
+  | "getTransactionApproval"
+  | "approveAndSubmitTransaction"
+  | "rejectTransactionApproval"
+>;
+
 export type TransactionsEvents = {
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void;
   onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;

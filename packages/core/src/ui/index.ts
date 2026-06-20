@@ -43,6 +43,7 @@ export type {
   UiAccountMeta,
   UiBackupStatus,
   UiKeyringMeta,
+  UiPermissionsSnapshot,
   UiSnapshot,
   VaultSnapshot,
 } from "./protocol/schemas.js";

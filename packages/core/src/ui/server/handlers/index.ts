@@ -10,9 +10,7 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap => {
-  const { access, surface, buildSnapshot } = deps;
-
-  const toChainSnapshot = () => access.chains.getSelectedChainView();
+  const { access, wallet, read, buildSnapshot } = deps;
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
@@ -21,30 +19,12 @@ export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap 
       session: access.session,
       namespaceBindings: access.namespaceBindings,
     }),
-    ...createSessionHandlers({ session: access.session }),
-    ...createOnboardingHandlers({
-      accounts: access.accounts,
-      chains: access.chains,
-      accountCodecs: access.accountCodecs,
-      walletSetup: access.walletSetup,
-    }),
-    ...createAccountsHandlers({ accounts: access.accounts }),
-    ...createNetworksHandlers({ chains: access.chains }, toChainSnapshot),
-    ...createApprovalsHandlers({ approvals: access.approvals }),
-    ...createKeyringsHandlers({
-      accounts: access.accounts,
-      chains: access.chains,
-      accountCodecs: access.accountCodecs,
-      session: access.session,
-      keyrings: access.keyrings,
-    }),
-    ...createTransactionsHandlers({
-      transactions: access.transactions,
-      chains: access.chains,
-      accounts: access.accounts,
-      session: access.session,
-      namespaceBindings: access.namespaceBindings,
-      surface,
-    }),
+    ...createSessionHandlers({ wallet }),
+    ...createOnboardingHandlers({ wallet }),
+    ...createAccountsHandlers({ wallet }),
+    ...createNetworksHandlers({ wallet }),
+    ...createApprovalsHandlers({ wallet, read }),
+    ...createKeyringsHandlers({ wallet, read }),
+    ...createTransactionsHandlers({ wallet, read }),
   } as const satisfies UiMethodHandlerMap;
 };

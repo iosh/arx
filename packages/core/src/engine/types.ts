@@ -32,6 +32,7 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
+import type { CoreReadApi } from "../read/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -79,7 +80,7 @@ import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
-import type { UiPlatformAdapter, UiServerExtension, UiWalletSnapshotReadModel } from "../ui/server/types.js";
+import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
@@ -201,6 +202,7 @@ export type WalletSession = Readonly<{
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
   persistVaultMeta(): Promise<void>;
+  withVaultMetaPersistHold<T>(fn: () => Promise<T>): Promise<T>;
   onStateChanged(listener: () => void): () => void;
   onUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   onLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
@@ -290,6 +292,7 @@ export type WalletNetworks = Readonly<{
   getChain(chainRef: ChainRef): SupportedChainEntity | null;
   listChains(): SupportedChainEntity[];
   getSelectedChainView(): ChainView;
+  findAvailableChainView(params: { chainRef?: ChainRef; namespace?: string }): ChainView | null;
   getActiveChainViewForNamespace(namespace: string): ChainView;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
@@ -356,7 +359,8 @@ export type WalletProvider = Readonly<{
 export type WalletCreateUiOptions = Readonly<{
   platform: UiPlatformAdapter;
   uiOrigin: string;
-  read?: UiWalletSnapshotReadModel;
+  createId?: () => string;
+  read?: CoreReadApi;
   extensions?: readonly UiServerExtension[];
 }>;
 

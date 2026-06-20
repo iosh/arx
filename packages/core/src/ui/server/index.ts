@@ -10,6 +10,7 @@ export type {
 export { createUiKeyringsAccess } from "./keyringsAccess.js";
 export type { UiSessionAccess } from "./sessionAccess.js";
 export { createUiSessionAccess } from "./sessionAccess.js";
+export { buildUiSnapshot } from "./snapshot.js";
 export type {
   UiMethodHandlerMap,
   UiOnboardingOpenTabResult,

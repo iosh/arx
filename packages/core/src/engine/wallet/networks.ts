@@ -27,6 +27,7 @@ export const createWalletNetworks = (deps: {
     getChain: (chainRef) => supportedChains.getChain(chainRef),
     listChains: () => supportedChains.listChains(),
     getSelectedChainView: () => chainViews.getSelectedChainView(),
+    findAvailableChainView: (params) => chainViews.findAvailableChainView(params),
     getActiveChainViewForNamespace: (namespace) => chainViews.getActiveChainViewForNamespace(namespace),
     listKnownChainViews: () => chainViews.listKnownChainViews(),
     listAvailableChainViews: () => chainViews.listAvailableChainViews(),

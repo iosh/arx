@@ -1,3 +1,4 @@
+import type { CoreReadApi, CoreReadUnsubscribe } from "../read/types.js";
 import type {
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
@@ -8,11 +9,12 @@ import type {
   ProviderRuntimeRpcResponse,
 } from "../runtime/provider/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
-import type { UiSnapshot } from "../ui/protocol/schemas.js";
-import type { WalletApi } from "../wallet/api.js";
+import type { TrustedWalletApi } from "../wallet/api.js";
 import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionState } from "./types.js";
 
-export type CoreUnsubscribe = () => void;
+export type { CoreReadApi, CoreReadChangeListener } from "../read/types.js";
+
+export type CoreUnsubscribe = CoreReadUnsubscribe;
 
 export type CoreLogger = (message: string, error?: unknown) => void;
 
@@ -50,19 +52,9 @@ export type CoreProviderApi = Readonly<{
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): CoreUnsubscribe;
 }>;
 
-/** Payloadless invalidation signal; consumers should re-read the snapshot they need. */
-export type CoreReadChangeListener = () => void;
-
-export type CoreReadApi = Readonly<{
-  /** Wallet UI read model, detached from mutable owner state. */
-  getWalletSnapshot(): UiSnapshot;
-  /** Subscribe to post-subscription invalidations; callers read the initial snapshot explicitly. */
-  subscribe(listener: CoreReadChangeListener): CoreUnsubscribe;
-}>;
-
 export type CoreRuntime = Readonly<{
   provider: CoreProviderApi;
-  wallet: WalletApi;
+  wallet: TrustedWalletApi;
   read: CoreReadApi;
 }>;
 

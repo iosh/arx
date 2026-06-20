@@ -24,9 +24,9 @@ export type {
   SelectWalletChainInput,
   SetAutoLockDurationInput,
   SwitchActiveAccountInput,
+  TrustedWalletApi,
   UnhideHdAccountInput,
   UnlockSessionInput,
-  WalletApi,
 } from "./api.js";
 export {
   ApprovalResolveInputSchema,

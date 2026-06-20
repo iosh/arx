@@ -1,4 +1,5 @@
 import type { ApprovalResolveInput, ApprovalResolveResult } from "../../../approvals/queue/types.js";
+import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import { buildTransactionTerminalReason } from "../../../transactions/index.js";
 import type { TransactionsService } from "../../../transactions/TransactionsService.js";
 import type { UiMethodParams } from "../../protocol/index.js";
@@ -57,7 +58,10 @@ export const createApprovalResolveService = (deps: ApprovalResolveServiceDeps) =
     }
 
     if (!input.expectedPrepareId) {
-      throw new Error("Send-transaction approval requires expectedPrepareId.");
+      throw new RpcInvalidParamsError({
+        message: "Send-transaction approval requires expectedPrepareId.",
+        details: { approvalId: input.approvalId },
+      });
     }
 
     const result = await deps.transactions.approveAndSubmitTransaction({

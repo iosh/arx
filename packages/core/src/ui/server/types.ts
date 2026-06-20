@@ -3,11 +3,13 @@ import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { PermissionsEvents } from "../../permissions/service/types.js";
+import type { CoreReadApi } from "../../read/types.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
+import type { TrustedWalletApi } from "../../wallet/api.js";
 import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
@@ -49,11 +51,6 @@ export type UiHandlers = {
 export type UiMethodHandlerMap = Partial<UiHandlers>;
 
 export type UiSnapshotBuilder = () => UiSnapshot;
-
-export type UiWalletSnapshotReadModel = {
-  getWalletSnapshot: UiSnapshotBuilder;
-  subscribe: UiStateChangeSubscription;
-};
 
 export type UiResolvedContext = {
   namespace: string;
@@ -167,6 +164,8 @@ export type UiRuntimeBridgeAccess = {
 
 export type UiRuntimeServerDeps = {
   access: UiServerAccess;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
   platform: UiPlatformAdapter;
   uiOrigin: string;
   createId?: () => string;
@@ -175,20 +174,22 @@ export type UiRuntimeServerDeps = {
 
 export type UiServerRuntimeDeps = {
   access: UiServerAccess;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
-  buildSnapshot?: UiSnapshotBuilder;
   extensions?: readonly UiServerExtension[];
 };
 
 export type UiRuntimeDeps = {
   server: UiRuntimeServerDeps;
   bridge: UiRuntimeBridgeAccess;
-  read?: UiWalletSnapshotReadModel;
 };
 
 export type UiHandlerDeps = {
   access: UiServerAccess;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
   buildSnapshot: UiSnapshotBuilder;

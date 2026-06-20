@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import type { CoreReadApi } from "../../read/types.js";
 import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
+import type { TrustedWalletApi } from "../../wallet/api.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
@@ -8,7 +10,7 @@ import {
 } from "../protocol/events.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 import { createUiRuntimeAccess } from "./access.js";
-import type { UiTransactionsAccess, UiWalletSnapshotReadModel } from "./types.js";
+import type { UiTransactionsAccess } from "./types.js";
 
 const createTransactionAccess = () =>
   ({
@@ -89,9 +91,46 @@ const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSn
   },
 });
 
-const createUiAccess = (options: { read?: UiWalletSnapshotReadModel } = {}) =>
-  createUiRuntimeAccess({
+const createTrustedWalletStub = (): TrustedWalletApi =>
+  new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop === "string") {
+          return async () => {
+            throw new Error(`Unexpected TrustedWalletApi method in ui access test: ${prop}`);
+          };
+        }
+        return undefined;
+      },
+    },
+  ) as TrustedWalletApi;
+
+const createReadModel = (options: { snapshot?: UiSnapshot; listeners?: Set<() => void> } = {}) =>
+  ({
+    getWalletSnapshot: vi.fn(() => options.snapshot ?? createUiSnapshot()),
+    listKeyrings: async () => [],
+    getAccountsByKeyring: async () => [],
+    getBackupStatus: () => ({ pendingHdKeyringCount: 0, nextHdKeyring: null }),
+    listPendingApprovals: async () => [],
+    getApprovalDetail: async () => null,
+    listTransactions: async () => [],
+    getTransactionDetail: async () => null,
+    subscribe: vi.fn((listener: () => void) => {
+      options.listeners?.add(listener);
+      return () => {
+        options.listeners?.delete(listener);
+      };
+    }),
+  }) satisfies CoreReadApi;
+
+const createUiAccess = (options: { read?: CoreReadApi } = {}) => {
+  const read = options.read ?? createReadModel();
+
+  return createUiRuntimeAccess({
     server: {
+      wallet: createTrustedWalletStub(),
+      read,
       access: {
         accounts: {
           getState: () => ({ namespaces: {}, updatedAt: 0 }),
@@ -191,8 +230,8 @@ const createUiAccess = (options: { read?: UiWalletSnapshotReadModel } = {}) =>
         attention: { onStateChanged: () => () => {} },
       },
     },
-    ...(options.read ? { read: options.read } : {}),
   });
+};
 
 const approvalFinishedHandlers = new Set<(event: { approvalId: string }) => void>();
 const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => void>();
@@ -202,15 +241,7 @@ describe("createUiRuntimeAccess", () => {
   it("uses injected wallet read model for snapshot query, event, and invalidation", async () => {
     const snapshot = createUiSnapshot("eip155:10");
     const listeners = new Set<() => void>();
-    const read = {
-      getWalletSnapshot: vi.fn(() => snapshot),
-      subscribe: vi.fn((listener: () => void) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      }),
-    } satisfies UiWalletSnapshotReadModel;
+    const read = createReadModel({ snapshot, listeners });
     const access = createUiAccess({ read });
 
     const event = access.buildSnapshotEvent();
@@ -240,7 +271,7 @@ describe("createUiRuntimeAccess", () => {
       id: "snapshot-1",
       result: snapshot,
     });
-    expect(read.getWalletSnapshot).toHaveBeenCalledTimes(2);
+    expect(read.getWalletSnapshot).toHaveBeenCalledTimes(3);
     expect(read.subscribe).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listeners.size).toBe(0);

@@ -1,46 +1,12 @@
-import * as Value from "ox/Value";
-import { ChainNotSupportedError } from "../../../chains/errors.js";
-import { PermissionDeniedError } from "../../../permissions/errors.js";
-import { RpcInvalidParamsError } from "../../../rpc/errors.js";
-import type { JsonValue } from "../../../transactions/aggregate/index.js";
+import type { CoreReadApi } from "../../../read/types.js";
 import type { ListTransactionsQuery } from "../../../transactions/TransactionsService.js";
-import type { TransactionRequest } from "../../../transactions/types.js";
-import type { UiMethodParams } from "../../protocol/index.js";
-import type {
-  UiAccountsAccess,
-  UiChainsAccess,
-  UiHandlers,
-  UiNamespaceBindingsAccess,
-  UiSessionAccess,
-  UiSurfaceIdentity,
-  UiTransactionsAccess,
-} from "../types.js";
-import { assertUnlocked } from "./lib.js";
-
-const buildListTransactionsQuery = (
-  input: UiMethodParams<"ui.transactions.listHistory">,
-): ListTransactionsQuery | undefined => {
-  if (input === undefined) {
-    return undefined;
-  }
-
-  return {
-    ...(input.namespace !== undefined ? { namespace: input.namespace } : {}),
-    ...(input.chainRef !== undefined ? { chainRef: input.chainRef } : {}),
-    ...(input.accountKey !== undefined ? { accountKey: input.accountKey } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    ...(input.limit !== undefined ? { limit: input.limit } : {}),
-    ...(input.before !== undefined ? { before: input.before } : {}),
-  };
-};
+import type { TrustedWalletApi } from "../../../wallet/api.js";
+import type { ListTransactionsQuery as UiListTransactionsQuery } from "../../protocol/models/transactions.js";
+import type { UiHandlers } from "../types.js";
 
 export const createTransactionsHandlers = (deps: {
-  transactions: UiTransactionsAccess;
-  chains: UiChainsAccess;
-  accounts: Pick<UiAccountsAccess, "getActiveAccountForNamespace">;
-  session: UiSessionAccess;
-  namespaceBindings: UiNamespaceBindingsAccess;
-  surface: UiSurfaceIdentity;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
 }): Pick<
   UiHandlers,
   | "ui.transactions.listHistory"
@@ -50,87 +16,37 @@ export const createTransactionsHandlers = (deps: {
   | "ui.transactions.applyDraftEdit"
 > => {
   return {
-    "ui.transactions.listHistory": async (query) => {
-      assertUnlocked(deps.session);
-      return await deps.transactions.listTransactions(buildListTransactionsQuery(query));
-    },
-    "ui.transactions.getDetail": async ({ transactionId }) => {
-      assertUnlocked(deps.session);
-      return await deps.transactions.getTransaction(transactionId);
-    },
-    "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
-      assertUnlocked(deps.session);
-
-      const resolvedChainRef = chainRef ?? deps.chains.getSelectedChainView().chainRef;
-      const chain = deps.chains.findAvailableChainView({ chainRef: resolvedChainRef });
-      if (!chain) {
-        throw new ChainNotSupportedError({
-          message: `Send transaction is not supported for chain "${resolvedChainRef}" yet.`,
-        });
-      }
-      const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
-      const sendSupported =
-        Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);
-      if (!sendSupported || !uiBindings?.createSendTransactionRequest) {
-        throw new ChainNotSupportedError({
-          message: `Send transaction is not supported for namespace "${chain.namespace}" yet.`,
-        });
+    "ui.transactions.listHistory": async (input: UiListTransactionsQuery) => {
+      if (input === undefined) {
+        return await deps.read.listTransactions();
       }
 
-      const activeAccount = deps.accounts.getActiveAccountForNamespace({
-        namespace: chain.namespace,
-        chainRef: resolvedChainRef,
-      });
-      if (!activeAccount) {
-        throw new PermissionDeniedError();
+      const query: ListTransactionsQuery = {};
+      if (input.namespace !== undefined) {
+        query.namespace = input.namespace;
+      }
+      if (input.chainRef !== undefined) {
+        query.chainRef = input.chainRef;
+      }
+      if (input.accountKey !== undefined) {
+        query.accountKey = input.accountKey;
+      }
+      if (input.status !== undefined) {
+        query.status = input.status;
+      }
+      if (input.limit !== undefined) {
+        query.limit = input.limit;
+      }
+      if (input.before !== undefined) {
+        query.before = input.before;
       }
 
-      const trimmedValue = valueEther.trim();
-      let wei: bigint;
-      try {
-        wei = Value.fromEther(trimmedValue);
-      } catch (error) {
-        throw new RpcInvalidParamsError({
-          message: "Invalid amount",
-          cause: error,
-        });
-      }
-
-      const request: TransactionRequest = uiBindings.createSendTransactionRequest({
-        chainRef: resolvedChainRef,
-        to,
-        valueWei: wei,
-      });
-
-      const approval = await deps.transactions.requestTransactionApproval({
-        namespace: chain.namespace,
-        chainRef: resolvedChainRef,
-        origin: deps.surface.origin,
-        source: "wallet-ui",
-        requestId: crypto.randomUUID(),
-        accountKey: activeAccount.accountKey,
-        approvalId: crypto.randomUUID(),
-        request: {
-          kind: `${chain.namespace}.wallet.native_transfer`,
-          payload: request.payload as JsonValue,
-        },
-      });
-
-      return { approvalId: approval.approval.approvalId };
+      return await deps.read.listTransactions(query);
     },
-    "ui.transactions.rerunPrepare": async ({ approvalId }) => {
-      assertUnlocked(deps.session);
-      await deps.transactions.rerunApprovalPrepare({ approvalId });
-      return null;
-    },
-    "ui.transactions.applyDraftEdit": async ({ approvalId, edit, mode }) => {
-      assertUnlocked(deps.session);
-      await deps.transactions.updateApprovalDraft({
-        approvalId,
-        edit,
-        ...(mode ? { mode } : {}),
-      });
-      return null;
-    },
+    "ui.transactions.getDetail": async (input) => await deps.read.getTransactionDetail(input),
+    "ui.transactions.requestSendTransactionApproval": async (input) =>
+      await deps.wallet.requestSendTransactionApproval(input),
+    "ui.transactions.rerunPrepare": async (input) => await deps.wallet.rerunTransactionPrepare(input),
+    "ui.transactions.applyDraftEdit": async (input) => await deps.wallet.applyTransactionDraftEdit(input),
   };
 };

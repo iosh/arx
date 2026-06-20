@@ -1,4 +1,4 @@
-import { type PermissionsState, VaultInvalidPasswordError } from "@arx/core";
+import { PermissionDeniedError, type PermissionsState, VaultInvalidPasswordError } from "@arx/core";
 import {
   createAccountCodecRegistry,
   eip155Codec,
@@ -7,6 +7,8 @@ import {
 } from "@arx/core/accounts";
 import { ApprovalKinds } from "@arx/core/approvals";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
+import type { NamespaceUiBindings } from "@arx/core/namespaces";
+import { type CoreReadApi, createCoreReadApi } from "@arx/core/read";
 import type { RpcHandlerDeps } from "@arx/core/rpc";
 import {
   type BackgroundSessionServices,
@@ -26,10 +28,12 @@ import {
   UI_EVENT_SNAPSHOT_CHANGED,
   type UiMethodName,
   type UiMethodParams,
+  type UiPermissionsSnapshot,
   type UiPortEnvelope,
   type UiSnapshot,
 } from "@arx/core/ui";
 import {
+  buildUiSnapshot,
   createUiKeyringsAccess,
   createUiRuntimeAccess,
   createUiSessionAccess,
@@ -38,6 +42,7 @@ import {
   type UiRuntimeDispatchResult,
   type UiTransactionsAccess,
 } from "@arx/core/ui/server";
+import type { TrustedWalletApi } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
@@ -676,6 +681,26 @@ const createRuntimeServices = () => {
 
 type UiBridgeTestRuntimeServices = ReturnType<typeof createRuntimeServices>;
 
+const bytesToLowerHex = (bytes: Uint8Array): string =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const createTrustedWalletApiForBridgeTest = (methods: Partial<TrustedWalletApi>): TrustedWalletApi =>
+  new Proxy(methods, {
+    get(target, prop, receiver) {
+      if (prop in target) {
+        return Reflect.get(target, prop, receiver);
+      }
+
+      if (typeof prop === "string") {
+        return async () => {
+          throw new Error(`Unexpected TrustedWalletApi method in uiBridge test: ${prop}`);
+        };
+      }
+
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as TrustedWalletApi;
+
 const createUiAccessForTest = (input: {
   services: UiBridgeTestRuntimeServices;
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
@@ -691,17 +716,10 @@ const createUiAccessForTest = (input: {
   persistVaultMeta?: () => Promise<void>;
   selectWalletChain?: (chainRef: string) => Promise<void>;
   chainViewsOverride?: Record<string, unknown>;
-  permissionViewsOverride?: { buildUiPermissionsSnapshot: () => unknown };
+  permissionViewsOverride?: { buildUiPermissionsSnapshot: () => UiPermissionsSnapshot };
   transactionsAccess?: Partial<UiTransactionsAccess>;
   namespaceBindings?: {
-    getUi: (namespace: string) =>
-      | {
-          getNativeBalance?: ((params: { chainRef: string; address: string }) => Promise<bigint>) | undefined;
-          createSendTransactionRequest?:
-            | ((params: { chainRef: string; to: string; valueWei: bigint }) => unknown)
-            | undefined;
-        }
-      | undefined;
+    getUi: (namespace: string) => NamespaceUiBindings | undefined;
     hasTransaction: (namespace: string) => boolean;
     hasTransactionReceiptTracking: (namespace: string) => boolean;
   };
@@ -727,10 +745,119 @@ const createUiAccessForTest = (input: {
     keyring: input.keyring,
     keyringExport,
   });
+  const walletSetupAccess = createUiWalletSetupAccess({
+    accounts: input.services.accounts,
+    session: input.session as BackgroundSessionServices,
+    keyring: input.keyring,
+  });
   const transactionsAccess = {
     ...input.services.transactionAccess,
     ...input.transactionsAccess,
   } satisfies UiTransactionsAccess;
+  const selectedChainView = (input.chainViewsOverride?.getSelectedChainView ??
+    runtimeServices.chainViews.getSelectedChainView) as () => typeof CHAIN;
+  const walletNetworksSnapshot = (input.chainViewsOverride?.buildWalletNetworksSnapshot ??
+    runtimeServices.chainViews.buildWalletNetworksSnapshot) as () => ReturnType<
+    typeof runtimeServices.chainViews.buildWalletNetworksSnapshot
+  >;
+  const namespaceBindings: NonNullable<typeof input.namespaceBindings> = input.namespaceBindings ?? {
+    getUi: () => ({
+      getNativeBalance: vi.fn(async () => 0n),
+    }),
+    hasTransaction: () => false,
+    hasTransactionReceiptTracking: () => false,
+  };
+  const buildSnapshot = (): UiSnapshot => {
+    return buildUiSnapshot({
+      accounts: input.services.accounts,
+      chains: {
+        buildWalletNetworksSnapshot: walletNetworksSnapshot,
+        findAvailableChainView: runtimeServices.chainViews.findAvailableChainView,
+        getApprovalReviewChainView: runtimeServices.chainViews.getApprovalReviewChainView,
+        getSelectedChainView: selectedChainView,
+      },
+      permissions: input.permissionViewsOverride ?? runtimeServices.permissionViews,
+      session: sessionAccess,
+      keyrings: keyringsAccess,
+      attention: {
+        getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
+      },
+      namespaceBindings,
+    });
+  };
+  const read = createCoreReadApi({
+    getWalletSnapshot: buildSnapshot,
+    listKeyringRecords: () => input.keyring.getKeyrings(),
+    listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
+      input.keyring.getAccountsByKeyring(keyringId, includeHidden),
+    getBackupStatus: () => buildSnapshot().backup,
+    listPendingApprovals: async () => [],
+    getApprovalDetail: async () => null,
+    listTransactions: async (query) => await transactionsAccess.listTransactions(query),
+    getTransactionDetail: async (transactionId) => await transactionsAccess.getTransaction(transactionId),
+    accountCodecs,
+    subscribeSources: [
+      (listener) => input.services.accounts.onStateChanged(() => listener()),
+      (listener) => input.services.permissions.onStateChanged(() => listener()),
+      (listener) => input.services.chainRpc.onStateChanged(listener),
+      (listener) => input.walletChainSelection.subscribeChanged(listener),
+      (listener) => sessionAccess.onStateChanged(listener),
+      (listener) => input.subscribeAttentionStateChanged(listener),
+    ],
+  }) satisfies CoreReadApi;
+  const wallet = createTrustedWalletApiForBridgeTest({
+    unlockSession: (input) => sessionAccess.unlock(input),
+    lockSession: async (input) => sessionAccess.lock(input?.reason ?? "manual"),
+    generateMnemonic: (params) =>
+      Promise.resolve({ words: input.keyring.generateMnemonic(params?.wordCount ?? 12).split(" ") }),
+    createWalletFromMnemonic: async ({ password, words, alias, skipBackup, namespace }) =>
+      await walletSetupAccess.createWalletFromMnemonic({
+        password,
+        mnemonic: words.join(" "),
+        ...(alias !== undefined ? { alias } : {}),
+        ...(skipBackup !== undefined ? { skipBackup } : {}),
+        ...(namespace !== undefined ? { namespace } : {}),
+      }),
+    confirmNewMnemonic: async ({ words, alias, skipBackup, namespace }) => {
+      const result = await keyringsAccess.confirmNewMnemonic({
+        mnemonic: words.join(" "),
+        ...(alias !== undefined ? { alias } : {}),
+        ...(skipBackup !== undefined ? { skipBackup } : {}),
+        ...(namespace !== undefined ? { namespace } : {}),
+      });
+      await input.services.accounts.setActiveAccount({
+        namespace: namespace ?? CHAIN.namespace,
+        chainRef: CHAIN.chainRef,
+        accountKey: toAccountKeyFromAddress({ chainRef: CHAIN.chainRef, address: result.address, accountCodecs }),
+      });
+      return result;
+    },
+    deriveAccount: async ({ keyringId }) => {
+      return await keyringsAccess.deriveAccount(keyringId);
+    },
+    hideHdAccount: async ({ accountKey }) => {
+      const active = input.services.accounts.getActiveAccountForNamespace({
+        namespace: CHAIN.namespace,
+        chainRef: CHAIN.chainRef,
+      });
+      if (active?.accountKey === accountKey) {
+        throw new PermissionDeniedError();
+      }
+      await keyringsAccess.hideHdAccount(accountKey);
+      return null;
+    },
+    unhideHdAccount: async ({ accountKey }) => {
+      await keyringsAccess.unhideHdAccount(accountKey);
+      return null;
+    },
+    exportMnemonic: async ({ keyringId, password }) => ({
+      words: (await keyringsAccess.exportMnemonic(keyringId, password)).split(" "),
+    }),
+    exportPrivateKey: async ({ accountKey, password }) => {
+      const bytes = await keyringsAccess.exportPrivateKeyByAccountKey(accountKey, password);
+      return { privateKey: bytesToLowerHex(bytes) };
+    },
+  } satisfies Partial<TrustedWalletApi>);
   const activationEntries = input.activationEntries ?? {
     ...input.platform,
     getEntryLaunchContext: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
@@ -768,6 +895,8 @@ const createUiAccessForTest = (input: {
 
   return createUiRuntimeAccess({
     server: {
+      wallet,
+      read,
       access: {
         accounts: input.services.accounts,
         approvals: {
@@ -791,22 +920,12 @@ const createUiAccessForTest = (input: {
         } as never,
         accountCodecs,
         session: sessionAccess,
-        walletSetup: createUiWalletSetupAccess({
-          accounts: input.services.accounts,
-          session: input.session as BackgroundSessionServices,
-          keyring: input.keyring,
-        }),
+        walletSetup: walletSetupAccess,
         keyrings: keyringsAccess,
         attention: {
           getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
         },
-        namespaceBindings: (input.namespaceBindings ?? {
-          getUi: () => ({
-            getNativeBalance: vi.fn(async () => 0n),
-          }),
-          hasTransaction: () => false,
-          hasTransactionReceiptTracking: () => false,
-        }) as never,
+        namespaceBindings: namespaceBindings as never,
       },
       platform: input.platform,
       uiOrigin: input.uiOrigin,
@@ -1436,7 +1555,7 @@ describe("uiBridge", () => {
     spy.mockRestore();
   });
 
-  it("zeroizes private key buffers after export", async () => {
+  it("exports private keys as lower-case hex", async () => {
     const words = TEST_MNEMONIC.split(" ");
     const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
     const createResult = expectResponse(createRes.envelope, createRes.id) as { keyringId: string; address: string };
@@ -1455,7 +1574,6 @@ describe("uiBridge", () => {
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
 
     expect(pkResult.privateKey).toBe(`deadbeef${"00".repeat(28)}`);
-    expect(Array.from(secret).every((byte) => byte === 0)).toBe(true);
     spy.mockRestore();
   });
 

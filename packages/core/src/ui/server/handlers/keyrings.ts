@@ -1,33 +1,15 @@
-import { getAccountKeyNamespace } from "../../../accounts/addressing/accountKey.js";
-import { PermissionDeniedError } from "../../../permissions/errors.js";
-import type {
-  UiConfirmNewMnemonicParams,
-  UiImportMnemonicParams,
-  UiImportPrivateKeyParams,
-} from "../keyringsAccess.js";
-import type {
-  UiAccountCodecsAccess,
-  UiAccountsAccess,
-  UiChainsAccess,
-  UiHandlers,
-  UiKeyringsAccess,
-  UiSessionAccess,
-} from "../types.js";
-import {
-  assertUnlocked,
-  resolveUiChainRefForNamespace,
-  toPlainHex,
-  toUiAccountMeta,
-  toUiKeyringMeta,
-  withSensitiveBytes,
-} from "./lib.js";
+import type { CoreReadApi } from "../../../read/types.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
+import type { UiHandlers } from "../types.js";
+
+const buildAccountsByKeyringInput = (input: { keyringId: string; includeHidden?: boolean | undefined }) => ({
+  keyringId: input.keyringId,
+  ...(input.includeHidden !== undefined ? { includeHidden: input.includeHidden } : {}),
+});
 
 export const createKeyringsHandlers = (deps: {
-  accounts: UiAccountsAccess;
-  chains: UiChainsAccess;
-  accountCodecs: UiAccountCodecsAccess;
-  session: UiSessionAccess;
-  keyrings: UiKeyringsAccess;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
 }): Pick<
   UiHandlers,
   | "ui.keyrings.confirmNewMnemonic"
@@ -45,130 +27,21 @@ export const createKeyringsHandlers = (deps: {
   | "ui.keyrings.exportMnemonic"
   | "ui.keyrings.exportPrivateKey"
 > => {
-  const selectAccount = async (params: { namespace: string | undefined; accountKey: string }) => {
-    const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
-    const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
-    await deps.accounts.setActiveAccount({ namespace, chainRef, accountKey: params.accountKey });
-  };
-
   return {
-    "ui.keyrings.confirmNewMnemonic": async (params) => {
-      assertUnlocked(deps.session);
-      const { words, ...keyringParams } = params;
-      const result = await deps.keyrings.confirmNewMnemonic({
-        mnemonic: words.join(" "),
-        ...keyringParams,
-      } as UiConfirmNewMnemonicParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
-      await selectAccount({
-        accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
-          address: result.address,
-        }),
-        namespace: params.namespace,
-      });
-      return result;
-    },
-
-    "ui.keyrings.importMnemonic": async (params) => {
-      assertUnlocked(deps.session);
-      const { words, ...keyringParams } = params;
-      const result = await deps.keyrings.importMnemonic({
-        mnemonic: words.join(" "),
-        ...keyringParams,
-      } as UiImportMnemonicParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
-      await selectAccount({
-        accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
-          address: result.address,
-        }),
-        namespace: params.namespace,
-      });
-      return result;
-    },
-
-    "ui.keyrings.importPrivateKey": async (params) => {
-      assertUnlocked(deps.session);
-      const result = await deps.keyrings.importPrivateKey(params as UiImportPrivateKeyParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
-      await selectAccount({
-        accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
-          address: result.account.address,
-        }),
-        namespace: params.namespace,
-      });
-      return result;
-    },
-
-    "ui.keyrings.deriveAccount": async (params) => {
-      assertUnlocked(deps.session);
-      return await deps.keyrings.deriveAccount(params.keyringId);
-    },
-
-    "ui.keyrings.list": async () => {
-      assertUnlocked(deps.session);
-      const metas = deps.keyrings.getKeyrings();
-      return metas.map(toUiKeyringMeta);
-    },
-
-    "ui.keyrings.getAccountsByKeyring": async (params) => {
-      assertUnlocked(deps.session);
-      const records = deps.keyrings.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
-      return records.map((record) => toUiAccountMeta(deps.accountCodecs, record));
-    },
-
-    "ui.keyrings.renameKeyring": async (params) => {
-      assertUnlocked(deps.session);
-      await deps.keyrings.renameKeyring(params.keyringId, params.alias);
-      return null;
-    },
-
-    "ui.keyrings.renameAccount": async (params) => {
-      assertUnlocked(deps.session);
-      await deps.keyrings.renameAccount(params.accountKey, params.alias);
-      return null;
-    },
-
-    "ui.keyrings.markBackedUp": async (params) => {
-      assertUnlocked(deps.session);
-      await deps.keyrings.markBackedUp(params.keyringId);
-      return null;
-    },
-
-    "ui.keyrings.hideHdAccount": async (params) => {
-      assertUnlocked(deps.session);
-      const namespace = getAccountKeyNamespace(params.accountKey);
-      const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
-      const activeAccount = deps.accounts.getActiveAccountForNamespace({ namespace, chainRef });
-      if (activeAccount?.accountKey === params.accountKey) {
-        throw new PermissionDeniedError();
-      }
-      await deps.keyrings.hideHdAccount(params.accountKey);
-      return null;
-    },
-
-    "ui.keyrings.unhideHdAccount": async (params) => {
-      assertUnlocked(deps.session);
-      await deps.keyrings.unhideHdAccount(params.accountKey);
-      return null;
-    },
-
-    "ui.keyrings.removePrivateKeyKeyring": async (params) => {
-      assertUnlocked(deps.session);
-      await deps.keyrings.removePrivateKeyKeyring(params.keyringId);
-      return null;
-    },
-
-    "ui.keyrings.exportMnemonic": async (params) => {
-      return { words: (await deps.keyrings.exportMnemonic(params.keyringId, params.password)).split(" ") };
-    },
-
-    "ui.keyrings.exportPrivateKey": async (params) => {
-      const secret = await deps.keyrings.exportPrivateKeyByAccountKey(params.accountKey, params.password);
-      const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
-      return { privateKey };
-    },
+    "ui.keyrings.confirmNewMnemonic": async (input) => await deps.wallet.confirmNewMnemonic(input),
+    "ui.keyrings.importMnemonic": async (input) => await deps.wallet.importMnemonic(input),
+    "ui.keyrings.importPrivateKey": async (input) => await deps.wallet.importPrivateKey(input),
+    "ui.keyrings.deriveAccount": async (input) => await deps.wallet.deriveAccount(input),
+    "ui.keyrings.list": async () => await deps.read.listKeyrings(),
+    "ui.keyrings.getAccountsByKeyring": async (input) =>
+      await deps.read.getAccountsByKeyring(buildAccountsByKeyringInput(input)),
+    "ui.keyrings.renameKeyring": async (input) => await deps.wallet.renameKeyring(input),
+    "ui.keyrings.renameAccount": async (input) => await deps.wallet.renameAccount(input),
+    "ui.keyrings.markBackedUp": async (input) => await deps.wallet.markBackedUp(input),
+    "ui.keyrings.hideHdAccount": async (input) => await deps.wallet.hideHdAccount(input),
+    "ui.keyrings.unhideHdAccount": async (input) => await deps.wallet.unhideHdAccount(input),
+    "ui.keyrings.removePrivateKeyKeyring": async (input) => await deps.wallet.removePrivateKeyKeyring(input),
+    "ui.keyrings.exportMnemonic": async (input) => await deps.wallet.exportMnemonic(input),
+    "ui.keyrings.exportPrivateKey": async (input) => await deps.wallet.exportPrivateKey(input),
   };
 };

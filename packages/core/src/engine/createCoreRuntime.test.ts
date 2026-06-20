@@ -27,6 +27,7 @@ const ORIGIN = "https://dapp.example";
 const EIP155_NAMESPACE = "eip155";
 const EIP155_CHAIN_REF = "eip155:1" as const;
 const ACCOUNT_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
+const PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 const ACCOUNT_KEY = toAccountKeyFromAddress({
   chainRef: EIP155_CHAIN_REF,
   address: ACCOUNT_ADDRESS,
@@ -203,19 +204,73 @@ describe("createCoreRuntime", () => {
     await expect(core.wallet.generateMnemonic()).resolves.toMatchObject({
       words: expect.arrayContaining([expect.any(String)]),
     });
-    await expect(
-      core.wallet.createWalletFromMnemonic({
-        password: PASSWORD,
-        words: TEST_MNEMONIC.split(" "),
-      }),
-    ).resolves.toMatchObject({
+    const created = await core.wallet.createWalletFromMnemonic({
+      password: PASSWORD,
+      words: TEST_MNEMONIC.split(" "),
+    });
+    expect(created).toMatchObject({
       keyringId: expect.any(String),
       address: expect.stringMatching(/^0x[0-9a-f]+$/i),
     });
+    await expect(core.wallet.deriveAccount({ keyringId: created.keyringId })).resolves.toMatchObject({
+      address: expect.stringMatching(/^0x[0-9a-f]+$/i),
+    });
+    const privateKeyImport = await core.wallet.importPrivateKey({ privateKey: PRIVATE_KEY });
+    expect(privateKeyImport).toMatchObject({
+      keyringId: expect.any(String),
+      account: { address: expect.stringMatching(/^0x[0-9a-f]+$/i) },
+    });
+    await expect(
+      core.wallet.exportPrivateKey({
+        accountKey: toAccountKeyFromAddress({
+          chainRef: EIP155_CHAIN_REF,
+          address: privateKeyImport.account.address,
+          accountCodecs: TEST_ACCOUNT_CODECS,
+        }),
+        password: PASSWORD,
+      }),
+    ).resolves.toEqual({ privateKey: PRIVATE_KEY });
+    await expect(core.wallet.selectWalletChain({ chainRef: EIP155_CHAIN_REF })).resolves.toMatchObject({
+      chainRef: EIP155_CHAIN_REF,
+      namespace: EIP155_NAMESPACE,
+    });
+    const accountKey = toAccountKeyFromAddress({
+      chainRef: EIP155_CHAIN_REF,
+      address: created.address,
+      accountCodecs: TEST_ACCOUNT_CODECS,
+    });
+    await expect(core.wallet.switchActiveAccount({ chainRef: EIP155_CHAIN_REF, accountKey })).resolves.toMatchObject({
+      accountKey,
+      canonicalAddress: created.address,
+    });
     expect(core.read.getWalletSnapshot()).toMatchObject({
       vault: { initialized: true },
-      accounts: { totalCount: 1 },
+      accounts: { totalCount: 3 },
     });
+    expect(core.read.listKeyrings()).toHaveLength(2);
+    expect(core.read.getBackupStatus()).toMatchObject({ pendingHdKeyringCount: 1 });
+    expect(core.read.getAccountsByKeyring({ keyringId: created.keyringId })).toHaveLength(2);
+    await expect(core.read.listPendingApprovals()).resolves.toEqual([]);
+    await expect(core.read.getApprovalDetail({ approvalId: "missing" })).resolves.toBeNull();
+    await expect(core.read.listTransactions()).resolves.toEqual([]);
+    await expect(core.read.getTransactionDetail({ transactionId: "missing" })).resolves.toBeNull();
+  });
+
+  it("runs session wallet API methods through wallet actions", async () => {
+    const core = await createCoreRuntime(createCoreRuntimeInput());
+
+    await core.wallet.createWalletFromMnemonic({
+      password: PASSWORD,
+      words: TEST_MNEMONIC.split(" "),
+    });
+    expect(core.read.getWalletSnapshot().session).toMatchObject({ isUnlocked: true });
+
+    await expect(core.wallet.resetAutoLockTimer()).resolves.toMatchObject({ status: "unlocked" });
+    await expect(core.wallet.setAutoLockDuration({ durationMs: 5 * 60 * 1000 })).resolves.toMatchObject({
+      autoLockDurationMs: 5 * 60 * 1000,
+    });
+    await expect(core.wallet.lockSession()).resolves.toMatchObject({ status: "locked" });
+    await expect(core.wallet.unlockSession({ password: PASSWORD })).resolves.toMatchObject({ status: "unlocked" });
   });
 
   it("emits read invalidation when wallet state changes", async () => {

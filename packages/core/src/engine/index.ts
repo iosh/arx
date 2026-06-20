@@ -1,5 +1,5 @@
 export type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
-export type { WalletApi } from "../wallet/index.js";
+export type { TrustedWalletApi } from "../wallet/index.js";
 export type {
   CoreLogger,
   CoreProviderApi,

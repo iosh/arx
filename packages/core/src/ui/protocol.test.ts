@@ -84,8 +84,8 @@ describe("ui protocol registry", () => {
     expect(params.durationMs).toBe(60_000);
     expect(() => parseUiMethodParams("ui.session.setAutoLockDuration", { durationMs: "60_000" })).toThrow();
 
-    expect(parseUiMethodParams("ui.session.lock", undefined)).toBeUndefined();
-    expect(parseUiMethodParams("ui.session.lock", {})).toEqual({});
+    expect(parseUiMethodParams("ui.session.lock", undefined)).toEqual({ reason: "manual" });
+    expect(parseUiMethodParams("ui.session.lock", {})).toEqual({ reason: "manual" });
     expect(() => parseUiMethodParams("ui.session.lock", { reason: "__bad__" })).toThrow();
 
     expect(

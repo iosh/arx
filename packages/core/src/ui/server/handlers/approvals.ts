@@ -1,17 +1,18 @@
-import type { UiApprovalsAccess, UiHandlers } from "../types.js";
+import type { CoreReadApi } from "../../../read/types.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
+import type { UiHandlers } from "../types.js";
 
 export const createApprovalsHandlers = ({
-  approvals,
+  wallet,
+  read,
 }: {
-  approvals: UiApprovalsAccess;
+  wallet: TrustedWalletApi;
+  read: CoreReadApi;
 }): Pick<UiHandlers, "ui.approvals.listPending" | "ui.approvals.getDetail" | "ui.approvals.resolve"> => ({
-  "ui.approvals.listPending": async () => approvals.read.listPendingEntries(),
-  "ui.approvals.getDetail": async ({ approvalId }) => approvals.read.getDetail(approvalId),
+  "ui.approvals.listPending": async () => await read.listPendingApprovals(),
+  "ui.approvals.getDetail": async (input) => await read.getApprovalDetail(input),
   "ui.approvals.resolve": async (input) => {
-    const result = await approvals.write.resolve(input);
-    if (result.status === "requires_review") {
-      throw new Error("Transaction approval changed. Review it again.");
-    }
+    await wallet.resolveApproval(input);
     return null;
   },
 });

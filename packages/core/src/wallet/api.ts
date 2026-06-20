@@ -16,10 +16,10 @@ import type {
   WalletApiResolveApprovalResult,
 } from "./types.js";
 
-type WalletApiInput<TSchema extends z.ZodTypeAny> = z.infer<TSchema>;
+type WalletApiInput<TSchema extends z.ZodTypeAny> = z.input<TSchema>;
 
 export type UnlockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.unlock>;
-export type LockSessionInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.session.lock>>;
+export type LockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.lock>;
 export type SetAutoLockDurationInput = WalletApiInput<typeof WalletApiSchemas.session.setAutoLockDuration>;
 
 export type GenerateMnemonicInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.onboarding.generateMnemonic>>;
@@ -65,7 +65,7 @@ export type ApplyTransactionDraftEditInput = Omit<
   edit: NamespaceTransactionDraftEdit;
 };
 
-export type WalletApi = Readonly<{
+export type TrustedWalletApi = Readonly<{
   unlockSession(input: UnlockSessionInput): Promise<SessionLockState>;
   lockSession(input?: LockSessionInput): Promise<SessionLockState>;
   resetAutoLockTimer(): Promise<SessionLockState>;
@@ -108,4 +108,4 @@ type WalletApiForbiddenKey =
   | "getRequestBroadcastPolicy"
   | "subscribeUiEvents";
 
-type _WalletApiDoesNotExposeProtocolKeys = AssertNever<Extract<keyof WalletApi, WalletApiForbiddenKey>>;
+type _TrustedWalletApiDoesNotExposeProtocolKeys = AssertNever<Extract<keyof TrustedWalletApi, WalletApiForbiddenKey>>;

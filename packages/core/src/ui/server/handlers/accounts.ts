@@ -1,6 +1,6 @@
-import { parseChainRef } from "../../../chains/caip.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
 import type { UiOwnedAccountSummary } from "../../protocol/schemas.js";
-import type { UiAccountsAccess, UiHandlers } from "../types.js";
+import type { UiHandlers } from "../types.js";
 
 const toUiOwnedAccountSummary = (account: {
   accountKey: string;
@@ -13,16 +13,11 @@ const toUiOwnedAccountSummary = (account: {
 });
 
 export const createAccountsHandlers = (deps: {
-  accounts: UiAccountsAccess;
+  wallet: TrustedWalletApi;
 }): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
-    "ui.accounts.switchActive": async ({ chainRef, accountKey }) => {
-      const { namespace } = parseChainRef(chainRef);
-      const active = await deps.accounts.setActiveAccount({
-        namespace,
-        chainRef,
-        accountKey: accountKey ?? null,
-      });
+    "ui.accounts.switchActive": async (input) => {
+      const active = await deps.wallet.switchActiveAccount(input);
       return active ? toUiOwnedAccountSummary(active) : null;
     },
   };

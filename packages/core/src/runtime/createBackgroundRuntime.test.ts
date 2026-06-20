@@ -3,7 +3,14 @@ import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
+import {
+  createWalletAccounts,
+  createWalletApprovals,
+  createWalletNetworks,
+  createWalletSession,
+} from "../engine/wallet.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
+import { createCoreReadApi } from "../read/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionRequest } from "../transactions/types.js";
@@ -12,8 +19,10 @@ import { createApprovalResolveService } from "../ui/server/approvals/resolveServ
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
+import { buildUiSnapshot } from "../ui/server/snapshot.js";
 import type { UiServerExtension } from "../ui/server/types.js";
 import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
+import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -191,8 +200,76 @@ const createHandlersForRuntime = (
     approvals: runtime.services.approvals,
     transactions: runtime.transactions,
   });
+  const walletAccounts = createWalletAccounts({
+    accounts: runtime.services.accounts,
+    keyring: runtime.services.keyring,
+    keyringExport: runtime.services.keyringExport,
+  });
+  const walletSession = createWalletSession({
+    session: runtime.services.session,
+    sessionStatus: runtime.services.sessionStatus,
+    keyring: runtime.services.keyring,
+  });
+  const walletNetworks = createWalletNetworks({
+    walletChainSelection: runtime.services.walletChainSelection,
+    supportedChains: runtime.services.supportedChains,
+    chainRpcEndpointOverrides: runtime.services.chainRpcEndpointOverrides,
+    chainViews: runtime.services.chainViews,
+    chainActivation: runtime.services.chainActivation,
+    chainRpc: runtime.services.chainRpc,
+  });
+  const wallet = createTrustedWalletApi({
+    session: walletSession,
+    accounts: walletAccounts,
+    networks: walletNetworks,
+    approvals: createWalletApprovals({
+      approvals: runtime.services.approvals,
+    }),
+    accountCodecs: runtime.services.accountCodecs,
+    createId: () => crypto.randomUUID(),
+    surface: {
+      origin: "chrome-extension://arx",
+    },
+    namespaceBindings: runtime.services.namespaceBindings,
+    transactions: runtime.transactions,
+  });
+  const read = createCoreReadApi({
+    getWalletSnapshot: () =>
+      buildUiSnapshot({
+        accounts: runtime.services.accounts,
+        chains: runtime.services.chainViews,
+        permissions: runtime.services.permissionViews,
+        session,
+        keyrings: runtime.services.keyring,
+        attention: runtime.services.attention,
+        namespaceBindings: runtime.services.namespaceBindings,
+      }),
+    listKeyringRecords: () => runtime.services.keyring.getKeyrings(),
+    listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
+      runtime.services.keyring.getAccountsByKeyring(keyringId, includeHidden),
+    getBackupStatus: () => walletAccounts.getBackupStatus(),
+    listPendingApprovals: async () => await approvalReadService.listPending(),
+    getApprovalDetail: async ({ approvalId }: { approvalId: string }) =>
+      await approvalReadService.getDetail(approvalId),
+    listTransactions: async (input?: Parameters<typeof runtime.transactions.listTransactions>[0]) =>
+      await runtime.transactions.listTransactions(input),
+    getTransactionDetail: async ({ transactionId }: { transactionId: string }) =>
+      await runtime.transactions.getTransaction(transactionId),
+    accountCodecs: runtime.services.accountCodecs,
+    subscribeSources: [
+      (listener) => runtime.services.accounts.onStateChanged(listener),
+      (listener) => runtime.services.permissions.onStateChanged(listener),
+      (listener) => runtime.services.chainRpc.onStateChanged(listener),
+      (listener) => runtime.services.walletChainSelection.subscribeChanged(listener),
+      (listener) => session.onStateChanged(listener),
+      (listener) => runtime.transactions.onTransactionsChanged(listener),
+      (listener) => runtime.transactions.onTransactionApprovalsChanged(listener),
+    ],
+  });
 
   return createUiServerRuntime({
+    wallet,
+    read,
     access: {
       accounts: runtime.services.accounts,
       approvals: {

@@ -19,6 +19,7 @@
     "./chains": "./src/chains/index.ts",
     "./namespaces": "./src/namespaces/index.ts",
     "./permissions": "./src/permissions/index.ts",
+    "./read": "./src/read/index.ts",
     "./rpc": "./src/rpc/index.ts",
     "./runtime": "./src/runtime/index.ts",
     "./transactions": "./src/transactions/index.ts",

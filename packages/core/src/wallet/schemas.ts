@@ -1,10 +1,10 @@
 import type { z } from "zod";
+import { WalletApiOnboardingSchemas } from "./actions/onboarding.js";
+import { WalletApiSessionSchemas } from "./actions/session.js";
 import { WalletApiAccountsSchemas } from "./schemas/accounts.js";
 import { ApprovalResolveInputSchema, WalletApiApprovalsSchemas } from "./schemas/approvals.js";
 import { WalletApiChainsSchemas } from "./schemas/chains.js";
 import { WalletApiKeyringsSchemas } from "./schemas/keyrings.js";
-import { WalletApiOnboardingSchemas } from "./schemas/onboarding.js";
-import { WalletApiSessionSchemas } from "./schemas/session.js";
 import { WalletApiSharedSchemas } from "./schemas/shared.js";
 import {
   WalletApiEip155TransactionDraftChangeSchema,

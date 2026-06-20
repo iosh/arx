@@ -1,20 +1,12 @@
-import type { UiChainsAccess, UiHandlers } from "../types.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
+import type { UiHandlers } from "../types.js";
 
-export const createNetworksHandlers = (
-  deps: { chains: UiChainsAccess },
-  toChainSnapshot: () => {
-    chainRef: string;
-    namespace: string;
-    displayName: string;
-    shortName: string | null;
-    icon: string | null;
-    nativeCurrency: { name: string; symbol: string; decimals: number };
-  },
-): Pick<UiHandlers, "ui.networks.switchActive"> => {
+export const createNetworksHandlers = (deps: {
+  wallet: TrustedWalletApi;
+}): Pick<UiHandlers, "ui.networks.switchActive"> => {
   return {
-    "ui.networks.switchActive": async ({ chainRef }) => {
-      await deps.chains.selectWalletChain(chainRef);
-      return toChainSnapshot();
+    "ui.networks.switchActive": async (input) => {
+      return await deps.wallet.selectWalletChain(input);
     },
   };
 };

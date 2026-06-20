@@ -42,34 +42,9 @@ const createUiSurfaceIdentity = (uiOrigin: string, createId: () => string): UiSu
 });
 
 const createUiStateChangedSubscription = ({
-  bridge,
-  read,
+  server,
 }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeStateChanged"] => {
-  if (read) {
-    return (listener) => read.subscribe(listener);
-  }
-
-  return (listener) => {
-    const notify = () => listener();
-    const unsubs = [
-      bridge.stateChanged.accounts.onStateChanged(notify),
-      bridge.stateChanged.chains.onStateChanged(notify),
-      bridge.stateChanged.permissions.onStateChanged(notify),
-      bridge.stateChanged.chains.onSelectionChanged(notify),
-      bridge.stateChanged.session.onStateChanged(notify),
-      bridge.stateChanged.attention.onStateChanged(notify),
-    ];
-
-    return () => {
-      unsubs.forEach((unsubscribe) => {
-        try {
-          unsubscribe();
-        } catch (error) {
-          accessLog("failed to remove ui runtime listener", error);
-        }
-      });
-    };
-  };
+  return (listener) => server.read.subscribe(listener);
 };
 
 const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeUiEvents"] => {
@@ -83,7 +58,7 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
     };
 
     const getContext = () => {
-      const chain = server.access.chains.getSelectedChainView();
+      const chain = server.read.getWalletSnapshot().chain;
       return {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
@@ -149,16 +124,17 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
   };
 };
 
-const createUiRuntimeCore = ({ server, bridge, read }: CreateUiRuntimeAccessOptions) => {
+const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
   const surface = createUiSurfaceIdentity(server.uiOrigin, server.createId ?? (() => globalThis.crypto.randomUUID()));
   const uiRuntime = createUiServerRuntime({
     access: server.access,
+    wallet: server.wallet,
+    read: server.read,
     platform: server.platform,
     surface,
-    ...(read ? { buildSnapshot: read.getWalletSnapshot } : {}),
     ...(server.extensions ? { extensions: server.extensions } : {}),
   });
-  const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge, ...(read ? { read } : {}) });
+  const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge });
   const subscribeUiEvents = createUiEventSubscription({ server, bridge });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {

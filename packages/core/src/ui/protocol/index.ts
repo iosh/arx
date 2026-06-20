@@ -13,7 +13,7 @@ export type UiEventName = keyof typeof uiEvents;
 
 type UiMethodDef<N extends UiMethodName> = (typeof uiMethods)[N];
 
-export type UiMethodParams<N extends UiMethodName> = z.infer<UiMethodDef<N>["paramsSchema"]>;
+export type UiMethodParams<N extends UiMethodName> = z.input<UiMethodDef<N>["paramsSchema"]>;
 export type UiMethodResult<N extends UiMethodName> = UiMethodResultMap[N];
 export type UiEventPayload<N extends UiEventName> = UiEventPayloadMap[N];
 

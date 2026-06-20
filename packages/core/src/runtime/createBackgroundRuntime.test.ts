@@ -10,7 +10,7 @@ import {
   createWalletSession,
 } from "../engine/wallet.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
-import { createCoreReadApi } from "../read/index.js";
+import { createCoreNativeBalanceReader, createCoreReadApi } from "../read/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
@@ -247,6 +247,12 @@ const createHandlersForRuntime = (
     listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
       runtime.services.keyring.getAccountsByKeyring(keyringId, includeHidden),
     getBackupStatus: () => walletAccounts.getBackupStatus(),
+    getNativeBalance: createCoreNativeBalanceReader({
+      accounts: runtime.services.accounts,
+      chainViews: runtime.services.chainViews,
+      namespaceBindings: runtime.services.namespaceBindings,
+      sessionStatus: runtime.services.sessionStatus,
+    }),
     listPendingApprovals: async () => await approvalReadService.listPending(),
     getApprovalDetail: async ({ approvalId }: { approvalId: string }) =>
       await approvalReadService.getDetail(approvalId),
@@ -631,6 +637,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
+    await createActiveAccount(runtime, MAINNET_CHAIN.chainRef);
 
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
       namespace: "eip155",
@@ -643,17 +650,26 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createHandlersForRuntime(runtime);
 
+    const activeAccount = runtime.services.accounts.getActiveAccountForNamespace({
+      namespace: MAINNET_CHAIN.namespace,
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    if (!activeAccount) {
+      throw new Error("Expected initialized wallet to have an active account");
+    }
+
     await expect(
       handlers["ui.balances.getNative"]({
         chainRef: MAINNET_CHAIN.chainRef,
-        address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountKey: activeAccount.accountKey,
       }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
+      accountKey: activeAccount.accountKey,
       chainRef: MAINNET_CHAIN.chainRef,
-      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      amountWei: "1000000000000000000",
+      amount: "1000000000000000000",
+      currency: MAINNET_CHAIN.nativeCurrency,
     });
-    expect(getBalance).toHaveBeenCalledWith("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", {
+    expect(getBalance).toHaveBeenCalledWith(activeAccount.canonicalAddress, {
       blockTag: "latest",
       timeoutMs: 15_000,
     });

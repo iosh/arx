@@ -26,8 +26,6 @@ type MutableArxWalletRuntimeInput = {
   runtime: ArxWalletRuntimeOptions;
 };
 
-type ArxWalletRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
-
 const buildArxWalletStorageInput = (input: CreateCoreRuntimeInput): ArxWalletStorageInput => {
   const storage: MutableArxWalletStorageInput = {
     ports: input.storage,

@@ -11,6 +11,7 @@ export type CreateCoreReadApiInput = {
   listKeyringRecords: () => KeyringMetaRecord[];
   listAccountRecordsByKeyring: (input: { keyringId: string; includeHidden: boolean }) => AccountRecord[];
   getBackupStatus: CoreReadApi["getBackupStatus"];
+  getNativeBalance: CoreReadApi["getNativeBalance"];
   listPendingApprovals: CoreReadApi["listPendingApprovals"];
   getApprovalDetail: CoreReadApi["getApprovalDetail"];
   listTransactions: TransactionsService["listTransactions"];
@@ -64,6 +65,7 @@ export const createCoreReadApi = (input: CreateCoreReadApiInput): CoreReadApi =>
       .listAccountRecordsByKeyring({ keyringId, includeHidden: includeHidden ?? false })
       .map((record) => buildAccountMetaFromRecord(input.accountCodecs, record)),
   getBackupStatus: input.getBackupStatus,
+  getNativeBalance: async (inputParams) => await input.getNativeBalance(inputParams),
   listPendingApprovals: input.listPendingApprovals,
   getApprovalDetail: input.getApprovalDetail,
   listTransactions: async (query) => await input.listTransactions(query),

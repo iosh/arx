@@ -52,7 +52,7 @@ function HomePage() {
     <HomeScreen
       snapshot={snapshot}
       approvals={approvals ?? []}
-      nativeBalanceWei={nativeBalance.balanceWei}
+      nativeBalance={nativeBalance.balance}
       nativeBalanceLoading={nativeBalance.isInitialLoading}
       nativeBalanceError={nativeBalance.error ? "Failed to load balance" : null}
       onMarkBackedUp={handleMarkBackedUp}

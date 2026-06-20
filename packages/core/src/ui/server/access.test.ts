@@ -111,6 +111,12 @@ const createReadModel = (options: { snapshot?: UiSnapshot; listeners?: Set<() =>
     listKeyrings: async () => [],
     getAccountsByKeyring: async () => [],
     getBackupStatus: () => ({ pendingHdKeyringCount: 0, nextHdKeyring: null }),
+    getNativeBalance: async ({ accountKey, chainRef }) => ({
+      accountKey,
+      chainRef,
+      amount: "0",
+      currency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    }),
     listPendingApprovals: async () => [],
     getApprovalDetail: async () => null,
     listTransactions: async () => [],

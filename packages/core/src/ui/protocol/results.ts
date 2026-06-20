@@ -1,5 +1,7 @@
+import type { NativeCurrency } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { SessionLockState } from "../../runtime/session/unlock/types.js";
+import type { AccountKey } from "../../storage/records.js";
 import type {
   WalletApiAutoLockResult,
   WalletApiCreationResult,
@@ -23,10 +25,10 @@ import type { UiTransaction } from "./models/transactions.js";
 import type { ChainSnapshot, UiAccountMeta, UiKeyringMeta, UiOwnedAccountSummary, UiSnapshot } from "./schemas.js";
 
 export type UiNativeBalanceResult = {
+  accountKey: AccountKey;
   chainRef: ChainRef;
-  address: string;
-  amountWei: string;
-  fetchedAt: number;
+  amount: string;
+  currency: NativeCurrency;
 };
 
 export type UiSetAutoLockDurationResult = WalletApiAutoLockResult;

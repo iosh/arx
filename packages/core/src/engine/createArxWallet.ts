@@ -1,6 +1,6 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import type { ViolationMode } from "../messenger/Messenger.js";
-import { type CoreReadApi, createCoreReadApi } from "../read/index.js";
+import { type CoreReadApi, createCoreNativeBalanceReader, createCoreReadApi } from "../read/index.js";
 import {
   createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
@@ -188,6 +188,12 @@ const createArxWalletRuntimeRead = (
     listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
       accounts.getAccountsByKeyring(keyringId, includeHidden),
     getBackupStatus: () => accounts.getBackupStatus(),
+    getNativeBalance: createCoreNativeBalanceReader({
+      accounts: runtime.services.accounts,
+      chainViews: runtime.services.chainViews,
+      namespaceBindings: runtime.services.namespaceBindings,
+      sessionStatus: runtime.services.sessionStatus,
+    }),
     listPendingApprovals: async () => await approvalReadService.listPending(),
     getApprovalDetail: async ({ approvalId }) => await approvalReadService.getDetail(approvalId),
     listTransactions: (input) => runtime.transactions.listTransactions(input),

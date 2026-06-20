@@ -1,4 +1,4 @@
-import type { ApprovalListEntry, UiSnapshot } from "@arx/core/ui";
+import type { ApprovalListEntry, UiMethodResult, UiSnapshot } from "@arx/core/ui";
 import {
   Activity,
   ArrowDownLeft,
@@ -29,7 +29,7 @@ import { getErrorMessage } from "../lib/errorUtils";
 type HomeScreenProps = {
   snapshot: UiSnapshot;
   approvals: ApprovalListEntry[];
-  nativeBalanceWei: string | null;
+  nativeBalance: UiMethodResult<"ui.balances.getNative"> | null;
   nativeBalanceLoading: boolean;
   nativeBalanceError: string | null;
   onMarkBackedUp: (keyringId: string) => Promise<void>;
@@ -81,7 +81,7 @@ type HomeTab = (typeof HOME_TABS)[number]["value"];
 export const HomeScreen = ({
   snapshot,
   approvals,
-  nativeBalanceWei,
+  nativeBalance,
   nativeBalanceLoading,
   nativeBalanceError,
   onMarkBackedUp,
@@ -95,6 +95,7 @@ export const HomeScreen = ({
 }: HomeScreenProps) => {
   const theme = useTheme();
   const { chain, accounts } = snapshot;
+  const nativeCurrency = nativeBalance?.currency ?? chain.nativeCurrency;
   const approvalsCount = approvals.length;
   const { backup } = snapshot;
 
@@ -166,11 +167,10 @@ export const HomeScreen = ({
           <AccountCard
             address={accounts.active?.canonicalAddress ?? null}
             displayAddress={accounts.active?.displayAddress ?? null}
-            balanceWei={nativeBalanceWei}
+            nativeBalance={nativeBalance}
             balanceLoading={nativeBalanceLoading}
             balanceError={nativeBalanceError}
-            nativeSymbol={chain.nativeCurrency.symbol}
-            nativeDecimals={chain.nativeCurrency.decimals}
+            fallbackCurrencySymbol={chain.nativeCurrency.symbol}
             onPressAccount={onNavigateAccounts}
           />
         </YStack>
@@ -326,10 +326,10 @@ export const HomeScreen = ({
             <Tabs.Content value="tokens">
               <YStack paddingVertical="$2">
                 <TokenListItem
-                  symbol={chain.nativeCurrency.symbol}
-                  name={chain.nativeCurrency.name}
-                  balanceRaw={nativeBalanceWei}
-                  decimals={chain.nativeCurrency.decimals}
+                  symbol={nativeCurrency.symbol}
+                  name={nativeCurrency.name}
+                  balanceRaw={nativeBalance?.amount ?? null}
+                  decimals={nativeCurrency.decimals}
                   loading={nativeBalanceLoading}
                 />
               </YStack>

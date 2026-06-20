@@ -8,7 +8,7 @@ import {
 import { ApprovalKinds } from "@arx/core/approvals";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import type { NamespaceUiBindings } from "@arx/core/namespaces";
-import { type CoreReadApi, createCoreReadApi } from "@arx/core/read";
+import { type CoreReadApi, createCoreNativeBalanceReader, createCoreReadApi } from "@arx/core/read";
 import type { RpcHandlerDeps } from "@arx/core/rpc";
 import {
   type BackgroundSessionServices,
@@ -649,6 +649,12 @@ const createRuntimeServices = () => {
     getActiveChainViewForNamespace: () => CHAIN,
     getSelectedNamespace: () => CHAIN.namespace,
     getSelectedChainView: () => CHAIN,
+    requireAvailableChainDefinition: () => ({
+      chainRef: CHAIN.chainRef,
+      displayName: CHAIN.displayName,
+      shortName: CHAIN.shortName,
+      nativeCurrency: CHAIN.nativeCurrency,
+    }),
     listKnownChainViews: () => [CHAIN],
     listAvailableChainViews: () => [CHAIN],
     buildWalletNetworksSnapshot: () => ({
@@ -764,6 +770,10 @@ const createUiAccessForTest = (input: {
     }),
     hasTransactionReceiptTracking: () => false,
   };
+  const readChainViews = {
+    ...runtimeServices.chainViews,
+    ...(input.chainViewsOverride ?? {}),
+  } as typeof runtimeServices.chainViews;
   const buildSnapshot = (): UiSnapshot => {
     return buildUiSnapshot({
       accounts: input.services.accounts,
@@ -790,6 +800,12 @@ const createUiAccessForTest = (input: {
     getBackupStatus: () => buildSnapshot().backup,
     listPendingApprovals: async () => [],
     getApprovalDetail: async () => null,
+    getNativeBalance: createCoreNativeBalanceReader({
+      accounts: input.services.accounts,
+      chainViews: readChainViews,
+      namespaceBindings,
+      sessionStatus,
+    }),
     listTransactions: async (query) => await transactionsAccess.listTransactions(query),
     getTransactionDetail: async (transactionId) => await transactionsAccess.getTransaction(transactionId),
     accountCodecs,

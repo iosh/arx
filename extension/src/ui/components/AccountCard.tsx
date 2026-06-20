@@ -1,3 +1,4 @@
+import type { UiMethodResult } from "@arx/core/ui";
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Paragraph, useTheme, XStack, YStack } from "tamagui";
@@ -9,22 +10,20 @@ import { Button } from "./Button";
 export type AccountCardProps = {
   address: string | null;
   displayAddress: string | null;
-  balanceWei: string | null;
+  nativeBalance: UiMethodResult<"ui.balances.getNative"> | null;
   balanceLoading: boolean;
   balanceError: string | null;
-  nativeSymbol: string;
-  nativeDecimals: number;
+  fallbackCurrencySymbol: string;
   onPressAccount: () => void;
 };
 
 export function AccountCard({
   address,
   displayAddress,
-  balanceWei,
+  nativeBalance,
   balanceLoading,
   balanceError,
-  nativeSymbol,
-  nativeDecimals,
+  fallbackCurrencySymbol,
   onPressAccount,
 }: AccountCardProps) {
   const theme = useTheme();
@@ -50,9 +49,10 @@ export function AccountCard({
   };
 
   const formattedBalance = useMemo(() => {
-    if (!balanceWei) return null;
-    return formatTokenAmount(balanceWei, nativeDecimals, { maxFractionDigits: 6 });
-  }, [balanceWei, nativeDecimals]);
+    if (!nativeBalance) return null;
+    return formatTokenAmount(nativeBalance.amount, nativeBalance.currency.decimals, { maxFractionDigits: 6 });
+  }, [nativeBalance]);
+  const balanceSymbol = nativeBalance?.currency.symbol ?? fallbackCurrencySymbol;
 
   return (
     <YStack alignItems="center" gap="$4" paddingVertical="$2">
@@ -142,7 +142,7 @@ export function AccountCard({
               {hideBalance ? "••••" : (formattedBalance ?? "0")}
             </Paragraph>
             <Paragraph color="$mutedText" fontSize="$5" fontWeight="500" paddingBottom="$1">
-              {nativeSymbol}
+              {balanceSymbol}
             </Paragraph>
           </XStack>
         )}

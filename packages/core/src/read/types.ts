@@ -1,3 +1,6 @@
+import type { NativeCurrency } from "../chains/definition.js";
+import type { ChainRef } from "../chains/ids.js";
+import type { AccountKey } from "../storage/records.js";
 import type { ListTransactionsQuery } from "../transactions/TransactionsService.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../ui/protocol/models/approvals.js";
 import type { UiTransaction } from "../ui/protocol/models/transactions.js";
@@ -18,6 +21,18 @@ export type CoreReadAccountsByKeyringInput = {
 export type CoreReadAccountsByKeyringResult = UiAccountMeta[];
 
 export type CoreReadBackupStatusResult = UiBackupStatus;
+
+export type CoreReadNativeBalanceInput = {
+  accountKey: AccountKey;
+  chainRef: ChainRef;
+};
+
+export type CoreReadNativeBalanceResult = {
+  accountKey: AccountKey;
+  chainRef: ChainRef;
+  amount: string;
+  currency: NativeCurrency;
+};
 
 export type CoreReadPendingApprovalsResult = ApprovalListEntry[];
 
@@ -43,6 +58,7 @@ export type CoreReadApi = Readonly<{
   listKeyrings(): CoreReadKeyringListResult;
   getAccountsByKeyring(input: CoreReadAccountsByKeyringInput): CoreReadAccountsByKeyringResult;
   getBackupStatus(): CoreReadBackupStatusResult;
+  getNativeBalance(input: CoreReadNativeBalanceInput): Promise<CoreReadNativeBalanceResult>;
   listPendingApprovals(): Promise<CoreReadPendingApprovalsResult>;
   getApprovalDetail(input: CoreReadApprovalDetailInput): Promise<CoreReadApprovalDetailResult>;
   listTransactions(input?: CoreReadTransactionsInput): Promise<CoreReadTransactionsResult>;

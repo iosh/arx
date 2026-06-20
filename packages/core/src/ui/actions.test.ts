@@ -47,7 +47,10 @@ describe("ui actions", () => {
     void actions.entry.getLaunchContext({ environment: "popup" });
     void actions.entry.getBootstrap({ environment: "popup" });
 
-    void actions.balances.getNative({ chainRef: "eip155:1", address: "0x0" });
+    void actions.balances.getNative({
+      chainRef: "eip155:1",
+      accountKey: "eip155:0000000000000000000000000000000000000000",
+    });
 
     void actions.session.unlock({ password: "pw" });
     void actions.session.lock();

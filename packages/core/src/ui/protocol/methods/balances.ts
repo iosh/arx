@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
+import { AccountKeySchema } from "../../../storage/records.js";
 import { defineMethod } from "./types.js";
 
 export const balancesMethods = {
@@ -7,7 +8,7 @@ export const balancesMethods = {
     "query",
     z.strictObject({
       chainRef: ChainRefSchema,
-      address: z.string().min(1),
+      accountKey: AccountKeySchema,
     }),
   ),
 } as const;

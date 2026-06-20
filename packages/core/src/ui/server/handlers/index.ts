@@ -10,15 +10,11 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap => {
-  const { access, wallet, read, buildSnapshot } = deps;
+  const { wallet, read, buildSnapshot } = deps;
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
-    ...createBalancesHandlers({
-      chains: access.chains,
-      session: access.session,
-      namespaceBindings: access.namespaceBindings,
-    }),
+    ...createBalancesHandlers({ read }),
     ...createSessionHandlers({ wallet }),
     ...createOnboardingHandlers({ wallet }),
     ...createAccountsHandlers({ wallet }),

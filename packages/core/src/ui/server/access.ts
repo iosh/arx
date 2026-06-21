@@ -95,19 +95,19 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
       });
     };
     const unsubs = [
-      server.access.approvalEvents.onCreated(() => emitApprovalsChanged()),
-      server.access.approvalEvents.onFinished((event) => {
+      server.events.onApprovalCreated(() => emitApprovalsChanged()),
+      server.events.onApprovalFinished((event) => {
         emitApprovalsChanged();
         emitApprovalDetailChanged(event.approvalId);
       }),
-      server.access.transactions.onTransactionApprovalsChanged((approvalIds) => {
+      server.events.onTransactionApprovalsChanged((approvalIds) => {
         const uniqueApprovalIds = Array.from(new Set(approvalIds));
         emitApprovalsChanged();
         for (const approvalId of uniqueApprovalIds) {
           emitApprovalDetailChanged(approvalId);
         }
       }),
-      server.access.transactions.onTransactionsChanged((transactionIds) => {
+      server.events.onTransactionsChanged((transactionIds) => {
         emitTransactionsChanged(transactionIds);
       }),
     ];
@@ -127,7 +127,6 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
 const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
   const surface = createUiSurfaceIdentity(server.uiOrigin, server.createId ?? (() => globalThis.crypto.randomUUID()));
   const uiRuntime = createUiServerRuntime({
-    access: server.access,
     wallet: server.wallet,
     platform: server.platform,
     surface,

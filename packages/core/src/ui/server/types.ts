@@ -1,22 +1,20 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
-import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
-import type { PermissionsEvents } from "../../permissions/service/types.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { TransactionsService } from "../../transactions/TransactionsService.js";
+import type {
+  TransactionApprovalsChangedHandler,
+  TransactionsChangedHandler,
+} from "../../transactions/TransactionsService.js";
 import type { TrustedWalletApi } from "../../wallet/api.js";
 import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiApprovalResolveResult } from "./approvals/resolveService.js";
-import type { UiKeyringsAccess } from "./keyringsAccess.js";
-import type { UiSessionAccess, UiStateChangeSubscription } from "./sessionAccess.js";
-import type { UiWalletSetupAccess } from "./walletSetupAccess.js";
+import type { UiStateChangeSubscription } from "./sessionAccess.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
@@ -77,26 +75,7 @@ export type UiApprovalsAccess = {
   write: UiApprovalsWriteAccess;
 };
 
-export type UiApprovalEventsAccess = {
-  onCreated: ApprovalQueueService["onCreated"];
-  onFinished: ApprovalQueueService["onFinished"];
-};
-
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
-
-export type UiTransactionsAccess = Pick<
-  TransactionsService,
-  | "requestTransactionApproval"
-  | "rerunApprovalPrepare"
-  | "updateApprovalDraft"
-  | "approveAndSubmitTransaction"
-  | "rejectTransactionApproval"
-  | "getTransactionApproval"
-  | "getTransaction"
-  | "listTransactions"
-  | "onTransactionsChanged"
-  | "onTransactionApprovalsChanged"
->;
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<
@@ -110,8 +89,6 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
     | "requireAvailableChainDefinition"
   >;
 
-export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountKeyFromAddress">;
-
 export type UiAttentionAccess = Pick<AttentionService, "getSnapshot">;
 
 export type UiNamespaceBindingsAccess = Pick<
@@ -119,19 +96,11 @@ export type UiNamespaceBindingsAccess = Pick<
   "getUi" | "hasTransactionReceiptTracking"
 >;
 
-export type UiServerAccess = {
-  accounts: UiAccountsAccess;
-  approvals: UiApprovalsAccess;
-  approvalEvents: UiApprovalEventsAccess;
-  permissions: UiPermissionsAccess;
-  transactions: UiTransactionsAccess;
-  chains: UiChainsAccess;
-  accountCodecs: UiAccountCodecsAccess;
-  session: UiSessionAccess;
-  walletSetup: UiWalletSetupAccess;
-  keyrings: UiKeyringsAccess;
-  attention: UiAttentionAccess;
-  namespaceBindings: UiNamespaceBindingsAccess;
+export type UiEventSource = {
+  onApprovalCreated(listener: () => void): () => void;
+  onApprovalFinished(listener: (event: { approvalId: string }) => void): () => void;
+  onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;
+  onTransactionsChanged(handler: TransactionsChangedHandler): () => void;
 };
 
 export type UiSurfaceIdentity = {
@@ -141,29 +110,13 @@ export type UiSurfaceIdentity = {
   surfaceId: string;
 };
 
-export type UiStateChangeSources = {
-  accounts: Pick<AccountSelectionService, "onStateChanged">;
-  permissions: {
-    onStateChanged: PermissionsEvents["onStateChanged"];
-  };
-  chains: {
-    onStateChanged: UiStateChangeSubscription;
-    onSelectionChanged: UiStateChangeSubscription;
-  };
-  session: Pick<UiSessionAccess, "onStateChanged">;
-  attention: {
-    onStateChanged: UiStateChangeSubscription;
-  };
-};
-
 export type UiRuntimeBridgeAccess = {
   persistVaultMeta: () => Promise<void>;
-  stateChanged: UiStateChangeSources;
 };
 
 export type UiRuntimeServerDeps = {
-  access: UiServerAccess;
   wallet: TrustedWalletApi;
+  events: UiEventSource;
   platform: UiPlatformAdapter;
   uiOrigin: string;
   createId?: () => string;
@@ -171,7 +124,6 @@ export type UiRuntimeServerDeps = {
 };
 
 export type UiServerRuntimeDeps = {
-  access: UiServerAccess;
   wallet: TrustedWalletApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
@@ -184,7 +136,6 @@ export type UiRuntimeDeps = {
 };
 
 export type UiHandlerDeps = {
-  access: UiServerAccess;
   wallet: TrustedWalletApi;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;

@@ -33,10 +33,7 @@ import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
-import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
-import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
-import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import type { TrustedWalletApi } from "../wallet/index.js";
@@ -251,74 +248,19 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
 const createWalletUiDeps = (
   runtime: ArxWalletRuntimeCore,
   approvalReadService: ReturnType<typeof createApprovalReadService>,
-  approvalResolveService: ReturnType<typeof createApprovalResolveService>,
   snapshots: ArxWallet["snapshots"],
   options: WalletCreateUiOptions,
 ): UiRuntimeDeps => {
-  const session = createUiSessionAccess({
-    session: runtime.services.session,
-    sessionStatus: runtime.services.sessionStatus,
-    keyring: runtime.services.keyring,
-  });
   const wallet = createUiTrustedWalletApi(runtime, snapshots, approvalReadService, options);
 
   return {
     server: {
       wallet,
-      access: {
-        accounts: runtime.services.accounts,
-        approvals: {
-          read: {
-            listPendingEntries: () => approvalReadService.listPending(),
-            getDetail: (id) => approvalReadService.getDetail(id),
-          },
-          write: {
-            resolve: (input) => approvalResolveService.resolve(input),
-          },
-        },
-        approvalEvents: runtime.services.approvals,
-        permissions: {
-          buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
-        },
-        transactions: {
-          requestTransactionApproval: (input) => runtime.transactions.requestTransactionApproval(input),
-          rerunApprovalPrepare: (input) => runtime.transactions.rerunApprovalPrepare(input),
-          updateApprovalDraft: (input) => runtime.transactions.updateApprovalDraft(input),
-          approveAndSubmitTransaction: (input) => runtime.transactions.approveAndSubmitTransaction(input),
-          rejectTransactionApproval: (input) => runtime.transactions.rejectTransactionApproval(input),
-          getTransactionApproval: (approvalId) => runtime.transactions.getTransactionApproval(approvalId),
-          getTransaction: (transactionId) => runtime.transactions.getTransaction(transactionId),
-          listTransactions: (query) => runtime.transactions.listTransactions(query),
-          onTransactionsChanged: (handler) => runtime.transactions.onTransactionsChanged(handler),
-          onTransactionApprovalsChanged: (handler) => runtime.transactions.onTransactionApprovalsChanged(handler),
-        },
-        chains: {
-          buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
-          findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
-          getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
-          getActiveChainViewForNamespace: (namespace) =>
-            runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
-          getSelectedNamespace: () => runtime.services.chainViews.getSelectedNamespace(),
-          getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
-          requireAvailableChainDefinition: (chainRef) =>
-            runtime.services.chainViews.requireAvailableChainDefinition(chainRef),
-          selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
-        },
-        accountCodecs: runtime.services.accountCodecs,
-        session,
-        walletSetup: createUiWalletSetupAccess({
-          accounts: runtime.services.accounts,
-          session: runtime.services.session,
-          keyring: runtime.services.keyring,
-        }),
-        keyrings: createUiKeyringsAccess({
-          keyring: runtime.services.keyring,
-          keyringExport: runtime.services.keyringExport,
-        }),
-        attention: {
-          getSnapshot: () => runtime.services.attention.getSnapshot(),
-        },
-        namespaceBindings: runtime.services.namespaceBindings,
+      events: {
+        onApprovalCreated: (listener) => runtime.services.approvals.onCreated(() => listener()),
+        onApprovalFinished: (listener) => runtime.services.approvals.onFinished(listener),
+        onTransactionApprovalsChanged: (handler) => runtime.transactions.onTransactionApprovalsChanged(handler),
+        onTransactionsChanged: (handler) => runtime.transactions.onTransactionsChanged(handler),
       },
       platform: options.platform,
       uiOrigin: options.uiOrigin,
@@ -327,20 +269,6 @@ const createWalletUiDeps = (
     },
     bridge: {
       persistVaultMeta: runtime.services.session.persistVaultMeta,
-      stateChanged: {
-        accounts: runtime.services.accounts,
-        permissions: {
-          onStateChanged: (listener) => runtime.services.permissions.onStateChanged(listener),
-        },
-        chains: {
-          onStateChanged: (listener) => runtime.services.chainRpc.onStateChanged(listener),
-          onSelectionChanged: (listener) => runtime.services.walletChainSelection.subscribeChanged(() => listener()),
-        },
-        session,
-        attention: {
-          onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
-        },
-      },
     },
   };
 };
@@ -674,11 +602,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     dappConnections,
   });
   const createUi = (options: WalletCreateUiOptions) =>
-    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, approvalResolveService, snapshots, options));
+    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, snapshots, options));
   const createUiAccess = (options: WalletCreateUiOptions) =>
-    createUiRuntimeAccess(
-      createWalletUiDeps(runtimeCore, approvalReadService, approvalResolveService, snapshots, options),
-    );
+    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, snapshots, options));
   const walletApi = createTrustedWalletApi(
     createTrustedWalletApiContext(runtimeCore, snapshots, approvalReadService, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),

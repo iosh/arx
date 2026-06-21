@@ -13,13 +13,10 @@ import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
-import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
-import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import { buildUiSnapshot } from "../ui/server/snapshot.js";
 import type { UiServerExtension } from "../ui/server/types.js";
-import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import {
   flushAsync,
@@ -194,10 +191,6 @@ const createHandlersForRuntime = (
     chainViews: runtime.services.chainViews,
     transactionApprovals: runtime.transactions,
   });
-  const approvalResolveService = createApprovalResolveService({
-    approvals: runtime.services.approvals,
-    transactions: runtime.transactions,
-  });
   const walletAccounts = createWalletAccounts({
     accounts: runtime.services.accounts,
     keyring: runtime.services.keyring,
@@ -260,71 +253,6 @@ const createHandlersForRuntime = (
 
   return createUiServerRuntime({
     wallet,
-    access: {
-      accounts: runtime.services.accounts,
-      approvals: {
-        read: {
-          listPendingEntries: () => approvalReadService.listPending(),
-          getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
-        },
-        write: {
-          resolve: (input) => approvalResolveService.resolve(input),
-        },
-      },
-      approvalEvents: runtime.services.approvals,
-      permissions: {
-        buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
-          runtime.services.permissionViews,
-        ),
-      },
-      transactions: {
-        requestTransactionApproval: (input) => runtime.transactions.requestTransactionApproval(input),
-        rerunApprovalPrepare: (input) => runtime.transactions.rerunApprovalPrepare(input),
-        updateApprovalDraft: (input) => runtime.transactions.updateApprovalDraft(input),
-        approveAndSubmitTransaction: (input) => runtime.transactions.approveAndSubmitTransaction(input),
-        rejectTransactionApproval: (input) => runtime.transactions.rejectTransactionApproval(input),
-        getTransactionApproval: (approvalId) => runtime.transactions.getTransactionApproval(approvalId),
-        getTransactionApprovalByTransactionId: (transactionId) =>
-          runtime.transactions.getTransactionApprovalByTransactionId(transactionId),
-        getTransaction: (transactionId) => runtime.transactions.getTransaction(transactionId),
-        listTransactions: (query) => runtime.transactions.listTransactions(query),
-        onTransactionsChanged: (handler) => runtime.transactions.onTransactionsChanged(handler),
-        onTransactionApprovalsChanged: (handler) => runtime.transactions.onTransactionApprovalsChanged(handler),
-      },
-      chains: {
-        buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
-          runtime.services.chainViews,
-        ),
-        findAvailableChainView: runtime.services.chainViews.findAvailableChainView.bind(runtime.services.chainViews),
-        getApprovalReviewChainView: runtime.services.chainViews.getApprovalReviewChainView.bind(
-          runtime.services.chainViews,
-        ),
-        getActiveChainViewForNamespace: runtime.services.chainViews.getActiveChainViewForNamespace.bind(
-          runtime.services.chainViews,
-        ),
-        getSelectedNamespace: runtime.services.chainViews.getSelectedNamespace.bind(runtime.services.chainViews),
-        getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
-        requireAvailableChainDefinition: runtime.services.chainViews.requireAvailableChainDefinition.bind(
-          runtime.services.chainViews,
-        ),
-        selectWalletChain: runtime.services.chainActivation.selectWalletChain.bind(runtime.services.chainActivation),
-      },
-      accountCodecs: runtime.services.accountCodecs,
-      session,
-      walletSetup: createUiWalletSetupAccess({
-        accounts: runtime.services.accounts,
-        session: runtime.services.session,
-        keyring: runtime.services.keyring,
-      }),
-      keyrings: createUiKeyringsAccess({
-        keyring: runtime.services.keyring,
-        keyringExport: runtime.services.keyringExport,
-      }),
-      attention: {
-        getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),
-      },
-      namespaceBindings: runtime.services.namespaceBindings,
-    },
     platform: {
       openOnboardingTab: async () => ({ activationPath: "create" }),
       openNotificationPopup: async () => ({ activationPath: "create" }),

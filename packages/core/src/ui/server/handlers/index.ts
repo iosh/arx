@@ -1,4 +1,5 @@
-import type { UiHandlerDeps, UiMethodHandlerMap } from "../types.js";
+import type { TrustedWalletApi } from "../../../wallet/api.js";
+import type { UiMethodHandlerMap } from "../types.js";
 import { createAccountsHandlers } from "./accounts.js";
 import { createApprovalsHandlers } from "./approvals.js";
 import { createBalancesHandlers } from "./balances.js";
@@ -9,7 +10,7 @@ import { createSessionHandlers } from "./session.js";
 import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
-export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap => {
+export const createUiCommonHandlers = (deps: { wallet: TrustedWalletApi }): UiMethodHandlerMap => {
   const { wallet } = deps;
 
   return {

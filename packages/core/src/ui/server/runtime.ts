@@ -35,7 +35,6 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
   const buildSnapshot = () => deps.wallet.snapshot.get();
 
   const handlerDeps = {
-    access: deps.access,
     wallet: deps.wallet,
     platform: deps.platform,
     surface: deps.surface,

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
 import type { TrustedWalletApi } from "../../wallet/api.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
@@ -9,37 +8,6 @@ import {
 } from "../protocol/events.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 import { createUiRuntimeAccess } from "./access.js";
-import type { UiTransactionsAccess } from "./types.js";
-
-const createTransactionAccess = () =>
-  ({
-    requestTransactionApproval: async () => {
-      throw new Error("not used");
-    },
-    rerunApprovalPrepare: async () => {
-      throw new Error("not used");
-    },
-    updateApprovalDraft: async () => {
-      throw new Error("not used");
-    },
-    approveAndSubmitTransaction: async () => {
-      throw new Error("not used");
-    },
-    rejectTransactionApproval: async () => {
-      throw new Error("not used");
-    },
-    getTransactionApproval: () => null,
-    getTransaction: async () => null,
-    listTransactions: async () => [],
-    onTransactionsChanged: (handler: (transactionIds: string[]) => void) => {
-      transactionChangedHandlers.add(handler);
-      return () => transactionChangedHandlers.delete(handler);
-    },
-    onTransactionApprovalsChanged: (handler: (approvalIds: string[]) => void) => {
-      transactionApprovalChangedHandlers.add(handler);
-      return () => transactionApprovalChangedHandlers.delete(handler);
-    },
-  }) satisfies UiTransactionsAccess;
 
 const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSnapshot => ({
   chain: {
@@ -139,83 +107,22 @@ const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnap
   return createUiRuntimeAccess({
     server: {
       wallet: createTrustedWalletStub(snapshot),
-      access: {
-        accounts: {
-          getState: () => ({ namespaces: {}, updatedAt: 0 }),
-          listOwnedForNamespace: () => [],
-          getActiveAccountForNamespace: () => null,
-          setActiveAccount: async () => {},
+      events: {
+        onApprovalCreated: (handler) => {
+          approvalCreatedHandlers.add(handler);
+          return () => approvalCreatedHandlers.delete(handler);
         },
-        approvals: {
-          read: {
-            listPendingEntries: () => [],
-            getDetail: () => null,
-          },
-          write: {
-            resolve: async () => ({ status: "resolved" }),
-          },
+        onApprovalFinished: (handler) => {
+          approvalFinishedHandlers.add(handler);
+          return () => approvalFinishedHandlers.delete(handler);
         },
-        approvalEvents: {
-          onCreated: () => () => {},
-          onFinished: (handler: (event: { approvalId: string }) => void) => {
-            approvalFinishedHandlers.add(handler);
-            return () => approvalFinishedHandlers.delete(handler);
-          },
+        onTransactionApprovalsChanged: (handler) => {
+          transactionApprovalChangedHandlers.add(handler);
+          return () => transactionApprovalChangedHandlers.delete(handler);
         },
-        permissions: {
-          buildUiPermissionsSnapshot: () => ({ origins: [] }),
-        },
-        transactions: createTransactionAccess(),
-        chains: {
-          selectWalletChain: async () => {},
-          buildWalletNetworksSnapshot: () =>
-            ({
-              selectedNamespace: "eip155",
-              active: "eip155:1",
-              known: [],
-              available: [],
-            }) satisfies UiNetworksSnapshot,
-          findAvailableChainView: () => null,
-          getApprovalReviewChainView: () => ({ namespace: "eip155", chainRef: "eip155:1" }),
-          getActiveChainViewForNamespace: () => ({ namespace: "eip155", chainRef: "eip155:1" }),
-          getSelectedNamespace: () => "eip155",
-          getSelectedChainView: () => ({ namespace: "eip155", chainRef: "eip155:1" }),
-          requireAvailableChainDefinition: () => ({
-            chainRef: "eip155:1",
-            displayName: "Ethereum",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-          }),
-        },
-        accountCodecs: {
-          get: () => null as never,
-          toAccountKeyFromAddress: () => "account-key",
-        },
-        session: {
-          getStatus: () => ({ initialized: true, isUnlocked: true, isLocked: false, unlockReason: null }),
-          getSessionLockState: () => ({
-            status: "unlocked",
-            unlockedAt: 1,
-            autoLockDurationMs: 900_000,
-            nextAutoLockAt: 900_001,
-          }),
-          isUnlocked: () => true,
-          hasInitializedVault: () => true,
-          onStateChanged: () => () => {},
-        } as never,
-        walletSetup: {
-          getState: () => ({ totalAccountCount: 0, hasOwnedAccounts: false }),
-        } as never,
-        keyrings: {
-          list: async () => [],
-          exportMnemonic: async () => "",
-          exportPrivateKeyByAccountKey: async () => "",
-        } as never,
-        attention: {
-          getSnapshot: () => ({ queue: [], count: 0 }),
-        },
-        namespaceBindings: {
-          getUi: () => null,
-          hasTransactionReceiptTracking: () => false,
+        onTransactionsChanged: (handler) => {
+          transactionChangedHandlers.add(handler);
+          return () => transactionChangedHandlers.delete(handler);
         },
       },
       platform: {
@@ -226,20 +133,11 @@ const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnap
     },
     bridge: {
       persistVaultMeta: async () => {},
-      stateChanged: {
-        accounts: { onStateChanged: () => () => {} },
-        permissions: { onStateChanged: () => () => {} },
-        chains: {
-          onStateChanged: () => () => {},
-          onSelectionChanged: () => () => {},
-        },
-        session: { onStateChanged: () => () => {} },
-        attention: { onStateChanged: () => () => {} },
-      },
     },
   });
 };
 
+const approvalCreatedHandlers = new Set<() => void>();
 const approvalFinishedHandlers = new Set<(event: { approvalId: string }) => void>();
 const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => void>();
 const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
@@ -285,6 +183,7 @@ describe("createUiRuntimeAccess", () => {
   });
 
   it("emits approval invalidations from generic approval finish", () => {
+    approvalCreatedHandlers.clear();
     approvalFinishedHandlers.clear();
     transactionApprovalChangedHandlers.clear();
     transactionChangedHandlers.clear();
@@ -307,6 +206,7 @@ describe("createUiRuntimeAccess", () => {
   });
 
   it("emits approvals changed from transaction invalidation", () => {
+    approvalCreatedHandlers.clear();
     approvalFinishedHandlers.clear();
     transactionApprovalChangedHandlers.clear();
     transactionChangedHandlers.clear();
@@ -331,6 +231,7 @@ describe("createUiRuntimeAccess", () => {
   });
 
   it("emits transaction history invalidations from transaction lifecycle events", () => {
+    approvalCreatedHandlers.clear();
     approvalFinishedHandlers.clear();
     transactionApprovalChangedHandlers.clear();
     transactionChangedHandlers.clear();

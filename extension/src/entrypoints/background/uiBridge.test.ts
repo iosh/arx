@@ -33,6 +33,7 @@ import {
   type UiPermissionsSnapshot,
   type UiPortEnvelope,
   type UiSnapshot,
+  type UiTransaction,
 } from "@arx/core/ui";
 import {
   buildUiSnapshot,
@@ -42,7 +43,6 @@ import {
   createUiWalletSetupAccess,
   type UiRuntimeAccess,
   type UiRuntimeDispatchResult,
-  type UiTransactionsAccess,
 } from "@arx/core/ui/server";
 import type { TrustedWalletApi } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +51,19 @@ import { createUiPlatform } from "./platform/uiPlatform";
 import type { UiPort } from "./ui/portHub";
 import { createUiActivationExtension } from "./ui/uiActivationExtension";
 import { createUiBridge } from "./uiBridge";
+
+type UiBridgeTestTransactionsAccess = {
+  requestTransactionApproval: (...args: never[]) => Promise<unknown>;
+  rerunApprovalPrepare: (input: { approvalId: string }) => Promise<unknown>;
+  updateApprovalDraft: (input: { approvalId: string; edit: unknown }) => Promise<unknown>;
+  approveAndSubmitTransaction: (...args: never[]) => Promise<unknown>;
+  rejectTransactionApproval: (...args: never[]) => Promise<unknown>;
+  getTransactionApproval: (...args: never[]) => unknown;
+  getTransaction: (transactionId: string) => Promise<UiTransaction | null>;
+  listTransactions: (query?: unknown) => Promise<UiTransaction[]>;
+  onTransactionsChanged: (handler: (transactionIds: readonly string[]) => void) => () => void;
+  onTransactionApprovalsChanged: (handler: (approvalIds: readonly string[]) => void) => () => void;
+};
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
@@ -616,7 +629,7 @@ const createRuntimeServices = () => {
     listTransactions: vi.fn(async () => [mockTransaction]),
     onTransactionsChanged: vi.fn(() => () => {}),
     onTransactionApprovalsChanged: vi.fn(() => () => {}),
-  } satisfies UiTransactionsAccess;
+  } satisfies UiBridgeTestTransactionsAccess;
   const providerTransactionCommands = {
     beginTransactionApproval: vi.fn(async () => ({
       transactionId: "approval-id",
@@ -756,7 +769,7 @@ const createUiAccessForTest = (input: {
   selectWalletChain?: (chainRef: string) => Promise<void>;
   chainViewsOverride?: Record<string, unknown>;
   permissionViewsOverride?: { buildUiPermissionsSnapshot: () => UiPermissionsSnapshot };
-  transactionsAccess?: Partial<UiTransactionsAccess>;
+  transactionsAccess?: Partial<UiBridgeTestTransactionsAccess>;
   namespaceBindings?: {
     getUi: (namespace: string) => NamespaceUiBindings | undefined;
     hasTransactionReceiptTracking: (namespace: string) => boolean;
@@ -791,7 +804,7 @@ const createUiAccessForTest = (input: {
   const transactionsAccess = {
     ...input.services.transactionAccess,
     ...input.transactionsAccess,
-  } satisfies UiTransactionsAccess;
+  } satisfies UiBridgeTestTransactionsAccess;
   const selectedChainView = (input.chainViewsOverride?.getSelectedChainView ??
     runtimeServices.chainViews.getSelectedChainView) as () => typeof CHAIN;
   const walletNetworksSnapshot = (input.chainViewsOverride?.buildWalletNetworksSnapshot ??
@@ -858,7 +871,7 @@ const createUiAccessForTest = (input: {
     },
     listPendingApprovals: async () => [],
     getApprovalDetail: async (_params: { approvalId: string }) => null,
-    listTransactions: async (query: Parameters<UiTransactionsAccess["listTransactions"]>[0]) =>
+    listTransactions: async (query: Parameters<UiBridgeTestTransactionsAccess["listTransactions"]>[0]) =>
       await transactionsAccess.listTransactions(query),
     getTransactionDetail: async ({ transactionId }: { transactionId: string }) =>
       await transactionsAccess.getTransaction(transactionId),
@@ -1053,35 +1066,12 @@ const createUiAccessForTest = (input: {
   return createUiRuntimeAccess({
     server: {
       wallet,
-      access: {
-        accounts: input.services.accounts,
-        approvals: {
-          read: {
-            listPendingEntries: vi.fn(() => []),
-            getDetail: vi.fn(() => null),
-          },
-          write: {
-            resolve: vi.fn(async () => ({ status: "resolved" as const })),
-          },
-        },
-        approvalEvents: input.services.approvals as never,
-        permissions: {
-          buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? runtimeServices.permissionViews)
-            .buildUiPermissionsSnapshot as never,
-        },
-        transactions: transactionsAccess as never,
-        chains: {
-          ...(input.chainViewsOverride ?? runtimeServices.chainViews),
-          selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
-        } as never,
-        accountCodecs,
-        session: sessionAccess,
-        walletSetup: walletSetupAccess,
-        keyrings: keyringsAccess,
-        attention: {
-          getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
-        },
-        namespaceBindings: namespaceBindings as never,
+      events: {
+        onApprovalCreated: (handler) => input.services.approvals.onCreated(() => handler()),
+        onApprovalFinished: (handler) =>
+          input.services.approvals.onFinished((event) => handler({ approvalId: event.id })),
+        onTransactionApprovalsChanged: (handler) => transactionsAccess.onTransactionApprovalsChanged(handler),
+        onTransactionsChanged: (handler) => transactionsAccess.onTransactionsChanged(handler),
       },
       platform: input.platform,
       uiOrigin: input.uiOrigin,
@@ -1091,20 +1081,6 @@ const createUiAccessForTest = (input: {
     },
     bridge: {
       persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
-      stateChanged: {
-        accounts: input.services.accounts,
-        permissions: {
-          onStateChanged: input.services.permissions.onStateChanged,
-        },
-        chains: {
-          onStateChanged: input.services.chainRpc.onStateChanged,
-          onSelectionChanged: (listener: () => void) => input.walletChainSelection.subscribeChanged(() => listener()),
-        },
-        session: sessionAccess,
-        attention: {
-          onStateChanged: input.subscribeAttentionStateChanged,
-        },
-      },
     },
   });
 };

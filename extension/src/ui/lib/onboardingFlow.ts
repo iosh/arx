@@ -2,7 +2,7 @@ import { ROUTES } from "./routes";
 
 /** Minimal snapshot fields needed for onboarding route decisions. */
 type OnboardingSnapshotLike = {
-  vault: { initialized: boolean };
+  session: { vaultInitialized: boolean };
   accounts: { totalCount: number };
 };
 
@@ -16,7 +16,8 @@ export function buildWelcomeIntentNavigation(params: {
   snapshot?: OnboardingSnapshotLike | null;
   intent: OnboardingIntent;
 }): { to: string; search?: { intent: OnboardingIntent } } {
-  const shouldSkipPassword = !!params.snapshot?.vault.initialized && (params.snapshot.accounts.totalCount ?? 0) === 0;
+  const shouldSkipPassword =
+    !!params.snapshot?.session.vaultInitialized && (params.snapshot.accounts.totalCount ?? 0) === 0;
 
   if (params.intent === "create") {
     return shouldSkipPassword
@@ -53,7 +54,7 @@ export function buildCreateEntryRedirect(params: {
     return { to: ROUTES.ONBOARDING_COMPLETE, replace: true };
   }
 
-  if (!params.snapshot.vault.initialized && !params.password) {
+  if (!params.snapshot.session.vaultInitialized && !params.password) {
     return { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "create" }, replace: true };
   }
 

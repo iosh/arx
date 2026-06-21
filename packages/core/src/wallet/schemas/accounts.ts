@@ -3,6 +3,7 @@ import { ChainRefSchema } from "../../chains/ids.js";
 import { AccountKeySchema } from "../../storage/records.js";
 
 export const WalletApiAccountsSchemas = {
+  listCurrentChain: z.undefined(),
   switchActive: z.strictObject({
     chainRef: ChainRefSchema,
     accountKey: AccountKeySchema.nullable().optional(),

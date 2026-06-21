@@ -15,6 +15,7 @@ export type AccountsSnapshot = {
 };
 
 export type SessionSnapshot = {
+  vaultInitialized: boolean;
   isUnlocked: boolean;
   autoLockDurationMs: number;
   nextAutoLockAt: number | null;
@@ -22,10 +23,6 @@ export type SessionSnapshot = {
 
 export type UiChainCapabilities = {
   nativeBalance: boolean;
-};
-
-export type VaultSnapshot = {
-  initialized: boolean;
 };
 
 export type UiPermissionChainState = {
@@ -98,7 +95,6 @@ export type UiSnapshot = {
   };
   permissions: UiPermissionsSnapshot;
   backup: UiBackupStatus;
-  vault: VaultSnapshot;
 };
 
 export type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount };

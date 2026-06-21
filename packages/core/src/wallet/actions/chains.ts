@@ -15,6 +15,10 @@ export const getSelectedWalletChainRefForNamespace = (context: WalletApiContext,
   return context.networks.getActiveChainViewForNamespace(namespace).chainRef;
 };
 
+export const getSelectedWalletChain = (context: WalletApiContext) => context.networks.getSelectedChainView();
+
+export const listWalletNetworks = (context: WalletApiContext) => context.networks.buildWalletNetworksSnapshot();
+
 export const selectWalletChain = async (context: WalletApiContext, input: SelectWalletChainInput) => {
   const params = WalletApiChainsSchemas.selectWalletChain.parse(input);
   await context.networks.selectChain(params.chainRef);

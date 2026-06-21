@@ -25,6 +25,8 @@ export const keyringsMethods = {
 
   "ui.keyrings.getAccountsByKeyring": defineMethod("query", WalletApiSchemas.keyrings.getAccountsByKeyring),
 
+  "ui.keyrings.getBackupStatus": defineMethod("query", WalletApiSchemas.keyrings.getBackupStatus),
+
   "ui.keyrings.renameKeyring": defineMethod("command", WalletApiSchemas.keyrings.renameKeyring, {
     broadcastSnapshot: true,
   }),

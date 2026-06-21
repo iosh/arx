@@ -12,6 +12,7 @@ const autoLockDurationMsSchema = z
   });
 
 export const WalletApiSessionSchemas = {
+  getStatus: z.undefined(),
   unlock: z.strictObject({ password: WalletApiSharedSchemas.password }),
   lock: z
     .strictObject({

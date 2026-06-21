@@ -28,7 +28,7 @@ export const requireVaultInitialized = async ({ context }: { context: RouterCont
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!snapshot.vault.initialized) {
+  if (!snapshot.session.vaultInitialized) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };
@@ -40,7 +40,7 @@ export const requireOnboardingPasswordAllowed = async ({ context }: { context: R
   if (hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
-  if (snapshot.vault.initialized) {
+  if (snapshot.session.vaultInitialized) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };
@@ -52,7 +52,7 @@ export const requireOnboardingPasswordAllowed = async ({ context }: { context: R
 export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
   const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) return;
-  if (!snapshot.vault.initialized) return;
+  if (!snapshot.session.vaultInitialized) return;
   if (hasAccounts(snapshot)) return;
 
   throw redirect({ to: ROUTES.ONBOARDING_WELCOME, replace: true });
@@ -79,7 +79,7 @@ export const requireSetupComplete = async ({ context }: { context: RouterContext
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!snapshot.vault.initialized || !hasAccounts(snapshot)) {
+  if (!snapshot.session.vaultInitialized || !hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };

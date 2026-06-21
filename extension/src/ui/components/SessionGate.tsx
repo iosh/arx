@@ -17,7 +17,7 @@ export function SessionGate({ snapshot, isLoading, unlock, children }: SessionGa
 
   // Vault initialization routing is enforced at route-level in `routes/__root.tsx`.
   // SessionGate only guards locked sessions.
-  if (!snapshot.vault.initialized) {
+  if (!snapshot.session.vaultInitialized) {
     return children;
   }
 

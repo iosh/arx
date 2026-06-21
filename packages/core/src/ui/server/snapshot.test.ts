@@ -108,12 +108,10 @@ describe("buildUiSnapshot", () => {
     const snapshot = buildUiSnapshot(deps);
 
     expect(snapshot.session).toEqual({
+      vaultInitialized: true,
       isUnlocked: false,
       autoLockDurationMs: 123_000,
       nextAutoLockAt: 456_000,
-    });
-    expect(snapshot.vault).toEqual({
-      initialized: true,
     });
     expect(snapshot.backup).toEqual({
       pendingHdKeyringCount: 0,

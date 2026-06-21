@@ -50,6 +50,7 @@ export {
 } from "./schemas.js";
 export type {
   WalletApiAccountsByKeyringResult,
+  WalletApiAccountsForCurrentChainResult,
   WalletApiApprovalDetailResult,
   WalletApiAutoLockResult,
   WalletApiBackupStatusResult,
@@ -62,10 +63,12 @@ export type {
   WalletApiKeyringAccount,
   WalletApiKeyringListResult,
   WalletApiNativeBalanceResult,
+  WalletApiNetworksResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
+  WalletApiSessionStatusResult,
   WalletApiSnapshot,
   WalletApiSnapshotChangeListener,
   WalletApiTransactionDetailResult,

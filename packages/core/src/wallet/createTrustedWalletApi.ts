@@ -1,7 +1,7 @@
-import { switchActiveAccount } from "./actions/accounts.js";
+import { listAccountsForCurrentChain, switchActiveAccount } from "./actions/accounts.js";
 import { getApprovalDetail, listPendingApprovals, resolveApproval } from "./actions/approvals.js";
 import { getNativeBalance } from "./actions/balances.js";
-import { selectWalletChain } from "./actions/chains.js";
+import { getSelectedWalletChain, listWalletNetworks, selectWalletChain } from "./actions/chains.js";
 import {
   confirmNewMnemonic,
   deriveAccount,
@@ -25,7 +25,13 @@ import {
   importWalletFromMnemonic,
   importWalletFromPrivateKey,
 } from "./actions/onboarding.js";
-import { lockSession, resetAutoLockTimer, setAutoLockDuration, unlockSession } from "./actions/session.js";
+import {
+  getSessionStatus,
+  lockSession,
+  resetAutoLockTimer,
+  setAutoLockDuration,
+  unlockSession,
+} from "./actions/session.js";
 import { getWalletSnapshot, subscribeWalletSnapshot } from "./actions/snapshot.js";
 import {
   applyTransactionDraftEdit,
@@ -43,6 +49,7 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     subscribe: (listener) => subscribeWalletSnapshot(context, listener),
   },
   session: {
+    getStatus: () => getSessionStatus(context),
     unlock: (input) => unlockSession(context, input),
     lock: (input) => lockSession(context, input),
     resetAutoLockTimer: () => resetAutoLockTimer(context),
@@ -55,9 +62,12 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     importWalletFromPrivateKey: (input) => importWalletFromPrivateKey(context, input),
   },
   accounts: {
+    listCurrentChain: () => listAccountsForCurrentChain(context),
     switchActive: (input) => switchActiveAccount(context, input),
   },
   networks: {
+    getSelectedChain: () => getSelectedWalletChain(context),
+    list: () => listWalletNetworks(context),
     select: (input) => selectWalletChain(context, input),
   },
   balances: {

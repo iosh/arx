@@ -2,6 +2,8 @@ import { WalletApiSchemas } from "../../../wallet/schemas.js";
 import { defineMethod } from "./types.js";
 
 export const sessionMethods = {
+  "ui.session.getStatus": defineMethod("query", WalletApiSchemas.session.getStatus),
+
   "ui.session.unlock": defineMethod("command", WalletApiSchemas.session.unlock, {
     broadcastSnapshot: true,
     persistVaultMeta: true,

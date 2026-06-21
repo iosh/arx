@@ -32,7 +32,7 @@ describe("getOrFetchUiSnapshot", () => {
   });
 
   it("returns the cached snapshot when a fresh fetch is not requested", async () => {
-    const cached = { vault: { initialized: true } } as UiSnapshot;
+    const cached = { session: { vaultInitialized: true } } as UiSnapshot;
     queryClient.setQueryData(UI_SNAPSHOT_QUERY_KEY, cached);
 
     await expect(getOrFetchUiSnapshot(queryClient)).resolves.toBe(cached);
@@ -41,7 +41,7 @@ describe("getOrFetchUiSnapshot", () => {
   });
 
   it("loads the first snapshot through waitForSnapshot and stores it in cache", async () => {
-    const snapshot = { vault: { initialized: true }, session: { isUnlocked: false } } as UiSnapshot;
+    const snapshot = { session: { vaultInitialized: true, isUnlocked: false } } as UiSnapshot;
     mockWaitForSnapshot.mockResolvedValue(snapshot);
 
     await expect(getOrFetchUiSnapshot(queryClient)).resolves.toBe(snapshot);
@@ -50,8 +50,8 @@ describe("getOrFetchUiSnapshot", () => {
   });
 
   it("bypasses the cache for fresh reads and updates the cached snapshot", async () => {
-    const cached = { vault: { initialized: false } } as UiSnapshot;
-    const fresh = { vault: { initialized: true } } as UiSnapshot;
+    const cached = { session: { vaultInitialized: false } } as UiSnapshot;
+    const fresh = { session: { vaultInitialized: true } } as UiSnapshot;
     queryClient.setQueryData(UI_SNAPSHOT_QUERY_KEY, cached);
     mockSnapshotGet.mockResolvedValue(fresh);
 

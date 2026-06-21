@@ -3,6 +3,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { SessionLockState } from "../../runtime/session/unlock/types.js";
 import type { AccountKey } from "../../storage/records.js";
 import type {
+  WalletApiAccountsForCurrentChainResult,
   WalletApiAutoLockResult,
   WalletApiCreationResult,
   WalletApiExportMnemonicResult,
@@ -10,7 +11,9 @@ import type {
   WalletApiGenerateMnemonicResult,
   WalletApiImportPrivateKeyResult,
   WalletApiKeyringAccount,
+  WalletApiNetworksResult,
   WalletApiRequestSendTransactionApprovalResult,
+  WalletApiSessionStatusResult,
 } from "../../wallet/types.js";
 import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
@@ -22,7 +25,14 @@ import type {
 import type { UiEntryBootstrap, UiEntryLaunchContext } from "./methods/entry.js";
 import type { ApprovalDetail, ApprovalListEntry, ApprovalResolveResult } from "./models/approvals.js";
 import type { UiTransaction } from "./models/transactions.js";
-import type { ChainSnapshot, UiAccountMeta, UiKeyringMeta, UiOwnedAccountSummary, UiSnapshot } from "./schemas.js";
+import type {
+  ChainSnapshot,
+  UiAccountMeta,
+  UiBackupStatus,
+  UiKeyringMeta,
+  UiOwnedAccountSummary,
+  UiSnapshot,
+} from "./schemas.js";
 
 export type UiNativeBalanceResult = {
   accountKey: AccountKey;
@@ -54,6 +64,7 @@ export type UiRequestSendTransactionApprovalResult = WalletApiRequestSendTransac
 
 export type UiMethodResultMap = {
   "ui.snapshot.get": UiSnapshot;
+  "ui.session.getStatus": WalletApiSessionStatusResult;
   "ui.entry.getLaunchContext": UiEntryLaunchContext;
   "ui.entry.getBootstrap": UiEntryBootstrap;
   "ui.balances.getNative": UiNativeBalanceResult;
@@ -66,7 +77,10 @@ export type UiMethodResultMap = {
   "ui.onboarding.createWalletFromMnemonic": UiWalletCreationResult;
   "ui.onboarding.importWalletFromMnemonic": UiWalletCreationResult;
   "ui.onboarding.importWalletFromPrivateKey": UiImportPrivateKeyResult;
+  "ui.accounts.listCurrentChain": WalletApiAccountsForCurrentChainResult;
   "ui.accounts.switchActive": UiOwnedAccountSummary | null;
+  "ui.networks.getSelectedChain": ChainSnapshot;
+  "ui.networks.list": WalletApiNetworksResult;
   "ui.networks.switchActive": ChainSnapshot;
   "ui.approvals.listPending": ApprovalListEntry[];
   "ui.approvals.getDetail": ApprovalDetail | null;
@@ -77,6 +91,7 @@ export type UiMethodResultMap = {
   "ui.keyrings.deriveAccount": UiKeyringAccount;
   "ui.keyrings.list": UiKeyringMeta[];
   "ui.keyrings.getAccountsByKeyring": UiAccountMeta[];
+  "ui.keyrings.getBackupStatus": UiBackupStatus;
   "ui.keyrings.renameKeyring": null;
   "ui.keyrings.renameAccount": null;
   "ui.keyrings.markBackedUp": null;

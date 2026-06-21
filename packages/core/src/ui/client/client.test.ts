@@ -44,6 +44,7 @@ const SNAPSHOT_FIXTURE = {
     active: null,
   },
   session: {
+    vaultInitialized: false,
     isUnlocked: false,
     autoLockDurationMs: 900_000,
     nextAutoLockAt: null,
@@ -58,9 +59,6 @@ const SNAPSHOT_FIXTURE = {
   backup: {
     pendingHdKeyringCount: 0,
     nextHdKeyring: null,
-  },
-  vault: {
-    initialized: false,
   },
 } as const;
 

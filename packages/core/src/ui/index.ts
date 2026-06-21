@@ -45,5 +45,4 @@ export type {
   UiKeyringMeta,
   UiPermissionsSnapshot,
   UiSnapshot,
-  VaultSnapshot,
 } from "./protocol/schemas.js";

@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { buildBackupEntryRedirect, buildCreateEntryRedirect, buildWelcomeIntentNavigation } from "./onboardingFlow";
 
 const SNAPSHOT_UNINITIALIZED = {
-  vault: { initialized: false },
+  session: { vaultInitialized: false },
   accounts: { totalCount: 0 },
 };
 
 const SNAPSHOT_NO_ACCOUNTS = {
-  vault: { initialized: true },
+  session: { vaultInitialized: true },
   accounts: { totalCount: 0 },
 };
 
 const SNAPSHOT_READY = {
-  vault: { initialized: true },
+  session: { vaultInitialized: true },
   accounts: { totalCount: 1 },
 };
 

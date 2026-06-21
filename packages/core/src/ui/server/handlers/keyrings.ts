@@ -16,6 +16,7 @@ export const createKeyringsHandlers = (deps: {
   | "ui.keyrings.deriveAccount"
   | "ui.keyrings.list"
   | "ui.keyrings.getAccountsByKeyring"
+  | "ui.keyrings.getBackupStatus"
   | "ui.keyrings.renameKeyring"
   | "ui.keyrings.renameAccount"
   | "ui.keyrings.markBackedUp"
@@ -33,6 +34,7 @@ export const createKeyringsHandlers = (deps: {
     "ui.keyrings.list": async () => await deps.wallet.keyrings.list(),
     "ui.keyrings.getAccountsByKeyring": async (input) =>
       await deps.wallet.keyrings.getAccountsByKeyring(buildAccountsByKeyringInput(input)),
+    "ui.keyrings.getBackupStatus": async () => deps.wallet.keyrings.getBackupStatus(),
     "ui.keyrings.renameKeyring": async (input) => await deps.wallet.keyrings.renameKeyring(input),
     "ui.keyrings.renameAccount": async (input) => await deps.wallet.keyrings.renameAccount(input),
     "ui.keyrings.markBackedUp": async (input) => await deps.wallet.keyrings.markBackedUp(input),

@@ -77,7 +77,7 @@ const boot = async () => {
 
   try {
     const snapshot = await preloadUiSnapshot(queryClient);
-    if (!snapshot.vault.initialized) {
+    if (!snapshot.session.vaultInitialized) {
       window.close();
       return;
     }

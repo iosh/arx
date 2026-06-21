@@ -37,6 +37,7 @@ const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSn
     active: null,
   },
   session: {
+    vaultInitialized: true,
     isUnlocked: true,
     autoLockDurationMs: 0,
     nextAutoLockAt: null,
@@ -51,9 +52,6 @@ const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSn
   backup: {
     pendingHdKeyringCount: 0,
     nextHdKeyring: null,
-  },
-  vault: {
-    initialized: true,
   },
 });
 

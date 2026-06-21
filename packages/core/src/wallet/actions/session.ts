@@ -9,6 +9,8 @@ export const assertSessionUnlocked = (context: WalletApiContext): void => {
   }
 };
 
+export const getSessionStatus = (context: WalletApiContext) => context.session.getStatus();
+
 export const unlockSession = async (context: WalletApiContext, input: UnlockSessionInput) => {
   const params = WalletApiSessionSchemas.unlock.parse(input);
   return await context.session.unlock(params);

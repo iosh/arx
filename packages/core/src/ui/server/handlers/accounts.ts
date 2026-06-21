@@ -14,8 +14,10 @@ const toUiOwnedAccountSummary = (account: {
 
 export const createAccountsHandlers = (deps: {
   wallet: TrustedWalletApi;
-}): Pick<UiHandlers, "ui.accounts.switchActive"> => {
+}): Pick<UiHandlers, "ui.accounts.listCurrentChain" | "ui.accounts.switchActive"> => {
   return {
+    "ui.accounts.listCurrentChain": async () => deps.wallet.accounts.listCurrentChain(),
+
     "ui.accounts.switchActive": async (input) => {
       const active = await deps.wallet.accounts.switchActive(input);
       return active ? toUiOwnedAccountSummary(active) : null;

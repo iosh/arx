@@ -181,8 +181,7 @@ describe("createCoreRuntime", () => {
 
     expect(Object.keys(core).sort()).toEqual(["provider", "wallet"]);
     expect(core.wallet.snapshot.get()).toMatchObject({
-      vault: { initialized: false },
-      session: { isUnlocked: false },
+      session: { vaultInitialized: false, isUnlocked: false },
       networks: { selectedNamespace: EIP155_NAMESPACE },
     });
     await expect(
@@ -243,7 +242,7 @@ describe("createCoreRuntime", () => {
       canonicalAddress: created.address,
     });
     expect(core.wallet.snapshot.get()).toMatchObject({
-      vault: { initialized: true },
+      session: { vaultInitialized: true },
       accounts: { totalCount: 3 },
     });
     expect(core.wallet.keyrings.list()).toHaveLength(2);

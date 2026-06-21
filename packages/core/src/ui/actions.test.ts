@@ -44,6 +44,7 @@ describe("ui actions", () => {
 
     // Execute all sugar functions once to record which underlying methods are used.
     void actions.snapshot.get();
+    void actions.session.getStatus();
     void actions.entry.getLaunchContext({ environment: "popup" });
     void actions.entry.getBootstrap({ environment: "popup" });
 
@@ -70,6 +71,7 @@ describe("ui actions", () => {
     });
     void actions.onboarding.importWalletFromPrivateKey({ password: "pw", privateKey: "deadbeef" });
 
+    void actions.accounts.listCurrentChain();
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
     void actions.accounts.switchActive({ chainRef: "eip155:1", accountKey: null });
     void actions.accounts.switchActive({
@@ -77,6 +79,8 @@ describe("ui actions", () => {
       accountKey: "eip155:0000000000000000000000000000000000000000",
     });
 
+    void actions.networks.getSelectedChain();
+    void actions.networks.list();
     void actions.networks.switchActive({ chainRef: "eip155:1" });
 
     void actions.transactions.listHistory({ status: "submitted", limit: 10 });
@@ -115,6 +119,7 @@ describe("ui actions", () => {
     void actions.keyrings.deriveAccount({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.list();
     void actions.keyrings.getAccountsByKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
+    void actions.keyrings.getBackupStatus();
     void actions.keyrings.renameKeyring({ keyringId: "00000000-0000-0000-0000-000000000000", alias: "a" });
     void actions.keyrings.renameAccount({ accountKey: "eip155:0000000000000000000000000000000000000000", alias: "a" });
     void actions.keyrings.markBackedUp({ keyringId: "00000000-0000-0000-0000-000000000000" });

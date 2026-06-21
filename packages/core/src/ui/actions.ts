@@ -51,6 +51,7 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     session: {
+      getStatus: call("ui.session.getStatus"),
       unlock: call("ui.session.unlock"),
       lock: call("ui.session.lock"),
       resetAutoLockTimer: call("ui.session.resetAutoLockTimer"),
@@ -65,10 +66,13 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     accounts: {
+      listCurrentChain: call("ui.accounts.listCurrentChain"),
       switchActive: call("ui.accounts.switchActive"),
     },
 
     networks: {
+      getSelectedChain: call("ui.networks.getSelectedChain"),
+      list: call("ui.networks.list"),
       switchActive: call("ui.networks.switchActive"),
     },
 
@@ -93,6 +97,7 @@ export const uiCommonActions = (client: UiClient) => {
       deriveAccount: call("ui.keyrings.deriveAccount"),
       list: call("ui.keyrings.list"),
       getAccountsByKeyring: call("ui.keyrings.getAccountsByKeyring"),
+      getBackupStatus: call("ui.keyrings.getBackupStatus"),
       renameKeyring: call("ui.keyrings.renameKeyring"),
       renameAccount: call("ui.keyrings.renameAccount"),
       markBackedUp: call("ui.keyrings.markBackedUp"),

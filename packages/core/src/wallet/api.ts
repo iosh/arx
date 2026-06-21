@@ -4,6 +4,7 @@ import type { WalletApiEip155TransactionDraftChangeSchema } from "./schemas/tran
 import type { WalletApiSchemas } from "./schemas.js";
 import type {
   WalletApiAccountsByKeyringResult,
+  WalletApiAccountsForCurrentChainResult,
   WalletApiApprovalDetailResult,
   WalletApiAutoLockResult,
   WalletApiBackupStatusResult,
@@ -16,10 +17,12 @@ import type {
   WalletApiKeyringAccount,
   WalletApiKeyringListResult,
   WalletApiNativeBalanceResult,
+  WalletApiNetworksResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
+  WalletApiSessionStatusResult,
   WalletApiSnapshot,
   WalletApiSnapshotChangeListener,
   WalletApiTransactionDetailResult,
@@ -88,6 +91,7 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   session: Readonly<{
+    getStatus(): WalletApiSessionStatusResult;
     unlock(input: UnlockSessionInput): Promise<SessionLockState>;
     lock(input?: LockSessionInput): Promise<SessionLockState>;
     resetAutoLockTimer(): Promise<SessionLockState>;
@@ -102,10 +106,13 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   accounts: Readonly<{
+    listCurrentChain(): WalletApiAccountsForCurrentChainResult;
     switchActive(input: SwitchActiveAccountInput): Promise<WalletApiOwnedAccountSummary | null>;
   }>;
 
   networks: Readonly<{
+    getSelectedChain(): WalletApiChainSnapshot;
+    list(): WalletApiNetworksResult;
     select(input: SelectWalletChainInput): Promise<WalletApiChainSnapshot>;
   }>;
 

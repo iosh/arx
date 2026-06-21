@@ -79,6 +79,7 @@ export const buildUiSnapshot = (deps: {
         : null,
     },
     session: {
+      vaultInitialized: sessionStatus.vaultInitialized,
       isUnlocked: unlocked,
       autoLockDurationMs: sessionStatus.autoLockDurationMs,
       nextAutoLockAt: sessionStatus.nextAutoLockAt,
@@ -93,9 +94,6 @@ export const buildUiSnapshot = (deps: {
             alias: nextHdKeyring.alias ?? null,
           }
         : null,
-    },
-    vault: {
-      initialized: sessionStatus.vaultInitialized,
     },
   };
 

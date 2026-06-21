@@ -23,6 +23,7 @@ export const WalletApiKeyringsSchemas = {
     keyringId: z.uuid(),
     includeHidden: z.boolean().optional(),
   }),
+  getBackupStatus: z.undefined(),
   deriveAccount: z.strictObject({ keyringId: z.uuid() }),
   renameKeyring: z.strictObject({ keyringId: z.uuid(), alias: z.string().min(1) }),
   renameAccount: z.strictObject({ accountKey: AccountKeySchema, alias: z.string().min(1) }),

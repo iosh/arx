@@ -3,13 +3,12 @@ import { isOnboardingPath } from "./onboardingPaths";
 import { ROUTES } from "./routes";
 
 type SnapshotLike = {
-  vault: { initialized: boolean };
   accounts: { totalCount: number };
-  session: { isUnlocked: boolean };
+  session: { vaultInitialized: boolean; isUnlocked: boolean };
 };
 
 export function needsOnboarding(snapshot: SnapshotLike): boolean {
-  if (!snapshot.vault.initialized) return true;
+  if (!snapshot.session.vaultInitialized) return true;
   return (snapshot.accounts.totalCount ?? 0) === 0;
 }
 
@@ -58,11 +57,11 @@ export function decideRootBeforeLoad(params: {
     return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   }
 
-  if (entry.environment === "notification" && !snapshot.vault.initialized) {
+  if (entry.environment === "notification" && !snapshot.session.vaultInitialized) {
     return { type: "close" };
   }
 
-  if (snapshot.vault.initialized) return { type: "allow" };
+  if (snapshot.session.vaultInitialized) return { type: "allow" };
 
   if (entry.environment === "popup") return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   return { type: "close" };

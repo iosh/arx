@@ -897,6 +897,7 @@ const createUiAccessForTest = (input: {
       subscribe: (listener) => read.subscribe(listener),
     },
     session: {
+      getStatus: () => sessionStatus.getStatus(),
       unlock: (input) => sessionAccess.unlock(input),
       lock: async (input) => sessionAccess.lock(input?.reason ?? "manual"),
       resetAutoLockTimer: async () => input.session.unlock.syncVaultStatus(),
@@ -929,6 +930,7 @@ const createUiAccessForTest = (input: {
       },
     },
     accounts: {
+      listCurrentChain: () => buildSnapshot().accounts,
       switchActive: async ({ chainRef, accountKey }) =>
         await input.services.accounts.setActiveAccount({
           namespace: CHAIN.namespace,
@@ -937,6 +939,8 @@ const createUiAccessForTest = (input: {
         }),
     },
     networks: {
+      getSelectedChain: () => selectedChainView(),
+      list: () => walletNetworksSnapshot(),
       select: async ({ chainRef }) => {
         await (input.selectWalletChain ?? vi.fn(async () => {}))(chainRef);
         return {
@@ -1359,7 +1363,7 @@ describe("uiBridge", () => {
     expect(lastSnapshotEventIndex).toBeGreaterThan(responseIndex);
 
     const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.vault.initialized).toBe(true);
+    expect(snapshot.session.vaultInitialized).toBe(true);
     expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
   });
 

@@ -1,6 +1,7 @@
 import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainView } from "../services/runtime/chainViews/types.js";
+import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
+import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountKey } from "../storage/records.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../ui/protocol/models/approvals.js";
 import type { UiTransaction } from "../ui/protocol/models/transactions.js";
@@ -12,6 +13,16 @@ export type WalletApiUnsubscribe = () => void;
 export type WalletApiSnapshotChangeListener = () => void;
 
 export type WalletApiSnapshot = UiSnapshot;
+
+export type WalletApiSessionStatusResult = SessionStatus;
+
+export type WalletApiAccountsForCurrentChainResult = {
+  totalCount: number;
+  list: WalletApiOwnedAccountSummary[];
+  active: WalletApiOwnedAccountSummary | null;
+};
+
+export type WalletApiNetworksResult = UiNetworksSnapshot;
 
 export type WalletApiAutoLockResult = {
   autoLockDurationMs: number;

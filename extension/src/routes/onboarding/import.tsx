@@ -42,12 +42,12 @@ function ImportSetupRoute() {
   useEffect(() => {
     if (password) return;
     if (!snapshot) return;
-    if (snapshot.vault.initialized) return; // allow resuming setupIncomplete without re-entering password flow
+    if (snapshot.session.vaultInitialized) return; // allow resuming setupIncomplete without re-entering password flow
     router.navigate({ to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" }, replace: true });
   }, [password, router, snapshot]);
 
   const handleImport = async (params: { value: string; mode: ImportMode; alias?: string }) => {
-    const vaultInitialized = snapshot?.vault.initialized ?? false;
+    const vaultInitialized = snapshot?.session.vaultInitialized ?? false;
     if (!vaultInitialized && !password) return;
 
     if (!params.value.trim()) {

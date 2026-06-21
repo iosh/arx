@@ -5,9 +5,15 @@ export const createSessionHandlers = (deps: {
   wallet: TrustedWalletApi;
 }): Pick<
   UiHandlers,
-  "ui.session.unlock" | "ui.session.lock" | "ui.session.resetAutoLockTimer" | "ui.session.setAutoLockDuration"
+  | "ui.session.getStatus"
+  | "ui.session.unlock"
+  | "ui.session.lock"
+  | "ui.session.resetAutoLockTimer"
+  | "ui.session.setAutoLockDuration"
 > => {
   return {
+    "ui.session.getStatus": async () => deps.wallet.session.getStatus(),
+
     "ui.session.unlock": async ({ password }) => {
       return await deps.wallet.session.unlock({ password });
     },

@@ -138,8 +138,7 @@ describe("createArxWallet", () => {
       expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
       expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
-        vault: { initialized: false },
-        session: { isUnlocked: false },
+        session: { vaultInitialized: false, isUnlocked: false },
         networks: { selectedNamespace: "eip155" },
       });
 
@@ -437,8 +436,7 @@ describe("createArxWallet", () => {
 
       const lockedSnapshot = wallet.snapshots.buildUiSnapshot();
       expect(lockedSnapshot).toMatchObject({
-        vault: { initialized: false },
-        session: { isUnlocked: false },
+        session: { vaultInitialized: false, isUnlocked: false },
         attention: { count: 1 },
         accounts: {
           totalCount: 1,
@@ -457,8 +455,7 @@ describe("createArxWallet", () => {
       await wallet.session.unlock({ password: PASSWORD });
 
       expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
-        vault: { initialized: true },
-        session: { isUnlocked: true },
+        session: { vaultInitialized: true, isUnlocked: true },
         attention: { count: 1 },
         accounts: {
           totalCount: 1,
@@ -522,8 +519,7 @@ describe("createArxWallet", () => {
 
       await wallet.session.createVault({ password: PASSWORD });
       await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
-        vault: { initialized: true },
-        session: { isUnlocked: false },
+        session: { vaultInitialized: true, isUnlocked: false },
       });
       await expect(ui.dispatch({ method: "ui.session.unlock", params: { password: PASSWORD } })).resolves.toMatchObject(
         {

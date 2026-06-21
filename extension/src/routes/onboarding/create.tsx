@@ -81,7 +81,7 @@ function GenerateMnemonicRoute() {
       return;
     }
 
-    const vaultInitialized = snapshot?.vault.initialized ?? false;
+    const vaultInitialized = snapshot?.session.vaultInitialized ?? false;
     if (!vaultInitialized && !password) return;
     if (words.length === 0 || isGenerating || isSubmitting) return;
 
@@ -103,7 +103,7 @@ function GenerateMnemonicRoute() {
 
       await waitForUiSnapshotMatch(
         queryClient,
-        (nextSnapshot) => nextSnapshot.vault.initialized && (nextSnapshot.accounts.totalCount ?? 0) > 0,
+        (nextSnapshot) => nextSnapshot.session.vaultInitialized && (nextSnapshot.accounts.totalCount ?? 0) > 0,
         { timeoutMs: 1_500 },
       );
 

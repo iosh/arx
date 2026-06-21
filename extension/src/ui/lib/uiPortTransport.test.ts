@@ -1,4 +1,4 @@
-import { UI_EVENT_SNAPSHOT_CHANGED } from "@arx/core/ui";
+import { UI_EVENT_READY } from "@arx/core/ui";
 import { describe, expect, it, vi } from "vitest";
 import type Browser from "webextension-polyfill";
 import { createUiPortTransport } from "./uiPortTransport";
@@ -71,13 +71,13 @@ describe("createUiPortTransport", () => {
     expect(runtime.connect).toHaveBeenCalledTimes(1);
     expect(transport.isConnected?.()).toBe(false);
 
-    port.emitMessage({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED, payload: { ready: true } });
+    port.emitMessage({ type: "ui:event", event: UI_EVENT_READY, payload: { ready: true } });
     await connectPromise;
 
     expect(transport.isConnected?.()).toBe(true);
   });
 
-  it("keeps waiting for the initial snapshot handshake when other inbound envelopes arrive first", async () => {
+  it("keeps waiting for the ready handshake when other inbound envelopes arrive first", async () => {
     const port = new FakePort();
     const runtime = { connect: vi.fn(() => port) };
     const browser = { runtime } as unknown as typeof Browser;
@@ -96,7 +96,7 @@ describe("createUiPortTransport", () => {
     expect(resolved).toBe(false);
     expect(transport.isConnected?.()).toBe(false);
 
-    port.emitMessage({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED, payload: { ready: true } });
+    port.emitMessage({ type: "ui:event", event: UI_EVENT_READY, payload: { ready: true } });
     await connectPromise;
 
     expect(resolved).toBe(true);
@@ -112,14 +112,14 @@ describe("createUiPortTransport", () => {
     const connectPromise = transport.connect(); // Don't await; keep it not-ready.
     await Promise.resolve(); // ensure port exists but not ready
 
-    expect(() => transport.postMessage({ type: "ui:request", id: "1", method: "ui.snapshot.get" })).toThrow(
+    expect(() => transport.postMessage({ type: "ui:request", id: "1", method: "ui.session.getStatus" })).toThrow(
       /not ready/i,
     );
 
-    port.emitMessage({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED, payload: { ready: true } });
+    port.emitMessage({ type: "ui:event", event: UI_EVENT_READY, payload: { ready: true } });
     await connectPromise;
 
-    expect(() => transport.postMessage({ type: "ui:request", id: "2", method: "ui.snapshot.get" })).not.toThrow();
+    expect(() => transport.postMessage({ type: "ui:request", id: "2", method: "ui.session.getStatus" })).not.toThrow();
   });
 
   it("ignores stale port disconnect after a retry connects a new port", async () => {
@@ -148,7 +148,7 @@ describe("createUiPortTransport", () => {
       port1.emitDisconnect({ includeRemoved: true });
 
       // Now make the new port ready.
-      port2.emitMessage({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED, payload: { ready: true } });
+      port2.emitMessage({ type: "ui:event", event: UI_EVENT_READY, payload: { ready: true } });
       await expect(second).resolves.toBeUndefined();
       expect(transport.isConnected?.()).toBe(true);
     } finally {

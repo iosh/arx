@@ -1,38 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { buildBackupEntryRedirect, buildCreateEntryRedirect, buildWelcomeIntentNavigation } from "./onboardingFlow";
 
-const SNAPSHOT_UNINITIALIZED = {
-  session: { vaultInitialized: false },
-  accounts: { totalCount: 0 },
+const SETUP_UNINITIALIZED = {
+  onboarding: { availability: "uninitialized" as const },
 };
 
-const SNAPSHOT_NO_ACCOUNTS = {
-  session: { vaultInitialized: true },
-  accounts: { totalCount: 0 },
+const SETUP_NO_ACCOUNTS = {
+  onboarding: { availability: "empty" as const },
 };
 
-const SNAPSHOT_READY = {
-  session: { vaultInitialized: true },
-  accounts: { totalCount: 1 },
+const SETUP_READY = {
+  onboarding: { availability: "ready" as const },
 };
 
 describe("buildWelcomeIntentNavigation", () => {
   it("sends first-time create/import through onboarding password", () => {
-    expect(buildWelcomeIntentNavigation({ snapshot: SNAPSHOT_UNINITIALIZED, intent: "create" })).toEqual({
+    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_UNINITIALIZED, intent: "create" })).toEqual({
       to: "/onboarding/password",
       search: { intent: "create" },
     });
-    expect(buildWelcomeIntentNavigation({ snapshot: SNAPSHOT_UNINITIALIZED, intent: "import" })).toEqual({
+    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_UNINITIALIZED, intent: "import" })).toEqual({
       to: "/onboarding/password",
       search: { intent: "import" },
     });
   });
 
   it("skips password on the vault-initialized no-accounts compatibility boundary", () => {
-    expect(buildWelcomeIntentNavigation({ snapshot: SNAPSHOT_NO_ACCOUNTS, intent: "create" })).toEqual({
+    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_NO_ACCOUNTS, intent: "create" })).toEqual({
       to: "/onboarding/create",
     });
-    expect(buildWelcomeIntentNavigation({ snapshot: SNAPSHOT_NO_ACCOUNTS, intent: "import" })).toEqual({
+    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_NO_ACCOUNTS, intent: "import" })).toEqual({
       to: "/onboarding/import",
     });
   });
@@ -42,7 +39,7 @@ describe("buildCreateEntryRedirect", () => {
   it("redirects back to onboarding password when create is missing the first password", () => {
     expect(
       buildCreateEntryRedirect({
-        snapshot: SNAPSHOT_UNINITIALIZED,
+        setupStatus: SETUP_UNINITIALIZED,
         password: null,
         mnemonicWords: null,
         mnemonicKeyringId: null,
@@ -57,7 +54,7 @@ describe("buildCreateEntryRedirect", () => {
   it("allows create to continue without a password on the compatibility boundary", () => {
     expect(
       buildCreateEntryRedirect({
-        snapshot: SNAPSHOT_NO_ACCOUNTS,
+        setupStatus: SETUP_NO_ACCOUNTS,
         password: null,
         mnemonicWords: null,
         mnemonicKeyringId: null,
@@ -68,7 +65,7 @@ describe("buildCreateEntryRedirect", () => {
   it("returns completed onboarding sessions to complete when mnemonic state is gone", () => {
     expect(
       buildCreateEntryRedirect({
-        snapshot: SNAPSHOT_READY,
+        setupStatus: SETUP_READY,
         password: null,
         mnemonicWords: null,
         mnemonicKeyringId: null,
@@ -84,7 +81,7 @@ describe("buildBackupEntryRedirect", () => {
   it("returns to create when backup is opened before the wallet exists", () => {
     expect(
       buildBackupEntryRedirect({
-        snapshot: SNAPSHOT_UNINITIALIZED,
+        setupStatus: SETUP_UNINITIALIZED,
         mnemonicWords: null,
         mnemonicKeyringId: null,
       }),
@@ -97,7 +94,7 @@ describe("buildBackupEntryRedirect", () => {
   it("returns to complete when the wallet exists but the generated mnemonic was lost", () => {
     expect(
       buildBackupEntryRedirect({
-        snapshot: SNAPSHOT_READY,
+        setupStatus: SETUP_READY,
         mnemonicWords: null,
         mnemonicKeyringId: null,
       }),
@@ -110,7 +107,7 @@ describe("buildBackupEntryRedirect", () => {
   it("allows backup when the wallet exists and mnemonic state is still present", () => {
     expect(
       buildBackupEntryRedirect({
-        snapshot: SNAPSHOT_READY,
+        setupStatus: SETUP_READY,
         mnemonicWords: ["one", "two", "three"],
         mnemonicKeyringId: null,
       }),

@@ -1,5 +1,5 @@
 import type { UiTransport } from "@arx/core/ui";
-import { parseUiEnvelope, UI_CHANNEL, UI_EVENT_SNAPSHOT_CHANGED, type UiPortEnvelope } from "@arx/core/ui";
+import { parseUiEnvelope, UI_CHANNEL, UI_EVENT_READY, type UiPortEnvelope } from "@arx/core/ui";
 import type Browser from "webextension-polyfill";
 
 type UnknownListener = (message: unknown) => void;
@@ -28,7 +28,7 @@ const toError = (message: string, cause?: unknown): Error => {
 const isReadyHandshakeMessage = (message: unknown): boolean => {
   try {
     const envelope = parseUiEnvelope(message);
-    return envelope.type === "ui:event" && envelope.event === UI_EVENT_SNAPSHOT_CHANGED;
+    return envelope.type === "ui:event" && envelope.event === UI_EVENT_READY;
   } catch {
     return false;
   }
@@ -50,8 +50,7 @@ export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransp
   // Used to invalidate any in-flight connect() work across awaits (e.g. dynamic import).
   let connectGen = 0;
   // MV3 cold-start: popup can run before the service worker has attached its
-  // port listeners. Treat connect() as ready only after the first inbound message
-  // arrives (BG sends an initial snapshot event on attach).
+  // port listeners. Treat connect() as ready only after BG acknowledges attach.
   let ready = false;
   let connectPromise: Promise<void> | null = null;
   let connectResolve: (() => void) | null = null;
@@ -159,7 +158,7 @@ export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransp
         port = p;
         ready = false;
 
-        // Must bind listeners immediately so we don't miss the initial snapshot event.
+        // Must bind listeners immediately so we don't miss the ready event.
         bindPort(p);
       }
     } catch (error) {

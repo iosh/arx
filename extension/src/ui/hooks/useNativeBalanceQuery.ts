@@ -1,4 +1,4 @@
-import type { UiMethodResult, UiSnapshot } from "@arx/core/ui";
+import type { UiMethodResult } from "@arx/core/ui";
 import { useQuery } from "@tanstack/react-query";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
 
@@ -10,13 +10,13 @@ type NativeBalanceResult = UiMethodResult<"ui.balances.getNative">;
 export const nativeBalanceQueryKey = (params: { chainRef: string | null; accountKey: string | null }) =>
   ["nativeBalance", params.chainRef, params.accountKey] as const;
 
-export function useNativeBalanceQuery(snapshot: UiSnapshot | null | undefined) {
-  const chainRef = snapshot?.chain.chainRef ?? null;
-  const accountKey = snapshot?.accounts.active?.accountKey ?? null;
-
-  const enabled = Boolean(
-    snapshot?.session.isUnlocked && snapshot?.chainCapabilities.nativeBalance && chainRef && accountKey,
-  );
+export function useNativeBalanceQuery(params: {
+  chainRef: string | null;
+  accountKey: string | null;
+  enabled: boolean;
+}) {
+  const { chainRef, accountKey } = params;
+  const enabled = Boolean(params.enabled && chainRef && accountKey);
 
   const query = useQuery({
     queryKey: nativeBalanceQueryKey({ chainRef, accountKey }),

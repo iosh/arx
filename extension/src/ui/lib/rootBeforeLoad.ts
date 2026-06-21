@@ -1,15 +1,14 @@
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { isOnboardingPath } from "./onboardingPaths";
 import { ROUTES } from "./routes";
+import { isWalletInitialized, isWalletReady, type WalletAvailability } from "./walletAvailability";
 
-type SnapshotLike = {
-  accounts: { totalCount: number };
-  session: { vaultInitialized: boolean; isUnlocked: boolean };
+type SetupStatusLike = {
+  onboarding: { availability: WalletAvailability };
 };
 
-export function needsOnboarding(snapshot: SnapshotLike): boolean {
-  if (!snapshot.session.vaultInitialized) return true;
-  return (snapshot.accounts.totalCount ?? 0) === 0;
+export function needsOnboarding(setupStatus: SetupStatusLike): boolean {
+  return !isWalletReady(setupStatus.onboarding.availability);
 }
 
 export type RootBeforeLoadDecision =
@@ -21,9 +20,9 @@ export type RootBeforeLoadDecision =
 export function decideRootBeforeLoad(params: {
   entry: UiEntryMetadata;
   pathname: string;
-  snapshot?: SnapshotLike | null;
+  setupStatus?: SetupStatusLike | null;
 }): RootBeforeLoadDecision {
-  const { entry, pathname, snapshot } = params;
+  const { entry, pathname, setupStatus } = params;
 
   if (isOnboardingPath(pathname)) {
     if (entry.environment === "onboarding") return { type: "allow" };
@@ -36,15 +35,16 @@ export function decideRootBeforeLoad(params: {
   }
 
   // Fail-safe: onboarding should never land on non-onboarding surfaces under unknown state.
-  if (!snapshot) {
+  if (!setupStatus) {
     if (entry.environment === "onboarding") {
       return { type: "redirect", to: ROUTES.ONBOARDING_WELCOME, replace: true };
     }
     return { type: "allow" };
   }
 
-  const onboardingNeeded = needsOnboarding(snapshot);
-  const hasAccounts = (snapshot.accounts.totalCount ?? 0) > 0;
+  const onboardingNeeded = needsOnboarding(setupStatus);
+  const hasAccounts = isWalletReady(setupStatus.onboarding.availability);
+  const hasVault = isWalletInitialized(setupStatus.onboarding.availability);
 
   if (entry.environment === "onboarding") {
     const target = hasAccounts ? ROUTES.ONBOARDING_COMPLETE : ROUTES.ONBOARDING_WELCOME;
@@ -57,11 +57,11 @@ export function decideRootBeforeLoad(params: {
     return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   }
 
-  if (entry.environment === "notification" && !snapshot.session.vaultInitialized) {
+  if (entry.environment === "notification" && !hasVault) {
     return { type: "close" };
   }
 
-  if (snapshot.session.vaultInitialized) return { type: "allow" };
+  if (hasVault) return { type: "allow" };
 
   if (entry.environment === "popup") return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   return { type: "close" };

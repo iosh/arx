@@ -1,8 +1,9 @@
-import type { UiSnapshot } from "@arx/core/ui";
 import { redirect } from "@tanstack/react-router";
 import type { RouterContext } from "@/routes/__root";
-import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
+import type { UiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
+import { getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 import { ROUTES } from "./routes";
+import { isWalletInitialized, isWalletReady } from "./walletAvailability";
 
 /**
  * Route guard responsibilities:
@@ -14,33 +15,31 @@ import { ROUTES } from "./routes";
  * - redirect* => if condition matches, redirect (non-error control flow)
  */
 
-/**
- * Check if snapshot has accounts.
- */
-const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.totalCount ?? 0) > 0;
+const hasAccounts = (status?: UiSetupStatus) => isWalletReady(status?.onboarding.availability);
+const hasVault = (status: UiSetupStatus) => isWalletInitialized(status.onboarding.availability);
 
 /**
  * Requires vault to be initialized.
  * Does not enforce unlocked state (handled by SessionGate).
  */
 export const requireVaultInitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
-  if (!snapshot) {
+  const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
+  if (!status) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!snapshot.session.vaultInitialized) {
+  if (!hasVault(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };
 export const requireOnboardingPasswordAllowed = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
-  if (!snapshot) {
+  const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
+  if (!status) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (hasAccounts(snapshot)) {
+  if (hasAccounts(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
-  if (snapshot.session.vaultInitialized) {
+  if (hasVault(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };
@@ -50,36 +49,36 @@ export const requireOnboardingPasswordAllowed = async ({ context }: { context: R
  * Used on home page to ensure user completes onboarding.
  */
 export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
-  if (!snapshot) return;
-  if (!snapshot.session.vaultInitialized) return;
-  if (hasAccounts(snapshot)) return;
+  const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
+  if (!status) return;
+  if (!hasVault(status)) return;
+  if (hasAccounts(status)) return;
 
   throw redirect({ to: ROUTES.ONBOARDING_WELCOME, replace: true });
 };
 
 export const requireSetupIncomplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
-  if (!snapshot) {
+  const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
+  if (!status) {
     throw redirect({ to: ROUTES.HOME });
   }
 
-  // Setup is considered "complete" once we have at least one account.
-  if (hasAccounts(snapshot)) {
+  // The wallet is usable once it has at least one account.
+  if (hasAccounts(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
 
   // Allow:
-  // - vault not initialized yet (atomic onboarding)
-  // - vault initialized but no accounts (legacy/edge state)
+  // - no vault yet
+  // - vault initialized but no accounts
 };
 
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
-  if (!snapshot) {
+  const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
+  if (!status) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!snapshot.session.vaultInitialized || !hasAccounts(snapshot)) {
+  if (!hasAccounts(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };

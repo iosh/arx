@@ -1,12 +1,15 @@
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useNativeBalanceQuery } from "@/ui/hooks/useNativeBalanceQuery";
 import { useUiApprovalsList } from "@/ui/hooks/useUiApprovals";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
+import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 
 export const Route = createFileRoute("/")({
@@ -15,8 +18,12 @@ export const Route = createFileRoute("/")({
 });
 function HomePage() {
   const router = useRouter();
-  const { snapshot, markBackedUp, exportMnemonic } = useUiSnapshot();
+  const accountsQuery = useUiCurrentChainAccounts();
+  const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const { approvals } = useUiApprovalsList();
+  const exportMnemonicMutation = useMutation({
+    mutationFn: (params: { keyringId: string; password: string }) => uiClient.keyrings.exportMnemonic(params),
+  });
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const handleMarkBackedUp = async (keyringId: string) => {
@@ -34,7 +41,7 @@ function HomePage() {
 
   const handleExportMnemonic = async (params: { keyringId: string; password: string }) => {
     try {
-      const res = await exportMnemonic(params);
+      const res = await exportMnemonicMutation.mutateAsync(params);
       return res.words;
     } catch (error) {
       console.warn("[HomePage] failed to export mnemonic", error);
@@ -42,15 +49,22 @@ function HomePage() {
     }
   };
 
-  const nativeBalance = useNativeBalanceQuery(snapshot);
+  const homeStatus = accountsQuery.data;
+  const nativeBalance = useNativeBalanceQuery({
+    chainRef: homeStatus?.chain.chainRef ?? null,
+    accountKey: homeStatus?.accounts.active?.accountKey ?? null,
+    enabled: homeStatus?.session.isUnlocked ?? false,
+  });
 
-  if (!snapshot) {
+  if (!homeStatus || !backupStatus) {
     return null;
   }
 
   return (
     <HomeScreen
-      snapshot={snapshot}
+      chain={homeStatus.chain}
+      accounts={homeStatus.accounts}
+      backupStatus={backupStatus}
       approvals={approvals ?? []}
       nativeBalance={nativeBalance.balance}
       nativeBalanceLoading={nativeBalance.isInitialLoading}

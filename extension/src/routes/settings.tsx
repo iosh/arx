@@ -1,11 +1,13 @@
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Input, Paragraph, Slider, XStack } from "tamagui";
 import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: requireVaultInitialized,
@@ -19,14 +21,27 @@ const clamp = (value: number) => Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Mat
 
 function SettingsPage() {
   const router = useRouter();
-  const { snapshot, isLoading, setAutoLockDuration, lock } = useUiSnapshot();
+  const setupStatusQuery = useUiSetupStatus();
+  const refreshSetupStatus = useRefreshUiSetupStatus();
+  const setAutoLockDurationMutation = useMutation({
+    mutationFn: (durationMs: number) => uiClient.session.setAutoLockDuration({ durationMs }),
+    onSuccess: async () => {
+      await refreshSetupStatus();
+    },
+  });
+  const lockMutation = useMutation({
+    mutationFn: () => uiClient.session.lock(),
+    onSuccess: async () => {
+      await refreshSetupStatus();
+    },
+  });
 
   const [minutes, setMinutes] = useState(15);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync local state with snapshot when autoLockDurationMs changes
-  const autoLockDurationMs = snapshot?.session.autoLockDurationMs;
+  const sessionStatus = setupStatusQuery.data?.session;
+  const autoLockDurationMs = sessionStatus?.autoLockDurationMs;
   useEffect(() => {
     if (autoLockDurationMs === undefined) return;
     const next = Math.round(autoLockDurationMs / 60000);
@@ -34,17 +49,17 @@ function SettingsPage() {
   }, [autoLockDurationMs]);
 
   const timeLeftLabel = useMemo(() => {
-    const delta = snapshot?.session.nextAutoLockAt ? snapshot.session.nextAutoLockAt - Date.now() : null;
+    const delta = sessionStatus?.nextAutoLockAt ? sessionStatus.nextAutoLockAt - Date.now() : null;
     if (delta === null) return "Auto-lock paused";
     return delta > 0 ? `${Math.ceil(delta / 1000)}s until lock` : "Locking soon";
-  }, [snapshot?.session?.nextAutoLockAt]);
+  }, [sessionStatus?.nextAutoLockAt]);
 
   const handleSave = async () => {
     if (pending) return;
     setPending(true);
     setError(null);
     try {
-      await setAutoLockDuration(minutes * 60_000);
+      await setAutoLockDurationMutation.mutateAsync(minutes * 60_000);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -52,7 +67,7 @@ function SettingsPage() {
     }
   };
 
-  if (isLoading || !snapshot) {
+  if (setupStatusQuery.isLoading || !sessionStatus) {
     return <LoadingScreen />;
   }
 
@@ -109,7 +124,7 @@ function SettingsPage() {
           <Button flex={1} onPress={handleSave} loading={pending} disabled={pending}>
             Save
           </Button>
-          <Button flex={1} onPress={() => void lock()} disabled={pending}>
+          <Button flex={1} onPress={() => void lockMutation.mutateAsync()} disabled={pending}>
             Lock now
           </Button>
         </XStack>

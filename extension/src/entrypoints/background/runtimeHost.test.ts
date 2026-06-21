@@ -287,9 +287,7 @@ describe("runtimeHost", () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
-      buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      subscribeStateChanged: vi.fn(() => vi.fn()),
       subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
@@ -473,9 +471,7 @@ describe("runtimeHost", () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
-      buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      subscribeStateChanged: vi.fn(() => vi.fn()),
       subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);

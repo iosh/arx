@@ -1,12 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildCreateEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
-import { waitForUiSnapshotMatch } from "@/ui/lib/uiSnapshotQuery";
+import { isWalletInitialized, isWalletReady } from "@/ui/lib/walletAvailability";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 
@@ -22,9 +21,9 @@ const requireOnboardingPassword = (password: string | null): string => {
 };
 
 function GenerateMnemonicRoute() {
-  const queryClient = useQueryClient();
   const router = useRouter();
-  const { snapshot } = useUiSnapshot();
+  const { data: setupStatus } = useUiSetupStatus();
+  const refreshSetupStatus = useRefreshUiSetupStatus();
   const password = useOnboardingStore((s) => s.password);
   const mnemonicWords = useOnboardingStore((s) => s.mnemonicWords);
   const mnemonicKeyringId = useOnboardingStore((s) => s.mnemonicKeyringId);
@@ -37,19 +36,20 @@ function GenerateMnemonicRoute() {
   const [error, setError] = useState<string | null>(null);
   // Prevent duplicate auto-generation when React replays effects in development.
   const autoGenerateRequestedRef = useRef(false);
-  const hasAccounts = (snapshot?.accounts.totalCount ?? 0) > 0;
+  const walletAvailability = setupStatus?.onboarding.availability;
+  const hasAccounts = isWalletReady(walletAvailability);
   const words = mnemonicWords ?? [];
 
   useEffect(() => {
     const redirect = buildCreateEntryRedirect({
-      snapshot,
+      setupStatus,
       password,
       mnemonicWords,
       mnemonicKeyringId,
     });
     if (!redirect) return;
     router.navigate(redirect);
-  }, [mnemonicKeyringId, mnemonicWords, password, router, snapshot]);
+  }, [mnemonicKeyringId, mnemonicWords, password, router, setupStatus]);
 
   const generateWords = useCallback(async () => {
     if (hasAccounts) {
@@ -81,7 +81,7 @@ function GenerateMnemonicRoute() {
       return;
     }
 
-    const vaultInitialized = snapshot?.session.vaultInitialized ?? false;
+    const vaultInitialized = isWalletInitialized(walletAvailability);
     if (!vaultInitialized && !password) return;
     if (words.length === 0 || isGenerating || isSubmitting) return;
 
@@ -101,11 +101,7 @@ function GenerateMnemonicRoute() {
       setMnemonicWords(words);
       setMnemonicKeyringId(res.keyringId);
 
-      await waitForUiSnapshotMatch(
-        queryClient,
-        (nextSnapshot) => nextSnapshot.session.vaultInitialized && (nextSnapshot.accounts.totalCount ?? 0) > 0,
-        { timeoutMs: 1_500 },
-      );
+      await refreshSetupStatus();
 
       await router.navigate({ to: ROUTES.ONBOARDING_BACKUP, replace: true });
       navigatedToBackup = true;

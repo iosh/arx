@@ -1,9 +1,8 @@
-import { UI_EVENT_ENTRY_CHANGED, type UiMethodResult, type UiSnapshot } from "@arx/core/ui";
+import { UI_EVENT_ENTRY_CHANGED, type UiMethodResult } from "@arx/core/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import { getUiEnvironment, hydrateUiEntryMetadata, type UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { writeCachedUiApprovalDetail } from "./uiApprovalQueries";
 import { uiClient } from "./uiBridgeClient";
-import { refreshUiSnapshotIntoCache } from "./uiSnapshotQuery";
 
 export const loadUiEntryLaunchContext = async (): Promise<UiEntryMetadata> => {
   const environment = getUiEnvironment();
@@ -77,8 +76,4 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
     stopConnectionStatus();
     stopEntryChanged();
   };
-};
-
-export const preloadUiSnapshot = async (queryClient: QueryClient): Promise<UiSnapshot> => {
-  return await refreshUiSnapshotIntoCache(queryClient);
 };

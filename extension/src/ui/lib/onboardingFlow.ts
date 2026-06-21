@@ -1,9 +1,8 @@
 import { ROUTES } from "./routes";
+import { isWalletReady, type WalletAvailability } from "./walletAvailability";
 
-/** Minimal snapshot fields needed for onboarding route decisions. */
-type OnboardingSnapshotLike = {
-  session: { vaultInitialized: boolean };
-  accounts: { totalCount: number };
+type OnboardingSetupStatusLike = {
+  onboarding: { availability: WalletAvailability };
 };
 
 type OnboardingIntent = "create" | "import";
@@ -13,11 +12,10 @@ type OnboardingIntent = "create" | "import";
  * The only branch here is whether the compatibility boundary can skip password setup.
  */
 export function buildWelcomeIntentNavigation(params: {
-  snapshot?: OnboardingSnapshotLike | null;
+  setupStatus?: OnboardingSetupStatusLike | null;
   intent: OnboardingIntent;
 }): { to: string; search?: { intent: OnboardingIntent } } {
-  const shouldSkipPassword =
-    !!params.snapshot?.session.vaultInitialized && (params.snapshot.accounts.totalCount ?? 0) === 0;
+  const shouldSkipPassword = params.setupStatus?.onboarding.availability === "empty";
 
   if (params.intent === "create") {
     return shouldSkipPassword
@@ -35,12 +33,12 @@ export function buildWelcomeIntentNavigation(params: {
  * A null result means the page can keep rendering its normal flow.
  */
 export function buildCreateEntryRedirect(params: {
-  snapshot?: OnboardingSnapshotLike | null;
+  setupStatus?: OnboardingSetupStatusLike | null;
   password: string | null;
   mnemonicWords: string[] | null;
   mnemonicKeyringId: string | null;
 }): { to: string; replace: true; search?: { intent: "create" } } | null {
-  if (!params.snapshot) {
+  if (!params.setupStatus) {
     return null;
   }
 
@@ -49,12 +47,11 @@ export function buildCreateEntryRedirect(params: {
     return null;
   }
 
-  const hasAccounts = (params.snapshot.accounts.totalCount ?? 0) > 0;
-  if (hasAccounts && (!params.mnemonicWords || params.mnemonicWords.length === 0)) {
+  if (isWalletReady(params.setupStatus.onboarding.availability) && !params.mnemonicWords?.length) {
     return { to: ROUTES.ONBOARDING_COMPLETE, replace: true };
   }
 
-  if (!params.snapshot.session.vaultInitialized && !params.password) {
+  if (params.setupStatus.onboarding.availability === "uninitialized" && !params.password) {
     return { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "create" }, replace: true };
   }
 
@@ -66,11 +63,11 @@ export function buildCreateEntryRedirect(params: {
  * and whether the generated mnemonic still exists in the onboarding store.
  */
 export function buildBackupEntryRedirect(params: {
-  snapshot?: OnboardingSnapshotLike | null;
+  setupStatus?: OnboardingSetupStatusLike | null;
   mnemonicWords: string[] | null;
   mnemonicKeyringId: string | null;
 }): { to: string; replace: true } | null {
-  if (!params.snapshot) {
+  if (!params.setupStatus) {
     return null;
   }
 
@@ -79,7 +76,7 @@ export function buildBackupEntryRedirect(params: {
     return null;
   }
 
-  if ((params.snapshot.accounts.totalCount ?? 0) === 0) {
+  if (!isWalletReady(params.setupStatus.onboarding.availability)) {
     return { to: ROUTES.ONBOARDING_CREATE, replace: true };
   }
 

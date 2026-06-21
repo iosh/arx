@@ -1,16 +1,18 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
+import { useCallback } from "react";
 import { YStack } from "tamagui";
 import { getUiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { ApprovalsOrchestrator } from "@/ui/approvals";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
-import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
+import { useUiSessionEvents } from "@/ui/hooks/useUiSessionEvents";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { createUiSetupStatusQueryOptions, getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 // Router context type for route guards
 export interface RouterContext {
   queryClient: QueryClient;
@@ -21,11 +23,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ context, location }) => {
     const entry = getUiEntryMetadata();
 
-    // Fast-path: enforce onboarding surface rules without needing snapshot.
+    // Fast-path: enforce onboarding surface rules before loading setup status.
     const preDecision = decideRootBeforeLoad({
       entry,
       pathname: location.pathname,
-      snapshot: null,
+      setupStatus: null,
     });
 
     if (preDecision.type === "openOnboardingAndClose") {
@@ -48,12 +50,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       return;
     }
 
-    const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+    const setupStatus = await getOrFetchUiSetupStatus(context.queryClient);
 
     const decision = decideRootBeforeLoad({
       entry,
       pathname: location.pathname,
-      snapshot: snapshot ?? null,
+      setupStatus: setupStatus ?? null,
     });
 
     if (decision.type === "openOnboardingAndClose") {
@@ -85,14 +87,30 @@ function RootLayout() {
 }
 
 function RootInner() {
-  const { snapshot, isLoading, unlock } = useUiSnapshot();
-  const enabled = snapshot?.session.isUnlocked ?? false;
+  const queryClient = useQueryClient();
+  const setupStatusQuery = useUiSetupStatus();
+  const unlockMutation = useMutation({
+    mutationFn: (password: string) => uiClient.session.unlock({ password }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: createUiSetupStatusQueryOptions().queryKey });
+    },
+  });
+  const enabled = setupStatusQuery.data?.session.isUnlocked ?? false;
   useIdleTimer(enabled);
+
+  const refreshSetupStatus = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: createUiSetupStatusQueryOptions().queryKey });
+  }, [queryClient]);
+  useUiSessionEvents(refreshSetupStatus);
 
   return (
     <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>
       <ApprovalsOrchestrator />
-      <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
+      <SessionGate
+        sessionStatus={setupStatusQuery.data?.session}
+        isLoading={setupStatusQuery.isLoading}
+        unlock={unlockMutation.mutateAsync}
+      >
         <Outlet />
       </SessionGate>
     </YStack>

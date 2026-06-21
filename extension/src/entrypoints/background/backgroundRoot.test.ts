@@ -72,9 +72,7 @@ vi.mock("webextension-polyfill", () => ({
 }));
 
 const createUiAccess = () => ({
-  buildSnapshotEvent: vi.fn(),
   dispatchRequest: vi.fn(),
-  subscribeStateChanged: vi.fn(() => vi.fn()),
   subscribeUiEvents: vi.fn(() => vi.fn()),
 });
 

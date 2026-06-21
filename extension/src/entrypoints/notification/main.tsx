@@ -8,7 +8,8 @@ import "../popup/style.css";
 
 import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
-import { loadUiEntryBootstrap, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
+import { refreshUiSetupStatusIntoCache } from "@/ui/lib/uiSetupStatusQuery";
+import { loadUiEntryBootstrap, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 const queryClient = new QueryClient();
@@ -76,8 +77,8 @@ const boot = async () => {
   adjustWindowInnerSize();
 
   try {
-    const snapshot = await preloadUiSnapshot(queryClient);
-    if (!snapshot.session.vaultInitialized) {
+    const setupStatus = await refreshUiSetupStatusIntoCache(queryClient);
+    if (setupStatus.onboarding.availability === "uninitialized") {
       window.close();
       return;
     }

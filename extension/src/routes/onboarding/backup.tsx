@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildBackupEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
@@ -23,7 +24,8 @@ export const Route = createFileRoute("/onboarding/backup")({
 });
 function VerifyMnemonicRoute() {
   const router = useRouter();
-  const { snapshot, markBackedUp } = useUiSnapshot();
+  const { data: setupStatus } = useUiSetupStatus();
+  const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const mnemonicWords = useOnboardingStore((s) => s.mnemonicWords);
   const mnemonicKeyringId = useOnboardingStore((s) => s.mnemonicKeyringId);
   const clearMnemonicWords = useOnboardingStore((s) => s.clearMnemonicWords);
@@ -33,11 +35,11 @@ function VerifyMnemonicRoute() {
   const words = mnemonicWords ?? [];
 
   useEffect(() => {
-    const redirect = buildBackupEntryRedirect({ snapshot, mnemonicWords, mnemonicKeyringId });
+    const redirect = buildBackupEntryRedirect({ setupStatus, mnemonicWords, mnemonicKeyringId });
     if (redirect) {
       router.navigate(redirect);
     }
-  }, [mnemonicKeyringId, mnemonicWords, router, snapshot]);
+  }, [mnemonicKeyringId, mnemonicWords, router, setupStatus]);
 
   const quizIndexes = useMemo(() => buildQuizIndexes(words.length), [words.length]);
 
@@ -56,7 +58,7 @@ function VerifyMnemonicRoute() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const keyringId = mnemonicKeyringId ?? snapshot?.backup.nextHdKeyring?.keyringId;
+      const keyringId = mnemonicKeyringId ?? backupStatus?.nextHdKeyring?.keyringId;
       if (keyringId) await markBackedUp(keyringId);
       clearMnemonicWords();
       router.navigate({ to: ROUTES.ONBOARDING_COMPLETE, replace: true });

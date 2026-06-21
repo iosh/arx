@@ -1,4 +1,5 @@
 import type { UiKeyringMeta } from "@arx/core/ui";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,12 +17,15 @@ import {
   Sheet,
   TextField,
 } from "@/ui/components";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useRefreshUiCurrentChainAccounts, useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
+import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { formatPrivateKeyHex, isValidPrivateKey } from "@/ui/lib/privateKeyInput";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { createUiKeyringsQueryOptions } from "@/ui/lib/uiKeyringQueries";
 
 export const Route = createFileRoute("/accounts")({
   beforeLoad: requireVaultInitialized,
@@ -29,9 +33,31 @@ export const Route = createFileRoute("/accounts")({
 });
 
 function AccountsPage() {
+  const queryClient = useQueryClient();
   const router = useRouter();
-  const { snapshot, isLoading, switchAccount, markBackedUp, deriveAccount, importPrivateKey, fetchKeyrings } =
-    useUiSnapshot();
+  const accountsQuery = useUiCurrentChainAccounts();
+  const refreshCurrentChainAccounts = useRefreshUiCurrentChainAccounts();
+  const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
+  const switchAccountMutation = useMutation({
+    mutationFn: ({ chainRef, accountKey }: { chainRef: string; accountKey?: string | null }) =>
+      uiClient.accounts.switchActive({ chainRef, accountKey }),
+    onSuccess: async () => {
+      await refreshCurrentChainAccounts();
+    },
+  });
+  const deriveAccountMutation = useMutation({
+    mutationFn: (params: { keyringId: string }) => uiClient.keyrings.deriveAccount(params),
+    onSuccess: async () => {
+      await refreshCurrentChainAccounts();
+    },
+  });
+  const importPrivateKeyMutation = useMutation({
+    mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
+      uiClient.keyrings.importPrivateKey(params),
+    onSuccess: async () => {
+      await refreshCurrentChainAccounts();
+    },
+  });
   const [pendingAccountKey, setPendingAccountKey] = useState<string | null>(null);
   const [accountErrorMessage, setAccountErrorMessage] = useState<string | null>(null);
   const [markingKeyringId, setMarkingKeyringId] = useState<string | null>(null);
@@ -75,7 +101,8 @@ function AccountsPage() {
     setLoadingHdKeyrings(true);
     setDeriveErrorMessage(null);
 
-    void fetchKeyrings()
+    void queryClient
+      .fetchQuery(createUiKeyringsQueryOptions())
       .then((keyrings) => {
         if (cancelled) return;
         const nextHdKeyrings = keyrings.filter((keyring) => keyring.type === "hd");
@@ -98,11 +125,13 @@ function AccountsPage() {
     return () => {
       cancelled = true;
     };
-  }, [deriveOpen, fetchKeyrings]);
+  }, [deriveOpen, queryClient]);
 
-  if (isLoading || !snapshot) {
+  if (accountsQuery.isLoading || !accountsQuery.data) {
     return <LoadingScreen />;
   }
+
+  const { session, chain, accounts } = accountsQuery.data;
 
   const handleAccountSwitch = async (accountKey: string | null) => {
     if (pendingAccountKey) return;
@@ -111,7 +140,7 @@ function AccountsPage() {
     setPendingAccountKey(accountKey);
 
     try {
-      await switchAccount({ chainRef: snapshot.chain.chainRef, accountKey });
+      await switchAccountMutation.mutateAsync({ chainRef: chain.chainRef, accountKey });
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
       setAccountErrorMessage(getErrorMessage(error));
@@ -134,7 +163,7 @@ function AccountsPage() {
   };
 
   const handleDeriveAccount = async () => {
-    if (!snapshot.session.isUnlocked) {
+    if (!session.isUnlocked) {
       pushToast({ kind: "error", message: "Wallet is locked. Please unlock first.", dedupeKey: "derive-locked" });
       return;
     }
@@ -148,7 +177,7 @@ function AccountsPage() {
     setDeriveErrorMessage(null);
 
     try {
-      await deriveAccount({ keyringId: selectedHdKeyringId });
+      await deriveAccountMutation.mutateAsync({ keyringId: selectedHdKeyringId });
       pushToast({ kind: "success", message: "New account derived", dedupeKey: "derive-success" });
       closeDeriveSheet();
     } catch (error) {
@@ -160,7 +189,7 @@ function AccountsPage() {
   };
 
   const handleImportPrivateKey = async () => {
-    if (!snapshot.session.isUnlocked) {
+    if (!session.isUnlocked) {
       pushToast({ kind: "error", message: "Wallet is locked. Please unlock first.", dedupeKey: "import-pk-locked" });
       return;
     }
@@ -181,10 +210,10 @@ function AccountsPage() {
 
     try {
       const alias = importAlias.trim() || undefined;
-      const result = await importPrivateKey({
+      const result = await importPrivateKeyMutation.mutateAsync({
         privateKey: formattedPrivateKey,
         alias,
-        namespace: snapshot.chain.namespace,
+        namespace: chain.namespace,
       });
       pushToast({
         kind: "success",
@@ -200,7 +229,7 @@ function AccountsPage() {
     }
   };
 
-  const nextHdKeyring = snapshot.backup.nextHdKeyring;
+  const nextHdKeyring = backupStatus?.nextHdKeyring ?? null;
 
   return (
     <Screen>
@@ -217,9 +246,9 @@ function AccountsPage() {
               Mark backed up
             </Button>
           </XStack>
-          {snapshot.backup.pendingHdKeyringCount > 1 ? (
+          {backupStatus && backupStatus.pendingHdKeyringCount > 1 ? (
             <Paragraph color="$color10" fontSize="$2">
-              {snapshot.backup.pendingHdKeyringCount} HD wallets still need backup.
+              {backupStatus.pendingHdKeyringCount} HD wallets still need backup.
             </Paragraph>
           ) : null}
           {backupErrorMessage ? (
@@ -236,15 +265,15 @@ function AccountsPage() {
         <Paragraph fontSize="$6" fontWeight="600">
           Accounts
         </Paragraph>
-        <ChainBadge chainRef={snapshot.chain.chainRef} displayName={snapshot.chain.displayName} size="sm" />
+        <ChainBadge chainRef={chain.chainRef} displayName={chain.displayName} size="sm" />
 
         <Divider marginVertical="$2" />
 
-        {snapshot.accounts.list.length === 0 ? (
+        {accounts.list.length === 0 ? (
           <Paragraph color="$color10">No accounts available yet.</Paragraph>
         ) : (
-          snapshot.accounts.list.map((account) => {
-            const isActive = snapshot.accounts.active?.accountKey === account.accountKey;
+          accounts.list.map((account) => {
+            const isActive = accounts.active?.accountKey === account.accountKey;
             const loading = pendingAccountKey === account.accountKey;
 
             return (
@@ -281,10 +310,10 @@ function AccountsPage() {
           Manage additional accounts (requires unlocked wallet).
         </Paragraph>
 
-        <Button disabled={!snapshot.session.isUnlocked} onPress={() => setDeriveOpen(true)}>
+        <Button disabled={!session.isUnlocked} onPress={() => setDeriveOpen(true)}>
           Derive New Account
         </Button>
-        <Button disabled={!snapshot.session.isUnlocked} onPress={() => setImportOpen(true)}>
+        <Button disabled={!session.isUnlocked} onPress={() => setImportOpen(true)}>
           Import Private Key
         </Button>
       </Card>

@@ -24,7 +24,8 @@ import {
   UI_CHANNEL,
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_READY,
+  UI_EVENT_SESSION_CHANGED,
   type UiAccountMeta,
   type UiBackupStatus,
   type UiKeyringMeta,
@@ -32,17 +33,14 @@ import {
   type UiMethodParams,
   type UiPermissionsSnapshot,
   type UiPortEnvelope,
-  type UiSnapshot,
   type UiTransaction,
 } from "@arx/core/ui";
 import {
-  buildUiSnapshot,
   createUiKeyringsAccess,
   createUiRuntimeAccess,
   createUiSessionAccess,
   createUiWalletSetupAccess,
   type UiRuntimeAccess,
-  type UiRuntimeDispatchResult,
 } from "@arx/core/ui/server";
 import type { TrustedWalletApi } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -724,6 +722,29 @@ const buildUiAccountMeta = (record: AccountRecord): UiAccountMeta => ({
   ...(record.hidden !== undefined ? { hidden: record.hidden } : {}),
 });
 
+const deriveBackupStatusForTest = (keyring: KeyringService): UiBackupStatus => {
+  const pendingHdKeyrings = keyring
+    .getKeyrings()
+    .filter((meta) => meta.type === "hd" && meta.needsBackup === true)
+    .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
+  const nextHdKeyring = pendingHdKeyrings[0] ?? null;
+
+  return {
+    pendingHdKeyringCount: pendingHdKeyrings.length,
+    nextHdKeyring: nextHdKeyring
+      ? {
+          keyringId: nextHdKeyring.id,
+          alias: nextHdKeyring.alias ?? null,
+        }
+      : null,
+  };
+};
+
+const hasOwnedAccountsForTest = (accounts: UiBridgeTestRuntimeServices["accounts"]): boolean => {
+  const state = accounts.getState();
+  return Object.values(state.namespaces).some((namespaceState) => namespaceState.accountKeys.length > 0);
+};
+
 const createUnexpectedWalletGroup = (group: string) =>
   new Proxy(
     {},
@@ -742,7 +763,6 @@ const createUnexpectedWalletGroup = (group: string) =>
 
 const createTrustedWalletApiForBridgeTest = (groups: Partial<TrustedWalletApi>): TrustedWalletApi =>
   ({
-    snapshot: groups.snapshot ?? createUnexpectedWalletGroup("snapshot"),
     session: groups.session ?? createUnexpectedWalletGroup("session"),
     onboarding: groups.onboarding ?? createUnexpectedWalletGroup("onboarding"),
     accounts: groups.accounts ?? createUnexpectedWalletGroup("accounts"),
@@ -751,7 +771,7 @@ const createTrustedWalletApiForBridgeTest = (groups: Partial<TrustedWalletApi>):
     approvals: groups.approvals ?? createUnexpectedWalletGroup("approvals"),
     keyrings: groups.keyrings ?? createUnexpectedWalletGroup("keyrings"),
     transactions: groups.transactions ?? createUnexpectedWalletGroup("transactions"),
-  }) as TrustedWalletApi;
+  }) as unknown as TrustedWalletApi;
 
 const createUiAccessForTest = (input: {
   services: UiBridgeTestRuntimeServices;
@@ -820,30 +840,35 @@ const createUiAccessForTest = (input: {
     ...runtimeServices.chainViews,
     ...(input.chainViewsOverride ?? {}),
   } as typeof runtimeServices.chainViews;
-  const buildSnapshot = (): UiSnapshot => {
-    return buildUiSnapshot({
-      accounts: input.services.accounts,
-      chains: {
-        buildWalletNetworksSnapshot: walletNetworksSnapshot,
-        findAvailableChainView: runtimeServices.chainViews.findAvailableChainView,
-        getApprovalReviewChainView: runtimeServices.chainViews.getApprovalReviewChainView,
-        getSelectedChainView: selectedChainView,
-      },
-      permissions: input.permissionViewsOverride ?? runtimeServices.permissionViews,
-      session: sessionAccess,
-      keyrings: keyringsAccess,
-      attention: {
-        getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
-      },
-      namespaceBindings,
-    });
+  const listAccountsForCurrentChain = () => {
+    const selectedChain = selectedChainView();
+    const params = {
+      namespace: selectedChain.namespace,
+      chainRef: selectedChain.chainRef,
+    };
+    const list = input.services.accounts.listOwnedForNamespace(params).map((account) => ({
+      accountKey: account.accountKey,
+      canonicalAddress: account.canonicalAddress,
+      displayAddress: account.displayAddress,
+    }));
+    const active = input.services.accounts.getActiveAccountForNamespace(params);
+    return {
+      totalCount: list.length,
+      list,
+      active: active
+        ? {
+            accountKey: active.accountKey,
+            canonicalAddress: active.canonicalAddress,
+            displayAddress: active.displayAddress,
+          }
+        : null,
+    };
   };
   const read = {
-    getWalletSnapshot: buildSnapshot,
     listKeyrings: () => input.keyring.getKeyrings().map(buildUiKeyringMeta),
     getAccountsByKeyring: ({ keyringId, includeHidden }: { keyringId: string; includeHidden?: boolean }) =>
       input.keyring.getAccountsByKeyring(keyringId, includeHidden ?? false).map(buildUiAccountMeta),
-    getBackupStatus: (): UiBackupStatus => buildSnapshot().backup,
+    getBackupStatus: (): UiBackupStatus => deriveBackupStatusForTest(input.keyring),
     getNativeBalance: async ({ accountKey, chainRef }: { accountKey: AccountKey; chainRef: ChainRef }) => {
       const account = input.services.accounts.getOwnedAccount({
         namespace: CHAIN.namespace,
@@ -891,10 +916,6 @@ const createUiAccessForTest = (input: {
     },
   };
   const wallet = createTrustedWalletApiForBridgeTest({
-    snapshot: {
-      get: () => read.getWalletSnapshot(),
-      subscribe: (listener) => read.subscribe(listener),
-    },
     session: {
       getStatus: () => sessionStatus.getStatus(),
       unlock: (input) => sessionAccess.unlock(input),
@@ -907,6 +928,16 @@ const createUiAccessForTest = (input: {
       },
     },
     onboarding: {
+      getStatus: () => {
+        const vaultInitialized = sessionStatus.hasInitializedVault();
+        return {
+          availability: !vaultInitialized
+            ? "uninitialized"
+            : hasOwnedAccountsForTest(input.services.accounts)
+              ? "ready"
+              : "empty",
+        };
+      },
       generateMnemonic: (params) =>
         Promise.resolve({ words: input.keyring.generateMnemonic(params?.wordCount ?? 12).split(" ") }),
       createWalletFromMnemonic: async ({ password, words, alias, skipBackup, namespace }) =>
@@ -929,7 +960,7 @@ const createUiAccessForTest = (input: {
       },
     },
     accounts: {
-      listCurrentChain: () => buildSnapshot().accounts,
+      listCurrentChain: () => listAccountsForCurrentChain(),
       switchActive: async ({ chainRef, accountKey }) =>
         await input.services.accounts.setActiveAccount({
           namespace: CHAIN.namespace,
@@ -1070,6 +1101,7 @@ const createUiAccessForTest = (input: {
     server: {
       wallet,
       events: {
+        onSessionChanged: (handler) => sessionAccess.onStateChanged(handler),
         onApprovalCreated: (handler) => input.services.approvals.onCreated(() => handler()),
         onApprovalFinished: (handler) =>
           input.services.approvals.onFinished((event) => handler({ approvalId: event.id })),
@@ -1263,11 +1295,8 @@ const expectResponse = <T = unknown>(msg: unknown, id: string): T => {
   return msg.result as T;
 };
 
-const latestSnapshotFromMessages = (messages: unknown[]) => {
-  const events = messages.filter((m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED);
-  const last = events.at(-1);
-  if (!last || !isRecord(last)) throw new Error("Expected at least one snapshotChanged event");
-  return last.payload as UiSnapshot;
+const findEvent = (messages: unknown[], event: string) => {
+  return messages.find((message) => isRecord(message) && message.type === "ui:event" && message.event === event);
 };
 
 describe("uiBridge", () => {
@@ -1292,7 +1321,7 @@ describe("uiBridge", () => {
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);
-    port.messages = []; // drop initial snapshot
+    port.messages = []; // drop ready handshake
   });
 
   const send = async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>) => {
@@ -1329,7 +1358,7 @@ describe("uiBridge", () => {
     expect(res.words).toHaveLength(12);
   });
 
-  it("onboarding.createWalletFromMnemonic initializes onboarding wallet state and refreshes the snapshot after reply", async () => {
+  it("onboarding.createWalletFromMnemonic initializes onboarding wallet state", async () => {
     // Default test setup starts with a vault that has ciphertext but no accounts.
     const id = crypto.randomUUID();
     const words = TEST_MNEMONIC.split(" ");
@@ -1344,18 +1373,13 @@ describe("uiBridge", () => {
     const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
 
-    const snapshotEvents = port.messages
-      .map((m, idx) => ({ m, idx }))
-      .filter(({ m }) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED);
-    const lastSnapshotEventIndex = snapshotEvents.at(-1)?.idx ?? -1;
-    expect(lastSnapshotEventIndex).toBeGreaterThan(responseIndex);
-
-    const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.session.vaultInitialized).toBe(true);
-    expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
+    const status = await send("ui.onboarding.getStatus");
+    expect(expectResponse(status.envelope, status.id)).toEqual({
+      availability: "ready",
+    });
   });
 
-  it("session.lock refreshes the snapshot after reply", async () => {
+  it("session.lock emits sessionChanged", async () => {
     const id = crypto.randomUUID();
 
     await port.triggerMessage({
@@ -1367,41 +1391,32 @@ describe("uiBridge", () => {
     const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
 
-    const firstSnapshotIndex = port.messages.findIndex(
-      (m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED,
+    const sessionChangedIndex = port.messages.findIndex(
+      (m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SESSION_CHANGED,
     );
-    expect(firstSnapshotIndex).toBeGreaterThan(responseIndex);
+    expect(sessionChangedIndex).toBeGreaterThanOrEqual(0);
 
-    const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.session.isUnlocked).toBe(false);
+    const status = await send("ui.session.getStatus");
+    expect(expectResponse(status.envelope, status.id)).toMatchObject({ isUnlocked: false });
   });
 
-  it("does not block snapshotChanged behind slow snapshot-irrelevant queries", async () => {
-    const stateChangedListeners = new Set<() => void>();
-    let snapshotVersion = 0;
-    let resolveDispatch!: (value: UiRuntimeDispatchResult | null) => void;
+  it("does not block ui events behind slow queries", async () => {
+    const uiEventListeners = new Set<(event: { type: "ui:event"; event: string; payload: unknown }) => void>();
+    let resolveDispatch!: (value: Awaited<ReturnType<UiRuntimeAccess["dispatchRequest"]>>) => void;
     let hasPendingDispatch = false;
 
     const uiAccess: UiRuntimeAccess = {
-      buildSnapshotEvent: () => ({
-        type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: { version: snapshotVersion },
-        context: { namespace: CHAIN.namespace, chainRef: CHAIN.chainRef },
-      }),
       dispatchRequest: vi.fn(
         () =>
-          new Promise<UiRuntimeDispatchResult | null>((resolve) => {
+          new Promise<Awaited<ReturnType<UiRuntimeAccess["dispatchRequest"]>>>((resolve) => {
             resolveDispatch = resolve;
             hasPendingDispatch = true;
           }),
       ),
-      getRequestKind: vi.fn(() => "query" as const),
-      subscribeStateChanged: vi.fn((listener) => {
-        stateChangedListeners.add(listener);
-        return () => stateChangedListeners.delete(listener);
+      subscribeUiEvents: vi.fn((listener) => {
+        uiEventListeners.add(listener);
+        return () => uiEventListeners.delete(listener);
       }),
-      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     const bridge = createUiBridge({ uiAccess });
     const queryPort = createPort();
@@ -1419,16 +1434,19 @@ describe("uiBridge", () => {
     });
     await vi.waitFor(() => expect(hasPendingDispatch).toBe(true));
 
-    snapshotVersion = 1;
-    for (const listener of stateChangedListeners) {
-      listener();
+    for (const listener of uiEventListeners) {
+      listener({
+        type: "ui:event",
+        event: UI_EVENT_SESSION_CHANGED,
+        payload: { reason: "changed" },
+      });
     }
 
     expect(observerPort.messages).toContainEqual(
       expect.objectContaining({
         type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: { version: 1 },
+        event: UI_EVENT_SESSION_CHANGED,
+        payload: { reason: "changed" },
       }),
     );
     expect(queryPort.messages).not.toContainEqual(expect.objectContaining({ type: "ui:response", id: "req-query" }));
@@ -1444,15 +1462,15 @@ describe("uiBridge", () => {
     });
     await pendingQuery;
 
-    const querySnapshotIndex = queryPort.messages.findIndex(
-      (message) => isRecord(message) && message.type === "ui:event" && message.event === UI_EVENT_SNAPSHOT_CHANGED,
+    const queryEventIndex = queryPort.messages.findIndex(
+      (message) => isRecord(message) && message.type === "ui:event" && message.event === UI_EVENT_SESSION_CHANGED,
     );
     const queryResponseIndex = queryPort.messages.findIndex(
       (message) => isRecord(message) && message.type === "ui:response" && message.id === "req-query",
     );
 
-    expect(querySnapshotIndex).toBeGreaterThanOrEqual(0);
-    expect(queryResponseIndex).toBeGreaterThan(querySnapshotIndex);
+    expect(queryEventIndex).toBeGreaterThanOrEqual(0);
+    expect(queryResponseIndex).toBeGreaterThan(queryEventIndex);
   });
 
   it("drops a stale port without affecting approval broadcasts to other attached ports", () => {
@@ -1498,17 +1516,14 @@ describe("uiBridge", () => {
     expect(stalePort.messages).toEqual([]);
   });
 
-  it("recovers snapshot broadcasting after a transient selected-chain resolution failure", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("sends ready without reading selected-chain state", () => {
     const browserApi = makeBrowser();
     const platform = createUiPlatform({
       browser: browserApi as unknown as Parameters<typeof createUiPlatform>[0]["browser"],
       entrypoints: ENTRYPOINTS,
     });
     const runtimeServices = createRuntimeServices();
-    const listeners = new Set<() => void>();
     const attentionStateHandlers = new Set<() => void>();
-    let snapshotBroken = true;
 
     const uiAccess = createUiAccessForTest({
       services: runtimeServices,
@@ -1531,10 +1546,7 @@ describe("uiBridge", () => {
       platform,
       uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
       walletChainSelection: {
-        subscribeChanged: (handler: () => void) => {
-          listeners.add(handler);
-          return () => listeners.delete(handler);
-        },
+        subscribeChanged: () => () => {},
       },
       subscribeAttentionStateChanged: (listener) => {
         attentionStateHandlers.add(listener);
@@ -1544,21 +1556,10 @@ describe("uiBridge", () => {
         ...runtimeServices.chainViews,
         getSelectedNamespace: () => CHAIN.namespace,
         getSelectedChainView: () => {
-          if (snapshotBroken) {
-            throw new Error("selected chain temporarily unavailable");
-          }
-          return CHAIN;
+          throw new Error("selected chain temporarily unavailable");
         },
         buildWalletNetworksSnapshot: () => {
-          if (snapshotBroken) {
-            throw new Error("selected chain temporarily unavailable");
-          }
-          return {
-            selectedNamespace: CHAIN.namespace,
-            active: CHAIN.chainRef,
-            known: [CHAIN],
-            available: [CHAIN],
-          };
+          throw new Error("selected chain temporarily unavailable");
         },
       },
     });
@@ -1567,16 +1568,13 @@ describe("uiBridge", () => {
     const port = createPort();
     bridge.attachPort(port as unknown as UiPort);
 
-    expect(port.messages).toEqual([]);
-
-    snapshotBroken = false;
-    for (const handler of listeners) {
-      handler();
-    }
-
-    const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.chain.chainRef).toBe(CHAIN.chainRef);
-    warnSpy.mockRestore();
+    expect(port.messages).toContainEqual(
+      expect.objectContaining({
+        type: "ui:event",
+        event: UI_EVENT_READY,
+        payload: { ready: true },
+      }),
+    );
   });
 
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
@@ -1697,7 +1695,7 @@ describe("uiBridge", () => {
     spy.mockRestore();
   });
 
-  it("does not include approvals in snapshotChanged payloads", async () => {
+  it("approval changes emit approval events without wallet state payloads", async () => {
     port.messages = [];
     const id = crypto.randomUUID();
     approvals.setPendingTasks([
@@ -1716,12 +1714,10 @@ describe("uiBridge", () => {
       (message) => isRecord(message) && message.type === "ui:event" && message.event === UI_EVENT_APPROVALS_CHANGED,
     );
     expect(approvalEvent).toBeDefined();
-    expect(port.messages.some((message) => isRecord(message) && message.event === UI_EVENT_SNAPSHOT_CHANGED)).toBe(
-      false,
-    );
+    expect(approvalEvent).toMatchObject({ payload: { reason: "changed" } });
   });
 
-  it("session.unlock triggers snapshotChanged with unlocked state", async () => {
+  it("session.unlock triggers sessionChanged with unlocked status available by query", async () => {
     unlock.setUnlocked(false);
     vault.setUnlocked(false);
     port.messages = [];
@@ -1729,8 +1725,10 @@ describe("uiBridge", () => {
     const res = await send("ui.session.unlock", { password: PASSWORD });
     expectResponse(res.envelope, res.id);
 
-    const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.session.isUnlocked).toBe(true);
+    expect(findEvent(port.messages, UI_EVENT_SESSION_CHANGED)).toBeDefined();
+
+    const status = await send("ui.session.getStatus");
+    expect(expectResponse(status.envelope, status.id)).toMatchObject({ isUnlocked: true });
   });
 
   it("onboarding.openTab: creates then debounces within cooldown", async () => {

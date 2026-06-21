@@ -2,7 +2,7 @@ import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiRuntimeAccess } from "@arx/core/runtime";
 import type { UiEventEnvelope } from "@arx/core/ui";
 import { createUiPortHub } from "./ui/portHub";
-import { createUiSnapshotBroadcaster } from "./ui/snapshotBroadcaster";
+import { createUiReadyHandshake } from "./ui/readyHandshake";
 
 export { UI_CHANNEL } from "@arx/core/ui";
 
@@ -15,56 +15,23 @@ type BridgeDeps = {
 
 export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
   const portHub = createUiPortHub();
+  const readyHandshake = createUiReadyHandshake({ portHub });
 
-  const buildSnapshotEventSafely = () => {
-    try {
-      return uiAccess.buildSnapshotEvent();
-    } catch (error) {
-      bridgeLog("failed to build snapshot", error);
-      return null;
-    }
-  };
-
-  const snapshotBroadcaster = createUiSnapshotBroadcaster({
-    portHub,
-    buildSnapshotEvent: buildSnapshotEventSafely,
-  });
-
-  const unsubscribeStateChanged = uiAccess.subscribeStateChanged(() => {
-    snapshotBroadcaster.requestBroadcast();
-  });
   const unsubscribeUiEvents = uiAccess.subscribeUiEvents((event) => {
     portHub.broadcast(event);
   });
 
   const dispatchPortMessage = async (port: Parameters<typeof portHub.attach>[0], raw: unknown) => {
-    const requestKind = uiAccess.getRequestKind(raw);
+    const dispatched = await uiAccess.dispatchRequest(raw);
+    if (!dispatched) return;
 
-    const processRequest = async () => {
-      const dispatched = await uiAccess.dispatchRequest(raw);
-      if (!dispatched) return;
-
-      portHub.send(port, dispatched.reply);
-
-      if (dispatched.reply.type === "ui:response" && dispatched.kind === "command") {
-        snapshotBroadcaster.requestBroadcast();
-      }
-    };
-
-    if (requestKind === "command") {
-      await snapshotBroadcaster.withResponseFence(async () => {
-        await processRequest();
-      });
-      return;
-    }
-
-    await processRequest();
+    portHub.send(port, dispatched.reply);
   };
 
   const attachPort = (port: Parameters<typeof portHub.attach>[0]) => {
     portHub.attach(port, async (raw) => await dispatchPortMessage(port, raw));
 
-    snapshotBroadcaster.sendInitialSnapshot(port);
+    readyHandshake.sendReady(port);
   };
 
   const broadcastEvent = (event: UiEventEnvelope) => {
@@ -72,11 +39,6 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
   };
 
   const teardown = () => {
-    try {
-      unsubscribeStateChanged();
-    } catch (error) {
-      bridgeLog("failed to remove ui access listener", error);
-    }
     try {
       unsubscribeUiEvents();
     } catch (error) {

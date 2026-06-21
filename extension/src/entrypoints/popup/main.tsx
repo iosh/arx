@@ -10,7 +10,8 @@ import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
-import { loadUiEntryBootstrap, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
+import { refreshUiSetupStatusIntoCache } from "@/ui/lib/uiSetupStatusQuery";
+import { loadUiEntryBootstrap, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 // Create QueryClient instance (shared across entire app)
@@ -83,8 +84,8 @@ const boot = async () => {
   adjustWindowInnerSize();
 
   try {
-    const snapshot = await preloadUiSnapshot(queryClient);
-    const needsOnboardingNow = needsOnboarding(snapshot);
+    const walletStatus = await refreshUiSetupStatusIntoCache(queryClient);
+    const needsOnboardingNow = needsOnboarding(walletStatus);
 
     if (needsOnboardingNow) {
       void uiClient.onboarding.openTab({ reason: "onboarding_required" });

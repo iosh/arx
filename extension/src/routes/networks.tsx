@@ -1,11 +1,13 @@
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Paragraph, XStack } from "tamagui";
 import { Button, Card, ChainBadge, LoadingScreen, Screen } from "@/ui/components";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useRefreshUiNetworksStatus, useUiNetworksStatus } from "@/ui/hooks/useUiNetworksStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/networks")({
   beforeLoad: requireVaultInitialized,
@@ -14,21 +16,29 @@ export const Route = createFileRoute("/networks")({
 
 function NetworkSwitchPage() {
   const router = useRouter();
-  const { snapshot, isLoading, switchChain } = useUiSnapshot();
+  const networksQuery = useUiNetworksStatus();
+  const refreshNetworksStatus = useRefreshUiNetworksStatus();
+  const switchChainMutation = useMutation({
+    mutationFn: (chainRef: string) => uiClient.networks.switchActive({ chainRef }),
+    onSuccess: async () => {
+      await refreshNetworksStatus();
+    },
+  });
   const [pendingRef, setPendingRef] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (isLoading || !snapshot) {
+  if (networksQuery.isLoading || !networksQuery.data) {
     return <LoadingScreen />;
   }
 
-  const activeNetwork = snapshot.networks.available.find((item) => item.chainRef === snapshot.networks.active);
+  const { networks } = networksQuery.data;
+  const activeNetwork = networks.available.find((item) => item.chainRef === networks.active);
 
   const handleChainSwitch = async (chainRef: string) => {
     setPendingRef(chainRef);
     setErrorMessage(null);
     try {
-      await switchChain(chainRef);
+      await switchChainMutation.mutateAsync(chainRef);
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -46,16 +56,16 @@ function NetworkSwitchPage() {
           Networks
         </Paragraph>
         <Paragraph color="$mutedText" fontSize="$2">
-          Active chain: {activeNetwork?.displayName ?? snapshot.networks.active}
+          Active chain: {activeNetwork?.displayName ?? networks.active}
         </Paragraph>
 
-        {snapshot.networks.available.length === 0 ? (
+        {networks.available.length === 0 ? (
           <Paragraph color="$mutedText" marginTop="$2">
             No available networks.
           </Paragraph>
         ) : (
-          snapshot.networks.available.map((item) => {
-            const isActive = snapshot.networks.active === item.chainRef;
+          networks.available.map((item) => {
+            const isActive = networks.active === item.chainRef;
             const loading = pendingRef === item.chainRef;
             return (
               <Card key={item.chainRef} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">

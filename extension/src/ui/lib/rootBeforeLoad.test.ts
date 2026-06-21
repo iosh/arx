@@ -2,24 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { decideRootBeforeLoad, needsOnboarding } from "./rootBeforeLoad";
 
-const SNAPSHOT_UNINITIALIZED = {
-  accounts: { totalCount: 0 },
-  session: { vaultInitialized: false, isUnlocked: false },
+const SETUP_UNINITIALIZED = {
+  onboarding: { availability: "uninitialized" as const },
 };
 
-const SNAPSHOT_NO_ACCOUNTS = {
-  accounts: { totalCount: 0 },
-  session: { vaultInitialized: true, isUnlocked: true },
+const SETUP_NO_ACCOUNTS = {
+  onboarding: { availability: "empty" as const },
 };
 
-const SNAPSHOT_READY = {
-  accounts: { totalCount: 1 },
-  session: { vaultInitialized: true, isUnlocked: true },
+const SETUP_READY = {
+  onboarding: { availability: "ready" as const },
 };
 
-const SNAPSHOT_LOCKED = {
-  accounts: { totalCount: 0 },
-  session: { vaultInitialized: true, isUnlocked: false },
+const SETUP_EMPTY = {
+  onboarding: { availability: "empty" as const },
 };
 
 const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => ({
@@ -35,15 +31,15 @@ const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => (
 });
 
 describe("decideRootBeforeLoad", () => {
-  it("needsOnboarding stays true when setup is incomplete even if the session is locked", () => {
-    expect(needsOnboarding(SNAPSHOT_LOCKED)).toBe(true);
+  it("needsOnboarding stays true when vault exists but has no accounts", () => {
+    expect(needsOnboarding(SETUP_EMPTY)).toBe(true);
   });
 
   it("popup + onboarding path => openOnboardingAndClose", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/onboarding/welcome",
-      snapshot: null,
+      setupStatus: null,
     });
 
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
@@ -53,7 +49,7 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "notification", reason: "approval_created" }),
       pathname: "/onboarding/create",
-      snapshot: null,
+      setupStatus: null,
     });
 
     expect(decision).toEqual({ type: "close" });
@@ -63,18 +59,18 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
       pathname: "/onboarding/backup",
-      snapshot: null,
+      setupStatus: null,
     });
 
     expect(decision).toEqual({ type: "allow" });
   });
 
-  it("onboarding environment + non-onboarding path => redirect based on snapshot", () => {
+  it("onboarding environment + non-onboarding path => redirect based on setup status", () => {
     expect(
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
-        snapshot: SNAPSHOT_UNINITIALIZED,
+        setupStatus: SETUP_UNINITIALIZED,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
@@ -82,7 +78,7 @@ describe("decideRootBeforeLoad", () => {
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
-        snapshot: SNAPSHOT_LOCKED,
+        setupStatus: SETUP_EMPTY,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
@@ -90,7 +86,7 @@ describe("decideRootBeforeLoad", () => {
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/accounts",
-        snapshot: SNAPSHOT_LOCKED,
+        setupStatus: SETUP_EMPTY,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
@@ -98,7 +94,7 @@ describe("decideRootBeforeLoad", () => {
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
-        snapshot: SNAPSHOT_NO_ACCOUNTS,
+        setupStatus: SETUP_NO_ACCOUNTS,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
@@ -106,7 +102,7 @@ describe("decideRootBeforeLoad", () => {
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
-        snapshot: SNAPSHOT_READY,
+        setupStatus: SETUP_READY,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/complete", replace: true });
   });
@@ -115,7 +111,7 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/",
-      snapshot: SNAPSHOT_NO_ACCOUNTS,
+      setupStatus: SETUP_NO_ACCOUNTS,
     });
 
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
@@ -125,7 +121,7 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/",
-      snapshot: SNAPSHOT_LOCKED,
+      setupStatus: SETUP_EMPTY,
     });
 
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
@@ -135,17 +131,17 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "notification", reason: "idle" }),
       pathname: "/",
-      snapshot: null,
+      setupStatus: null,
     });
 
     expect(decision).toEqual({ type: "close" });
   });
 
-  it("onboarding environment + non-onboarding path + missing snapshot => redirect to /onboarding/welcome", () => {
+  it("onboarding environment + non-onboarding path + missing setup status => redirect to /onboarding/welcome", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
       pathname: "/",
-      snapshot: null,
+      setupStatus: null,
     });
 
     expect(decision).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });

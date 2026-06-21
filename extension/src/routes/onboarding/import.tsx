@@ -1,11 +1,12 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { isWalletInitialized } from "@/ui/lib/walletAvailability";
 import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 
@@ -31,7 +32,8 @@ const requireOnboardingPassword = (password: string | null): string => {
 
 function ImportSetupRoute() {
   const router = useRouter();
-  const { snapshot } = useUiSnapshot();
+  const { data: setupStatus } = useUiSetupStatus();
+  const refreshSetupStatus = useRefreshUiSetupStatus();
 
   const password = useOnboardingStore((s) => s.password);
   const clear = useOnboardingStore((s) => s.clear);
@@ -41,13 +43,13 @@ function ImportSetupRoute() {
 
   useEffect(() => {
     if (password) return;
-    if (!snapshot) return;
-    if (snapshot.session.vaultInitialized) return; // allow resuming setupIncomplete without re-entering password flow
+    if (!setupStatus) return;
+    if (isWalletInitialized(setupStatus.onboarding.availability)) return;
     router.navigate({ to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" }, replace: true });
-  }, [password, router, snapshot]);
+  }, [password, router, setupStatus]);
 
   const handleImport = async (params: { value: string; mode: ImportMode; alias?: string }) => {
-    const vaultInitialized = snapshot?.session.vaultInitialized ?? false;
+    const vaultInitialized = isWalletInitialized(setupStatus?.onboarding.availability);
     if (!vaultInitialized && !password) return;
 
     if (!params.value.trim()) {
@@ -91,6 +93,7 @@ function ImportSetupRoute() {
       }
 
       clear();
+      await refreshSetupStatus();
       router.navigate({ to: ROUTES.ONBOARDING_COMPLETE });
     } catch (err) {
       setError(getErrorMessage(err));

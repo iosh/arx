@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { buildWelcomeIntentNavigation } from "@/ui/lib/onboardingFlow";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { WelcomeScreen } from "@/ui/screens/onboarding/WelcomeScreen";
@@ -11,12 +11,12 @@ export const Route = createFileRoute("/onboarding/welcome")({
 
 function WelcomeRoute() {
   const router = useRouter();
-  const { snapshot } = useUiSnapshot();
+  const { data: setupStatus } = useUiSetupStatus();
 
   return (
     <WelcomeScreen
-      onCreate={() => router.navigate(buildWelcomeIntentNavigation({ snapshot, intent: "create" }))}
-      onImport={() => router.navigate(buildWelcomeIntentNavigation({ snapshot, intent: "import" }))}
+      onCreate={() => router.navigate(buildWelcomeIntentNavigation({ setupStatus, intent: "create" }))}
+      onImport={() => router.navigate(buildWelcomeIntentNavigation({ setupStatus, intent: "import" }))}
     />
   );
 }

@@ -1,4 +1,4 @@
-import type { UiSnapshot } from "@arx/core/ui";
+import type { UiMethodResult } from "@arx/core/ui";
 import { ArrowUpRight } from "lucide-react";
 import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
@@ -16,15 +16,15 @@ const normalizeEvmAddressInput = (value: string) => {
 };
 
 type SendScreenProps = {
-  snapshot: UiSnapshot;
+  chain: UiMethodResult<"ui.networks.getSelectedChain">;
+  accounts: UiMethodResult<"ui.accounts.listCurrentChain">;
   pending: boolean;
   errorMessage: string | null;
   onSubmit: (params: { to: string; value: Hex.Hex }) => void;
   onCancel: () => void;
 };
 
-export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel }: SendScreenProps) {
-  const { chain, accounts } = snapshot;
+export function SendScreen({ chain, accounts, pending, errorMessage, onSubmit, onCancel }: SendScreenProps) {
   const [to, setTo] = useState("");
   const [valueEther, setValueEther] = useState("");
   const [submitted, setSubmitted] = useState(false);

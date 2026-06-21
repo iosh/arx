@@ -1,4 +1,4 @@
-import type { ApprovalListEntry, UiMethodResult, UiSnapshot } from "@arx/core/ui";
+import type { ApprovalListEntry, UiBackupStatus, UiMethodResult } from "@arx/core/ui";
 import {
   Activity,
   ArrowDownLeft,
@@ -27,7 +27,9 @@ import {
 import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
-  snapshot: UiSnapshot;
+  chain: UiMethodResult<"ui.networks.getSelectedChain">;
+  accounts: UiMethodResult<"ui.accounts.listCurrentChain">;
+  backupStatus: UiBackupStatus;
   approvals: ApprovalListEntry[];
   nativeBalance: UiMethodResult<"ui.balances.getNative"> | null;
   nativeBalanceLoading: boolean;
@@ -79,7 +81,9 @@ const HOME_TABS = [
 type HomeTab = (typeof HOME_TABS)[number]["value"];
 
 export const HomeScreen = ({
-  snapshot,
+  chain,
+  accounts,
+  backupStatus,
   approvals,
   nativeBalance,
   nativeBalanceLoading,
@@ -94,10 +98,8 @@ export const HomeScreen = ({
   markingKeyringId,
 }: HomeScreenProps) => {
   const theme = useTheme();
-  const { chain, accounts } = snapshot;
   const nativeCurrency = nativeBalance?.currency ?? chain.nativeCurrency;
   const approvalsCount = approvals.length;
-  const { backup } = snapshot;
 
   const [activeTab, setActiveTab] = useState<HomeTab>("tokens");
 
@@ -111,9 +113,9 @@ export const HomeScreen = ({
 
   const confirmingHdKeyring = useMemo(() => {
     if (!confirmKeyringId) return null;
-    const nextHdKeyring = backup.nextHdKeyring;
+    const nextHdKeyring = backupStatus.nextHdKeyring;
     return nextHdKeyring && nextHdKeyring.keyringId === confirmKeyringId ? nextHdKeyring : null;
-  }, [backup.nextHdKeyring, confirmKeyringId]);
+  }, [backupStatus.nextHdKeyring, confirmKeyringId]);
   const confirmOpen = confirmKeyringId !== null;
   const confirmMarking = confirmKeyringId !== null && markingKeyringId === confirmKeyringId;
 
@@ -132,7 +134,7 @@ export const HomeScreen = ({
     setExporting(false);
   }, [confirmKeyringId]);
 
-  const hasBackupReminder = backup.pendingHdKeyringCount > 0 && backup.nextHdKeyring !== null;
+  const hasBackupReminder = backupStatus.pendingHdKeyringCount > 0 && backupStatus.nextHdKeyring !== null;
   const hasAlerts = approvalsCount > 0 || hasBackupReminder;
 
   return (
@@ -235,7 +237,7 @@ export const HomeScreen = ({
                 borderColor="$danger"
                 backgroundColor="$dangerBackground"
                 pressStyle={{ opacity: 0.9 }}
-                onPress={() => setConfirmKeyringId(backup.nextHdKeyring?.keyringId ?? null)}
+                onPress={() => setConfirmKeyringId(backupStatus.nextHdKeyring?.keyringId ?? null)}
                 cursor="pointer"
               >
                 <XStack alignItems="center" justifyContent="space-between">
@@ -255,16 +257,16 @@ export const HomeScreen = ({
                         Backup Required
                       </Paragraph>
                       <Paragraph color="$mutedText" fontSize="$2">
-                        {`${backup.nextHdKeyring?.alias ?? "Wallet"} needs backup`}
+                        {`${backupStatus.nextHdKeyring?.alias ?? "Wallet"} needs backup`}
                       </Paragraph>
-                      {backup.pendingHdKeyringCount > 1 ? (
+                      {backupStatus.pendingHdKeyringCount > 1 ? (
                         <Paragraph color="$mutedText" fontSize="$1">
-                          {backup.pendingHdKeyringCount} HD wallets still need backup
+                          {backupStatus.pendingHdKeyringCount} HD wallets still need backup
                         </Paragraph>
                       ) : null}
                     </YStack>
                   </XStack>
-                  {markingKeyringId === backup.nextHdKeyring?.keyringId ? (
+                  {markingKeyringId === backupStatus.nextHdKeyring?.keyringId ? (
                     <Spinner size="small" color="$mutedText" />
                   ) : (
                     <ChevronRight size={18} color={theme.mutedText.get()} />

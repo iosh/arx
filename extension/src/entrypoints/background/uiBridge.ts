@@ -38,7 +38,7 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
   });
 
   const dispatchPortMessage = async (port: Parameters<typeof portHub.attach>[0], raw: unknown) => {
-    const broadcastPolicy = uiAccess.getRequestBroadcastPolicy(raw);
+    const requestKind = uiAccess.getRequestKind(raw);
 
     const processRequest = async () => {
       const dispatched = await uiAccess.dispatchRequest(raw);
@@ -46,26 +46,19 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
 
       portHub.send(port, dispatched.reply);
 
-      if (dispatched.shouldBroadcastSnapshot) {
+      if (dispatched.reply.type === "ui:response" && dispatched.kind === "command") {
         snapshotBroadcaster.requestBroadcast();
       }
     };
 
-    const runRequest = async () => {
-      if (broadcastPolicy.holdBroadcast) {
-        await snapshotBroadcaster.withBroadcastHold(processRequest);
-        return;
-      }
-
-      await processRequest();
-    };
-
-    if (broadcastPolicy.fenceSnapshotBroadcast) {
-      await snapshotBroadcaster.withResponseFence(runRequest);
+    if (requestKind === "command") {
+      await snapshotBroadcaster.withResponseFence(async () => {
+        await processRequest();
+      });
       return;
     }
 
-    await runRequest();
+    await processRequest();
   };
 
   const attachPort = (port: Parameters<typeof portHub.attach>[0]) => {

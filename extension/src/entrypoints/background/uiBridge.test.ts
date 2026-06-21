@@ -755,7 +755,7 @@ const createTrustedWalletApiForBridgeTest = (groups: Partial<TrustedWalletApi>):
 
 const createUiAccessForTest = (input: {
   services: UiBridgeTestRuntimeServices;
-  session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
+  session: BackgroundSessionServices;
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
   activationEntries?: Parameters<typeof createUiActivationExtension>[0]["entries"];
@@ -765,7 +765,6 @@ const createUiAccessForTest = (input: {
   };
   subscribeAttentionStateChanged: (listener: () => void) => () => void;
   attentionSnapshot?: () => { queue: never[]; count: number };
-  persistVaultMeta?: () => Promise<void>;
   selectWalletChain?: (chainRef: string) => Promise<void>;
   chainViewsOverride?: Record<string, unknown>;
   permissionViewsOverride?: { buildUiPermissionsSnapshot: () => UiPermissionsSnapshot };
@@ -1083,9 +1082,6 @@ const createUiAccessForTest = (input: {
         ? {}
         : { extensions: [createUiActivationExtension({ entries: activationEntries })] }),
     },
-    bridge: {
-      persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
-    },
   });
 };
 
@@ -1203,7 +1199,6 @@ const buildBridge = (opts?: {
     browser: browserApi as unknown as Parameters<typeof createUiPlatform>[0]["browser"],
     entrypoints: ENTRYPOINTS,
   });
-  const persistVaultMeta = vi.fn(async () => {});
   const attentionStateHandlers = new Set<() => void>();
   const walletChainSelectionListeners = new Set<() => void>();
   const walletChainSelection = {
@@ -1214,10 +1209,7 @@ const buildBridge = (opts?: {
   };
   const uiAccess = createUiAccessForTest({
     services: runtimeServices,
-    session: {
-      ...session,
-      persistVaultMeta,
-    },
+    session,
     keyring,
     platform,
     uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
@@ -1228,7 +1220,6 @@ const buildBridge = (opts?: {
       attentionStateHandlers.add(listener);
       return () => attentionStateHandlers.delete(listener);
     },
-    persistVaultMeta,
   });
   const bridge = createUiBridge({ uiAccess });
 
@@ -1239,7 +1230,6 @@ const buildBridge = (opts?: {
     unlock,
     approvals: approvalQueueService,
     browser: browserApi,
-    persistVaultMeta,
     emitWalletChainSelectionChanged: () => {
       for (const handler of walletChainSelectionListeners) {
         handler();
@@ -1289,7 +1279,6 @@ describe("uiBridge", () => {
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
   let _emitWalletChainSelectionChanged: ReturnType<typeof buildBridge>["emitWalletChainSelectionChanged"];
-  let persistVaultMeta: ReturnType<typeof buildBridge>["persistVaultMeta"];
 
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
@@ -1300,7 +1289,6 @@ describe("uiBridge", () => {
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
     _emitWalletChainSelectionChanged = ctx.emitWalletChainSelectionChanged;
-    persistVaultMeta = ctx.persistVaultMeta;
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);
@@ -1341,7 +1329,7 @@ describe("uiBridge", () => {
     expect(res.words).toHaveLength(12);
   });
 
-  it("onboarding.createWalletFromMnemonic initializes onboarding wallet state and holds snapshot broadcast", async () => {
+  it("onboarding.createWalletFromMnemonic initializes onboarding wallet state and refreshes the snapshot after reply", async () => {
     // Default test setup starts with a vault that has ciphertext but no accounts.
     const id = crypto.randomUUID();
     const words = TEST_MNEMONIC.split(" ");
@@ -1367,7 +1355,7 @@ describe("uiBridge", () => {
     expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
   });
 
-  it("session.lock persists vault meta and replies before snapshotChanged", async () => {
+  it("session.lock refreshes the snapshot after reply", async () => {
     const id = crypto.randomUUID();
 
     await port.triggerMessage({
@@ -1383,7 +1371,6 @@ describe("uiBridge", () => {
       (m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED,
     );
     expect(firstSnapshotIndex).toBeGreaterThan(responseIndex);
-    expect(persistVaultMeta).toHaveBeenCalledTimes(1);
 
     const snapshot = latestSnapshotFromMessages(port.messages);
     expect(snapshot.session.isUnlocked).toBe(false);
@@ -1409,10 +1396,7 @@ describe("uiBridge", () => {
             hasPendingDispatch = true;
           }),
       ),
-      getRequestBroadcastPolicy: vi.fn(() => ({
-        holdBroadcast: false,
-        fenceSnapshotBroadcast: false,
-      })),
+      getRequestKind: vi.fn(() => "query" as const),
       subscribeStateChanged: vi.fn((listener) => {
         stateChangedListeners.add(listener);
         return () => stateChangedListeners.delete(listener);
@@ -1456,7 +1440,7 @@ describe("uiBridge", () => {
         result: [],
         context: { namespace: CHAIN.namespace, chainRef: CHAIN.chainRef },
       },
-      shouldBroadcastSnapshot: false,
+      kind: "query",
     });
     await pendingQuery;
 
@@ -1542,7 +1526,7 @@ describe("uiBridge", () => {
         vault: {
           getStatus: () => ({ status: "unlocked" }),
         },
-      } as unknown as BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> },
+      } as unknown as BackgroundSessionServices,
       keyring,
       platform,
       uiOrigin: new URL(browserApi.runtime.getURL("")).origin,

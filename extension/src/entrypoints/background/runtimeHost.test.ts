@@ -289,7 +289,6 @@ describe("runtimeHost", () => {
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
       subscribeUiEvents: vi.fn(() => vi.fn()),
     };
@@ -476,7 +475,6 @@ describe("runtimeHost", () => {
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
       subscribeUiEvents: vi.fn(() => vi.fn()),
     };

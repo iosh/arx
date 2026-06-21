@@ -10,7 +10,6 @@ type UiSnapshotBroadcasterDeps = {
 };
 
 export const createUiSnapshotBroadcaster = ({ portHub, buildSnapshotEvent }: UiSnapshotBroadcasterDeps) => {
-  let broadcastHold = 0;
   let responseFence = 0;
   let lastBroadcastSnapshotKey: string | null = null;
   let pendingBroadcast = false;
@@ -30,7 +29,7 @@ export const createUiSnapshotBroadcaster = ({ portHub, buildSnapshotEvent }: UiS
   };
 
   const flushPendingBroadcast = () => {
-    if (broadcastHold > 0 || responseFence > 0 || !pendingBroadcast) {
+    if (responseFence > 0 || !pendingBroadcast) {
       return;
     }
 
@@ -39,22 +38,12 @@ export const createUiSnapshotBroadcaster = ({ portHub, buildSnapshotEvent }: UiS
   };
 
   const requestBroadcast = () => {
-    if (broadcastHold > 0 || responseFence > 0) {
+    if (responseFence > 0) {
       pendingBroadcast = true;
       return;
     }
 
     broadcastSnapshotNow();
-  };
-
-  const withBroadcastHold = async <T>(fn: () => Promise<T>): Promise<T> => {
-    broadcastHold += 1;
-    try {
-      return await fn();
-    } finally {
-      broadcastHold -= 1;
-      flushPendingBroadcast();
-    }
   };
 
   const withResponseFence = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -73,19 +62,13 @@ export const createUiSnapshotBroadcaster = ({ portHub, buildSnapshotEvent }: UiS
     const snapshotKey = buildSnapshotKey(snapshotEvent);
     const sent = portHub.send(port, snapshotEvent);
     if (!sent) return;
-
-    // When the broadcaster is idle, the initial snapshot has effectively
-    // reached every attached port, so it can advance duplicate suppression.
-    // While a broadcast is queued or fenced, older ports may still be missing
-    // that snapshot, so the global broadcast key must stay untouched.
-    if (!pendingBroadcast && broadcastHold === 0 && responseFence === 0) {
+    if (!pendingBroadcast && responseFence === 0) {
       lastBroadcastSnapshotKey = snapshotKey;
     }
   };
 
   return {
     requestBroadcast,
-    withBroadcastHold,
     withResponseFence,
     sendInitialSnapshot,
   };

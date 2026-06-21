@@ -10,7 +10,7 @@ import {
 import type { UiMethodName } from "../protocol/index.js";
 import { parseUiMethodParams } from "../protocol/index.js";
 import { createUiDispatcher } from "./dispatcher.js";
-import { getUiRequestBroadcastPolicy } from "./requestMetadata.js";
+import { getUiRequestExecutionPlan } from "./requestMetadata.js";
 import { createUiServerRuntime } from "./runtime.js";
 import type { UiHandlerFn, UiRuntimeAccess, UiRuntimeDeps, UiSurfaceIdentity } from "./types.js";
 
@@ -124,7 +124,7 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
   };
 };
 
-const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
+const createUiRuntimeCore = ({ server }: CreateUiRuntimeAccessOptions) => {
   const surface = createUiSurfaceIdentity(server.uiOrigin, server.createId ?? (() => globalThis.crypto.randomUUID()));
   const uiRuntime = createUiServerRuntime({
     wallet: server.wallet,
@@ -132,8 +132,8 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
     surface,
     ...(server.extensions ? { extensions: server.extensions } : {}),
   });
-  const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge });
-  const subscribeUiEvents = createUiEventSubscription({ server, bridge });
+  const subscribeStateChanged = createUiStateChangedSubscription({ server });
+  const subscribeUiEvents = createUiEventSubscription({ server });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {
     const handler = requireUiHandler(uiRuntime.handlers, input.method);
@@ -173,17 +173,9 @@ export const createUiRuntimeAccess = (options: CreateUiRuntimeAccessOptions): Ui
     const dispatched = await dispatcher.dispatch(raw);
     if (!dispatched) return null;
 
-    if (dispatched.reply.type === "ui:response" && dispatched.plan.persistVaultMeta) {
-      try {
-        await options.bridge.persistVaultMeta();
-      } catch (error) {
-        accessLog("failed to persist vault meta", error);
-      }
-    }
-
     return {
       reply: dispatched.reply,
-      shouldBroadcastSnapshot: dispatched.reply.type === "ui:response" && dispatched.plan.broadcastSnapshot,
+      kind: dispatched.plan.kind,
     };
   };
 
@@ -201,7 +193,7 @@ export const createUiRuntimeAccess = (options: CreateUiRuntimeAccessOptions): Ui
       };
     },
     dispatchRequest,
-    getRequestBroadcastPolicy: (raw) => getUiRequestBroadcastPolicy(raw),
+    getRequestKind: (raw) => getUiRequestExecutionPlan(raw)?.kind ?? null,
     subscribeStateChanged,
     subscribeUiEvents,
   };

@@ -5,11 +5,7 @@ import { defineMethod } from "./types.js";
 const UiApprovalsListPendingParamsSchema = z.undefined();
 
 export const approvalsMethods = {
-  "ui.approvals.listPending": defineMethod("query", UiApprovalsListPendingParamsSchema, {
-    broadcastSnapshot: false,
-  }),
-  "ui.approvals.getDetail": defineMethod("query", WalletApiSchemas.approvals.getDetail, { broadcastSnapshot: false }),
-  "ui.approvals.resolve": defineMethod("command", WalletApiSchemas.approvals.resolve, {
-    broadcastSnapshot: false,
-  }),
+  "ui.approvals.listPending": defineMethod("query", UiApprovalsListPendingParamsSchema),
+  "ui.approvals.getDetail": defineMethod("query", WalletApiSchemas.approvals.getDetail),
+  "ui.approvals.resolve": defineMethod("command", WalletApiSchemas.approvals.resolve),
 } as const;

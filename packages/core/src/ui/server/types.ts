@@ -110,10 +110,6 @@ export type UiSurfaceIdentity = {
   surfaceId: string;
 };
 
-export type UiRuntimeBridgeAccess = {
-  persistVaultMeta: () => Promise<void>;
-};
-
 export type UiRuntimeServerDeps = {
   wallet: TrustedWalletApi;
   events: UiEventSource;
@@ -132,7 +128,6 @@ export type UiServerRuntimeDeps = {
 
 export type UiRuntimeDeps = {
   server: UiRuntimeServerDeps;
-  bridge: UiRuntimeBridgeAccess;
 };
 
 export type UiHandlerDeps = {
@@ -154,16 +149,13 @@ export type UiServerRuntime = {
 
 export type UiRuntimeDispatchResult = {
   reply: UiPortEnvelope;
-  shouldBroadcastSnapshot: boolean;
+  kind: "query" | "command";
 };
 
 export type UiRuntimeAccess = {
   buildSnapshotEvent: () => UiEventEnvelope;
   dispatchRequest: (raw: unknown) => Promise<UiRuntimeDispatchResult | null>;
-  getRequestBroadcastPolicy: (raw: unknown) => {
-    holdBroadcast: boolean;
-    fenceSnapshotBroadcast: boolean;
-  };
+  getRequestKind: (raw: unknown) => "query" | "command" | null;
   subscribeStateChanged: UiStateChangeSubscription;
   subscribeUiEvents: (listener: (event: UiEventEnvelope) => void) => () => void;
 };

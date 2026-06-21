@@ -5,14 +5,6 @@ import { uiMethods } from "../protocol/methods.js";
 
 export type UiRequestExecutionPlan = {
   kind: UiMethodKind;
-  broadcastSnapshot: boolean;
-  persistVaultMeta: boolean;
-  holdBroadcast: boolean;
-};
-
-export type UiRequestBroadcastPolicy = {
-  holdBroadcast: boolean;
-  fenceSnapshotBroadcast: boolean;
 };
 
 export type UiDispatchRequest = {
@@ -29,27 +21,10 @@ export type UiRequestMetadata = {
 
 export const EMPTY_UI_REQUEST_EXECUTION_PLAN: UiRequestExecutionPlan = {
   kind: "query",
-  broadcastSnapshot: false,
-  persistVaultMeta: false,
-  holdBroadcast: false,
-};
-
-export const EMPTY_UI_REQUEST_BROADCAST_POLICY: UiRequestBroadcastPolicy = {
-  holdBroadcast: false,
-  fenceSnapshotBroadcast: false,
 };
 
 const buildUiRequestExecutionPlan = (definition: UiMethodDefinition): UiRequestExecutionPlan => ({
   kind: definition.kind,
-  broadcastSnapshot: definition.effects?.broadcastSnapshot ?? false,
-  persistVaultMeta: definition.effects?.persistVaultMeta ?? false,
-  holdBroadcast: definition.effects?.holdBroadcast ?? false,
-});
-
-const buildUiRequestBroadcastPolicy = (plan: UiRequestExecutionPlan): UiRequestBroadcastPolicy => ({
-  holdBroadcast: plan.holdBroadcast,
-  fenceSnapshotBroadcast:
-    plan.kind === "command" && (plan.broadcastSnapshot || plan.persistVaultMeta || plan.holdBroadcast),
 });
 
 const isUiDispatchRequest = (value: unknown): value is UiDispatchRequest => {
@@ -82,9 +57,4 @@ export const parseUiRequestMetadata = (raw: unknown): UiRequestMetadata | null =
 export const getUiRequestExecutionPlan = (raw: unknown): UiRequestExecutionPlan | null => {
   const metadata = parseUiRequestMetadata(raw);
   return metadata?.method ? metadata.plan : null;
-};
-
-export const getUiRequestBroadcastPolicy = (raw: unknown): UiRequestBroadcastPolicy => {
-  const plan = getUiRequestExecutionPlan(raw);
-  return plan ? buildUiRequestBroadcastPolicy(plan) : EMPTY_UI_REQUEST_BROADCAST_POLICY;
 };

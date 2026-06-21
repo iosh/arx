@@ -267,9 +267,6 @@ const createWalletUiDeps = (
       ...(options.createId ? { createId: options.createId } : {}),
       ...(options.extensions ? { extensions: options.extensions } : {}),
     },
-    bridge: {
-      persistVaultMeta: runtime.services.session.persistVaultMeta,
-    },
   };
 };
 

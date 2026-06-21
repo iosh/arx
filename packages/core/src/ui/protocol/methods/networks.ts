@@ -6,7 +6,5 @@ export const networksMethods = {
 
   "ui.networks.list": defineMethod("query", WalletApiSchemas.chains.list),
 
-  "ui.networks.switchActive": defineMethod("command", WalletApiSchemas.chains.selectWalletChain, {
-    broadcastSnapshot: true,
-  }),
+  "ui.networks.switchActive": defineMethod("command", WalletApiSchemas.chains.selectWalletChain),
 } as const;

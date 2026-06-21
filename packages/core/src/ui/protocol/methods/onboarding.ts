@@ -13,30 +13,15 @@ export const onboardingMethods = {
   "ui.onboarding.createWalletFromMnemonic": defineMethod(
     "command",
     WalletApiSchemas.onboarding.createWalletFromMnemonic,
-    {
-      broadcastSnapshot: true,
-      persistVaultMeta: true,
-      holdBroadcast: true,
-    },
   ),
 
   "ui.onboarding.importWalletFromMnemonic": defineMethod(
     "command",
     WalletApiSchemas.onboarding.importWalletFromMnemonic,
-    {
-      broadcastSnapshot: true,
-      persistVaultMeta: true,
-      holdBroadcast: true,
-    },
   ),
 
   "ui.onboarding.importWalletFromPrivateKey": defineMethod(
     "command",
     WalletApiSchemas.onboarding.importWalletFromPrivateKey,
-    {
-      broadcastSnapshot: true,
-      persistVaultMeta: true,
-      holdBroadcast: true,
-    },
   ),
 } as const;

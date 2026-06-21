@@ -129,9 +129,6 @@ const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnap
       },
       uiOrigin: "chrome-extension://arx",
     },
-    bridge: {
-      persistVaultMeta: async () => {},
-    },
   });
 };
 

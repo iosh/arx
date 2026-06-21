@@ -11,10 +11,6 @@ const createTestClient = (call: UiClient["call"]): UiClient => {
     connect: async () => {},
     call,
     on: () => () => {},
-    getLastSnapshot: () => null,
-    waitForSnapshot: async () => {
-      throw new Error("Not implemented in unit tests");
-    },
     destroy: () => {},
     extend: function <E extends Record<string, unknown>>(
       this: UiClient & Record<string, unknown>,
@@ -43,7 +39,6 @@ describe("ui actions", () => {
     const methodKeys = Object.keys(uiMethods).sort();
 
     // Execute all sugar functions once to record which underlying methods are used.
-    void actions.snapshot.get();
     void actions.session.getStatus();
     void actions.entry.getLaunchContext({ environment: "popup" });
     void actions.entry.getBootstrap({ environment: "popup" });
@@ -60,6 +55,7 @@ describe("ui actions", () => {
     void actions.session.setAutoLockDuration({ durationMs: 60_000 });
 
     void actions.onboarding.openTab({ reason: "reason" });
+    void actions.onboarding.getStatus();
     void actions.onboarding.generateMnemonic();
     void actions.onboarding.createWalletFromMnemonic({
       password: "pw",
@@ -183,7 +179,6 @@ describe("ui actions", () => {
     const actions = uiActions(client);
 
     // These should all be type-safe
-    expect(typeof actions.snapshot.get).toBe("function");
     expect(typeof actions.entry.getLaunchContext).toBe("function");
     expect(typeof actions.entry.getBootstrap).toBe("function");
     expect(typeof actions.session.unlock).toBe("function");

@@ -7,14 +7,12 @@ import { createKeyringsHandlers } from "./keyrings.js";
 import { createNetworksHandlers } from "./networks.js";
 import { createOnboardingHandlers } from "./onboarding.js";
 import { createSessionHandlers } from "./session.js";
-import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiCommonHandlers = (deps: { wallet: TrustedWalletApi }): UiMethodHandlerMap => {
   const { wallet } = deps;
 
   return {
-    ...createSnapshotHandlers({ wallet }),
     ...createBalancesHandlers({ wallet }),
     ...createSessionHandlers({ wallet }),
     ...createOnboardingHandlers({ wallet }),

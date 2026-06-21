@@ -23,7 +23,6 @@ import type { SessionOptions } from "../runtime/background/session.js";
 import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
 import { createProviderRequests } from "../runtime/provider/providerRequests.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
-import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import {
   buildTransactionTerminalReason,
   createTransactionServices,
@@ -32,7 +31,6 @@ import {
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
-import { createApprovalResolveService } from "../ui/server/approvals/resolveService.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
@@ -50,7 +48,6 @@ import {
   createWalletPermissions,
   createWalletProvider,
   createWalletSession,
-  createWalletSnapshots,
 } from "./wallet.js";
 
 type BackgroundBootstrapScope = ReturnType<typeof createBackgroundBootstrapScope>;
@@ -144,12 +141,11 @@ type ArxWalletRuntime = Readonly<{
 
 const createUiTrustedWalletApi = (
   runtime: ArxWalletRuntimeCore,
-  snapshots: ArxWallet["snapshots"],
   approvalReadService: ReturnType<typeof createApprovalReadService>,
   options: WalletCreateUiOptions,
 ): TrustedWalletApi => {
   return createTrustedWalletApi(
-    createTrustedWalletApiContext(runtime, snapshots, approvalReadService, {
+    createTrustedWalletApiContext(runtime, approvalReadService, {
       createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
       origin: options.uiOrigin,
     }),
@@ -158,22 +154,10 @@ const createUiTrustedWalletApi = (
 
 const createTrustedWalletApiContext = (
   runtime: ArxWalletRuntimeCore,
-  snapshots: ArxWallet["snapshots"],
   approvalReadService: ReturnType<typeof createApprovalReadService>,
   options: { createId: () => string; origin: string },
 ): WalletApiContext => {
   return {
-    snapshots,
-    snapshotChangeSources: [
-      (listener) => runtime.services.accounts.onStateChanged(listener),
-      (listener) => runtime.services.permissions.onStateChanged(listener),
-      (listener) => runtime.services.chainRpc.onStateChanged(listener),
-      (listener) => runtime.services.walletChainSelection.subscribeChanged(listener),
-      (listener) => runtime.services.session.unlock.onStateChanged(listener),
-      (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
-      (listener) => runtime.transactions.onTransactionsChanged(listener),
-      (listener) => runtime.transactions.onTransactionApprovalsChanged(listener),
-    ],
     session: createWalletSession({
       session: runtime.services.session,
       sessionStatus: runtime.services.sessionStatus,
@@ -248,15 +232,15 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
 const createWalletUiDeps = (
   runtime: ArxWalletRuntimeCore,
   approvalReadService: ReturnType<typeof createApprovalReadService>,
-  snapshots: ArxWallet["snapshots"],
   options: WalletCreateUiOptions,
 ): UiRuntimeDeps => {
-  const wallet = createUiTrustedWalletApi(runtime, snapshots, approvalReadService, options);
+  const wallet = createUiTrustedWalletApi(runtime, approvalReadService, options);
 
   return {
     server: {
       wallet,
       events: {
+        onSessionChanged: (listener) => runtime.services.session.onStateChanged(listener),
         onApprovalCreated: (listener) => runtime.services.approvals.onCreated(() => listener()),
         onApprovalFinished: (listener) => runtime.services.approvals.onFinished(listener),
         onTransactionApprovalsChanged: (handler) => runtime.transactions.onTransactionApprovalsChanged(handler),
@@ -518,10 +502,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainViews: sessionScope.chainViews,
     transactionApprovals: transactionServices.transactions,
   });
-  const approvalResolveService = createApprovalResolveService({
-    approvals: stateServices.approvals,
-    transactions: transactionServices.transactions,
-  });
   const permissions = createWalletPermissions({
     permissions: stateServices.permissions,
   });
@@ -549,25 +529,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     if (change.changed.chain || change.changed.accounts) {
       syncDappConnectionFromProviderState(change.scope, change.next);
     }
-  });
-  const snapshots = createWalletSnapshots({
-    session: sessionScope.sessionLayer.session,
-    sessionStatus: sessionScope.sessionStatus,
-    keyring: sessionScope.keyringService,
-    attention: sessionScope.attention,
-    chainViews: sessionScope.chainViews,
-    permissionViews: backgroundSupportScope.permissionViews,
-    accounts,
-    approvals: {
-      read: {
-        listPendingEntries: () => approvalReadService.listPending(),
-        getDetail: (id: string) => approvalReadService.getDetail(id),
-      },
-      write: {
-        resolve: (input) => approvalResolveService.resolve(input),
-      },
-    },
-    namespaceBindings: backgroundSupportScope.namespaceBindings,
   });
   const services: WalletRuntimeServices = {
     ...stateServices,
@@ -599,11 +560,11 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     dappConnections,
   });
   const createUi = (options: WalletCreateUiOptions) =>
-    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, snapshots, options));
+    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, options));
   const createUiAccess = (options: WalletCreateUiOptions) =>
-    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, snapshots, options));
+    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, options));
   const walletApi = createTrustedWalletApi(
-    createTrustedWalletApiContext(runtimeCore, snapshots, approvalReadService, {
+    createTrustedWalletApiContext(runtimeCore, approvalReadService, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
       origin: CORE_WALLET_API_ORIGIN,
     }),
@@ -620,7 +581,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     dappConnections,
     createProvider: () => provider,
     createUi,
-    snapshots,
   };
   let shutdownPromise: Promise<void> | null = null;
   const shutdown = async () => {

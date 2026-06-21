@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { getUiRequestExecutionPlan, parseUiRequestMetadata } from "./requestMetadata.js";
 
 describe("parseUiRequestMetadata", () => {
-  it("marks snapshot.get as a query", () => {
+  it("marks session.getStatus as a query", () => {
     const metadata = parseUiRequestMetadata({
       type: "ui:request",
       id: "req-1",
-      method: "ui.snapshot.get",
+      method: "ui.session.getStatus",
     });
 
     expect(metadata).toMatchObject({
-      method: "ui.snapshot.get",
+      method: "ui.session.getStatus",
       plan: {
         kind: "query",
       },

@@ -5,14 +5,7 @@ import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountKey } from "../storage/records.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../ui/protocol/models/approvals.js";
 import type { UiTransaction } from "../ui/protocol/models/transactions.js";
-import type { UiAccountMeta, UiBackupStatus, UiKeyringMeta, UiSnapshot } from "../ui/protocol/schemas.js";
-
-export type WalletApiUnsubscribe = () => void;
-
-/** Payloadless invalidation signal; consumers should re-read the wallet snapshot. */
-export type WalletApiSnapshotChangeListener = () => void;
-
-export type WalletApiSnapshot = UiSnapshot;
+import type { UiAccountMeta, UiBackupStatus, UiKeyringMeta } from "../ui/protocol/schemas.js";
 
 export type WalletApiSessionStatusResult = SessionStatus;
 
@@ -31,6 +24,12 @@ export type WalletApiAutoLockResult = {
 
 export type WalletApiGenerateMnemonicResult = {
   words: string[];
+};
+
+export type WalletApiAvailability = "uninitialized" | "empty" | "ready";
+
+export type WalletApiOnboardingStatusResult = {
+  availability: WalletApiAvailability;
 };
 
 export type WalletApiKeyringAccount = {

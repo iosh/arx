@@ -39,7 +39,6 @@ export type {
   WalletProviderConnectionState,
   WalletSession,
   WalletSetupState,
-  WalletSnapshots,
   WalletUi,
   WalletUiDispatchInput,
 } from "./types.js";

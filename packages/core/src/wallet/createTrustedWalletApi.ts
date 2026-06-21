@@ -22,6 +22,7 @@ import {
 import {
   createWalletFromMnemonic,
   generateMnemonic,
+  getOnboardingStatus,
   importWalletFromMnemonic,
   importWalletFromPrivateKey,
 } from "./actions/onboarding.js";
@@ -32,7 +33,6 @@ import {
   setAutoLockDuration,
   unlockSession,
 } from "./actions/session.js";
-import { getWalletSnapshot, subscribeWalletSnapshot } from "./actions/snapshot.js";
 import {
   applyTransactionDraftEdit,
   getTransactionDetail,
@@ -44,10 +44,6 @@ import type { TrustedWalletApi } from "./api.js";
 import type { WalletApiContext } from "./context.js";
 
 export const createTrustedWalletApi = (context: WalletApiContext): TrustedWalletApi => ({
-  snapshot: {
-    get: () => getWalletSnapshot(context),
-    subscribe: (listener) => subscribeWalletSnapshot(context, listener),
-  },
   session: {
     getStatus: () => getSessionStatus(context),
     unlock: (input) => unlockSession(context, input),
@@ -56,6 +52,7 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     setAutoLockDuration: (input) => setAutoLockDuration(context, input),
   },
   onboarding: {
+    getStatus: () => getOnboardingStatus(context),
     generateMnemonic: (input) => generateMnemonic(context, input),
     createWalletFromMnemonic: (input) => createWalletFromMnemonic(context, input),
     importWalletFromMnemonic: (input) => importWalletFromMnemonic(context, input),

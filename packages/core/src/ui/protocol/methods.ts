@@ -6,14 +6,10 @@ import { keyringsMethods } from "./methods/keyrings.js";
 import { networksMethods } from "./methods/networks.js";
 import { onboardingMethods } from "./methods/onboarding.js";
 import { sessionMethods } from "./methods/session.js";
-import { snapshotMethods } from "./methods/snapshot.js";
 import { transactionsMethods } from "./methods/transactions.js";
 import type { UiMethodDefinition } from "./methods/types.js";
 
 export const uiMethods = {
-  // --- snapshot ---
-  ...snapshotMethods,
-
   // --- entry ---
   ...entryMethods,
 

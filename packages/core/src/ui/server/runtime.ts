@@ -1,6 +1,6 @@
 import type { UiMethodName } from "../protocol/index.js";
 import { createUiCommonHandlers } from "./handlers/index.js";
-import type { UiMethodHandlerMap, UiRuntimeServerDeps, UiServerRuntime, UiServerRuntimeDeps } from "./types.js";
+import type { UiMethodHandlerMap, UiServerRuntime, UiServerRuntimeDeps } from "./types.js";
 
 const UI_COMMON_HANDLER_OWNER_ID = "core.uiCommon";
 
@@ -26,14 +26,12 @@ const registerUiHandlers = (
   }
 };
 
-const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "wallet">) => {
-  const chain = deps.wallet.snapshot.get().chain;
+const buildUiContext = (deps: Pick<UiServerRuntimeDeps, "wallet">) => {
+  const chain = deps.wallet.networks.getSelectedChain();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 
 export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
-  const buildSnapshot = () => deps.wallet.snapshot.get();
-
   const handlerDeps = {
     wallet: deps.wallet,
     platform: deps.platform,
@@ -50,7 +48,6 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
   }
 
   return {
-    buildSnapshot,
     getUiContext: () => buildUiContext(deps),
     handlers,
   };

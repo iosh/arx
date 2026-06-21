@@ -4,13 +4,12 @@ import { createLogger, extendLogger } from "../../utils/logger.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_SESSION_CHANGED,
   UI_EVENT_TRANSACTIONS_CHANGED,
 } from "../protocol/events.js";
 import type { UiMethodName } from "../protocol/index.js";
 import { parseUiMethodParams } from "../protocol/index.js";
 import { createUiDispatcher } from "./dispatcher.js";
-import { getUiRequestExecutionPlan } from "./requestMetadata.js";
 import { createUiServerRuntime } from "./runtime.js";
 import type { UiHandlerFn, UiRuntimeAccess, UiRuntimeDeps, UiSurfaceIdentity } from "./types.js";
 
@@ -41,15 +40,9 @@ const createUiSurfaceIdentity = (uiOrigin: string, createId: () => string): UiSu
   surfaceId: createId(),
 });
 
-const createUiStateChangedSubscription = ({
-  server,
-}: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeStateChanged"] => {
-  return (listener) => server.wallet.snapshot.subscribe(listener);
-};
-
 const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeUiEvents"] => {
   return (listener) => {
-    const emit = (event: ReturnType<UiRuntimeAccess["buildSnapshotEvent"]>) => {
+    const emit = (event: Parameters<typeof listener>[0]) => {
       try {
         listener(event);
       } catch (error) {
@@ -57,12 +50,12 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
       }
     };
 
-    const getContext = () => {
-      const chain = server.wallet.snapshot.get().chain;
-      return {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      };
+    const emitSessionChanged = () => {
+      emit({
+        type: "ui:event",
+        event: UI_EVENT_SESSION_CHANGED,
+        payload: { reason: "changed" },
+      });
     };
 
     const emitApprovalsChanged = () => {
@@ -70,7 +63,6 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         type: "ui:event",
         event: UI_EVENT_APPROVALS_CHANGED,
         payload: { reason: "changed" },
-        context: getContext(),
       });
     };
 
@@ -79,7 +71,6 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         type: "ui:event",
         event: UI_EVENT_APPROVAL_DETAIL_CHANGED,
         payload: { approvalId },
-        context: getContext(),
       });
     };
     const emitTransactionsChanged = (transactionIds: readonly string[]) => {
@@ -91,10 +82,10 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
         type: "ui:event",
         event: UI_EVENT_TRANSACTIONS_CHANGED,
         payload: { transactionIds: uniqueTransactionIds },
-        context: getContext(),
       });
     };
     const unsubs = [
+      server.events.onSessionChanged(() => emitSessionChanged()),
       server.events.onApprovalCreated(() => emitApprovalsChanged()),
       server.events.onApprovalFinished((event) => {
         emitApprovalsChanged();
@@ -132,7 +123,6 @@ const createUiRuntimeCore = ({ server }: CreateUiRuntimeAccessOptions) => {
     surface,
     ...(server.extensions ? { extensions: server.extensions } : {}),
   });
-  const subscribeStateChanged = createUiStateChangedSubscription({ server });
   const subscribeUiEvents = createUiEventSubscription({ server });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {
@@ -144,25 +134,22 @@ const createUiRuntimeCore = ({ server }: CreateUiRuntimeAccessOptions) => {
 
   return {
     uiRuntime,
-    subscribeStateChanged,
     subscribeUiEvents,
     dispatch,
   };
 };
 
 export const createUiContract = (options: CreateUiRuntimeAccessOptions): WalletUi => {
-  const { uiRuntime, subscribeStateChanged, subscribeUiEvents, dispatch } = createUiRuntimeCore(options);
+  const { subscribeUiEvents, dispatch } = createUiRuntimeCore(options);
 
   return {
-    buildSnapshot: () => uiRuntime.buildSnapshot(),
     dispatch,
-    subscribeStateChanged,
     subscribeUiEvents,
   };
 };
 
 export const createUiRuntimeAccess = (options: CreateUiRuntimeAccessOptions): UiRuntimeAccess => {
-  const { uiRuntime, subscribeStateChanged, subscribeUiEvents } = createUiRuntimeCore(options);
+  const { uiRuntime, subscribeUiEvents } = createUiRuntimeCore(options);
 
   const dispatcher = createUiDispatcher({
     handlers: uiRuntime.handlers,
@@ -180,21 +167,7 @@ export const createUiRuntimeAccess = (options: CreateUiRuntimeAccessOptions): Ui
   };
 
   return {
-    buildSnapshotEvent: () => {
-      const snapshot = uiRuntime.buildSnapshot();
-      return {
-        type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: snapshot,
-        context: {
-          namespace: snapshot.chain.namespace,
-          chainRef: snapshot.chain.chainRef,
-        },
-      };
-    },
     dispatchRequest,
-    getRequestKind: (raw) => getUiRequestExecutionPlan(raw)?.kind ?? null,
-    subscribeStateChanged,
     subscribeUiEvents,
   };
 };

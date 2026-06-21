@@ -2,6 +2,7 @@ import { z } from "zod";
 import { WalletApiSharedSchemas } from "./shared.js";
 
 export const WalletApiOnboardingSchemas = {
+  getStatus: z.undefined(),
   generateMnemonic: z
     .strictObject({
       wordCount: z.union([z.literal(12), z.literal(24)]).optional(),

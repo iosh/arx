@@ -1,5 +1,4 @@
 import { parseUiEnvelope, type UiPortEnvelope } from "../protocol/envelopes.js";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import {
   parseUiMethodParams,
   type UiEventName,
@@ -8,7 +7,6 @@ import {
   type UiMethodParams,
   type UiMethodResult,
 } from "../protocol/index.js";
-import type { UiSnapshot } from "../protocol/schemas.js";
 import {
   type PendingRequest,
   type UiClient,
@@ -41,8 +39,6 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
   const logger = args.logger;
 
   let destroyed = false;
-
-  let lastSnapshot: UiSnapshot | null = null;
 
   const pending = new Map<string, PendingRequest>();
 
@@ -157,7 +153,6 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     needsReconnect = true;
 
     connected = false;
-    lastSnapshot = null;
     rejectAllPending(new Error("UI bridge disconnected"));
 
     if (wasConnected) {
@@ -231,10 +226,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     if (envelope.type === "ui:event") {
       const payload = envelope.payload as UiEventPayload<typeof envelope.event>;
 
-      if (envelope.event === UI_EVENT_SNAPSHOT_CHANGED) {
-        lastSnapshot = payload as UiSnapshot;
-        reconnectAttempts = 0;
-      }
+      reconnectAttempts = 0;
 
       const set = listeners.get(envelope.event);
       if (!set || set.size === 0) return;
@@ -355,55 +347,6 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     });
   };
 
-  const getLastSnapshot = () => lastSnapshot;
-
-  const waitForSnapshot: UiClient["waitForSnapshot"] = async (opts) => {
-    const timeoutMs = opts?.timeoutMs ?? 30_000;
-    const predicate = opts?.predicate;
-
-    const existing = lastSnapshot;
-    if (connected && existing && (!predicate || predicate(existing))) return existing;
-
-    return await new Promise<UiSnapshot>((resolve, reject) => {
-      let settled = false;
-      let timeout: ReturnType<typeof setTimeout> | null = null;
-
-      const cleanup = () => {
-        if (timeout) clearTimeout(timeout);
-        unsubscribe();
-      };
-
-      const maybeResolve = (snapshot: UiSnapshot) => {
-        if (settled) return;
-        if (predicate && !predicate(snapshot)) return;
-        settled = true;
-        cleanup();
-        resolve(snapshot);
-      };
-
-      const unsubscribe = on(UI_EVENT_SNAPSHOT_CHANGED, (payload) => maybeResolve(payload as UiSnapshot));
-
-      void connect()
-        .then(() => {
-          const postConnect = lastSnapshot;
-          if (postConnect) maybeResolve(postConnect);
-        })
-        .catch((error) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          reject(toError(error));
-        });
-
-      timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error("Timed out waiting for UI snapshot"));
-      }, timeoutMs);
-    });
-  };
-
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -432,11 +375,9 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     } catch (error) {
       logger?.warn?.("[uiClient] failed to disconnect transport", error);
     }
-
-    lastSnapshot = null;
   };
 
-  const base = { connect, call, on, onConnectionStatus, getLastSnapshot, waitForSnapshot, destroy };
+  const base = { connect, call, on, onConnectionStatus, destroy };
 
   const extend: UiClient["extend"] = function <E extends Record<string, unknown>>(
     this: UiClient & Record<string, unknown>,

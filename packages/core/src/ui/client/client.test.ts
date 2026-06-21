@@ -1,66 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
+import { UI_EVENT_SESSION_CHANGED } from "../protocol/events.js";
 import { createUiClient, type UiTransport } from "./index.js";
-
-const SNAPSHOT_FIXTURE = {
-  chain: {
-    chainRef: "eip155:1",
-    namespace: "eip155",
-    displayName: "Ethereum",
-    shortName: "eth",
-    icon: null,
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  },
-  chainCapabilities: {
-    nativeBalance: true,
-  },
-  networks: {
-    selectedNamespace: "eip155",
-    active: "eip155:1",
-    known: [
-      {
-        chainRef: "eip155:1",
-        namespace: "eip155",
-        displayName: "Ethereum",
-        shortName: "eth",
-        icon: null,
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      },
-    ],
-    available: [
-      {
-        chainRef: "eip155:1",
-        namespace: "eip155",
-        displayName: "Ethereum",
-        shortName: "eth",
-        icon: null,
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      },
-    ],
-  },
-  accounts: {
-    totalCount: 0,
-    list: [],
-    active: null,
-  },
-  session: {
-    vaultInitialized: false,
-    isUnlocked: false,
-    autoLockDurationMs: 900_000,
-    nextAutoLockAt: null,
-  },
-  attention: {
-    queue: [],
-    count: 0,
-  },
-  permissions: {
-    origins: {},
-  },
-  backup: {
-    pendingHdKeyringCount: 0,
-    nextHdKeyring: null,
-  },
-} as const;
 
 const createMockTransport = () => {
   const messageListeners = new Set<(m: unknown) => void>();
@@ -223,30 +163,13 @@ describe("ui client runtime", () => {
     }
   });
 
-  it("waitForSnapshot resolves after snapshotChanged", async () => {
-    const transport = createMockTransport();
-    const client = createUiClient({ transport });
-
-    const p = client.waitForSnapshot({ timeoutMs: 1_000 });
-
-    transport.emit({
-      type: "ui:event",
-      event: UI_EVENT_SNAPSHOT_CHANGED,
-      payload: SNAPSHOT_FIXTURE,
-    });
-
-    await expect(p).resolves.toMatchObject({ chain: { chainRef: "eip155:1" } });
-
-    client.destroy();
-  });
-
   it("reconnects on disconnect when there is at least one event listener", async () => {
     vi.useFakeTimers();
 
     const transport = createMockTransport();
     const client = createUiClient({ transport });
 
-    const unsubscribe = client.on(UI_EVENT_SNAPSHOT_CHANGED, () => {});
+    const unsubscribe = client.on(UI_EVENT_SESSION_CHANGED, () => {});
 
     // First connect is async; allow it to start.
     await Promise.resolve();
@@ -310,72 +233,6 @@ describe("ui client runtime", () => {
     }
   });
 
-  it("waitForSnapshot requires a fresh snapshot after disconnect", async () => {
-    const transport = createMockTransport();
-    const client = createUiClient({ transport });
-
-    try {
-      transport.emit({
-        type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: SNAPSHOT_FIXTURE,
-      });
-
-      await expect(client.waitForSnapshot({ timeoutMs: 1_000 })).resolves.toMatchObject({
-        chain: { chainRef: "eip155:1" },
-      });
-
-      transport.disconnectNow(new Error("port disconnected"));
-
-      let resolved = false;
-      const pendingSnapshot = client.waitForSnapshot({ timeoutMs: 1_000 }).then((snapshot) => {
-        resolved = true;
-        return snapshot;
-      });
-
-      await Promise.resolve();
-      expect(resolved).toBe(false);
-
-      transport.emit({
-        type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: {
-          ...SNAPSHOT_FIXTURE,
-          chain: {
-            ...SNAPSHOT_FIXTURE.chain,
-            chainRef: "eip155:2",
-            displayName: "Sepolia",
-            shortName: "sep",
-          },
-          networks: {
-            ...SNAPSHOT_FIXTURE.networks,
-            active: "eip155:2",
-            known: [
-              {
-                ...SNAPSHOT_FIXTURE.networks.known[0],
-                chainRef: "eip155:2",
-                displayName: "Sepolia",
-                shortName: "sep",
-              },
-            ],
-            available: [
-              {
-                ...SNAPSHOT_FIXTURE.networks.available[0],
-                chainRef: "eip155:2",
-                displayName: "Sepolia",
-                shortName: "sep",
-              },
-            ],
-          },
-        },
-      });
-
-      await expect(pendingSnapshot).resolves.toMatchObject({ chain: { chainRef: "eip155:2" } });
-    } finally {
-      client.destroy();
-    }
-  });
-
   it("stops auto-reconnect once the last event listener unsubscribes", async () => {
     vi.useFakeTimers();
 
@@ -383,7 +240,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport });
 
     try {
-      const unsubscribe = client.on(UI_EVENT_SNAPSHOT_CHANGED, () => {});
+      const unsubscribe = client.on(UI_EVENT_SESSION_CHANGED, () => {});
 
       await Promise.resolve();
       transport.disconnectNow(new Error("port disconnected"));

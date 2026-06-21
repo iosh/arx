@@ -14,8 +14,6 @@ import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
-import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
-import { buildUiSnapshot } from "../ui/server/snapshot.js";
 import type { UiServerExtension } from "../ui/server/types.js";
 import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import {
@@ -180,11 +178,6 @@ const createHandlersForRuntime = (
   runtime: ReturnType<typeof createBackgroundRuntime>,
   options?: { extensions?: readonly UiServerExtension[] },
 ) => {
-  const session = createUiSessionAccess({
-    session: runtime.services.session,
-    sessionStatus: runtime.services.sessionStatus,
-    keyring: runtime.services.keyring,
-  });
   const approvalReadService = createApprovalReadService({
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
@@ -209,29 +202,7 @@ const createHandlersForRuntime = (
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  const snapshots = {
-    buildUiSnapshot: () =>
-      buildUiSnapshot({
-        accounts: runtime.services.accounts,
-        chains: runtime.services.chainViews,
-        permissions: runtime.services.permissionViews,
-        session,
-        keyrings: runtime.services.keyring,
-        attention: runtime.services.attention,
-        namespaceBindings: runtime.services.namespaceBindings,
-      }),
-  };
   const wallet = createTrustedWalletApi({
-    snapshots,
-    snapshotChangeSources: [
-      (listener) => runtime.services.accounts.onStateChanged(listener),
-      (listener) => runtime.services.permissions.onStateChanged(listener),
-      (listener) => runtime.services.chainRpc.onStateChanged(listener),
-      (listener) => runtime.services.walletChainSelection.subscribeChanged(listener),
-      (listener) => session.onStateChanged(listener),
-      (listener) => runtime.transactions.onTransactionsChanged(listener),
-      (listener) => runtime.transactions.onTransactionApprovalsChanged(listener),
-    ],
     session: walletSession,
     accounts: walletAccounts,
     networks: walletNetworks,
@@ -749,16 +720,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
 
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      hasUiBindings: true,
       hasTransactionReceiptTracking: false,
     });
+    expect(runtime.services.namespaceBindings.getUi("eip155")).toBeDefined();
     expect(runtime.services.namespaceBindings.hasTransactionReceiptTracking("eip155")).toBe(false);
-
-    const handlers = createHandlersForRuntime(runtime);
-    await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
-      chainCapabilities: {
-        nativeBalance: true,
-      },
-    });
 
     runtime.lifecycle.shutdown();
   });

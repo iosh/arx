@@ -12,9 +12,7 @@ import type { TrustedWalletApi } from "../../wallet/api.js";
 import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
-import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiApprovalResolveResult } from "./approvals/resolveService.js";
-import type { UiStateChangeSubscription } from "./sessionAccess.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
@@ -46,8 +44,6 @@ export type UiHandlers = {
 };
 
 export type UiMethodHandlerMap = Partial<UiHandlers>;
-
-export type UiSnapshotBuilder = () => UiSnapshot;
 
 export type UiResolvedContext = {
   namespace: string;
@@ -97,6 +93,7 @@ export type UiNamespaceBindingsAccess = Pick<
 >;
 
 export type UiEventSource = {
+  onSessionChanged(listener: () => void): () => void;
   onApprovalCreated(listener: () => void): () => void;
   onApprovalFinished(listener: (event: { approvalId: string }) => void): () => void;
   onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;
@@ -142,7 +139,6 @@ export type UiServerExtension = {
 };
 
 export type UiServerRuntime = {
-  buildSnapshot: UiSnapshotBuilder;
   getUiContext: UiContextResolver;
   handlers: UiMethodHandlerMap;
 };
@@ -153,9 +149,6 @@ export type UiRuntimeDispatchResult = {
 };
 
 export type UiRuntimeAccess = {
-  buildSnapshotEvent: () => UiEventEnvelope;
   dispatchRequest: (raw: unknown) => Promise<UiRuntimeDispatchResult | null>;
-  getRequestKind: (raw: unknown) => "query" | "command" | null;
-  subscribeStateChanged: UiStateChangeSubscription;
   subscribeUiEvents: (listener: (event: UiEventEnvelope) => void) => () => void;
 };

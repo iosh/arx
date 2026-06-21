@@ -69,9 +69,6 @@ export type {
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
   WalletApiSessionStatusResult,
-  WalletApiSnapshot,
-  WalletApiSnapshotChangeListener,
   WalletApiTransactionDetailResult,
   WalletApiTransactionsResult,
-  WalletApiUnsubscribe,
 } from "./types.js";

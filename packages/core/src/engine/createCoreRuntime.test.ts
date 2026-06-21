@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import {
   MemoryAccountsPort,
@@ -94,27 +94,6 @@ const expectHydrationFailure = async (input: CreateCoreRuntimeInput, details: { 
   });
 };
 
-const createSeededAccountsPort = () =>
-  new MemoryAccountsPort([
-    {
-      accountKey: ACCOUNT_KEY,
-      namespace: EIP155_NAMESPACE,
-      keyringId: "11111111-1111-4111-8111-111111111111",
-      createdAt: 1,
-    },
-  ]);
-
-const createSeededPermissionsPort = () =>
-  new MemoryPermissionsPort([
-    {
-      origin: ORIGIN,
-      namespace: EIP155_NAMESPACE,
-      chainScopes: {
-        [EIP155_CHAIN_REF]: [ACCOUNT_KEY],
-      },
-    },
-  ]);
-
 const createRecoverableTransactionAggregate = (status: "submitting" | "submitted"): TransactionAggregate => ({
   record: {
     id: `tx-${status}`,
@@ -180,9 +159,10 @@ describe("createCoreRuntime", () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
     expect(Object.keys(core).sort()).toEqual(["provider", "wallet"]);
-    expect(core.wallet.snapshot.get()).toMatchObject({
-      session: { vaultInitialized: false, isUnlocked: false },
-      networks: { selectedNamespace: EIP155_NAMESPACE },
+    expect(core.wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
+    expect(core.wallet.networks.getSelectedChain()).toMatchObject({
+      namespace: EIP155_NAMESPACE,
+      chainRef: EIP155_CHAIN_REF,
     });
     await expect(
       core.provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
@@ -241,10 +221,8 @@ describe("createCoreRuntime", () => {
       accountKey,
       canonicalAddress: created.address,
     });
-    expect(core.wallet.snapshot.get()).toMatchObject({
-      session: { vaultInitialized: true },
-      accounts: { totalCount: 3 },
-    });
+    expect(core.wallet.session.getStatus()).toMatchObject({ vaultInitialized: true });
+    expect(core.wallet.accounts.listCurrentChain()).toMatchObject({ totalCount: 3 });
     expect(core.wallet.keyrings.list()).toHaveLength(2);
     expect(core.wallet.keyrings.getBackupStatus()).toMatchObject({ pendingHdKeyringCount: 1 });
     expect(core.wallet.keyrings.getAccountsByKeyring({ keyringId: created.keyringId })).toHaveLength(2);
@@ -261,7 +239,7 @@ describe("createCoreRuntime", () => {
       password: PASSWORD,
       words: TEST_MNEMONIC.split(" "),
     });
-    expect(core.wallet.snapshot.get().session).toMatchObject({ isUnlocked: true });
+    expect(core.wallet.session.getStatus()).toMatchObject({ isUnlocked: true });
 
     await expect(core.wallet.session.resetAutoLockTimer()).resolves.toMatchObject({ status: "unlocked" });
     await expect(core.wallet.session.setAutoLockDuration({ durationMs: 5 * 60 * 1000 })).resolves.toMatchObject({
@@ -269,54 +247,6 @@ describe("createCoreRuntime", () => {
     });
     await expect(core.wallet.session.lock()).resolves.toMatchObject({ status: "locked" });
     await expect(core.wallet.session.unlock({ password: PASSWORD })).resolves.toMatchObject({ status: "unlocked" });
-  });
-
-  it("emits read invalidation when wallet state changes", async () => {
-    const core = await createCoreRuntime(createCoreRuntimeInput());
-    const listener = vi.fn();
-    const unsubscribe = core.wallet.snapshot.subscribe(listener);
-
-    await core.wallet.onboarding.createWalletFromMnemonic({
-      password: PASSWORD,
-      words: TEST_MNEMONIC.split(" "),
-    });
-
-    expect(listener).toHaveBeenCalled();
-    unsubscribe();
-  });
-
-  it("returns wallet snapshots detached from mutable owner state", async () => {
-    const core = await createCoreRuntime(createCoreRuntimeInput());
-
-    const first = core.wallet.snapshot.get();
-    const firstKnownNetwork = first.networks.known[0];
-    if (!firstKnownNetwork) {
-      throw new Error("expected default snapshot fixtures to include network state");
-    }
-    const originalNetworkName = firstKnownNetwork.displayName;
-
-    first.accounts.totalCount = 999;
-    firstKnownNetwork.displayName = "mutated network";
-
-    const next = core.wallet.snapshot.get();
-    expect(next).not.toBe(first);
-    expect(next.accounts.totalCount).toBe(0);
-    expect(next.networks.known[0]?.displayName).toBe(originalNetworkName);
-  });
-
-  it("does not emit read invalidation while subscribing to replaying owner state", async () => {
-    const core = await createCoreRuntime(
-      createCoreRuntimeInput({
-        accountsPort: createSeededAccountsPort(),
-        permissionsPort: createSeededPermissionsPort(),
-      }),
-    );
-
-    const listener = vi.fn();
-    const unsubscribe = core.wallet.snapshot.subscribe(listener);
-
-    expect(listener).not.toHaveBeenCalled();
-    unsubscribe();
   });
 
   it("runs transaction restart recovery by default and can skip it explicitly", async () => {

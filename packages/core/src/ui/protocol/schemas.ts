@@ -8,23 +8,6 @@ export type ChainSnapshot = ChainView;
 
 export type UiOwnedAccountSummary = WalletApiOwnedAccountSummary;
 
-export type AccountsSnapshot = {
-  totalCount: number;
-  list: UiOwnedAccountSummary[];
-  active: UiOwnedAccountSummary | null;
-};
-
-export type SessionSnapshot = {
-  vaultInitialized: boolean;
-  isUnlocked: boolean;
-  autoLockDurationMs: number;
-  nextAutoLockAt: number | null;
-};
-
-export type UiChainCapabilities = {
-  nativeBalance: boolean;
-};
-
 export type UiPermissionChainState = {
   accountKeys: AccountKey[];
 };
@@ -56,13 +39,6 @@ export type UiAccountMeta = {
   hidden?: boolean | undefined;
 };
 
-export type NetworkListSnapshot = {
-  selectedNamespace: string;
-  active: ChainRef;
-  known: ChainSnapshot[];
-  available: ChainSnapshot[];
-};
-
 export type UiBackupKeyringReminder = {
   keyringId: string;
   alias: string | null;
@@ -81,20 +57,6 @@ export type AttentionRequest = {
   namespace: string | null;
   requestedAt: number;
   expiresAt: number;
-};
-
-export type UiSnapshot = {
-  chain: ChainSnapshot;
-  chainCapabilities: UiChainCapabilities;
-  networks: NetworkListSnapshot;
-  accounts: AccountsSnapshot;
-  session: SessionSnapshot;
-  attention: {
-    queue: AttentionRequest[];
-    count: number;
-  };
-  permissions: UiPermissionsSnapshot;
-  backup: UiBackupStatus;
 };
 
 export type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount };

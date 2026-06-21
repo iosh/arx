@@ -137,9 +137,9 @@ describe("createArxWallet", () => {
       expect(wallet.networks.getSelectedNamespace()).toBe("eip155");
       expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
-        session: { vaultInitialized: false, isUnlocked: false },
-        networks: { selectedNamespace: "eip155" },
+      expect(wallet.networks.getSelectedChainView()).toMatchObject({
+        namespace: "eip155",
+        chainRef: "eip155:1",
       });
 
       const correctedSelection = walletChainSelectionPort.saved.at(-1);
@@ -419,7 +419,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("builds UI snapshots from wallet session, network, and attention surfaces", async () => {
+  it("exposes focused wallet owner projections for session, network, account, and attention state", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
     });
@@ -434,34 +434,30 @@ describe("createArxWallet", () => {
         chainRef: EIP155_CHAIN_REF,
       });
 
-      const lockedSnapshot = wallet.snapshots.buildUiSnapshot();
-      expect(lockedSnapshot).toMatchObject({
-        session: { vaultInitialized: false, isUnlocked: false },
-        attention: { count: 1 },
-        accounts: {
-          totalCount: 1,
-          active: {
-            accountKey: ACCOUNT_KEY,
-          },
-        },
-        networks: {
-          selectedNamespace: wallet.networks.getSelectedNamespace(),
-          active: wallet.networks.getSelectedChainView().chainRef,
-        },
+      expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
+      expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
+      expect(wallet.accounts.getWalletSetupState()).toEqual({
+        totalAccountCount: 1,
+        hasOwnedAccounts: true,
       });
-      expect(lockedSnapshot.accounts.list[0]?.accountKey).toBe(ACCOUNT_KEY);
+      expect(
+        wallet.accounts.getActiveAccountForNamespace({
+          namespace: EIP155_NAMESPACE,
+          chainRef: EIP155_CHAIN_REF,
+        }),
+      ).toMatchObject({ accountKey: ACCOUNT_KEY });
+      expect(wallet.networks.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
+      expect(wallet.networks.getSelectedChainView().chainRef).toBe(EIP155_CHAIN_REF);
 
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
-      expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
-        session: { vaultInitialized: true, isUnlocked: true },
-        attention: { count: 1 },
-        accounts: {
-          totalCount: 1,
-        },
+      expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: true, isUnlocked: true });
+      expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
+      expect(wallet.accounts.getWalletSetupState()).toEqual({
+        totalAccountCount: 1,
+        hasOwnedAccounts: true,
       });
-      expect(wallet.snapshots.buildUiSnapshot().accounts.list[0]?.accountKey).toBe(ACCOUNT_KEY);
     } finally {
       await runtime.shutdown();
     }
@@ -514,31 +510,46 @@ describe("createArxWallet", () => {
         platform: createUiPlatform(),
         uiOrigin: "chrome-extension://arx/popup.html",
       });
-      const stateChanged = vi.fn();
-      const unsubscribe = ui.subscribeStateChanged(stateChanged);
+      const events: unknown[] = [];
+      const unsubscribe = ui.subscribeUiEvents((event) => events.push(event));
 
       await wallet.session.createVault({ password: PASSWORD });
-      await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
-        session: { vaultInitialized: true, isUnlocked: false },
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: "ui:sessionChanged",
+            payload: { reason: "changed" },
+          }),
+        ]),
+      );
+      await expect(ui.dispatch({ method: "ui.session.getStatus" })).resolves.toMatchObject({
+        vaultInitialized: true,
+        isUnlocked: false,
       });
+      events.length = 0;
       await expect(ui.dispatch({ method: "ui.session.unlock", params: { password: PASSWORD } })).resolves.toMatchObject(
         {
           status: "unlocked",
         },
       );
-      expect(stateChanged).toHaveBeenCalled();
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: "ui:sessionChanged",
+            payload: { reason: "changed" },
+          }),
+        ]),
+      );
       await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       wallet.session.lock("manual");
 
-      await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
-        session: { isUnlocked: false },
-        accounts: {
-          totalCount: 1,
-          active: {
-            accountKey: ACCOUNT_KEY,
-          },
-          list: [expect.objectContaining({ accountKey: ACCOUNT_KEY })],
+      await expect(ui.dispatch({ method: "ui.session.getStatus" })).resolves.toMatchObject({ isUnlocked: false });
+      await expect(ui.dispatch({ method: "ui.accounts.listCurrentChain" })).resolves.toMatchObject({
+        totalCount: 1,
+        active: {
+          accountKey: ACCOUNT_KEY,
         },
+        list: [expect.objectContaining({ accountKey: ACCOUNT_KEY })],
       });
       await expect(
         provider.request({

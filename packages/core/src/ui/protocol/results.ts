@@ -12,6 +12,7 @@ import type {
   WalletApiImportPrivateKeyResult,
   WalletApiKeyringAccount,
   WalletApiNetworksResult,
+  WalletApiOnboardingStatusResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiSessionStatusResult,
 } from "../../wallet/types.js";
@@ -19,20 +20,14 @@ import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_READY,
+  UI_EVENT_SESSION_CHANGED,
   UI_EVENT_TRANSACTIONS_CHANGED,
 } from "./events.js";
 import type { UiEntryBootstrap, UiEntryLaunchContext } from "./methods/entry.js";
 import type { ApprovalDetail, ApprovalListEntry, ApprovalResolveResult } from "./models/approvals.js";
 import type { UiTransaction } from "./models/transactions.js";
-import type {
-  ChainSnapshot,
-  UiAccountMeta,
-  UiBackupStatus,
-  UiKeyringMeta,
-  UiOwnedAccountSummary,
-  UiSnapshot,
-} from "./schemas.js";
+import type { ChainSnapshot, UiAccountMeta, UiBackupStatus, UiKeyringMeta, UiOwnedAccountSummary } from "./schemas.js";
 
 export type UiNativeBalanceResult = {
   accountKey: AccountKey;
@@ -63,7 +58,6 @@ export type UiExportPrivateKeyResult = WalletApiExportPrivateKeyResult;
 export type UiRequestSendTransactionApprovalResult = WalletApiRequestSendTransactionApprovalResult;
 
 export type UiMethodResultMap = {
-  "ui.snapshot.get": UiSnapshot;
   "ui.session.getStatus": WalletApiSessionStatusResult;
   "ui.entry.getLaunchContext": UiEntryLaunchContext;
   "ui.entry.getBootstrap": UiEntryBootstrap;
@@ -73,6 +67,7 @@ export type UiMethodResultMap = {
   "ui.session.resetAutoLockTimer": SessionLockState;
   "ui.session.setAutoLockDuration": UiSetAutoLockDurationResult;
   "ui.onboarding.openTab": UiOnboardingOpenTabResult;
+  "ui.onboarding.getStatus": WalletApiOnboardingStatusResult;
   "ui.onboarding.generateMnemonic": UiGenerateMnemonicResult;
   "ui.onboarding.createWalletFromMnemonic": UiWalletCreationResult;
   "ui.onboarding.importWalletFromMnemonic": UiWalletCreationResult;
@@ -108,7 +103,8 @@ export type UiMethodResultMap = {
 };
 
 export type UiEventPayloadMap = {
-  [UI_EVENT_SNAPSHOT_CHANGED]: UiSnapshot;
+  [UI_EVENT_READY]: { ready: true };
+  [UI_EVENT_SESSION_CHANGED]: { reason: "changed" };
   [UI_EVENT_ENTRY_CHANGED]: UiEntryLaunchContext;
   [UI_EVENT_APPROVALS_CHANGED]: { reason: "changed" };
   [UI_EVENT_APPROVAL_DETAIL_CHANGED]: { approvalId: string };

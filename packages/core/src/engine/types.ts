@@ -78,7 +78,6 @@ import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
-import type { UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 
@@ -376,9 +375,7 @@ export type WalletUiDispatchInput<M extends UiMethodName> =
 
 /** Engine-owned UI contract for wallet shells. */
 export type WalletUi = Readonly<{
-  buildSnapshot(): UiSnapshot;
   dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
-  subscribeStateChanged(listener: () => void): () => void;
   subscribeUiEvents(listener: (event: UiEventEnvelope) => void): () => void;
 }>;
 
@@ -396,11 +393,6 @@ export type WalletDappConnections = Readonly<{
   getConnection(origin: string, options: { namespace: string }): DappConnectionRecord | null;
   isConnected(origin: string, options: { namespace: string }): boolean;
   onStateChanged(listener: (state: DappConnectionsState) => void): () => void;
-}>;
-
-/** Provider and UI snapshot builders. */
-export type WalletSnapshots = Readonly<{
-  buildUiSnapshot(): UiSnapshot;
 }>;
 
 export type ArxWallet = Readonly<{
@@ -424,6 +416,4 @@ export type ArxWallet = Readonly<{
   createProvider(): WalletProvider;
   /** Create a UI-facing contract. */
   createUi(options: WalletCreateUiOptions): WalletUi;
-  /** Provider and UI snapshots. */
-  snapshots: WalletSnapshots;
 }>;

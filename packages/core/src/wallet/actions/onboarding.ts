@@ -73,6 +73,17 @@ export const generateMnemonic = async (context: WalletApiContext, input?: Genera
   return { words: mnemonic.split(" ") };
 };
 
+export const getOnboardingStatus = (context: WalletApiContext) => {
+  const vaultInitialized = context.session.getStatus().vaultInitialized;
+  if (!vaultInitialized) {
+    return { availability: "uninitialized" as const };
+  }
+
+  return {
+    availability: hasAnyOwnedAccounts(context) ? ("ready" as const) : ("empty" as const),
+  };
+};
+
 export const createWalletFromMnemonic = async (context: WalletApiContext, input: CreateWalletFromMnemonicInput) => {
   const params = WalletApiOnboardingSchemas.createWalletFromMnemonic.parse(input);
   const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);

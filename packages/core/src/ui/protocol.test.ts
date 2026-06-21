@@ -1,82 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { parseUiEnvelope } from "./protocol/envelopes.js";
-import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
+import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_READY, UI_EVENT_SESSION_CHANGED } from "./protocol/events.js";
 import { isUiEventName, isUiMethodName, parseUiMethodParams } from "./protocol/index.js";
-
-const SNAPSHOT_FIXTURE = {
-  chain: {
-    chainRef: "eip155:1",
-    namespace: "eip155",
-    displayName: "Ethereum",
-    shortName: "eth",
-    icon: null,
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  },
-  chainCapabilities: {
-    nativeBalance: true,
-  },
-  networks: {
-    selectedNamespace: "eip155",
-    active: "eip155:1",
-    known: [
-      {
-        chainRef: "eip155:1",
-        namespace: "eip155",
-        displayName: "Ethereum",
-        shortName: "eth",
-        icon: null,
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      },
-    ],
-    available: [
-      {
-        chainRef: "eip155:1",
-        namespace: "eip155",
-        displayName: "Ethereum",
-        shortName: "eth",
-        icon: null,
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      },
-    ],
-  },
-  accounts: {
-    totalCount: 0,
-    list: [],
-    active: null,
-  },
-  session: {
-    vaultInitialized: false,
-    isUnlocked: false,
-    autoLockDurationMs: 900_000,
-    nextAutoLockAt: null,
-  },
-  attention: {
-    queue: [],
-    count: 0,
-  },
-  permissions: {
-    origins: {},
-  },
-  backup: {
-    pendingHdKeyringCount: 0,
-    nextHdKeyring: null,
-  },
-} as const;
 
 describe("ui protocol registry", () => {
   it("recognizes method/event names", () => {
-    expect(isUiMethodName("ui.snapshot.get")).toBe(true);
+    expect(isUiMethodName("ui.snapshot.get")).toBe(false);
     expect(isUiMethodName("ui.snapshot.nope")).toBe(false);
 
     expect(isUiEventName(UI_EVENT_ENTRY_CHANGED)).toBe(true);
-    expect(isUiEventName(UI_EVENT_SNAPSHOT_CHANGED)).toBe(true);
+    expect(isUiEventName(UI_EVENT_READY)).toBe(true);
+    expect(isUiEventName(UI_EVENT_SESSION_CHANGED)).toBe(true);
     expect(isUiEventName("ui:unknown")).toBe(false);
   });
 
   it("validates method params (strict)", () => {
-    expect(parseUiMethodParams("ui.snapshot.get", undefined)).toBeUndefined();
-    expect(() => parseUiMethodParams("ui.snapshot.get", {})).toThrow();
-
     const params = parseUiMethodParams("ui.session.setAutoLockDuration", { durationMs: 60_000 });
     expect(params.durationMs).toBe(60_000);
     expect(() => parseUiMethodParams("ui.session.setAutoLockDuration", { durationMs: "60_000" })).toThrow();
@@ -135,9 +73,9 @@ describe("ui envelope parsing", () => {
       parseUiEnvelope({
         type: "ui:request",
         id: "1",
-        method: "ui.snapshot.get",
+        method: "ui.session.getStatus",
       }),
-    ).toMatchObject({ type: "ui:request", id: "1", method: "ui.snapshot.get" });
+    ).toMatchObject({ type: "ui:request", id: "1", method: "ui.session.getStatus" });
 
     expect(
       parseUiEnvelope({
@@ -164,16 +102,16 @@ describe("ui envelope parsing", () => {
     expect(
       parseUiEnvelope({
         type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
-        payload: SNAPSHOT_FIXTURE,
+        event: UI_EVENT_READY,
+        payload: { ready: true },
       }),
-    ).toMatchObject({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED });
+    ).toMatchObject({ type: "ui:event", event: UI_EVENT_READY });
 
     expect(() =>
       parseUiEnvelope({
         type: "ui:request",
         id: "1",
-        method: "ui.snapshot.nope",
+        method: "ui.snapshot.get",
       }),
     ).toThrow();
 

@@ -18,16 +18,14 @@ import type {
   WalletApiKeyringListResult,
   WalletApiNativeBalanceResult,
   WalletApiNetworksResult,
+  WalletApiOnboardingStatusResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
   WalletApiSessionStatusResult,
-  WalletApiSnapshot,
-  WalletApiSnapshotChangeListener,
   WalletApiTransactionDetailResult,
   WalletApiTransactionsResult,
-  WalletApiUnsubscribe,
 } from "./types.js";
 
 type WalletApiInput<TSchema extends z.ZodTypeAny> = z.input<TSchema>;
@@ -85,11 +83,6 @@ export type ApplyTransactionDraftEditInput = Omit<
 };
 
 export type TrustedWalletApi = Readonly<{
-  snapshot: Readonly<{
-    get(): WalletApiSnapshot;
-    subscribe(listener: WalletApiSnapshotChangeListener): WalletApiUnsubscribe;
-  }>;
-
   session: Readonly<{
     getStatus(): WalletApiSessionStatusResult;
     unlock(input: UnlockSessionInput): Promise<SessionLockState>;
@@ -99,6 +92,7 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   onboarding: Readonly<{
+    getStatus(): WalletApiOnboardingStatusResult;
     generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
     createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
     importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;

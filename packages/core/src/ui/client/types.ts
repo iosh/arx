@@ -1,6 +1,5 @@
 import type { UiContext, UiError, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiEventName, UiEventPayload, UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
-import type { UiSnapshot } from "../protocol/schemas.js";
 
 export type UiTransport = {
   connect: () => Promise<void>;
@@ -64,9 +63,6 @@ export type UiClient = {
 
   on: <E extends UiEventName>(event: E, listener: (payload: UiEventPayload<E>) => void) => () => void;
   onConnectionStatus: (listener: (status: UiClientConnectionStatus) => void) => () => void;
-
-  getLastSnapshot: () => UiSnapshot | null;
-  waitForSnapshot: (opts?: { timeoutMs?: number; predicate?: (s: UiSnapshot) => boolean }) => Promise<UiSnapshot>;
 
   destroy: () => void;
 

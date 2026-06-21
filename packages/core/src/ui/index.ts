@@ -15,7 +15,8 @@ export {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_READY,
+  UI_EVENT_SESSION_CHANGED,
   UI_EVENT_TRANSACTIONS_CHANGED,
   uiEvents,
 } from "./protocol/events.js";
@@ -34,15 +35,11 @@ export { uiMethods } from "./protocol/methods.js";
 export type { ListTransactionsQuery, UiTransaction } from "./protocol/models/transactions.js";
 export { ListTransactionsQuerySchema } from "./protocol/models/transactions.js";
 export type {
-  AccountsSnapshot,
   ApprovalDetail,
   ApprovalListEntry,
   ChainSnapshot,
-  NetworkListSnapshot,
-  SessionSnapshot,
   UiAccountMeta,
   UiBackupStatus,
   UiKeyringMeta,
   UiPermissionsSnapshot,
-  UiSnapshot,
 } from "./protocol/schemas.js";

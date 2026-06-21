@@ -1,57 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { TrustedWalletApi } from "../../wallet/api.js";
 import {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,
-  UI_EVENT_SNAPSHOT_CHANGED,
+  UI_EVENT_SESSION_CHANGED,
   UI_EVENT_TRANSACTIONS_CHANGED,
 } from "../protocol/events.js";
-import type { UiSnapshot } from "../protocol/schemas.js";
 import { createUiRuntimeAccess } from "./access.js";
 
-const createUiSnapshot = (chainRef: "eip155:1" | "eip155:10" = "eip155:1"): UiSnapshot => ({
-  chain: {
-    chainRef,
-    namespace: "eip155",
-    displayName: chainRef === "eip155:10" ? "Optimism" : "Ethereum",
-    shortName: null,
-    icon: null,
-    nativeCurrency: {
-      name: "Ether",
-      symbol: "ETH",
-      decimals: 18,
-    },
-  },
-  chainCapabilities: {
-    nativeBalance: true,
-  },
-  networks: {
-    selectedNamespace: "eip155",
-    active: chainRef,
-    known: [],
-    available: [],
-  },
-  accounts: {
-    totalCount: 0,
-    list: [],
-    active: null,
-  },
-  session: {
-    vaultInitialized: true,
-    isUnlocked: true,
-    autoLockDurationMs: 0,
-    nextAutoLockAt: null,
-  },
-  attention: {
-    queue: [],
-    count: 0,
-  },
-  permissions: {
-    origins: {},
-  },
-  backup: {
-    pendingHdKeyringCount: 0,
-    nextHdKeyring: null,
+const createChainView = (chainRef: "eip155:1" | "eip155:10" = "eip155:1") => ({
+  chainRef,
+  namespace: "eip155",
+  displayName: chainRef === "eip155:10" ? "Optimism" : "Ethereum",
+  shortName: null,
+  icon: null,
+  nativeCurrency: {
+    name: "Ether",
+    symbol: "ETH",
+    decimals: 18,
   },
 });
 
@@ -70,42 +36,29 @@ const createUnexpectedWalletGroup = (group: string) =>
     },
   );
 
-const createTrustedWalletStub = (snapshot: {
-  get: () => UiSnapshot;
-  subscribe: (listener: () => void) => () => void;
-}): TrustedWalletApi =>
+const createTrustedWalletStub = (options: { chain?: ReturnType<typeof createChainView> } = {}): TrustedWalletApi =>
   ({
-    snapshot: {
-      get: snapshot.get,
-      subscribe: snapshot.subscribe,
+    networks: {
+      getSelectedChain: () => options.chain ?? createChainView(),
     },
     session: createUnexpectedWalletGroup("session"),
     onboarding: createUnexpectedWalletGroup("onboarding"),
     accounts: createUnexpectedWalletGroup("accounts"),
-    networks: createUnexpectedWalletGroup("networks"),
     balances: createUnexpectedWalletGroup("balances"),
     approvals: createUnexpectedWalletGroup("approvals"),
     keyrings: createUnexpectedWalletGroup("keyrings"),
     transactions: createUnexpectedWalletGroup("transactions"),
   }) as TrustedWalletApi;
 
-const createWalletSnapshotStub = (options: { snapshot?: UiSnapshot; listeners?: Set<() => void> } = {}) => ({
-  get: vi.fn(() => options.snapshot ?? createUiSnapshot()),
-  subscribe: vi.fn((listener: () => void) => {
-    options.listeners?.add(listener);
-    return () => {
-      options.listeners?.delete(listener);
-    };
-  }),
-});
-
-const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnapshotStub> } = {}) => {
-  const snapshot = options.snapshot ?? createWalletSnapshotStub();
-
+const createUiAccess = (options: { chain?: ReturnType<typeof createChainView> } = {}) => {
   return createUiRuntimeAccess({
     server: {
-      wallet: createTrustedWalletStub(snapshot),
+      wallet: createTrustedWalletStub(options),
       events: {
+        onSessionChanged: (handler) => {
+          sessionChangedHandlers.add(handler);
+          return () => sessionChangedHandlers.delete(handler);
+        },
         onApprovalCreated: (handler) => {
           approvalCreatedHandlers.add(handler);
           return () => approvalCreatedHandlers.delete(handler);
@@ -132,49 +85,43 @@ const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnap
   });
 };
 
+const sessionChangedHandlers = new Set<() => void>();
 const approvalCreatedHandlers = new Set<() => void>();
 const approvalFinishedHandlers = new Set<(event: { approvalId: string }) => void>();
 const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => void>();
 const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
-  it("uses injected wallet snapshot API for snapshot query, event, and invalidation", async () => {
-    const snapshotValue = createUiSnapshot("eip155:10");
-    const listeners = new Set<() => void>();
-    const snapshot = createWalletSnapshotStub({ snapshot: snapshotValue, listeners });
-    const access = createUiAccess({ snapshot });
-
-    const event = access.buildSnapshotEvent();
-    const dispatched = await access.dispatchRequest({
-      type: "ui:request",
-      id: "snapshot-1",
-      method: "ui.snapshot.get",
-    });
-    const listener = vi.fn();
-    const unsubscribe = access.subscribeStateChanged(listener);
-    for (const emit of listeners) {
-      emit();
-    }
-    unsubscribe();
-
-    expect(event).toEqual({
-      type: "ui:event",
-      event: UI_EVENT_SNAPSHOT_CHANGED,
-      payload: snapshotValue,
-      context: {
+  it("emits session invalidation from session state changes", () => {
+    sessionChangedHandlers.clear();
+    const access = createUiAccess({
+      chain: {
+        get chainRef(): "eip155:1" {
+          throw new Error("selected chain should not be read for ui invalidation events");
+        },
         namespace: "eip155",
-        chainRef: "eip155:10",
+        displayName: "Ethereum",
+        shortName: null,
+        icon: null,
+        nativeCurrency: {
+          name: "Ether",
+          symbol: "ETH",
+          decimals: 18,
+        },
       },
     });
-    expect(dispatched?.reply).toMatchObject({
-      type: "ui:response",
-      id: "snapshot-1",
-      result: snapshotValue,
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const unsubscribe = access.subscribeUiEvents((event) => {
+      events.push({ event: event.event, payload: event.payload });
     });
-    expect(snapshot.get).toHaveBeenCalledTimes(3);
-    expect(snapshot.subscribe).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listeners.size).toBe(0);
+
+    for (const handler of sessionChangedHandlers) {
+      handler();
+    }
+
+    unsubscribe();
+
+    expect(events).toEqual([{ event: UI_EVENT_SESSION_CHANGED, payload: { reason: "changed" } }]);
   });
 
   it("emits approval invalidations from generic approval finish", () => {

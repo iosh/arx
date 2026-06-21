@@ -42,10 +42,6 @@ export const uiCommonActions = (client: UiClient) => {
     };
 
   return {
-    snapshot: {
-      get: call("ui.snapshot.get"),
-    },
-
     balances: {
       getNative: call("ui.balances.getNative"),
     },
@@ -59,6 +55,7 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     onboarding: {
+      getStatus: call("ui.onboarding.getStatus"),
       generateMnemonic: call("ui.onboarding.generateMnemonic"),
       createWalletFromMnemonic: call("ui.onboarding.createWalletFromMnemonic"),
       importWalletFromMnemonic: call("ui.onboarding.importWalletFromMnemonic"),

@@ -249,6 +249,8 @@ export type WalletTransactionAccess = Pick<
   | "rerunApprovalPrepare"
   | "updateApprovalDraft"
   | "getTransactionApproval"
+  | "getTransaction"
+  | "listTransactions"
   | "approveAndSubmitTransaction"
   | "rejectTransactionApproval"
 >;

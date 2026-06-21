@@ -60,3 +60,4 @@ export type {
   TransactionSubmission,
   TransactionSubmissionStatus,
 } from "./types.js";
+export { TRANSACTION_STATUSES } from "./types.js";

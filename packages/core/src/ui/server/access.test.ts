@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CoreReadApi } from "../../read/types.js";
 import type { UiNetworksSnapshot } from "../../services/runtime/chainViews/types.js";
 import type { TrustedWalletApi } from "../../wallet/api.js";
 import {
@@ -105,11 +104,14 @@ const createUnexpectedWalletGroup = (group: string) =>
     },
   );
 
-const createTrustedWalletStub = (read: CoreReadApi): TrustedWalletApi =>
+const createTrustedWalletStub = (snapshot: {
+  get: () => UiSnapshot;
+  subscribe: (listener: () => void) => () => void;
+}): TrustedWalletApi =>
   ({
     snapshot: {
-      get: () => read.getWalletSnapshot(),
-      subscribe: (listener) => read.subscribe(listener),
+      get: snapshot.get,
+      subscribe: snapshot.subscribe,
     },
     session: createUnexpectedWalletGroup("session"),
     onboarding: createUnexpectedWalletGroup("onboarding"),
@@ -121,36 +123,22 @@ const createTrustedWalletStub = (read: CoreReadApi): TrustedWalletApi =>
     transactions: createUnexpectedWalletGroup("transactions"),
   }) as TrustedWalletApi;
 
-const createReadModel = (options: { snapshot?: UiSnapshot; listeners?: Set<() => void> } = {}) =>
-  ({
-    getWalletSnapshot: vi.fn(() => options.snapshot ?? createUiSnapshot()),
-    listKeyrings: async () => [],
-    getAccountsByKeyring: async () => [],
-    getBackupStatus: () => ({ pendingHdKeyringCount: 0, nextHdKeyring: null }),
-    getNativeBalance: async ({ accountKey, chainRef }) => ({
-      accountKey,
-      chainRef,
-      amount: "0",
-      currency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    }),
-    listPendingApprovals: async () => [],
-    getApprovalDetail: async () => null,
-    listTransactions: async () => [],
-    getTransactionDetail: async () => null,
-    subscribe: vi.fn((listener: () => void) => {
-      options.listeners?.add(listener);
-      return () => {
-        options.listeners?.delete(listener);
-      };
-    }),
-  }) satisfies CoreReadApi;
+const createWalletSnapshotStub = (options: { snapshot?: UiSnapshot; listeners?: Set<() => void> } = {}) => ({
+  get: vi.fn(() => options.snapshot ?? createUiSnapshot()),
+  subscribe: vi.fn((listener: () => void) => {
+    options.listeners?.add(listener);
+    return () => {
+      options.listeners?.delete(listener);
+    };
+  }),
+});
 
-const createUiAccess = (options: { read?: CoreReadApi } = {}) => {
-  const read = options.read ?? createReadModel();
+const createUiAccess = (options: { snapshot?: ReturnType<typeof createWalletSnapshotStub> } = {}) => {
+  const snapshot = options.snapshot ?? createWalletSnapshotStub();
 
   return createUiRuntimeAccess({
     server: {
-      wallet: createTrustedWalletStub(read),
+      wallet: createTrustedWalletStub(snapshot),
       access: {
         accounts: {
           getState: () => ({ namespaces: {}, updatedAt: 0 }),
@@ -257,11 +245,11 @@ const transactionApprovalChangedHandlers = new Set<(approvalIds: string[]) => vo
 const transactionChangedHandlers = new Set<(transactionIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
-  it("uses injected wallet read model for snapshot query, event, and invalidation", async () => {
-    const snapshot = createUiSnapshot("eip155:10");
+  it("uses injected wallet snapshot API for snapshot query, event, and invalidation", async () => {
+    const snapshotValue = createUiSnapshot("eip155:10");
     const listeners = new Set<() => void>();
-    const read = createReadModel({ snapshot, listeners });
-    const access = createUiAccess({ read });
+    const snapshot = createWalletSnapshotStub({ snapshot: snapshotValue, listeners });
+    const access = createUiAccess({ snapshot });
 
     const event = access.buildSnapshotEvent();
     const dispatched = await access.dispatchRequest({
@@ -279,7 +267,7 @@ describe("createUiRuntimeAccess", () => {
     expect(event).toEqual({
       type: "ui:event",
       event: UI_EVENT_SNAPSHOT_CHANGED,
-      payload: snapshot,
+      payload: snapshotValue,
       context: {
         namespace: "eip155",
         chainRef: "eip155:10",
@@ -288,10 +276,10 @@ describe("createUiRuntimeAccess", () => {
     expect(dispatched?.reply).toMatchObject({
       type: "ui:response",
       id: "snapshot-1",
-      result: snapshot,
+      result: snapshotValue,
     });
-    expect(read.getWalletSnapshot).toHaveBeenCalledTimes(3);
-    expect(read.subscribe).toHaveBeenCalledTimes(1);
+    expect(snapshot.get).toHaveBeenCalledTimes(3);
+    expect(snapshot.subscribe).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listeners.size).toBe(0);
   });

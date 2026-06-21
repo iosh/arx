@@ -5,6 +5,8 @@ import type {
   ImportMnemonicParams,
   ImportPrivateKeyParams,
 } from "../../runtime/keyring/KeyringService.js";
+import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
+import type { UiAccountMeta, UiKeyringMeta } from "../../ui/protocol/schemas.js";
 import type {
   ConfirmNewMnemonicInput,
   DeriveAccountInput,
@@ -18,6 +20,7 @@ import type {
   RenameAccountInput,
   RenameKeyringInput,
   UnhideHdAccountInput,
+  WalletApiAccountsByKeyringInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
 import { WalletApiKeyringsSchemas } from "../schemas/keyrings.js";
@@ -27,6 +30,40 @@ import { assertSessionUnlocked } from "./session.js";
 
 const privateKeyBytesToHex = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): UiKeyringMeta => ({
+  id: record.id,
+  type: record.type,
+  createdAt: record.createdAt,
+  ...(record.alias !== undefined ? { alias: record.alias } : {}),
+  ...(record.type === "hd"
+    ? { backedUp: record.needsBackup !== true, derivedCount: record.nextDerivationIndex ?? 0 }
+    : {}),
+});
+
+const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): UiAccountMeta => ({
+  accountKey: record.accountKey,
+  canonicalAddress: context.accountCodecs.toCanonicalAddressFromAccountKey({
+    accountKey: record.accountKey,
+  }),
+  keyringId: record.keyringId,
+  createdAt: record.createdAt,
+  ...(record.derivationIndex !== undefined ? { derivationIndex: record.derivationIndex } : {}),
+  ...(record.alias !== undefined ? { alias: record.alias } : {}),
+  ...(record.hidden !== undefined ? { hidden: record.hidden } : {}),
+});
+
+export const listKeyrings = (context: WalletApiContext) =>
+  context.accounts.getKeyrings().map(buildKeyringMetaFromRecord);
+
+export const getAccountsByKeyring = (context: WalletApiContext, input: WalletApiAccountsByKeyringInput) => {
+  const params = WalletApiKeyringsSchemas.getAccountsByKeyring.parse(input);
+  return context.accounts
+    .getAccountsByKeyring(params.keyringId, params.includeHidden ?? false)
+    .map((record) => buildAccountMetaFromRecord(context, record));
+};
+
+export const getBackupStatus = (context: WalletApiContext) => context.accounts.getBackupStatus();
 
 export const confirmNewMnemonic = async (context: WalletApiContext, input: ConfirmNewMnemonicInput) => {
   assertSessionUnlocked(context);

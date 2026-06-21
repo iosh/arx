@@ -3,11 +3,14 @@ import { ChainNotSupportedError } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { PermissionDeniedError } from "../../permissions/errors.js";
 import type { JsonValue } from "../../transactions/aggregate/index.js";
+import type { ListTransactionsQuery } from "../../transactions/TransactionsService.js";
 import type { TransactionRequest, WalletTransactionRequest } from "../../transactions/types.js";
 import type {
   ApplyTransactionDraftEditInput,
   RequestSendTransactionApprovalInput,
   RerunTransactionPrepareInput,
+  WalletApiTransactionDetailInput,
+  WalletApiTransactionsInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
 import { WalletApiTransactionsSchemas } from "../schemas/transactions.js";
@@ -54,6 +57,44 @@ const buildTransactionRequestFromWalletRequest = (
   chainRef,
   payload: walletRequest.payload,
 });
+
+const buildTransactionHistoryQuery = (input: WalletApiTransactionsInput): ListTransactionsQuery | undefined => {
+  const params = WalletApiTransactionsSchemas.listHistory.parse(input);
+  if (!params) {
+    return undefined;
+  }
+
+  const query: ListTransactionsQuery = {};
+  if (params.namespace !== undefined) {
+    query.namespace = params.namespace;
+  }
+  if (params.chainRef !== undefined) {
+    query.chainRef = params.chainRef;
+  }
+  if (params.accountKey !== undefined) {
+    query.accountKey = params.accountKey;
+  }
+  if (params.status !== undefined) {
+    query.status = params.status;
+  }
+  if (params.limit !== undefined) {
+    query.limit = params.limit;
+  }
+  if (params.before !== undefined) {
+    query.before = params.before;
+  }
+
+  return query;
+};
+
+export const listTransactionHistory = async (context: WalletApiContext, input?: WalletApiTransactionsInput) => {
+  return await context.transactions.listTransactions(buildTransactionHistoryQuery(input));
+};
+
+export const getTransactionDetail = async (context: WalletApiContext, input: WalletApiTransactionDetailInput) => {
+  const params = WalletApiTransactionsSchemas.getDetail.parse(input);
+  return await context.transactions.getTransaction(params.transactionId);
+};
 
 export const requestSendTransactionApproval = async (
   context: WalletApiContext,

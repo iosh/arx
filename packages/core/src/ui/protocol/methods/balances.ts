@@ -1,14 +1,6 @@
-import { z } from "zod";
-import { ChainRefSchema } from "../../../chains/ids.js";
-import { AccountKeySchema } from "../../../storage/records.js";
+import { WalletApiSchemas } from "../../../wallet/schemas.js";
 import { defineMethod } from "./types.js";
 
 export const balancesMethods = {
-  "ui.balances.getNative": defineMethod(
-    "query",
-    z.strictObject({
-      chainRef: ChainRefSchema,
-      accountKey: AccountKeySchema,
-    }),
-  ),
+  "ui.balances.getNative": defineMethod("query", WalletApiSchemas.balances.getNative),
 } as const;

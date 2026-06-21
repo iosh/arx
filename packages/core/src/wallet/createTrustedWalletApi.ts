@@ -1,14 +1,18 @@
 import { switchActiveAccount } from "./actions/accounts.js";
-import { resolveApproval } from "./actions/approvals.js";
+import { getApprovalDetail, listPendingApprovals, resolveApproval } from "./actions/approvals.js";
+import { getNativeBalance } from "./actions/balances.js";
 import { selectWalletChain } from "./actions/chains.js";
 import {
   confirmNewMnemonic,
   deriveAccount,
   exportMnemonic,
   exportPrivateKey,
+  getAccountsByKeyring,
+  getBackupStatus,
   hideHdAccount,
   importMnemonic,
   importPrivateKey,
+  listKeyrings,
   markBackedUp,
   removePrivateKeyKeyring,
   renameAccount,
@@ -22,8 +26,11 @@ import {
   importWalletFromPrivateKey,
 } from "./actions/onboarding.js";
 import { lockSession, resetAutoLockTimer, setAutoLockDuration, unlockSession } from "./actions/session.js";
+import { getWalletSnapshot, subscribeWalletSnapshot } from "./actions/snapshot.js";
 import {
   applyTransactionDraftEdit,
+  getTransactionDetail,
+  listTransactionHistory,
   requestSendTransactionApproval,
   rerunTransactionPrepare,
 } from "./actions/transactions.js";
@@ -32,8 +39,8 @@ import type { WalletApiContext } from "./context.js";
 
 export const createTrustedWalletApi = (context: WalletApiContext): TrustedWalletApi => ({
   snapshot: {
-    get: () => context.read.getWalletSnapshot(),
-    subscribe: (listener) => context.read.subscribe(listener),
+    get: () => getWalletSnapshot(context),
+    subscribe: (listener) => subscribeWalletSnapshot(context, listener),
   },
   session: {
     unlock: (input) => unlockSession(context, input),
@@ -54,17 +61,17 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     select: (input) => selectWalletChain(context, input),
   },
   balances: {
-    getNative: (input) => context.read.getNativeBalance(input),
+    getNative: (input) => getNativeBalance(context, input),
   },
   approvals: {
-    listPending: () => context.read.listPendingApprovals(),
-    getDetail: (input) => context.read.getApprovalDetail(input),
+    listPending: () => listPendingApprovals(context),
+    getDetail: (input) => getApprovalDetail(context, input),
     resolve: (input) => resolveApproval(context, input),
   },
   keyrings: {
-    list: () => context.read.listKeyrings(),
-    getAccountsByKeyring: (input) => context.read.getAccountsByKeyring(input),
-    getBackupStatus: () => context.read.getBackupStatus(),
+    list: () => listKeyrings(context),
+    getAccountsByKeyring: (input) => getAccountsByKeyring(context, input),
+    getBackupStatus: () => getBackupStatus(context),
     confirmNewMnemonic: (input) => confirmNewMnemonic(context, input),
     importMnemonic: (input) => importMnemonic(context, input),
     importPrivateKey: (input) => importPrivateKey(context, input),
@@ -79,8 +86,8 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     exportPrivateKey: (input) => exportPrivateKey(context, input),
   },
   transactions: {
-    listHistory: (input) => context.read.listTransactions(input),
-    getDetail: (input) => context.read.getTransactionDetail(input),
+    listHistory: (input) => listTransactionHistory(context, input),
+    getDetail: (input) => getTransactionDetail(context, input),
     requestSendTransactionApproval: (input) => requestSendTransactionApproval(context, input),
     rerunPrepare: (input) => rerunTransactionPrepare(context, input),
     applyDraftEdit: (input) => applyTransactionDraftEdit(context, input),

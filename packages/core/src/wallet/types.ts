@@ -2,7 +2,6 @@ import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainView } from "../services/runtime/chainViews/types.js";
 import type { AccountKey } from "../storage/records.js";
-import type { ListTransactionsQuery } from "../transactions/TransactionsService.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../ui/protocol/models/approvals.js";
 import type { UiTransaction } from "../ui/protocol/models/transactions.js";
 import type { UiAccountMeta, UiBackupStatus, UiKeyringMeta, UiSnapshot } from "../ui/protocol/schemas.js";
@@ -63,19 +62,9 @@ export type WalletApiResolveApprovalResult = null;
 
 export type WalletApiKeyringListResult = UiKeyringMeta[];
 
-export type WalletApiAccountsByKeyringInput = {
-  keyringId: string;
-  includeHidden?: boolean;
-};
-
 export type WalletApiAccountsByKeyringResult = UiAccountMeta[];
 
 export type WalletApiBackupStatusResult = UiBackupStatus;
-
-export type WalletApiNativeBalanceInput = {
-  accountKey: AccountKey;
-  chainRef: ChainRef;
-};
 
 export type WalletApiNativeBalanceResult = {
   accountKey: AccountKey;
@@ -86,18 +75,8 @@ export type WalletApiNativeBalanceResult = {
 
 export type WalletApiPendingApprovalsResult = ApprovalListEntry[];
 
-export type WalletApiApprovalDetailInput = {
-  approvalId: string;
-};
-
 export type WalletApiApprovalDetailResult = ApprovalDetail | null;
 
-export type WalletApiTransactionsInput = ListTransactionsQuery;
-
 export type WalletApiTransactionsResult = UiTransaction[];
-
-export type WalletApiTransactionDetailInput = {
-  transactionId: string;
-};
 
 export type WalletApiTransactionDetailResult = UiTransaction | null;

@@ -3,15 +3,18 @@ import type { JsonValue } from "./json.js";
 import type { TransactionTerminalReason } from "./terminalReason.js";
 
 /** State of the wallet transaction shown in history and recovery. */
-export type TransactionStatus =
-  | "cancelled"
-  | "expired"
-  | "submitting"
-  | "submitted"
-  | "confirmed"
-  | "failed"
-  | "replaced"
-  | "dropped";
+export const TRANSACTION_STATUSES = [
+  "cancelled",
+  "expired",
+  "submitting",
+  "submitted",
+  "confirmed",
+  "failed",
+  "replaced",
+  "dropped",
+] as const;
+
+export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
 /** State of one local signing and broadcast attempt. */
 export type TransactionSubmissionStatus =

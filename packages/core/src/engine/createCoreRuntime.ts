@@ -1,8 +1,5 @@
-import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import type { CoreRuntime, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { type CreateArxWalletRuntimeInput, createArxWalletRuntime } from "./createArxWallet.js";
-
-const CORE_UI_ORIGIN = "arx://core-ui";
 
 type ArxWalletStorageInput = CreateArxWalletRuntimeInput["storage"];
 type ArxWalletEnvironmentInput = NonNullable<CreateArxWalletRuntimeInput["env"]>;
@@ -80,38 +77,16 @@ const buildArxWalletRuntimeInput = (input: CreateCoreRuntimeInput): CreateArxWal
   return runtimeInput;
 };
 
-type CreateCoreRuntimeFromArxWalletRuntimeOptions = Readonly<{
-  createId?: () => string;
-}>;
-
 export const createCoreRuntimeFromArxWalletRuntime = (
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>,
-  options?: CreateCoreRuntimeFromArxWalletRuntimeOptions,
 ): CoreRuntime => {
-  const wallet = createTrustedWalletApi({
-    read: runtime.read,
-    session: runtime.wallet.session,
-    accounts: runtime.wallet.accounts,
-    networks: runtime.wallet.networks,
-    accountCodecs: runtime.services.accountCodecs,
-    createId: options?.createId ?? (() => globalThis.crypto.randomUUID()),
-    surface: {
-      origin: CORE_UI_ORIGIN,
-    },
-    namespaceBindings: runtime.services.namespaceBindings,
-    approvals: runtime.wallet.approvals,
-    transactions: runtime.transactions,
-  });
-
   return {
     provider: runtime.provider,
-    wallet,
+    wallet: runtime.walletApi,
   };
 };
 
 export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
   const runtime = await createArxWalletRuntime(buildArxWalletRuntimeInput(input));
-  return createCoreRuntimeFromArxWalletRuntime(runtime, {
-    ...(input.environment?.createId ? { createId: input.environment.createId } : {}),
-  });
+  return createCoreRuntimeFromArxWalletRuntime(runtime);
 };

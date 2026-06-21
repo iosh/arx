@@ -10,7 +10,6 @@ import {
   createWalletSession,
 } from "../engine/wallet.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
-import { createCoreNativeBalanceReader, createCoreReadApi } from "../read/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
@@ -217,8 +216,8 @@ const createHandlersForRuntime = (
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  const read = createCoreReadApi({
-    getWalletSnapshot: () =>
+  const snapshots = {
+    buildUiSnapshot: () =>
       buildUiSnapshot({
         accounts: runtime.services.accounts,
         chains: runtime.services.chainViews,
@@ -228,25 +227,10 @@ const createHandlersForRuntime = (
         attention: runtime.services.attention,
         namespaceBindings: runtime.services.namespaceBindings,
       }),
-    listKeyringRecords: () => runtime.services.keyring.getKeyrings(),
-    listAccountRecordsByKeyring: ({ keyringId, includeHidden }) =>
-      runtime.services.keyring.getAccountsByKeyring(keyringId, includeHidden),
-    getBackupStatus: () => walletAccounts.getBackupStatus(),
-    getNativeBalance: createCoreNativeBalanceReader({
-      accounts: runtime.services.accounts,
-      chainViews: runtime.services.chainViews,
-      namespaceBindings: runtime.services.namespaceBindings,
-      sessionStatus: runtime.services.sessionStatus,
-    }),
-    listPendingApprovals: async () => await approvalReadService.listPending(),
-    getApprovalDetail: async ({ approvalId }: { approvalId: string }) =>
-      await approvalReadService.getDetail(approvalId),
-    listTransactions: async (input?: Parameters<typeof runtime.transactions.listTransactions>[0]) =>
-      await runtime.transactions.listTransactions(input),
-    getTransactionDetail: async ({ transactionId }: { transactionId: string }) =>
-      await runtime.transactions.getTransaction(transactionId),
-    accountCodecs: runtime.services.accountCodecs,
-    subscribeSources: [
+  };
+  const wallet = createTrustedWalletApi({
+    snapshots,
+    snapshotChangeSources: [
       (listener) => runtime.services.accounts.onStateChanged(listener),
       (listener) => runtime.services.permissions.onStateChanged(listener),
       (listener) => runtime.services.chainRpc.onStateChanged(listener),
@@ -255,15 +239,16 @@ const createHandlersForRuntime = (
       (listener) => runtime.transactions.onTransactionsChanged(listener),
       (listener) => runtime.transactions.onTransactionApprovalsChanged(listener),
     ],
-  });
-  const wallet = createTrustedWalletApi({
-    read,
     session: walletSession,
     accounts: walletAccounts,
     networks: walletNetworks,
     approvals: createWalletApprovals({
       approvals: runtime.services.approvals,
     }),
+    approvalDetails: {
+      listPending: () => approvalReadService.listPending(),
+      getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
+    },
     accountCodecs: runtime.services.accountCodecs,
     createId: () => crypto.randomUUID(),
     surface: {

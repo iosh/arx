@@ -8,17 +8,9 @@ import type {
   TransactionStatus,
   TransactionTerminalReason,
 } from "../../../transactions/aggregate/index.js";
+import { TRANSACTION_STATUSES } from "../../../transactions/aggregate/index.js";
 
-const TransactionStatusSchema = z.enum([
-  "cancelled",
-  "expired",
-  "submitting",
-  "submitted",
-  "confirmed",
-  "failed",
-  "replaced",
-  "dropped",
-]);
+const TransactionStatusSchema = z.enum(TRANSACTION_STATUSES);
 
 export const ListTransactionsQuerySchema = z
   .strictObject({

@@ -27,11 +27,17 @@ export type {
   TrustedWalletApi,
   UnhideHdAccountInput,
   UnlockSessionInput,
+  WalletApiAccountsByKeyringInput,
+  WalletApiApprovalDetailInput,
+  WalletApiNativeBalanceInput,
+  WalletApiTransactionDetailInput,
+  WalletApiTransactionsInput,
 } from "./api.js";
 export {
   ApprovalResolveInputSchema,
   WalletApiAccountsSchemas,
   WalletApiApprovalsSchemas,
+  WalletApiBalancesSchemas,
   WalletApiChainsSchemas,
   WalletApiEip155TransactionDraftChangeSchema,
   WalletApiKeyringsSchemas,
@@ -43,9 +49,7 @@ export {
   WalletApiTransactionsSchemas,
 } from "./schemas.js";
 export type {
-  WalletApiAccountsByKeyringInput,
   WalletApiAccountsByKeyringResult,
-  WalletApiApprovalDetailInput,
   WalletApiApprovalDetailResult,
   WalletApiAutoLockResult,
   WalletApiBackupStatusResult,
@@ -57,7 +61,6 @@ export type {
   WalletApiImportPrivateKeyResult,
   WalletApiKeyringAccount,
   WalletApiKeyringListResult,
-  WalletApiNativeBalanceInput,
   WalletApiNativeBalanceResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
@@ -65,9 +68,7 @@ export type {
   WalletApiResolveApprovalResult,
   WalletApiSnapshot,
   WalletApiSnapshotChangeListener,
-  WalletApiTransactionDetailInput,
   WalletApiTransactionDetailResult,
-  WalletApiTransactionsInput,
   WalletApiTransactionsResult,
   WalletApiUnsubscribe,
 } from "./types.js";

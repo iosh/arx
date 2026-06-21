@@ -4,11 +4,6 @@ import { defineMethod } from "./types.js";
 
 const UiKeyringsListParamsSchema = z.undefined();
 
-const UiKeyringsGetAccountsByKeyringParamsSchema = z.strictObject({
-  keyringId: z.uuid(),
-  includeHidden: z.boolean().optional(),
-});
-
 export const keyringsMethods = {
   "ui.keyrings.confirmNewMnemonic": defineMethod("command", WalletApiSchemas.keyrings.confirmNewMnemonic, {
     broadcastSnapshot: true,
@@ -28,7 +23,7 @@ export const keyringsMethods = {
 
   "ui.keyrings.list": defineMethod("query", UiKeyringsListParamsSchema),
 
-  "ui.keyrings.getAccountsByKeyring": defineMethod("query", UiKeyringsGetAccountsByKeyringParamsSchema),
+  "ui.keyrings.getAccountsByKeyring": defineMethod("query", WalletApiSchemas.keyrings.getAccountsByKeyring),
 
   "ui.keyrings.renameKeyring": defineMethod("command", WalletApiSchemas.keyrings.renameKeyring, {
     broadcastSnapshot: true,

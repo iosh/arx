@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { ApprovalAccountSelectionDecisionSchema } from "../../approvals/decision.js";
 
+const ApprovalDetailInputSchema = z.strictObject({
+  approvalId: z.string().min(1),
+});
+
 export const ApprovalResolveInputSchema = z.discriminatedUnion("action", [
   z.strictObject({
     approvalId: z.string().min(1),
@@ -16,5 +20,6 @@ export const ApprovalResolveInputSchema = z.discriminatedUnion("action", [
 ]);
 
 export const WalletApiApprovalsSchemas = {
+  getDetail: ApprovalDetailInputSchema,
   resolve: ApprovalResolveInputSchema,
 } satisfies Record<string, z.ZodTypeAny>;

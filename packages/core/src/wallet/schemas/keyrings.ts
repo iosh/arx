@@ -19,6 +19,10 @@ export const WalletApiKeyringsSchemas = {
     alias: z.string().min(1).optional(),
     namespace: z.string().min(1).optional(),
   }),
+  getAccountsByKeyring: z.strictObject({
+    keyringId: z.uuid(),
+    includeHidden: z.boolean().optional(),
+  }),
   deriveAccount: z.strictObject({ keyringId: z.uuid() }),
   renameKeyring: z.strictObject({ keyringId: z.uuid(), alias: z.string().min(1) }),
   renameAccount: z.strictObject({ accountKey: AccountKeySchema, alias: z.string().min(1) }),

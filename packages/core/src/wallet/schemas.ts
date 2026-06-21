@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { WalletApiAccountsSchemas } from "./schemas/accounts.js";
 import { ApprovalResolveInputSchema, WalletApiApprovalsSchemas } from "./schemas/approvals.js";
+import { WalletApiBalancesSchemas } from "./schemas/balances.js";
 import { WalletApiChainsSchemas } from "./schemas/chains.js";
 import { WalletApiKeyringsSchemas } from "./schemas/keyrings.js";
 import { WalletApiOnboardingSchemas } from "./schemas/onboarding.js";
@@ -16,6 +17,7 @@ export const WalletApiSchemas = {
   session: WalletApiSessionSchemas,
   onboarding: WalletApiOnboardingSchemas,
   accounts: WalletApiAccountsSchemas,
+  balances: WalletApiBalancesSchemas,
   chains: WalletApiChainsSchemas,
   approvals: WalletApiApprovalsSchemas,
   keyrings: WalletApiKeyringsSchemas,
@@ -26,6 +28,7 @@ export {
   ApprovalResolveInputSchema,
   WalletApiAccountsSchemas,
   WalletApiApprovalsSchemas,
+  WalletApiBalancesSchemas,
   WalletApiChainsSchemas,
   WalletApiEip155TransactionDraftChangeSchema,
   WalletApiKeyringsSchemas,

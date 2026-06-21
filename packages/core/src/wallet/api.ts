@@ -3,9 +3,7 @@ import type { SessionLockState } from "../runtime/session/unlock/types.js";
 import type { WalletApiEip155TransactionDraftChangeSchema } from "./schemas/transactions.js";
 import type { WalletApiSchemas } from "./schemas.js";
 import type {
-  WalletApiAccountsByKeyringInput,
   WalletApiAccountsByKeyringResult,
-  WalletApiApprovalDetailInput,
   WalletApiApprovalDetailResult,
   WalletApiAutoLockResult,
   WalletApiBackupStatusResult,
@@ -17,7 +15,6 @@ import type {
   WalletApiImportPrivateKeyResult,
   WalletApiKeyringAccount,
   WalletApiKeyringListResult,
-  WalletApiNativeBalanceInput,
   WalletApiNativeBalanceResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
@@ -25,9 +22,7 @@ import type {
   WalletApiResolveApprovalResult,
   WalletApiSnapshot,
   WalletApiSnapshotChangeListener,
-  WalletApiTransactionDetailInput,
   WalletApiTransactionDetailResult,
-  WalletApiTransactionsInput,
   WalletApiTransactionsResult,
   WalletApiUnsubscribe,
 } from "./types.js";
@@ -47,9 +42,12 @@ export type ImportWalletFromPrivateKeyInput = WalletApiInput<
 
 export type SwitchActiveAccountInput = WalletApiInput<typeof WalletApiSchemas.accounts.switchActive>;
 export type SelectWalletChainInput = WalletApiInput<typeof WalletApiSchemas.chains.selectWalletChain>;
+export type WalletApiNativeBalanceInput = WalletApiInput<typeof WalletApiSchemas.balances.getNative>;
 
+export type WalletApiApprovalDetailInput = WalletApiInput<typeof WalletApiSchemas.approvals.getDetail>;
 export type ResolveApprovalInput = WalletApiInput<typeof WalletApiSchemas.approvals.resolve>;
 
+export type WalletApiAccountsByKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.getAccountsByKeyring>;
 export type ConfirmNewMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.confirmNewMnemonic>;
 export type ImportMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importMnemonic>;
 export type ImportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importPrivateKey>;
@@ -66,6 +64,8 @@ export type ExportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyri
 export type RequestSendTransactionApprovalInput = WalletApiInput<
   typeof WalletApiSchemas.transactions.requestSendTransactionApproval
 >;
+export type WalletApiTransactionsInput = WalletApiInput<typeof WalletApiSchemas.transactions.listHistory>;
+export type WalletApiTransactionDetailInput = WalletApiInput<typeof WalletApiSchemas.transactions.getDetail>;
 export type RerunTransactionPrepareInput = WalletApiInput<typeof WalletApiSchemas.transactions.rerunPrepare>;
 export type Eip155TransactionDraftChange = WalletApiInput<typeof WalletApiEip155TransactionDraftChangeSchema>;
 export type NamespaceTransactionDraftEdit = Omit<

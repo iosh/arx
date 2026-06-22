@@ -27,6 +27,7 @@
     "./ui": "./src/ui/index.ts",
     "./ui/server": "./src/ui/server/index.ts",
     "./wallet": "./src/wallet/index.ts",
+    "./wallet/bridge": "./src/wallet/bridge/index.ts",
     "./keyring": "./src/keyring/index.ts",
     "./services": "./src/services/index.ts"
   },

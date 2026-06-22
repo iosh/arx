@@ -14,7 +14,7 @@ import type {
   ImportWalletFromPrivateKeyInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiOnboardingSchemas } from "../schemas/onboarding.js";
+import { WalletApiSetupSchemas } from "../schemas/setup.js";
 import { selectCreatedAccount } from "./createdAccountSelection.js";
 
 const sanitizeMnemonicPhraseFromWords = (words: readonly string[]): string =>
@@ -68,12 +68,12 @@ const runWalletSetupFlow = async <T>(
 };
 
 export const generateMnemonic = async (context: WalletApiContext, input?: GenerateMnemonicInput) => {
-  const params = WalletApiOnboardingSchemas.generateMnemonic.parse(input);
+  const params = WalletApiSetupSchemas.generateMnemonic.parse(input);
   const mnemonic = context.accounts.generateMnemonic(params?.wordCount ?? 12);
   return { words: mnemonic.split(" ") };
 };
 
-export const getOnboardingStatus = (context: WalletApiContext) => {
+export const getWalletSetupStatus = (context: WalletApiContext) => {
   const vaultInitialized = context.session.getStatus().vaultInitialized;
   if (!vaultInitialized) {
     return { availability: "uninitialized" as const };
@@ -85,7 +85,7 @@ export const getOnboardingStatus = (context: WalletApiContext) => {
 };
 
 export const createWalletFromMnemonic = async (context: WalletApiContext, input: CreateWalletFromMnemonicInput) => {
-  const params = WalletApiOnboardingSchemas.createWalletFromMnemonic.parse(input);
+  const params = WalletApiSetupSchemas.createWalletFromMnemonic.parse(input);
   const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
   validateBip39Mnemonic(mnemonic);
   const command: ConfirmNewMnemonicParams = { mnemonic };
@@ -108,7 +108,7 @@ export const createWalletFromMnemonic = async (context: WalletApiContext, input:
 };
 
 export const importWalletFromMnemonic = async (context: WalletApiContext, input: ImportWalletFromMnemonicInput) => {
-  const params = WalletApiOnboardingSchemas.importWalletFromMnemonic.parse(input);
+  const params = WalletApiSetupSchemas.importWalletFromMnemonic.parse(input);
   const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
   validateBip39Mnemonic(mnemonic);
   const command: ImportMnemonicParams = { mnemonic };
@@ -128,7 +128,7 @@ export const importWalletFromMnemonic = async (context: WalletApiContext, input:
 };
 
 export const importWalletFromPrivateKey = async (context: WalletApiContext, input: ImportWalletFromPrivateKeyInput) => {
-  const params = WalletApiOnboardingSchemas.importWalletFromPrivateKey.parse(input);
+  const params = WalletApiSetupSchemas.importWalletFromPrivateKey.parse(input);
   const privateKey = parsePrivateKeyHex(params.privateKey);
   const command: ImportPrivateKeyParams = { privateKey };
   if (params.alias !== undefined) {

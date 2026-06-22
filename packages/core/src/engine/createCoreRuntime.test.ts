@@ -160,6 +160,7 @@ describe("createCoreRuntime", () => {
 
     expect(Object.keys(core).sort()).toEqual(["provider", "wallet"]);
     expect(core.wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
+    expect(core.wallet.setup.getStatus()).toEqual({ availability: "uninitialized" });
     expect(core.wallet.networks.getSelectedChain()).toMatchObject({
       namespace: EIP155_NAMESPACE,
       chainRef: EIP155_CHAIN_REF,
@@ -179,10 +180,10 @@ describe("createCoreRuntime", () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
     expect("dispatch" in core.wallet).toBe(false);
-    await expect(core.wallet.onboarding.generateMnemonic()).resolves.toMatchObject({
+    await expect(core.wallet.setup.generateMnemonic()).resolves.toMatchObject({
       words: expect.arrayContaining([expect.any(String)]),
     });
-    const created = await core.wallet.onboarding.createWalletFromMnemonic({
+    const created = await core.wallet.setup.createWalletFromMnemonic({
       password: PASSWORD,
       words: TEST_MNEMONIC.split(" "),
     });
@@ -235,7 +236,7 @@ describe("createCoreRuntime", () => {
   it("runs session wallet API methods through wallet actions", async () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
-    await core.wallet.onboarding.createWalletFromMnemonic({
+    await core.wallet.setup.createWalletFromMnemonic({
       password: PASSWORD,
       words: TEST_MNEMONIC.split(" "),
     });

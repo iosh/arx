@@ -33,6 +33,13 @@ export type {
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
 } from "./api.js";
+export type {
+  WalletOperationDescriptor,
+  WalletOperationDescriptorTree,
+  WalletOperationPath,
+} from "./operation.js";
+export { defineWalletOperation } from "./operation.js";
+export { walletOperations } from "./operations.js";
 export {
   ApprovalResolveInputSchema,
   WalletApiAccountsSchemas,
@@ -42,9 +49,9 @@ export {
   WalletApiEip155TransactionDraftChangeSchema,
   WalletApiKeyringsSchemas,
   WalletApiNamespaceTransactionDraftEditSchema,
-  WalletApiOnboardingSchemas,
   WalletApiSchemas,
   WalletApiSessionSchemas,
+  WalletApiSetupSchemas,
   WalletApiSharedSchemas,
   WalletApiTransactionsSchemas,
 } from "./schemas.js";
@@ -69,6 +76,8 @@ export type {
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
   WalletApiSessionStatusResult,
+  WalletApiSetupStatusResult,
   WalletApiTransactionDetailResult,
   WalletApiTransactionsResult,
+  WalletSetupAvailability,
 } from "./types.js";

@@ -18,12 +18,12 @@ import type {
   WalletApiKeyringListResult,
   WalletApiNativeBalanceResult,
   WalletApiNetworksResult,
-  WalletApiOnboardingStatusResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiResolveApprovalResult,
   WalletApiSessionStatusResult,
+  WalletApiSetupStatusResult,
   WalletApiTransactionDetailResult,
   WalletApiTransactionsResult,
 } from "./types.js";
@@ -34,12 +34,10 @@ export type UnlockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.
 export type LockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.lock>;
 export type SetAutoLockDurationInput = WalletApiInput<typeof WalletApiSchemas.session.setAutoLockDuration>;
 
-export type GenerateMnemonicInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.onboarding.generateMnemonic>>;
-export type CreateWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.onboarding.createWalletFromMnemonic>;
-export type ImportWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.onboarding.importWalletFromMnemonic>;
-export type ImportWalletFromPrivateKeyInput = WalletApiInput<
-  typeof WalletApiSchemas.onboarding.importWalletFromPrivateKey
->;
+export type GenerateMnemonicInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.setup.generateMnemonic>>;
+export type CreateWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.setup.createWalletFromMnemonic>;
+export type ImportWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.setup.importWalletFromMnemonic>;
+export type ImportWalletFromPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.setup.importWalletFromPrivateKey>;
 
 export type SwitchActiveAccountInput = WalletApiInput<typeof WalletApiSchemas.accounts.switchActive>;
 export type SelectWalletChainInput = WalletApiInput<typeof WalletApiSchemas.chains.selectWalletChain>;
@@ -91,8 +89,8 @@ export type TrustedWalletApi = Readonly<{
     setAutoLockDuration(input: SetAutoLockDurationInput): Promise<WalletApiAutoLockResult>;
   }>;
 
-  onboarding: Readonly<{
-    getStatus(): WalletApiOnboardingStatusResult;
+  setup: Readonly<{
+    getStatus(): WalletApiSetupStatusResult;
     generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
     createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
     importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;

@@ -12,13 +12,11 @@ export const createOnboardingHandlers = (deps: {
   | "ui.onboarding.importWalletFromPrivateKey"
 > => {
   return {
-    "ui.onboarding.getStatus": async () => deps.wallet.onboarding.getStatus(),
-    "ui.onboarding.generateMnemonic": async (input) => await deps.wallet.onboarding.generateMnemonic(input),
-    "ui.onboarding.createWalletFromMnemonic": async (input) =>
-      await deps.wallet.onboarding.createWalletFromMnemonic(input),
-    "ui.onboarding.importWalletFromMnemonic": async (input) =>
-      await deps.wallet.onboarding.importWalletFromMnemonic(input),
+    "ui.onboarding.getStatus": async () => deps.wallet.setup.getStatus(),
+    "ui.onboarding.generateMnemonic": async (input) => await deps.wallet.setup.generateMnemonic(input),
+    "ui.onboarding.createWalletFromMnemonic": async (input) => await deps.wallet.setup.createWalletFromMnemonic(input),
+    "ui.onboarding.importWalletFromMnemonic": async (input) => await deps.wallet.setup.importWalletFromMnemonic(input),
     "ui.onboarding.importWalletFromPrivateKey": async (input) =>
-      await deps.wallet.onboarding.importWalletFromPrivateKey(input),
+      await deps.wallet.setup.importWalletFromPrivateKey(input),
   };
 };

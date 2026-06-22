@@ -8,22 +8,16 @@ export const onboardingMethods = {
   // Host activation method; intentionally protocol-local, not part of core.wallet.
   "ui.onboarding.openTab": defineMethod("command", UiOnboardingOpenTabParamsSchema),
 
-  "ui.onboarding.getStatus": defineMethod("query", WalletApiSchemas.onboarding.getStatus),
+  "ui.onboarding.getStatus": defineMethod("query", WalletApiSchemas.setup.getStatus),
 
-  "ui.onboarding.generateMnemonic": defineMethod("command", WalletApiSchemas.onboarding.generateMnemonic),
+  "ui.onboarding.generateMnemonic": defineMethod("command", WalletApiSchemas.setup.generateMnemonic),
 
-  "ui.onboarding.createWalletFromMnemonic": defineMethod(
-    "command",
-    WalletApiSchemas.onboarding.createWalletFromMnemonic,
-  ),
+  "ui.onboarding.createWalletFromMnemonic": defineMethod("command", WalletApiSchemas.setup.createWalletFromMnemonic),
 
-  "ui.onboarding.importWalletFromMnemonic": defineMethod(
-    "command",
-    WalletApiSchemas.onboarding.importWalletFromMnemonic,
-  ),
+  "ui.onboarding.importWalletFromMnemonic": defineMethod("command", WalletApiSchemas.setup.importWalletFromMnemonic),
 
   "ui.onboarding.importWalletFromPrivateKey": defineMethod(
     "command",
-    WalletApiSchemas.onboarding.importWalletFromPrivateKey,
+    WalletApiSchemas.setup.importWalletFromPrivateKey,
   ),
 } as const;

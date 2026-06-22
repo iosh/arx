@@ -26,10 +26,10 @@ export type WalletApiGenerateMnemonicResult = {
   words: string[];
 };
 
-export type WalletApiAvailability = "uninitialized" | "empty" | "ready";
+export type WalletSetupAvailability = "uninitialized" | "empty" | "ready";
 
-export type WalletApiOnboardingStatusResult = {
-  availability: WalletApiAvailability;
+export type WalletApiSetupStatusResult = {
+  availability: WalletSetupAvailability;
 };
 
 export type WalletApiKeyringAccount = {

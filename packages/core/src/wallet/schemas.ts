@@ -4,8 +4,8 @@ import { ApprovalResolveInputSchema, WalletApiApprovalsSchemas } from "./schemas
 import { WalletApiBalancesSchemas } from "./schemas/balances.js";
 import { WalletApiChainsSchemas } from "./schemas/chains.js";
 import { WalletApiKeyringsSchemas } from "./schemas/keyrings.js";
-import { WalletApiOnboardingSchemas } from "./schemas/onboarding.js";
 import { WalletApiSessionSchemas } from "./schemas/session.js";
+import { WalletApiSetupSchemas } from "./schemas/setup.js";
 import { WalletApiSharedSchemas } from "./schemas/shared.js";
 import {
   WalletApiEip155TransactionDraftChangeSchema,
@@ -15,7 +15,7 @@ import {
 
 export const WalletApiSchemas = {
   session: WalletApiSessionSchemas,
-  onboarding: WalletApiOnboardingSchemas,
+  setup: WalletApiSetupSchemas,
   accounts: WalletApiAccountsSchemas,
   balances: WalletApiBalancesSchemas,
   chains: WalletApiChainsSchemas,
@@ -33,8 +33,8 @@ export {
   WalletApiEip155TransactionDraftChangeSchema,
   WalletApiKeyringsSchemas,
   WalletApiNamespaceTransactionDraftEditSchema,
-  WalletApiOnboardingSchemas,
   WalletApiSessionSchemas,
+  WalletApiSetupSchemas,
   WalletApiSharedSchemas,
   WalletApiTransactionsSchemas,
 };

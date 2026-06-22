@@ -764,7 +764,7 @@ const createUnexpectedWalletGroup = (group: string) =>
 const createTrustedWalletApiForBridgeTest = (groups: Partial<TrustedWalletApi>): TrustedWalletApi =>
   ({
     session: groups.session ?? createUnexpectedWalletGroup("session"),
-    onboarding: groups.onboarding ?? createUnexpectedWalletGroup("onboarding"),
+    setup: groups.setup ?? createUnexpectedWalletGroup("setup"),
     accounts: groups.accounts ?? createUnexpectedWalletGroup("accounts"),
     networks: groups.networks ?? createUnexpectedWalletGroup("networks"),
     balances: groups.balances ?? createUnexpectedWalletGroup("balances"),
@@ -927,7 +927,7 @@ const createUiAccessForTest = (input: {
         return { autoLockDurationMs: durationMs, nextAutoLockAt };
       },
     },
-    onboarding: {
+    setup: {
       getStatus: () => {
         const vaultInitialized = sessionStatus.hasInitializedVault();
         return {
@@ -956,7 +956,7 @@ const createUiAccessForTest = (input: {
           ...(namespace !== undefined ? { namespace } : {}),
         }),
       importWalletFromPrivateKey: async () => {
-        throw new Error("Unexpected TrustedWalletApi method in uiBridge test: onboarding.importWalletFromPrivateKey");
+        throw new Error("Unexpected TrustedWalletApi method in uiBridge test: setup.importWalletFromPrivateKey");
       },
     },
     accounts: {

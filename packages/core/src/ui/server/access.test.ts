@@ -42,7 +42,7 @@ const createTrustedWalletStub = (options: { chain?: ReturnType<typeof createChai
       getSelectedChain: () => options.chain ?? createChainView(),
     },
     session: createUnexpectedWalletGroup("session"),
-    onboarding: createUnexpectedWalletGroup("onboarding"),
+    setup: createUnexpectedWalletGroup("setup"),
     accounts: createUnexpectedWalletGroup("accounts"),
     balances: createUnexpectedWalletGroup("balances"),
     approvals: createUnexpectedWalletGroup("approvals"),

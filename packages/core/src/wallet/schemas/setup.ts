@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { setupOperations } from "../actions/setup/operations.js";
 import { WalletApiSharedSchemas } from "./shared.js";
 
-export const WalletApiOnboardingSchemas = {
-  getStatus: z.undefined(),
+export const WalletApiSetupSchemas = {
+  getStatus: setupOperations.getStatus.input,
   generateMnemonic: z
     .strictObject({
       wordCount: z.union([z.literal(12), z.literal(24)]).optional(),

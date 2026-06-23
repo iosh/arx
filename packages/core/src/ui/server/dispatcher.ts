@@ -33,7 +33,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
     const requestMeta = parseUiRequestMetadata(raw);
     if (!requestMeta) return null;
 
-    const ctx = getUiContext();
+    const ctx = await getUiContext();
     const { request, method, plan } = requestMeta;
 
     if (!method) {

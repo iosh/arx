@@ -33,10 +33,11 @@ export type {
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
 } from "./api.js";
+export { WalletOperationBindingInvariantError } from "./errors.js";
 export type {
-  WalletOperationDescriptor,
-  WalletOperationDescriptorTree,
+  WalletOperation,
   WalletOperationPath,
+  WalletOperations,
 } from "./operation.js";
 export { defineWalletOperation } from "./operation.js";
 export { walletOperations } from "./operations.js";

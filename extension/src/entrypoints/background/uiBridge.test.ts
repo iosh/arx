@@ -917,7 +917,7 @@ const createUiAccessForTest = (input: {
   };
   const wallet = createTrustedWalletApiForBridgeTest({
     session: {
-      getStatus: () => sessionStatus.getStatus(),
+      getStatus: async () => sessionStatus.getStatus(),
       unlock: (input) => sessionAccess.unlock(input),
       lock: async (input) => sessionAccess.lock(input?.reason ?? "manual"),
       resetAutoLockTimer: async () => input.session.unlock.syncVaultStatus(),
@@ -928,7 +928,7 @@ const createUiAccessForTest = (input: {
       },
     },
     setup: {
-      getStatus: () => {
+      getStatus: async () => {
         const vaultInitialized = sessionStatus.hasInitializedVault();
         return {
           availability: !vaultInitialized
@@ -960,7 +960,7 @@ const createUiAccessForTest = (input: {
       },
     },
     accounts: {
-      listCurrentChain: () => listAccountsForCurrentChain(),
+      listCurrentChain: async () => listAccountsForCurrentChain(),
       switchActive: async ({ chainRef, accountKey }) =>
         await input.services.accounts.setActiveAccount({
           namespace: CHAIN.namespace,
@@ -969,8 +969,8 @@ const createUiAccessForTest = (input: {
         }),
     },
     networks: {
-      getSelectedChain: () => selectedChainView(),
-      list: () => walletNetworksSnapshot(),
+      getSelectedChain: async () => selectedChainView(),
+      list: async () => walletNetworksSnapshot(),
       select: async ({ chainRef }) => {
         await (input.selectWalletChain ?? vi.fn(async () => {}))(chainRef);
         return {
@@ -992,9 +992,9 @@ const createUiAccessForTest = (input: {
       resolve: async () => null,
     },
     keyrings: {
-      list: () => read.listKeyrings(),
-      getAccountsByKeyring: (params) => read.getAccountsByKeyring(params),
-      getBackupStatus: () => read.getBackupStatus(),
+      list: async () => read.listKeyrings(),
+      getAccountsByKeyring: async (params) => read.getAccountsByKeyring(params),
+      getBackupStatus: async () => read.getBackupStatus(),
       confirmNewMnemonic: async ({ words, alias, skipBackup, namespace }) => {
         const result = await keyringsAccess.confirmNewMnemonic({
           mnemonic: words.join(" "),

@@ -1,8 +1,15 @@
 import { z } from "zod";
-import { defineWalletOperation } from "../../operation.js";
+import { defineWalletOperation, type WalletOperation } from "../../operation.js";
+import type { WalletApiSetupStatusResult } from "../../types.js";
 
-export const setupOperations = {
-  getStatus: defineWalletOperation({
-    input: z.undefined(),
+const SetupGetStatusInputSchema = z.undefined();
+
+export type SetupOperations = Readonly<{
+  getStatus: WalletOperation<typeof SetupGetStatusInputSchema, WalletApiSetupStatusResult>;
+}>;
+
+export const setupOperations: SetupOperations = {
+  getStatus: defineWalletOperation<WalletApiSetupStatusResult>()({
+    input: SetupGetStatusInputSchema,
   }),
 } as const;

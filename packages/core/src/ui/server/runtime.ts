@@ -26,8 +26,8 @@ const registerUiHandlers = (
   }
 };
 
-const buildUiContext = (deps: Pick<UiServerRuntimeDeps, "wallet">) => {
-  const chain = deps.wallet.networks.getSelectedChain();
+const buildUiContext = async (deps: Pick<UiServerRuntimeDeps, "wallet">) => {
+  const chain = await deps.wallet.networks.getSelectedChain();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 
@@ -48,7 +48,7 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
   }
 
   return {
-    getUiContext: () => buildUiContext(deps),
+    getUiContext: async () => await buildUiContext(deps),
     handlers,
   };
 };

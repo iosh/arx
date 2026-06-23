@@ -42,11 +42,9 @@ import {
 import type { TrustedWalletApi } from "./api.js";
 import type { WalletApiContext } from "./context.js";
 import { createWalletOperationExecutor } from "./executor.js";
-import type { WalletOperationPath } from "./operation.js";
+import { createWalletOperationClient } from "./operationClient.js";
 import { walletOperationHandlers } from "./operationHandlers.js";
 import { walletOperations } from "./operations.js";
-
-const setupGetStatusPath = "setup.getStatus" satisfies WalletOperationPath<typeof walletOperations>;
 
 export const createTrustedWalletApi = (context: WalletApiContext): TrustedWalletApi => {
   const walletExecutor = createWalletOperationExecutor({
@@ -54,31 +52,33 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
     operations: walletOperations,
     handlers: walletOperationHandlers,
   });
-  const getSetupStatusFromExecutor: TrustedWalletApi["setup"]["getStatus"] = () =>
-    walletExecutor.executePath(setupGetStatusPath, undefined);
+  const operationClient = createWalletOperationClient({
+    operations: walletOperations,
+    call: async (path, input) => await walletExecutor.executeUnknownPath(path, input),
+  });
 
   return {
     session: {
-      getStatus: () => getSessionStatus(context),
+      getStatus: async () => getSessionStatus(context),
       unlock: (input) => unlockSession(context, input),
       lock: (input) => lockSession(context, input),
       resetAutoLockTimer: () => resetAutoLockTimer(context),
       setAutoLockDuration: (input) => setAutoLockDuration(context, input),
     },
     setup: {
-      getStatus: getSetupStatusFromExecutor,
+      getStatus: operationClient.setup.getStatus,
       generateMnemonic: (input) => generateMnemonic(context, input),
       createWalletFromMnemonic: (input) => createWalletFromMnemonic(context, input),
       importWalletFromMnemonic: (input) => importWalletFromMnemonic(context, input),
       importWalletFromPrivateKey: (input) => importWalletFromPrivateKey(context, input),
     },
     accounts: {
-      listCurrentChain: () => listAccountsForCurrentChain(context),
+      listCurrentChain: async () => listAccountsForCurrentChain(context),
       switchActive: (input) => switchActiveAccount(context, input),
     },
     networks: {
-      getSelectedChain: () => getSelectedWalletChain(context),
-      list: () => listWalletNetworks(context),
+      getSelectedChain: async () => getSelectedWalletChain(context),
+      list: async () => listWalletNetworks(context),
       select: (input) => selectWalletChain(context, input),
     },
     balances: {
@@ -90,9 +90,9 @@ export const createTrustedWalletApi = (context: WalletApiContext): TrustedWallet
       resolve: (input) => resolveApproval(context, input),
     },
     keyrings: {
-      list: () => listKeyrings(context),
-      getAccountsByKeyring: (input) => getAccountsByKeyring(context, input),
-      getBackupStatus: () => getBackupStatus(context),
+      list: async () => listKeyrings(context),
+      getAccountsByKeyring: async (input) => getAccountsByKeyring(context, input),
+      getBackupStatus: async () => getBackupStatus(context),
       confirmNewMnemonic: (input) => confirmNewMnemonic(context, input),
       importMnemonic: (input) => importMnemonic(context, input),
       importPrivateKey: (input) => importPrivateKey(context, input),

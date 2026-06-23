@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ARX_ERROR_KIND } from "../../error.js";
-import { parseWalletBridgeEnvelope, parseWalletBridgeRequestEnvelope } from "./protocol.js";
+import { parseWalletBridgeMessage, parseWalletBridgeRequest } from "./protocol.js";
 
 describe("wallet bridge protocol", () => {
-  it("parses request, response, and error envelopes", () => {
+  it("parses request, response, and error messages", () => {
     expect(
-      parseWalletBridgeRequestEnvelope({
+      parseWalletBridgeRequest({
         type: "wallet:request",
         version: 1,
         id: "request-1",
@@ -19,7 +19,7 @@ describe("wallet bridge protocol", () => {
     });
 
     expect(
-      parseWalletBridgeEnvelope({
+      parseWalletBridgeMessage({
         type: "wallet:response",
         version: 1,
         id: "request-1",
@@ -33,7 +33,7 @@ describe("wallet bridge protocol", () => {
     });
 
     expect(
-      parseWalletBridgeEnvelope({
+      parseWalletBridgeMessage({
         type: "wallet:error",
         version: 1,
         id: "request-1",
@@ -47,9 +47,9 @@ describe("wallet bridge protocol", () => {
     ).toMatchObject({ type: "wallet:error", id: "request-1" });
   });
 
-  it("rejects invalid envelope shapes", () => {
+  it("rejects invalid message shapes", () => {
     expect(() =>
-      parseWalletBridgeRequestEnvelope({
+      parseWalletBridgeRequest({
         type: "wallet:request",
         version: 2,
         id: "request-1",
@@ -58,7 +58,7 @@ describe("wallet bridge protocol", () => {
     ).toThrow();
 
     expect(() =>
-      parseWalletBridgeEnvelope({
+      parseWalletBridgeMessage({
         type: "wallet:response",
         version: 1,
         id: "request-1",

@@ -159,9 +159,9 @@ describe("createCoreRuntime", () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
     expect(Object.keys(core).sort()).toEqual(["provider", "wallet"]);
-    expect(core.wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
-    expect(core.wallet.setup.getStatus()).toEqual({ availability: "uninitialized" });
-    expect(core.wallet.networks.getSelectedChain()).toMatchObject({
+    await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ vaultInitialized: false, isUnlocked: false });
+    await expect(core.wallet.setup.getStatus()).resolves.toEqual({ availability: "uninitialized" });
+    await expect(core.wallet.networks.getSelectedChain()).resolves.toMatchObject({
       namespace: EIP155_NAMESPACE,
       chainRef: EIP155_CHAIN_REF,
     });
@@ -222,11 +222,11 @@ describe("createCoreRuntime", () => {
       accountKey,
       canonicalAddress: created.address,
     });
-    expect(core.wallet.session.getStatus()).toMatchObject({ vaultInitialized: true });
-    expect(core.wallet.accounts.listCurrentChain()).toMatchObject({ totalCount: 3 });
-    expect(core.wallet.keyrings.list()).toHaveLength(2);
-    expect(core.wallet.keyrings.getBackupStatus()).toMatchObject({ pendingHdKeyringCount: 1 });
-    expect(core.wallet.keyrings.getAccountsByKeyring({ keyringId: created.keyringId })).toHaveLength(2);
+    await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ vaultInitialized: true });
+    await expect(core.wallet.accounts.listCurrentChain()).resolves.toMatchObject({ totalCount: 3 });
+    await expect(core.wallet.keyrings.list()).resolves.toHaveLength(2);
+    await expect(core.wallet.keyrings.getBackupStatus()).resolves.toMatchObject({ pendingHdKeyringCount: 1 });
+    await expect(core.wallet.keyrings.getAccountsByKeyring({ keyringId: created.keyringId })).resolves.toHaveLength(2);
     await expect(core.wallet.approvals.listPending()).resolves.toEqual([]);
     await expect(core.wallet.approvals.getDetail({ approvalId: "missing" })).resolves.toBeNull();
     await expect(core.wallet.transactions.listHistory()).resolves.toEqual([]);
@@ -240,7 +240,7 @@ describe("createCoreRuntime", () => {
       password: PASSWORD,
       words: TEST_MNEMONIC.split(" "),
     });
-    expect(core.wallet.session.getStatus()).toMatchObject({ isUnlocked: true });
+    await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ isUnlocked: true });
 
     await expect(core.wallet.session.resetAutoLockTimer()).resolves.toMatchObject({ status: "unlocked" });
     await expect(core.wallet.session.setAutoLockDuration({ durationMs: 5 * 60 * 1000 })).resolves.toMatchObject({

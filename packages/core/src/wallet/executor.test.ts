@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
+import { WalletOperationBindingInvariantError } from "./errors.js";
 import { createWalletOperationExecutor, type WalletOperationHandlerTree } from "./executor.js";
-import { defineWalletOperation, type WalletOperationDescriptorTree } from "./operation.js";
+import { defineWalletOperation, type WalletOperations } from "./operation.js";
 
 describe("wallet operation executor", () => {
-  it("executes a validated wallet operation path", () => {
+  it("executes a validated wallet operation path", async () => {
     const operations = {
       sample: {
         echo: defineWalletOperation({
           input: z.strictObject({ value: z.string().min(1) }),
         }),
       },
-    } as const satisfies WalletOperationDescriptorTree;
+    } as const satisfies WalletOperations;
     type TestContext = { prefix: string };
     const handlers = {
       sample: {
@@ -25,15 +26,15 @@ describe("wallet operation executor", () => {
       handlers,
     });
 
-    expect(executor.executePath("sample.echo", { value: "status" })).toBe("wallet:status");
+    await expect(executor.executePath("sample.echo", { value: "status" })).resolves.toBe("wallet:status");
   });
 
-  it("rejects invalid params and unsupported paths", () => {
+  it("rejects invalid params and unsupported paths", async () => {
     const operations = {
       setup: {
         getStatus: defineWalletOperation({ input: z.undefined() }),
       },
-    } as const satisfies WalletOperationDescriptorTree;
+    } as const satisfies WalletOperations;
     const handlers = {
       setup: {
         getStatus: () => ({ availability: "uninitialized" }),
@@ -45,7 +46,7 @@ describe("wallet operation executor", () => {
       handlers,
     });
 
-    expect(() => executor.executeUnknownPath("setup.getStatus", {})).toThrow(RpcInvalidParamsError);
-    expect(() => executor.executeUnknownPath("setup.missing", undefined)).toThrow(RpcUnsupportedMethodError);
+    await expect(executor.executeUnknownPath("setup.getStatus", {})).rejects.toThrow(RpcInvalidParamsError);
+    await expect(executor.executeUnknownPath("setup.missing", undefined)).rejects.toThrow(RpcUnsupportedMethodError);
   });
 });

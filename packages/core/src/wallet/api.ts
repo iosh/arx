@@ -82,7 +82,7 @@ export type ApplyTransactionDraftEditInput = Omit<
 
 export type TrustedWalletApi = Readonly<{
   session: Readonly<{
-    getStatus(): WalletApiSessionStatusResult;
+    getStatus(): Promise<WalletApiSessionStatusResult>;
     unlock(input: UnlockSessionInput): Promise<SessionLockState>;
     lock(input?: LockSessionInput): Promise<SessionLockState>;
     resetAutoLockTimer(): Promise<SessionLockState>;
@@ -90,7 +90,7 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   setup: Readonly<{
-    getStatus(): WalletApiSetupStatusResult;
+    getStatus(): Promise<WalletApiSetupStatusResult>;
     generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
     createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
     importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
@@ -98,13 +98,13 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   accounts: Readonly<{
-    listCurrentChain(): WalletApiAccountsForCurrentChainResult;
+    listCurrentChain(): Promise<WalletApiAccountsForCurrentChainResult>;
     switchActive(input: SwitchActiveAccountInput): Promise<WalletApiOwnedAccountSummary | null>;
   }>;
 
   networks: Readonly<{
-    getSelectedChain(): WalletApiChainSnapshot;
-    list(): WalletApiNetworksResult;
+    getSelectedChain(): Promise<WalletApiChainSnapshot>;
+    list(): Promise<WalletApiNetworksResult>;
     select(input: SelectWalletChainInput): Promise<WalletApiChainSnapshot>;
   }>;
 
@@ -119,9 +119,9 @@ export type TrustedWalletApi = Readonly<{
   }>;
 
   keyrings: Readonly<{
-    list(): WalletApiKeyringListResult;
-    getAccountsByKeyring(input: WalletApiAccountsByKeyringInput): WalletApiAccountsByKeyringResult;
-    getBackupStatus(): WalletApiBackupStatusResult;
+    list(): Promise<WalletApiKeyringListResult>;
+    getAccountsByKeyring(input: WalletApiAccountsByKeyringInput): Promise<WalletApiAccountsByKeyringResult>;
+    getBackupStatus(): Promise<WalletApiBackupStatusResult>;
     confirmNewMnemonic(input: ConfirmNewMnemonicInput): Promise<WalletApiCreationResult>;
     importMnemonic(input: ImportMnemonicInput): Promise<WalletApiCreationResult>;
     importPrivateKey(input: ImportPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;

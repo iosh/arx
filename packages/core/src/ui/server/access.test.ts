@@ -39,7 +39,7 @@ const createUnexpectedWalletGroup = (group: string) =>
 const createTrustedWalletStub = (options: { chain?: ReturnType<typeof createChainView> } = {}): TrustedWalletApi =>
   ({
     networks: {
-      getSelectedChain: () => options.chain ?? createChainView(),
+      getSelectedChain: async () => options.chain ?? createChainView(),
     },
     session: createUnexpectedWalletGroup("session"),
     setup: createUnexpectedWalletGroup("setup"),

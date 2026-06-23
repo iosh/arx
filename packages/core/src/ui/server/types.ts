@@ -50,7 +50,7 @@ export type UiResolvedContext = {
   chainRef: string;
 };
 
-export type UiContextResolver = () => UiResolvedContext;
+export type UiContextResolver = () => Promise<UiResolvedContext>;
 
 export type UiAccountsAccess = Pick<
   AccountSelectionService,

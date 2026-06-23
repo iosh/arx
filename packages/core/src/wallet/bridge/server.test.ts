@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { RpcInvalidParamsError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
+import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
 import { createWalletOperationExecutor, type WalletOperationHandlerTree } from "../executor.js";
-import { defineWalletOperation, type WalletOperationDescriptorTree } from "../operation.js";
+import { defineWalletOperation, type WalletOperations } from "../operation.js";
 import { createWalletBridgeServer } from "./server.js";
 
 const createTestServer = () => {
   const operations = {
     setup: {
-      getStatus: defineWalletOperation({ input: z.undefined() }),
+      getStatus: defineWalletOperation<{ availability: "uninitialized" }>()({ input: z.undefined() }),
     },
-  } as const satisfies WalletOperationDescriptorTree;
+  } as const satisfies WalletOperations;
 
   const handlers = {
     setup: {
@@ -74,6 +74,32 @@ describe("wallet bridge server", () => {
       type: "wallet:error",
       id: "request-2",
       error: { code: RpcUnsupportedMethodError.code },
+    });
+  });
+
+  it("encodes unexpected errors as internal bridge errors", async () => {
+    const server = createWalletBridgeServer({
+      executor: {
+        executeUnknownPath: async () => {
+          throw new Error("raw internal failure");
+        },
+      },
+    });
+
+    await expect(
+      server.handleRequest({
+        type: "wallet:request",
+        version: 1,
+        id: "request-1",
+        path: "setup.getStatus",
+      }),
+    ).resolves.toMatchObject({
+      type: "wallet:error",
+      id: "request-1",
+      error: {
+        code: RpcInternalError.code,
+        message: "Internal error.",
+      },
     });
   });
 });

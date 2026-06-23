@@ -12,7 +12,7 @@ export const createSessionHandlers = (deps: {
   | "ui.session.setAutoLockDuration"
 > => {
   return {
-    "ui.session.getStatus": async () => deps.wallet.session.getStatus(),
+    "ui.session.getStatus": async () => await deps.wallet.session.getStatus(),
 
     "ui.session.unlock": async ({ password }) => {
       return await deps.wallet.session.unlock({ password });

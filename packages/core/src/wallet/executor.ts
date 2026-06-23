@@ -1,119 +1,86 @@
 import { ZodError, type z } from "zod";
 import { RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
+import { WalletOperationBindingInvariantError } from "./errors.js";
 import {
-  isWalletOperationDescriptor,
-  type WalletOperationDescriptor,
-  type WalletOperationDescriptorTree,
+  isWalletOperation,
+  type WalletOperation,
+  type WalletOperationInputAtPath,
   type WalletOperationPath,
+  type WalletOperationResultAtPath,
+  type WalletOperations,
 } from "./operation.js";
 
-export type WalletOperationHandler<TContext, TOperation extends WalletOperationDescriptor> = (
+export type WalletOperationHandler<TContext, TOperation extends WalletOperation> = (
   context: TContext,
   input: z.output<TOperation["input"]>,
-) => unknown;
+) => TOperation extends WalletOperation<z.ZodTypeAny, infer TResult> ? TResult | Promise<TResult> : never;
 
-export type WalletOperationHandlerTree<TContext, TOperations extends WalletOperationDescriptorTree> = Readonly<{
-  [K in keyof TOperations]: TOperations[K] extends WalletOperationDescriptor
+export type WalletOperationHandlerTree<TContext, TOperations extends WalletOperations> = Readonly<{
+  [K in keyof TOperations]: TOperations[K] extends WalletOperation
     ? WalletOperationHandler<TContext, TOperations[K]>
-    : TOperations[K] extends WalletOperationDescriptorTree
+    : TOperations[K] extends WalletOperations
       ? WalletOperationHandlerTree<TContext, TOperations[K]>
       : never;
 }>;
 
 type WalletOperationBinding<TContext> = {
-  descriptor: WalletOperationDescriptor;
-  handler: WalletOperationHandler<TContext, WalletOperationDescriptor>;
+  operation: WalletOperation;
+  handler: WalletOperationHandler<TContext, WalletOperation>;
 };
 
-type WalletOperationDescriptorAtPath<
-  TOperations extends WalletOperationDescriptorTree,
-  TPath extends string,
-> = TPath extends `${infer THead}.${infer TRest}`
-  ? THead extends keyof TOperations
-    ? TOperations[THead] extends WalletOperationDescriptorTree
-      ? WalletOperationDescriptorAtPath<TOperations[THead], TRest>
-      : never
-    : never
-  : TPath extends keyof TOperations
-    ? TOperations[TPath] extends WalletOperationDescriptor
-      ? TOperations[TPath]
-      : never
-    : never;
-
-type WalletOperationHandlerAtPath<THandlers, TPath extends string> = TPath extends `${infer THead}.${infer TRest}`
-  ? THead extends keyof THandlers
-    ? WalletOperationHandlerAtPath<THandlers[THead], TRest>
-    : never
-  : TPath extends keyof THandlers
-    ? THandlers[TPath]
-    : never;
-
-export type WalletOperationInputAtPath<
-  TOperations extends WalletOperationDescriptorTree,
-  TPath extends WalletOperationPath<TOperations>,
-> =
-  WalletOperationDescriptorAtPath<TOperations, TPath> extends WalletOperationDescriptor<infer TInputSchema>
-    ? z.input<TInputSchema>
-    : never;
-
-export type WalletOperationResultAtPath<THandlers, TPath extends string> =
-  WalletOperationHandlerAtPath<THandlers, TPath> extends (...args: never[]) => infer TResult ? TResult : never;
-
-export type WalletOperationExecutor<
-  TContext,
-  TOperations extends WalletOperationDescriptorTree,
-  THandlers extends WalletOperationHandlerTree<TContext, TOperations>,
-> = Readonly<{
+export type WalletOperationExecutor<TOperations extends WalletOperations> = Readonly<{
   executePath<TPath extends WalletOperationPath<TOperations>>(
     path: TPath,
     input: WalletOperationInputAtPath<TOperations, TPath>,
-  ): WalletOperationResultAtPath<THandlers, TPath>;
-  executeUnknownPath(path: string, input: unknown): unknown;
+  ): Promise<WalletOperationResultAtPath<TOperations, TPath>>;
+  executeUnknownPath(path: string, input: unknown): Promise<unknown>;
 }>;
 
-const buildWalletOperationBindingsByPath = <TContext, TOperations extends WalletOperationDescriptorTree>(
+const bindWalletOperations = <TContext, TOperations extends WalletOperations>(
   operations: TOperations,
   handlers: WalletOperationHandlerTree<TContext, TOperations>,
 ) => {
   const bindingsByPath = new Map<string, WalletOperationBinding<TContext>>();
 
-  const visitNode = (operationNode: WalletOperationDescriptorTree, handlerNode: unknown, segments: string[]) => {
-    for (const [key, childOperation] of Object.entries(operationNode)) {
+  const bindNode = (operationBranch: WalletOperations, handlerNode: unknown, segments: string[]) => {
+    for (const [key, childNode] of Object.entries(operationBranch)) {
+      const pathSegments = [...segments, key];
+      const path = pathSegments.join(".");
       const childHandler = (handlerNode as Record<string, unknown> | null | undefined)?.[key];
-      const nextSegments = [...segments, key];
 
-      if (isWalletOperationDescriptor(childOperation)) {
+      if (isWalletOperation(childNode)) {
         if (typeof childHandler !== "function") {
-          throw new Error(`Wallet operation "${nextSegments.join(".")}" is missing a handler implementation.`);
+          throw new WalletOperationBindingInvariantError({
+            path,
+            message: `Wallet operation "${path}" is missing a handler implementation.`,
+          });
         }
 
-        const path = nextSegments.join(".");
-        const binding = {
-          descriptor: childOperation,
-          handler: childHandler as WalletOperationHandler<TContext, WalletOperationDescriptor>,
-        };
-        bindingsByPath.set(path, binding);
+        bindingsByPath.set(path, {
+          operation: childNode,
+          handler: childHandler as WalletOperationHandler<TContext, WalletOperation>,
+        });
         continue;
       }
 
-      visitNode(childOperation, childHandler, nextSegments);
+      bindNode(childNode, childHandler, pathSegments);
     }
   };
 
-  visitNode(operations, handlers, []);
+  bindNode(operations, handlers, []);
+
   return bindingsByPath;
 };
 
 export const createWalletOperationExecutor = <
   TContext,
-  TOperations extends WalletOperationDescriptorTree,
-  THandlers extends WalletOperationHandlerTree<TContext, TOperations>,
+  TOperations extends WalletOperations,
 >(deps: {
   context: TContext;
   operations: TOperations;
-  handlers: THandlers;
-}): WalletOperationExecutor<TContext, TOperations, THandlers> => {
-  const bindingsByPath = buildWalletOperationBindingsByPath(deps.operations, deps.handlers);
+  handlers: WalletOperationHandlerTree<TContext, TOperations>;
+}): WalletOperationExecutor<TOperations> => {
+  const bindingsByPath = bindWalletOperations(deps.operations, deps.handlers);
 
   const requireBinding = (path: string): WalletOperationBinding<TContext> => {
     const binding = bindingsByPath.get(path);
@@ -123,11 +90,11 @@ export const createWalletOperationExecutor = <
     return binding;
   };
 
-  const executeUnknownPath = (path: string, input: unknown): unknown => {
+  const executeUnknownPath = async (path: string, input: unknown): Promise<unknown> => {
     const binding = requireBinding(path);
     let params: unknown;
     try {
-      params = binding.descriptor.input.parse(input);
+      params = binding.operation.input.parse(input);
     } catch (error) {
       if (error instanceof ZodError) {
         throw new RpcInvalidParamsError({
@@ -141,7 +108,10 @@ export const createWalletOperationExecutor = <
   };
 
   return {
-    executePath: executeUnknownPath,
+    executePath: executeUnknownPath as <TPath extends WalletOperationPath<TOperations>>(
+      path: TPath,
+      input: WalletOperationInputAtPath<TOperations, TPath>,
+    ) => Promise<WalletOperationResultAtPath<TOperations, TPath>>,
     executeUnknownPath,
-  } as WalletOperationExecutor<TContext, TOperations, THandlers>;
+  } as WalletOperationExecutor<TOperations>;
 };

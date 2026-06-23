@@ -1,12 +1,13 @@
 import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiSetupStatusResult } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { uiClient, wallet } from "@/ui/lib/uiBridgeClient";
 
 export const UI_SETUP_STATUS_QUERY_KEY = ["uiSetupStatus"] as const;
 
 export type UiSetupStatus = {
   session: UiMethodResult<"ui.session.getStatus">;
-  onboarding: UiMethodResult<"ui.onboarding.getStatus">;
+  onboarding: WalletApiSetupStatusResult;
 };
 
 export const createUiSetupStatusQueryOptions = () => ({
@@ -18,7 +19,7 @@ export const createUiSetupStatusQueryOptions = () => ({
 });
 
 export const fetchUiSetupStatus = async (): Promise<UiSetupStatus> => {
-  const [session, onboarding] = await Promise.all([uiClient.session.getStatus(), uiClient.onboarding.getStatus()]);
+  const [session, onboarding] = await Promise.all([uiClient.session.getStatus(), wallet.setup.getStatus()]);
   return { session, onboarding };
 };
 

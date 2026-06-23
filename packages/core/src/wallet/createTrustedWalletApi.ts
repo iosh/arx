@@ -41,17 +41,23 @@ import {
 } from "./actions/transactions.js";
 import type { TrustedWalletApi } from "./api.js";
 import type { WalletApiContext } from "./context.js";
-import { createWalletOperationExecutor } from "./executor.js";
+import { createWalletOperationExecutor, type WalletOperationExecutor } from "./executor.js";
 import { createWalletOperationClient } from "./operationClient.js";
 import { walletOperationHandlers } from "./operationHandlers.js";
 import { walletOperations } from "./operations.js";
 
-export const createTrustedWalletApi = (context: WalletApiContext): TrustedWalletApi => {
-  const walletExecutor = createWalletOperationExecutor({
+export type TrustedWalletOperationExecutor = WalletOperationExecutor<typeof walletOperations>;
+
+export const createTrustedWalletOperationExecutor = (context: WalletApiContext): TrustedWalletOperationExecutor => {
+  return createWalletOperationExecutor({
     context,
     operations: walletOperations,
     handlers: walletOperationHandlers,
   });
+};
+
+export const createTrustedWalletApi = (context: WalletApiContext): TrustedWalletApi => {
+  const walletExecutor = createTrustedWalletOperationExecutor(context);
   const operationClient = createWalletOperationClient({
     operations: walletOperations,
     call: async (path, input) => await walletExecutor.executeUnknownPath(path, input),

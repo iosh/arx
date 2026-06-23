@@ -14,7 +14,6 @@ import type {
   WalletApiNetworksResult,
   WalletApiRequestSendTransactionApprovalResult,
   WalletApiSessionStatusResult,
-  WalletApiSetupStatusResult,
 } from "../../wallet/types.js";
 import type {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
@@ -67,7 +66,6 @@ export type UiMethodResultMap = {
   "ui.session.resetAutoLockTimer": SessionLockState;
   "ui.session.setAutoLockDuration": UiSetAutoLockDurationResult;
   "ui.onboarding.openTab": UiOnboardingOpenTabResult;
-  "ui.onboarding.getStatus": WalletApiSetupStatusResult;
   "ui.onboarding.generateMnemonic": UiGenerateMnemonicResult;
   "ui.onboarding.createWalletFromMnemonic": UiWalletCreationResult;
   "ui.onboarding.importWalletFromMnemonic": UiWalletCreationResult;

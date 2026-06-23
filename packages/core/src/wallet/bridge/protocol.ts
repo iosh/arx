@@ -26,7 +26,8 @@ export type WalletBridgeError = {
 };
 
 export type WalletBridgeReply = WalletBridgeResponse | WalletBridgeError;
-export type WalletBridgeMessage = WalletBridgeRequest | WalletBridgeReply;
+type WalletBridgeRequestMessageCandidate = Pick<WalletBridgeRequest, "type">;
+type WalletBridgeReplyMessageCandidate = Pick<WalletBridgeReply, "type">;
 
 const SerializedWalletBridgeErrorSchema = z
   .object({
@@ -75,16 +76,22 @@ const WalletBridgeErrorMessageSchema = z
   })
   .strict();
 
-const WalletBridgeMessageSchema = z.union([
-  WalletBridgeRequestSchema,
-  WalletBridgeResponseSchema,
-  WalletBridgeErrorMessageSchema,
-]);
+const WalletBridgeReplySchema = z.union([WalletBridgeResponseSchema, WalletBridgeErrorMessageSchema]);
 
 export const parseWalletBridgeRequest = (raw: unknown): WalletBridgeRequest => {
   return WalletBridgeRequestSchema.parse(raw) as WalletBridgeRequest;
 };
 
-export const parseWalletBridgeMessage = (raw: unknown): WalletBridgeMessage => {
-  return WalletBridgeMessageSchema.parse(raw) as WalletBridgeMessage;
+export const parseWalletBridgeReply = (raw: unknown): WalletBridgeReply => {
+  return WalletBridgeReplySchema.parse(raw) as WalletBridgeReply;
+};
+
+export const isWalletBridgeRequestMessage = (raw: unknown): raw is WalletBridgeRequestMessageCandidate => {
+  const type = typeof raw === "object" && raw !== null ? (raw as { type?: unknown }).type : undefined;
+  return type === "wallet:request";
+};
+
+export const isWalletBridgeReplyMessage = (raw: unknown): raw is WalletBridgeReplyMessageCandidate => {
+  const type = typeof raw === "object" && raw !== null ? (raw as { type?: unknown }).type : undefined;
+  return type === "wallet:response" || type === "wallet:error";
 };

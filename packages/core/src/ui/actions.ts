@@ -55,7 +55,6 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     onboarding: {
-      getStatus: call("ui.onboarding.getStatus"),
       generateMnemonic: call("ui.onboarding.generateMnemonic"),
       createWalletFromMnemonic: call("ui.onboarding.createWalletFromMnemonic"),
       importWalletFromMnemonic: call("ui.onboarding.importWalletFromMnemonic"),

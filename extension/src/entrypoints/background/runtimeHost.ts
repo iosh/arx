@@ -15,6 +15,7 @@ import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogg
 import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
 import { buildTransactionTerminalReason } from "@arx/core/transactions";
+import type { WalletBridgeServer } from "@arx/core/wallet/bridge";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -31,6 +32,7 @@ export type BackgroundRuntimeHost = {
   getCoreReady: () => Promise<CoreRuntime>;
   getOrInitProvider: () => Promise<CoreProviderApi>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
+  getOrInitWalletBridgeServer: (uiOrigin: string) => Promise<WalletBridgeServer>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
   applyDebugNamespacesFromEnv: () => void;
@@ -118,6 +120,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let uiAccess: UiRuntimeAccess | null = null;
   let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
   let uiAccessParams: BackgroundUiAccessParams | null = null;
+  let walletBridgeServer: WalletBridgeServer | null = null;
+  let walletBridgeUiOrigin: string | null = null;
   let runtimeGeneration = 0;
 
   const runtimeLog = createLogger("bg:runtime");
@@ -199,6 +203,15 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     throw new Error("Background runtime host UI access parameters must remain stable across calls");
   };
 
+  const assertWalletBridgeUiOriginStable = (uiOrigin: string) => {
+    if (!walletBridgeUiOrigin) return;
+    if (walletBridgeUiOrigin === uiOrigin) {
+      return;
+    }
+
+    throw new Error("Background runtime host wallet bridge parameters must remain stable across calls");
+  };
+
   const getOrInitUiAccess = async ({
     platform,
     activation,
@@ -233,6 +246,21 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       throw error;
     } finally {
       uiAccessPromise = null;
+    }
+  };
+
+  const getOrInitWalletBridgeServer = async (uiOrigin: string): Promise<WalletBridgeServer> => {
+    assertWalletBridgeUiOriginStable(uiOrigin);
+    if (walletBridgeServer) return walletBridgeServer;
+    walletBridgeUiOrigin = uiOrigin;
+
+    try {
+      const active = await getOrInitRuntimeCache();
+      walletBridgeServer = active.runtime.createWalletBridgeServer({ uiOrigin });
+      return walletBridgeServer;
+    } catch (error) {
+      walletBridgeUiOrigin = null;
+      throw error;
     }
   };
 
@@ -369,6 +397,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     provider = null;
     uiAccess = null;
     uiAccessParams = null;
+    walletBridgeServer = null;
+    walletBridgeUiOrigin = null;
     const activeRuntime = runtimeCache?.runtime ?? null;
     const pendingRuntimeCachePromise = runtimeCachePromise;
     runtimeCache = null;
@@ -397,6 +427,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     getCoreReady,
     getOrInitProvider,
     getOrInitUiAccess,
+    getOrInitWalletBridgeServer,
     getOrInitUiEntryAccess,
     shutdown,
     applyDebugNamespacesFromEnv,

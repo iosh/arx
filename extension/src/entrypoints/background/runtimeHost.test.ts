@@ -122,6 +122,10 @@ const makeRuntime = () => {
     cancelRequestScope: vi.fn(async () => 0),
   };
   const createUiAccess = vi.fn();
+  const walletBridgeServer = {
+    handleRequest: vi.fn(),
+  };
+  const createWalletBridgeServer = vi.fn(() => walletBridgeServer);
   const createProvider = vi.fn(() => provider);
   const getApprovalDetail = vi.fn(async () => null);
   const addTransactionApproval = () => {
@@ -211,6 +215,7 @@ const makeRuntime = () => {
       cancelTransactionApproval,
     },
     createUiAccess,
+    createWalletBridgeServer,
     getApprovalDetail,
     shutdown,
   };
@@ -220,6 +225,8 @@ const makeRuntime = () => {
     provider,
     createProvider,
     createUiAccess,
+    walletBridgeServer,
+    createWalletBridgeServer,
     providerSnapshot,
     shutdown,
     subscribe,
@@ -322,6 +329,8 @@ describe("runtimeHost", () => {
       activation: uiActivation,
       uiOrigin: "chrome-extension://test",
     });
+    const firstWalletBridgeServer = await runtimeHost.getOrInitWalletBridgeServer("chrome-extension://test");
+    const secondWalletBridgeServer = await runtimeHost.getOrInitWalletBridgeServer("chrome-extension://test");
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
 
     expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
@@ -338,10 +347,16 @@ describe("runtimeHost", () => {
       uiOrigin: "chrome-extension://test",
       extensions: [expect.objectContaining({ id: "extension.uiActivation" })],
     });
+    expect(runtimeHarness.createWalletBridgeServer).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.createWalletBridgeServer).toHaveBeenCalledWith({
+      uiOrigin: "chrome-extension://test",
+    });
     expect(runtimeHarness.createProvider).not.toHaveBeenCalled();
     expect(provider).toBe(runtimeHarness.provider);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);
+    expect(firstWalletBridgeServer).toBe(runtimeHarness.walletBridgeServer);
+    expect(secondWalletBridgeServer).toBe(runtimeHarness.walletBridgeServer);
     await expect(provider.getConnectionState({ origin: "https://example.com", namespace: "eip155" })).resolves.toEqual({
       snapshot: runtimeHarness.providerSnapshot,
       accounts: [],
@@ -458,13 +473,19 @@ describe("runtimeHost", () => {
     });
 
     await runtimeHost.initializeRuntime();
+    const firstWalletBridgeServer = await runtimeHost.getOrInitWalletBridgeServer("chrome-extension://test");
     await runtimeHost.shutdown();
 
     expect(runtimeHarness.shutdown).toHaveBeenCalledTimes(1);
     await runtimeHost.initializeRuntime();
+    const secondWalletBridgeServer = await runtimeHost.getOrInitWalletBridgeServer("chrome-extension://test");
 
     expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(2);
     expect(nextRuntimeHarness.shutdown).not.toHaveBeenCalled();
+    expect(firstWalletBridgeServer).toBe(runtimeHarness.walletBridgeServer);
+    expect(secondWalletBridgeServer).toBe(nextRuntimeHarness.walletBridgeServer);
+    expect(runtimeHarness.createWalletBridgeServer).toHaveBeenCalledTimes(1);
+    expect(nextRuntimeHarness.createWalletBridgeServer).toHaveBeenCalledTimes(1);
   });
 
   it("rejects repeated UI access requests with different parameters", async () => {

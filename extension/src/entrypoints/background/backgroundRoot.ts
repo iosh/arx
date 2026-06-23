@@ -76,8 +76,9 @@ export const createBackgroundRoot = (): BackgroundRoot => {
         activation: uiEntries,
         uiOrigin,
       });
+      const walletBridgeServer = await runtimeHost.getOrInitWalletBridgeServer(uiOrigin);
 
-      const bridge = createUiBridge({ uiAccess });
+      const bridge = createUiBridge({ uiAccess, walletBridgeServer });
 
       uiBridge = bridge;
       return bridge;

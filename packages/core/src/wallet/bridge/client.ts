@@ -48,6 +48,29 @@ export class WalletBridgeProtocolError extends ArxBaseError {
   }
 }
 
+export type WalletBridgeTransportErrorReason =
+  | "connect-failed"
+  | "disconnected"
+  | "invalid-reply"
+  | "post-message-failed"
+  | "request-timeout";
+
+export class WalletBridgeTransportError extends ArxBaseError {
+  static readonly code = "wallet.bridge.transport";
+
+  constructor(input: ErrorCause & { path: string; reason: WalletBridgeTransportErrorReason; requestId: string }) {
+    super(`Wallet bridge transport error for "${input.path}": ${input.reason}`, {
+      code: WalletBridgeTransportError.code,
+      details: {
+        path: input.path,
+        reason: input.reason,
+        requestId: input.requestId,
+      },
+      cause: input.cause,
+    });
+  }
+}
+
 const defaultCreateRequestId = () => globalThis.crypto.randomUUID();
 
 const sendRemoteWalletOperation = async (deps: {

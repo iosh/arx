@@ -55,7 +55,6 @@ describe("ui actions", () => {
     void actions.session.setAutoLockDuration({ durationMs: 60_000 });
 
     void actions.onboarding.openTab({ reason: "reason" });
-    void actions.onboarding.getStatus();
     void actions.onboarding.generateMnemonic();
     void actions.onboarding.createWalletFromMnemonic({
       password: "pw",

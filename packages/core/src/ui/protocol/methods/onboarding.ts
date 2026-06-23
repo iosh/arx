@@ -8,8 +8,6 @@ export const onboardingMethods = {
   // Host activation method; intentionally protocol-local, not part of core.wallet.
   "ui.onboarding.openTab": defineMethod("command", UiOnboardingOpenTabParamsSchema),
 
-  "ui.onboarding.getStatus": defineMethod("query", WalletApiSchemas.setup.getStatus),
-
   "ui.onboarding.generateMnemonic": defineMethod("command", WalletApiSchemas.setup.generateMnemonic),
 
   "ui.onboarding.createWalletFromMnemonic": defineMethod("command", WalletApiSchemas.setup.createWalletFromMnemonic),

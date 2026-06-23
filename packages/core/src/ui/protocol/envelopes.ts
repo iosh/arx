@@ -41,6 +41,7 @@ export type UiEventEnvelope = {
 };
 
 export type UiPortEnvelope = UiRequestEnvelope | UiResponseEnvelope | UiErrorEnvelope | UiEventEnvelope;
+type UiProtocolMessageCandidate = Pick<UiPortEnvelope, "type">;
 
 const UiContextSchema = z
   .object({
@@ -122,4 +123,9 @@ const UiPortEnvelopeSchema = z.union([
 
 export const parseUiEnvelope = (raw: unknown): UiPortEnvelope => {
   return UiPortEnvelopeSchema.parse(raw) as UiPortEnvelope;
+};
+
+export const isUiProtocolMessage = (raw: unknown): raw is UiProtocolMessageCandidate => {
+  const type = typeof raw === "object" && raw !== null ? (raw as { type?: unknown }).type : undefined;
+  return type === "ui:request" || type === "ui:response" || type === "ui:error" || type === "ui:event";
 };

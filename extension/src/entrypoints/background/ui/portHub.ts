@@ -1,22 +1,24 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiPortEnvelope } from "@arx/core/ui";
+import type { WalletBridgeReply } from "@arx/core/wallet/bridge";
 import type browserDefaultType from "webextension-polyfill";
 
 export type UiPort = browserDefaultType.Runtime.Port;
+export type UiPortOutboundMessage = UiPortEnvelope | WalletBridgeReply;
 
 const uiLog = createLogger("bg:ui");
 const portLog = extendLogger(uiLog, "port");
 
 export const createUiPortHub = () => {
   const ports = new Set<UiPort>();
-  const cleanups = new Map<UiPort, () => void>();
+  const removePortListeners = new Map<UiPort, () => void>();
 
   const detach = (port: UiPort) => {
-    const cleanup = cleanups.get(port);
-    cleanup?.();
+    const removeListeners = removePortListeners.get(port);
+    removeListeners?.();
   };
 
-  const send = (port: UiPort, envelope: UiPortEnvelope): boolean => {
+  const send = (port: UiPort, envelope: UiPortOutboundMessage): boolean => {
     try {
       port.postMessage(envelope);
       return true;
@@ -46,26 +48,20 @@ export const createUiPortHub = () => {
         });
     };
 
-    let cleanup = () => {};
-    const onDisconnect = () => cleanup();
+    let removeListeners = () => {};
+    const onDisconnect = () => removeListeners();
 
-    cleanup = () => {
+    removeListeners = () => {
       ports.delete(port);
       port.onMessage.removeListener(onMessageWrapped);
       port.onDisconnect.removeListener(onDisconnect);
-      cleanups.delete(port);
+      removePortListeners.delete(port);
     };
 
     port.onMessage.addListener(onMessageWrapped);
     port.onDisconnect.addListener(onDisconnect);
-    cleanups.set(port, cleanup);
+    removePortListeners.set(port, removeListeners);
   };
 
-  const teardown = () => {
-    for (const cleanup of cleanups.values()) cleanup();
-    ports.clear();
-    cleanups.clear();
-  };
-
-  return { attach, send, broadcast, teardown };
+  return { attach, send, broadcast };
 };

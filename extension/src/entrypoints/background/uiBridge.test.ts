@@ -43,6 +43,11 @@ import {
   type UiRuntimeAccess,
 } from "@arx/core/ui/server";
 import type { TrustedWalletApi } from "@arx/core/wallet";
+import {
+  WALLET_BRIDGE_PROTOCOL_VERSION,
+  type WalletBridgeReply,
+  type WalletBridgeServer,
+} from "@arx/core/wallet/bridge";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
@@ -1141,6 +1146,19 @@ const makeBrowser = (): MockBrowserApi => {
   };
 };
 
+const createWalletBridgeServerForTest = (
+  readSetupStatus?: () => { availability: "uninitialized" | "empty" | "ready" },
+): WalletBridgeServer => ({
+  handleRequest: vi.fn(
+    async (request): Promise<WalletBridgeReply> => ({
+      type: "wallet:response",
+      version: WALLET_BRIDGE_PROTOCOL_VERSION,
+      id: request.id,
+      result: readSetupStatus?.() ?? { availability: "ready" },
+    }),
+  ),
+});
+
 const buildBridge = (opts?: {
   unlocked?: boolean;
   hasEnvelope?: boolean;
@@ -1253,7 +1271,17 @@ const buildBridge = (opts?: {
       return () => attentionStateHandlers.delete(listener);
     },
   });
-  const bridge = createUiBridge({ uiAccess });
+  const readSetupStatus = () => {
+    if (session.vault.getStatus().status === "uninitialized") {
+      return { availability: "uninitialized" as const };
+    }
+    const hasAnyAccounts = Object.values(accountSelectionService.getState().namespaces).some(
+      (namespace) => namespace.accountKeys.length > 0,
+    );
+    return { availability: hasAnyAccounts ? ("ready" as const) : ("empty" as const) };
+  };
+  const walletBridgeServer = createWalletBridgeServerForTest(readSetupStatus);
+  const bridge = createUiBridge({ uiAccess, walletBridgeServer });
 
   return {
     bridge,
@@ -1373,9 +1401,24 @@ describe("uiBridge", () => {
     const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
 
-    const status = await send("ui.onboarding.getStatus");
-    expect(expectResponse(status.envelope, status.id)).toEqual({
-      availability: "ready",
+    const walletRequestId = crypto.randomUUID();
+    await port.triggerMessage({
+      type: "wallet:request",
+      version: WALLET_BRIDGE_PROTOCOL_VERSION,
+      id: walletRequestId,
+      path: "setup.getStatus",
+    });
+
+    const walletResponse = port.messages.find(
+      (message) => isRecord(message) && message.type === "wallet:response" && message.id === walletRequestId,
+    );
+    expect(walletResponse).toEqual({
+      type: "wallet:response",
+      version: WALLET_BRIDGE_PROTOCOL_VERSION,
+      id: walletRequestId,
+      result: {
+        availability: "ready",
+      },
     });
   });
 
@@ -1418,7 +1461,7 @@ describe("uiBridge", () => {
         return () => uiEventListeners.delete(listener);
       }),
     };
-    const bridge = createUiBridge({ uiAccess });
+    const bridge = createUiBridge({ uiAccess, walletBridgeServer: createWalletBridgeServerForTest() });
     const queryPort = createPort();
     const observerPort = createPort();
 
@@ -1563,7 +1606,7 @@ describe("uiBridge", () => {
         },
       },
     });
-    const bridge = createUiBridge({ uiAccess });
+    const bridge = createUiBridge({ uiAccess, walletBridgeServer: createWalletBridgeServerForTest() });
 
     const port = createPort();
     bridge.attachPort(port as unknown as UiPort);

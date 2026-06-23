@@ -2,22 +2,25 @@ export type {
   RemoteTrustedWalletClient,
   RemoteTrustedWalletClientOptions,
   WalletBridgeClientTransport,
+  WalletBridgeTransportErrorReason,
 } from "./client.js";
 export {
   createRemoteTrustedWalletClient,
   WalletBridgeProtocolError,
   WalletBridgeRemoteError,
+  WalletBridgeTransportError,
 } from "./client.js";
 export { encodeWalletBridgeError } from "./errorEncoding.js";
 export type {
   WalletBridgeError,
-  WalletBridgeMessage,
   WalletBridgeReply,
   WalletBridgeRequest,
   WalletBridgeResponse,
 } from "./protocol.js";
 export {
-  parseWalletBridgeMessage,
+  isWalletBridgeReplyMessage,
+  isWalletBridgeRequestMessage,
+  parseWalletBridgeReply,
   parseWalletBridgeRequest,
   WALLET_BRIDGE_PROTOCOL_VERSION,
 } from "./protocol.js";

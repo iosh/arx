@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ARX_ERROR_KIND } from "../../error.js";
-import { parseWalletBridgeMessage, parseWalletBridgeRequest } from "./protocol.js";
+import { parseWalletBridgeReply, parseWalletBridgeRequest } from "./protocol.js";
 
 describe("wallet bridge protocol", () => {
   it("parses request, response, and error messages", () => {
@@ -19,7 +19,7 @@ describe("wallet bridge protocol", () => {
     });
 
     expect(
-      parseWalletBridgeMessage({
+      parseWalletBridgeReply({
         type: "wallet:response",
         version: 1,
         id: "request-1",
@@ -33,7 +33,7 @@ describe("wallet bridge protocol", () => {
     });
 
     expect(
-      parseWalletBridgeMessage({
+      parseWalletBridgeReply({
         type: "wallet:error",
         version: 1,
         id: "request-1",
@@ -58,7 +58,7 @@ describe("wallet bridge protocol", () => {
     ).toThrow();
 
     expect(() =>
-      parseWalletBridgeMessage({
+      parseWalletBridgeReply({
         type: "wallet:response",
         version: 1,
         id: "request-1",

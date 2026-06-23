@@ -72,10 +72,7 @@ const bindWalletOperations = <TContext, TOperations extends WalletOperations>(
   return bindingsByPath;
 };
 
-export const createWalletOperationExecutor = <
-  TContext,
-  TOperations extends WalletOperations,
->(deps: {
+export const createWalletOperationExecutor = <TContext, TOperations extends WalletOperations>(deps: {
   context: TContext;
   operations: TOperations;
   handlers: WalletOperationHandlerTree<TContext, TOperations>;

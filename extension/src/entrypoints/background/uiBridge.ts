@@ -1,27 +1,36 @@
-import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiRuntimeAccess } from "@arx/core/runtime";
 import type { UiEventEnvelope } from "@arx/core/ui";
+import {
+  isWalletBridgeRequestMessage,
+  parseWalletBridgeRequest,
+  type WalletBridgeServer,
+} from "@arx/core/wallet/bridge";
 import { createUiPortHub } from "./ui/portHub";
 import { createUiReadyHandshake } from "./ui/readyHandshake";
 
 export { UI_CHANNEL } from "@arx/core/ui";
 
-const uiLog = createLogger("bg:ui");
-const bridgeLog = extendLogger(uiLog, "bridge");
-
 type BridgeDeps = {
   uiAccess: UiRuntimeAccess;
+  walletBridgeServer: WalletBridgeServer;
 };
 
-export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
+export const createUiBridge = ({ uiAccess, walletBridgeServer }: BridgeDeps) => {
   const portHub = createUiPortHub();
   const readyHandshake = createUiReadyHandshake({ portHub });
 
-  const unsubscribeUiEvents = uiAccess.subscribeUiEvents((event) => {
+  uiAccess.subscribeUiEvents((event) => {
     portHub.broadcast(event);
   });
 
   const dispatchPortMessage = async (port: Parameters<typeof portHub.attach>[0], raw: unknown) => {
+    if (isWalletBridgeRequestMessage(raw)) {
+      const request = parseWalletBridgeRequest(raw);
+      const reply = await walletBridgeServer.handleRequest(request);
+      portHub.send(port, reply);
+      return;
+    }
+
     const dispatched = await uiAccess.dispatchRequest(raw);
     if (!dispatched) return;
 
@@ -38,19 +47,8 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
     portHub.broadcast(event);
   };
 
-  const teardown = () => {
-    try {
-      unsubscribeUiEvents();
-    } catch (error) {
-      bridgeLog("failed to remove ui event listener", error);
-    }
-
-    portHub.teardown();
-  };
-
   return {
     attachPort,
     broadcastEvent,
-    teardown,
   };
 };

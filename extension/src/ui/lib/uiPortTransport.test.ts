@@ -1,7 +1,7 @@
 import { UI_EVENT_READY } from "@arx/core/ui";
 import { describe, expect, it, vi } from "vitest";
 import type Browser from "webextension-polyfill";
-import { createUiPortTransport } from "./uiPortTransport";
+import { createBrowserPortChannel } from "./uiPortTransport";
 
 type MessageListener = (message: unknown, port: Browser.Runtime.Port) => void;
 type DisconnectListener = (port: Browser.Runtime.Port) => void;
@@ -58,13 +58,13 @@ class FakePort {
   }
 }
 
-describe("createUiPortTransport", () => {
+describe("createBrowserPortChannel", () => {
   it("connect resolves only after first inbound message", async () => {
     const port = new FakePort();
     const runtime = { connect: vi.fn(() => port) };
     const browser = { runtime } as unknown as typeof Browser;
 
-    const transport = createUiPortTransport({ browser });
+    const transport = createBrowserPortChannel({ browser });
 
     const connectPromise = transport.connect();
     await Promise.resolve(); // allow connect() to call runtime.connect()
@@ -81,7 +81,7 @@ describe("createUiPortTransport", () => {
     const port = new FakePort();
     const runtime = { connect: vi.fn(() => port) };
     const browser = { runtime } as unknown as typeof Browser;
-    const transport = createUiPortTransport({ browser });
+    const transport = createBrowserPortChannel({ browser });
 
     let resolved = false;
     const connectPromise = transport.connect().then(() => {
@@ -108,7 +108,7 @@ describe("createUiPortTransport", () => {
     const runtime = { connect: vi.fn(() => port) };
     const browser = { runtime } as unknown as typeof Browser;
 
-    const transport = createUiPortTransport({ browser });
+    const transport = createBrowserPortChannel({ browser });
     const connectPromise = transport.connect(); // Don't await; keep it not-ready.
     await Promise.resolve(); // ensure port exists but not ready
 
@@ -130,7 +130,7 @@ describe("createUiPortTransport", () => {
 
       const runtime = { connect: vi.fn().mockReturnValueOnce(port1).mockReturnValueOnce(port2) };
       const browser = { runtime } as unknown as typeof Browser;
-      const transport = createUiPortTransport({ browser });
+      const transport = createBrowserPortChannel({ browser });
 
       const first = transport.connect();
       await Promise.resolve(); // allow runtime.connect() to be called

@@ -1,11 +1,18 @@
 import type { UiTransport } from "@arx/core/ui";
-import { parseUiEnvelope, UI_CHANNEL, UI_EVENT_READY, type UiPortEnvelope } from "@arx/core/ui";
+import { isUiProtocolMessage, parseUiEnvelope, UI_CHANNEL, UI_EVENT_READY, type UiPortEnvelope } from "@arx/core/ui";
 import type Browser from "webextension-polyfill";
 
 type UnknownListener = (message: unknown) => void;
 type DisconnectListener = (error?: unknown) => void;
-// Port-based transport for browser extension UI.
-// Keeps transport state local and re-binds listeners on reconnect.
+
+export type BrowserPortChannel = {
+  connect: () => Promise<void>;
+  disconnect?: () => void;
+  postMessage: (message: unknown) => void;
+  onMessage: (listener: UnknownListener) => () => void;
+  onDisconnect?: (listener: DisconnectListener) => () => void;
+  isConnected?: () => boolean;
+};
 
 type BrowserApi = typeof Browser;
 
@@ -34,7 +41,7 @@ const isReadyHandshakeMessage = (message: unknown): boolean => {
   }
 };
 
-export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransport => {
+export const createBrowserPortChannel = (deps?: { browser?: BrowserApi }): BrowserPortChannel => {
   let browserPromise: Promise<BrowserApi> | null = null;
   const getBrowser = async (): Promise<BrowserApi> => {
     if (deps?.browser) return deps.browser;
@@ -186,7 +193,7 @@ export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransp
       }
     },
 
-    postMessage: (message: UiPortEnvelope) => {
+    postMessage: (message: unknown) => {
       if (!port) throw new Error("UI transport is not connected");
       if (!ready) throw new Error("UI transport is not ready (await connect())");
       port.postMessage(message);
@@ -207,3 +214,17 @@ export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransp
     isConnected: () => port !== null && ready,
   };
 };
+
+export const createUiProtocolTransport = (channel: BrowserPortChannel): UiTransport => ({
+  connect: channel.connect,
+  disconnect: channel.disconnect,
+  postMessage: (message: UiPortEnvelope) => channel.postMessage(message),
+  onMessage: (listener) =>
+    channel.onMessage((message) => {
+      if (isUiProtocolMessage(message)) {
+        listener(message);
+      }
+    }),
+  onDisconnect: channel.onDisconnect,
+  isConnected: channel.isConnected,
+});

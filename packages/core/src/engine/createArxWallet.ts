@@ -32,8 +32,10 @@ import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
+import type { WalletBridgeServer } from "../wallet/bridge/server.js";
+import { createWalletBridgeServer as createWalletBridgeProtocolServer } from "../wallet/bridge/server.js";
 import type { WalletApiContext } from "../wallet/context.js";
-import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
+import { createTrustedWalletApi, createTrustedWalletOperationExecutor } from "../wallet/createTrustedWalletApi.js";
 import type { TrustedWalletApi } from "../wallet/index.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
@@ -133,10 +135,16 @@ type ArxWalletRuntime = Readonly<{
   providerAccess: ProviderRuntimeAccess;
   walletApi: TrustedWalletApi;
   createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
+  createWalletBridgeServer(options: WalletCreateWalletBridgeOptions): WalletBridgeServer;
   listPendingApprovals(): ReturnType<typeof createApprovalReadService>["listPending"] extends () => infer TResult
     ? Promise<Awaited<TResult>>
     : never;
   getApprovalDetail(approvalId: string): Promise<ApprovalDetail | null>;
+}>;
+
+type WalletCreateWalletBridgeOptions = Readonly<{
+  uiOrigin: string;
+  createId?: () => string;
 }>;
 
 const createUiTrustedWalletApi = (
@@ -563,6 +571,16 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, options));
   const createUiAccess = (options: WalletCreateUiOptions) =>
     createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, options));
+  const createWalletBridgeServer = (options: WalletCreateWalletBridgeOptions): WalletBridgeServer => {
+    const executor = createTrustedWalletOperationExecutor(
+      createTrustedWalletApiContext(runtimeCore, approvalReadService, {
+        createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
+        origin: options.uiOrigin,
+      }),
+    );
+
+    return createWalletBridgeProtocolServer({ executor });
+  };
   const walletApi = createTrustedWalletApi(
     createTrustedWalletApiContext(runtimeCore, approvalReadService, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
@@ -617,6 +635,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     providerAccess,
     walletApi,
     createUiAccess,
+    createWalletBridgeServer,
     listPendingApprovals: async () => await approvalReadService.listPending(),
     getApprovalDetail: async (approvalId) => await approvalReadService.getDetail(approvalId),
   };

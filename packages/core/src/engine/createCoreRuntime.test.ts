@@ -159,7 +159,10 @@ describe("createCoreRuntime", () => {
     const core = await createCoreRuntime(createCoreRuntimeInput());
 
     expect(Object.keys(core).sort()).toEqual(["provider", "wallet"]);
-    await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ vaultInitialized: false, isUnlocked: false });
+    await expect(core.wallet.session.getStatus()).resolves.toMatchObject({
+      vaultInitialized: false,
+      isUnlocked: false,
+    });
     await expect(core.wallet.setup.getStatus()).resolves.toEqual({ availability: "uninitialized" });
     await expect(core.wallet.networks.getSelectedChain()).resolves.toMatchObject({
       namespace: EIP155_NAMESPACE,

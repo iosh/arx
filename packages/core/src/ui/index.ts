@@ -10,7 +10,7 @@ export type {
   UiRequestEnvelope,
   UiResponseEnvelope,
 } from "./protocol/envelopes.js";
-export { parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
+export { isUiProtocolMessage, parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
 export {
   UI_EVENT_APPROVAL_DETAIL_CHANGED,
   UI_EVENT_APPROVALS_CHANGED,

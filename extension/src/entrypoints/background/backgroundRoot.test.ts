@@ -76,6 +76,10 @@ const createUiAccess = () => ({
   subscribeUiEvents: vi.fn(() => vi.fn()),
 });
 
+const createWalletBridgeServer = () => ({
+  handleRequest: vi.fn(),
+});
+
 const createUiEntryAccess = () => ({
   subscribeApprovalCreated: vi.fn(() => vi.fn()),
   subscribeApprovalFinished: vi.fn(() => vi.fn()),
@@ -92,7 +96,6 @@ describe("backgroundRoot", () => {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       trackWindowClose: vi.fn(),
       clearWindowCloseTracks: vi.fn(),
-      teardown: vi.fn(),
     });
     createProviderPortServerMock.mockImplementation(() => ({
       start: vi.fn(),
@@ -141,7 +144,6 @@ describe("backgroundRoot", () => {
     createUiBridgeMock.mockReturnValue({
       attachPort: vi.fn(),
       broadcastEvent: vi.fn(),
-      teardown: vi.fn(),
     });
   });
 
@@ -218,13 +220,13 @@ describe("backgroundRoot", () => {
         .fn()
         .mockRejectedValueOnce(new Error("ui access failed"))
         .mockResolvedValueOnce(createUiAccess()),
+      getOrInitWalletBridgeServer: vi.fn(async () => createWalletBridgeServer()),
     };
     createBackgroundRuntimeHostMock.mockReturnValue(runtimeHost);
 
     const bridge = {
       attachPort: vi.fn(),
       broadcastEvent: vi.fn(),
-      teardown: vi.fn(),
     };
     createUiBridgeMock.mockReturnValue(bridge);
 
@@ -246,15 +248,24 @@ describe("backgroundRoot", () => {
     readOnConnectListener()(firstUiPort);
 
     await vi.waitFor(() => expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(1));
+    expect(runtimeHost.getOrInitWalletBridgeServer).toHaveBeenCalledTimes(0);
     await Promise.resolve();
     expect(createUiBridgeMock).toHaveBeenCalledTimes(0);
     expect(bridge.attachPort).not.toHaveBeenCalled();
 
+    const walletBridgeServer = createWalletBridgeServer();
+    runtimeHost.getOrInitWalletBridgeServer.mockResolvedValueOnce(walletBridgeServer);
     const secondUiPort = { name: UI_CHANNEL } as unknown as Runtime.Port;
     readOnConnectListener()(secondUiPort);
 
     await vi.waitFor(() => expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(runtimeHost.getOrInitWalletBridgeServer).toHaveBeenCalledTimes(1));
+    expect(runtimeHost.getOrInitWalletBridgeServer).toHaveBeenCalledWith("null");
     expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
+    expect(createUiBridgeMock).toHaveBeenCalledWith({
+      uiAccess: expect.any(Object),
+      walletBridgeServer,
+    });
     await vi.waitFor(() => expect(bridge.attachPort).toHaveBeenCalledTimes(1));
     expect(bridge.attachPort).toHaveBeenCalledWith(secondUiPort);
   });

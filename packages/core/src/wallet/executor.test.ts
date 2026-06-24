@@ -1,52 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
-import { RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
-import { WalletOperationBindingInvariantError } from "./errors.js";
-import { createWalletOperationExecutor, type WalletOperationHandlerTree } from "./executor.js";
-import { defineWalletOperation, type WalletOperations } from "./operation.js";
+import { RpcUnsupportedMethodError } from "../rpc/errors.js";
+import { createWalletMethodExecutor, type WalletMethodHandlerTree } from "./executor.js";
 
-describe("wallet operation executor", () => {
-  it("executes a validated wallet operation path", async () => {
-    const operations = {
+describe("wallet method executor", () => {
+  it("dispatches a trusted wallet method path", async () => {
+    type TestApi = {
       sample: {
-        echo: defineWalletOperation({
-          input: z.strictObject({ value: z.string().min(1) }),
-        }),
-      },
-    } as const satisfies WalletOperations;
+        echo(input: { value: string }): Promise<string>;
+      };
+    };
     type TestContext = { prefix: string };
     const handlers = {
       sample: {
         echo: (context: TestContext, input: { value: string }) => `${context.prefix}:${input.value}`,
       },
-    } as const satisfies WalletOperationHandlerTree<TestContext, typeof operations>;
-    const executor = createWalletOperationExecutor({
+    } as const satisfies WalletMethodHandlerTree<TestContext, TestApi>;
+    const executor = createWalletMethodExecutor({
       context: { prefix: "wallet" },
-      operations,
       handlers,
     });
 
-    await expect(executor.executePath("sample.echo", { value: "status" })).resolves.toBe("wallet:status");
+    await expect(executor.executeUnknownPath("sample.echo", { value: "status" })).resolves.toBe("wallet:status");
   });
 
-  it("rejects invalid params and unsupported paths", async () => {
-    const operations = {
+  it("rejects unsupported paths", async () => {
+    type TestApi = {
       setup: {
-        getStatus: defineWalletOperation({ input: z.undefined() }),
-      },
-    } as const satisfies WalletOperations;
+        getStatus(): Promise<{ availability: "uninitialized" }>;
+      };
+    };
     const handlers = {
       setup: {
-        getStatus: () => ({ availability: "uninitialized" }),
+        getStatus: () => ({ availability: "uninitialized" as const }),
       },
-    } as const satisfies WalletOperationHandlerTree<undefined, typeof operations>;
-    const executor = createWalletOperationExecutor({
+    } as const satisfies WalletMethodHandlerTree<undefined, TestApi>;
+    const executor = createWalletMethodExecutor({
       context: undefined,
-      operations,
       handlers,
     });
 
-    await expect(executor.executeUnknownPath("setup.getStatus", {})).rejects.toThrow(RpcInvalidParamsError);
     await expect(executor.executeUnknownPath("setup.missing", undefined)).rejects.toThrow(RpcUnsupportedMethodError);
   });
 });

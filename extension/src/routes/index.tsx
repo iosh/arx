@@ -9,7 +9,7 @@ import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 
 export const Route = createFileRoute("/")({
@@ -22,7 +22,7 @@ function HomePage() {
   const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const { approvals } = useUiApprovalsList();
   const exportMnemonicMutation = useMutation({
-    mutationFn: (params: { keyringId: string; password: string }) => uiClient.keyrings.exportMnemonic(params),
+    mutationFn: (params: { keyringId: string; password: string }) => app.wallet.keyrings.exportMnemonic(params),
   });
   const [markingId, setMarkingId] = useState<string | null>(null);
 

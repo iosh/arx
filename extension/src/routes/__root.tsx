@@ -11,7 +11,7 @@ import { useUiSessionEvents } from "@/ui/hooks/useUiSessionEvents";
 import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app, uiClient } from "@/ui/lib/uiBridgeClient";
 import { createUiSetupStatusQueryOptions, getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 // Router context type for route guards
 export interface RouterContext {
@@ -90,7 +90,7 @@ function RootInner() {
   const queryClient = useQueryClient();
   const setupStatusQuery = useUiSetupStatus();
   const unlockMutation = useMutation({
-    mutationFn: (password: string) => uiClient.session.unlock({ password }),
+    mutationFn: (password: string) => app.wallet.session.unlock({ password }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: createUiSetupStatusQueryOptions().queryKey });
     },

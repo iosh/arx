@@ -4,28 +4,26 @@ import { ChainNotSupportedError } from "../../chains/errors.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { WalletApiNativeBalanceInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiBalancesSchemas } from "../schemas/balances.js";
 
 export const getNativeBalance = async (context: WalletApiContext, input: WalletApiNativeBalanceInput) => {
-  const params = WalletApiBalancesSchemas.getNative.parse(input);
   if (!context.session.isUnlocked()) {
     throw new SessionLockedError();
   }
 
-  const { namespace } = parseChainRef(params.chainRef);
-  const chain = context.networks.findAvailableChainView({ chainRef: params.chainRef });
+  const { namespace } = parseChainRef(input.chainRef);
+  const chain = context.networks.findAvailableChainView({ chainRef: input.chainRef });
   if (!chain) {
     throw new ChainNotSupportedError({
-      message: `Native balance is not supported for chain "${params.chainRef}" yet.`,
+      message: `Native balance is not supported for chain "${input.chainRef}" yet.`,
     });
   }
   const account = context.accounts.getOwnedAccount({
     namespace,
-    chainRef: params.chainRef,
-    accountKey: params.accountKey,
+    chainRef: input.chainRef,
+    accountKey: input.accountKey,
   });
   if (!account) {
-    throw new AccountNotOwnedError({ accountKey: params.accountKey, chainRef: params.chainRef, namespace });
+    throw new AccountNotOwnedError({ accountKey: input.accountKey, chainRef: input.chainRef, namespace });
   }
 
   const uiBindings = context.namespaceBindings.getUi(namespace);
@@ -35,11 +33,11 @@ export const getNativeBalance = async (context: WalletApiContext, input: WalletA
     });
   }
 
-  const amount = await uiBindings.getNativeBalance({ chainRef: params.chainRef, address: account.canonicalAddress });
+  const amount = await uiBindings.getNativeBalance({ chainRef: input.chainRef, address: account.canonicalAddress });
 
   return {
     accountKey: account.accountKey,
-    chainRef: params.chainRef,
+    chainRef: input.chainRef,
     amount: amount.toString(10),
     currency: { ...chain.nativeCurrency },
   };

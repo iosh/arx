@@ -1,114 +1,79 @@
-import { ZodError, type z } from "zod";
-import { RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
-import { WalletOperationBindingInvariantError } from "./errors.js";
-import {
-  isWalletOperation,
-  type WalletOperation,
-  type WalletOperationInputAtPath,
-  type WalletOperationPath,
-  type WalletOperationResultAtPath,
-  type WalletOperations,
-} from "./operation.js";
+import { RpcUnsupportedMethodError } from "../rpc/errors.js";
+import { WalletMethodBindingInvariantError } from "./errors.js";
 
-export type WalletOperationHandler<TContext, TOperation extends WalletOperation> = (
-  context: TContext,
-  input: z.output<TOperation["input"]>,
-) => TOperation extends WalletOperation<z.ZodTypeAny, infer TResult> ? TResult | Promise<TResult> : never;
+export type WalletMethodHandler<TContext, TMethod> = TMethod extends (...args: infer TArgs) => infer TResult
+  ? TArgs["length"] extends 0 | 1
+    ? (context: TContext, ...args: TArgs) => Awaited<TResult> | Promise<Awaited<TResult>>
+    : never
+  : never;
 
-export type WalletOperationHandlerTree<TContext, TOperations extends WalletOperations> = Readonly<{
-  [K in keyof TOperations]: TOperations[K] extends WalletOperation
-    ? WalletOperationHandler<TContext, TOperations[K]>
-    : TOperations[K] extends WalletOperations
-      ? WalletOperationHandlerTree<TContext, TOperations[K]>
+export type WalletMethodHandlerTree<TContext, TApi extends object> = Readonly<{
+  [K in keyof TApi]: TApi[K] extends (...args: infer _TArgs) => infer _TResult
+    ? WalletMethodHandler<TContext, TApi[K]>
+    : TApi[K] extends object
+      ? WalletMethodHandlerTree<TContext, TApi[K]>
       : never;
 }>;
 
-type WalletOperationBinding<TContext> = {
-  operation: WalletOperation;
-  handler: WalletOperationHandler<TContext, WalletOperation>;
+type WalletMethodBinding<TContext> = {
+  handler: (context: TContext, input?: unknown) => unknown | Promise<unknown>;
 };
 
-export type WalletOperationExecutor<TOperations extends WalletOperations> = Readonly<{
-  executePath<TPath extends WalletOperationPath<TOperations>>(
-    path: TPath,
-    input: WalletOperationInputAtPath<TOperations, TPath>,
-  ): Promise<WalletOperationResultAtPath<TOperations, TPath>>;
+export type WalletMethodExecutor = Readonly<{
   executeUnknownPath(path: string, input: unknown): Promise<unknown>;
 }>;
 
-const bindWalletOperations = <TContext, TOperations extends WalletOperations>(
-  operations: TOperations,
-  handlers: WalletOperationHandlerTree<TContext, TOperations>,
-) => {
-  const bindingsByPath = new Map<string, WalletOperationBinding<TContext>>();
+const bindWalletMethodHandlers = <TContext, TApi extends object>(
+  handlers: WalletMethodHandlerTree<TContext, TApi>,
+): Map<string, WalletMethodBinding<TContext>> => {
+  const bindingsByPath = new Map<string, WalletMethodBinding<TContext>>();
 
-  const bindNode = (operationBranch: WalletOperations, handlerNode: unknown, segments: string[]) => {
-    for (const [key, childNode] of Object.entries(operationBranch)) {
+  const bindNode = (node: unknown, segments: string[]): void => {
+    if (typeof node !== "object" || node === null) {
+      throw new WalletMethodBindingInvariantError({
+        path: segments.join("."),
+        message: `Wallet method handler branch "${segments.join(".")}" is not an object.`,
+      });
+    }
+
+    for (const [key, childNode] of Object.entries(node)) {
       const pathSegments = [...segments, key];
       const path = pathSegments.join(".");
-      const childHandler = (handlerNode as Record<string, unknown> | null | undefined)?.[key];
 
-      if (isWalletOperation(childNode)) {
-        if (typeof childHandler !== "function") {
-          throw new WalletOperationBindingInvariantError({
-            path,
-            message: `Wallet operation "${path}" is missing a handler implementation.`,
-          });
-        }
-
+      if (typeof childNode === "function") {
         bindingsByPath.set(path, {
-          operation: childNode,
-          handler: childHandler as WalletOperationHandler<TContext, WalletOperation>,
+          handler: childNode as (context: TContext, input?: unknown) => unknown | Promise<unknown>,
         });
         continue;
       }
 
-      bindNode(childNode, childHandler, pathSegments);
+      bindNode(childNode, pathSegments);
     }
   };
 
-  bindNode(operations, handlers, []);
+  bindNode(handlers, []);
 
   return bindingsByPath;
 };
 
-export const createWalletOperationExecutor = <TContext, TOperations extends WalletOperations>(deps: {
+export const createWalletMethodExecutor = <TContext, TApi extends object>(deps: {
   context: TContext;
-  operations: TOperations;
-  handlers: WalletOperationHandlerTree<TContext, TOperations>;
-}): WalletOperationExecutor<TOperations> => {
-  const bindingsByPath = bindWalletOperations(deps.operations, deps.handlers);
+  handlers: WalletMethodHandlerTree<TContext, TApi>;
+}): WalletMethodExecutor => {
+  const bindingsByPath = bindWalletMethodHandlers<TContext, TApi>(deps.handlers);
 
-  const requireBinding = (path: string): WalletOperationBinding<TContext> => {
+  const requireBinding = (path: string): WalletMethodBinding<TContext> => {
     const binding = bindingsByPath.get(path);
     if (!binding) {
-      throw new RpcUnsupportedMethodError({ message: `Unsupported wallet operation: ${path}` });
+      throw new RpcUnsupportedMethodError({ message: `Unsupported wallet method: ${path}` });
     }
     return binding;
   };
 
-  const executeUnknownPath = async (path: string, input: unknown): Promise<unknown> => {
-    const binding = requireBinding(path);
-    let params: unknown;
-    try {
-      params = binding.operation.input.parse(input);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new RpcInvalidParamsError({
-          message: `Invalid params for wallet operation: ${path}`,
-          cause: error,
-        });
-      }
-      throw error;
-    }
-    return binding.handler(deps.context, params);
-  };
-
   return {
-    executePath: executeUnknownPath as <TPath extends WalletOperationPath<TOperations>>(
-      path: TPath,
-      input: WalletOperationInputAtPath<TOperations, TPath>,
-    ) => Promise<WalletOperationResultAtPath<TOperations, TPath>>,
-    executeUnknownPath,
-  } as WalletOperationExecutor<TOperations>;
+    executeUnknownPath: async (path, input) => {
+      const binding = requireBinding(path);
+      return await binding.handler(deps.context, input);
+    },
+  };
 };

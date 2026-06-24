@@ -13,7 +13,6 @@ import type {
   WalletApiTransactionsInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiTransactionsSchemas } from "../schemas/transactions.js";
 import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 import { assertSessionUnlocked } from "./session.js";
 
@@ -58,30 +57,29 @@ const buildTransactionRequestFromWalletRequest = (
   payload: walletRequest.payload,
 });
 
-const buildTransactionHistoryQuery = (input: WalletApiTransactionsInput): ListTransactionsQuery | undefined => {
-  const params = WalletApiTransactionsSchemas.listHistory.parse(input);
-  if (!params) {
+const buildTransactionHistoryQuery = (input?: WalletApiTransactionsInput): ListTransactionsQuery | undefined => {
+  if (!input) {
     return undefined;
   }
 
   const query: ListTransactionsQuery = {};
-  if (params.namespace !== undefined) {
-    query.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    query.namespace = input.namespace;
   }
-  if (params.chainRef !== undefined) {
-    query.chainRef = params.chainRef;
+  if (input.chainRef !== undefined) {
+    query.chainRef = input.chainRef;
   }
-  if (params.accountKey !== undefined) {
-    query.accountKey = params.accountKey;
+  if (input.accountKey !== undefined) {
+    query.accountKey = input.accountKey;
   }
-  if (params.status !== undefined) {
-    query.status = params.status;
+  if (input.status !== undefined) {
+    query.status = input.status;
   }
-  if (params.limit !== undefined) {
-    query.limit = params.limit;
+  if (input.limit !== undefined) {
+    query.limit = input.limit;
   }
-  if (params.before !== undefined) {
-    query.before = params.before;
+  if (input.before !== undefined) {
+    query.before = input.before;
   }
 
   return query;
@@ -92,8 +90,7 @@ export const listTransactionHistory = async (context: WalletApiContext, input?: 
 };
 
 export const getTransactionDetail = async (context: WalletApiContext, input: WalletApiTransactionDetailInput) => {
-  const params = WalletApiTransactionsSchemas.getDetail.parse(input);
-  return await context.transactions.getTransaction(params.transactionId);
+  return await context.transactions.getTransaction(input.transactionId);
 };
 
 export const requestSendTransactionApproval = async (
@@ -101,7 +98,7 @@ export const requestSendTransactionApproval = async (
   input: RequestSendTransactionApprovalInput,
 ) => {
   assertSessionUnlocked(context);
-  const { request: walletRequest } = WalletApiTransactionsSchemas.requestSendTransactionApproval.parse(input);
+  const walletRequest = input.request;
   const chainRef = resolveWalletTransactionChainRef(context, walletRequest);
   const transactionRequest = buildTransactionRequestFromWalletRequest(walletRequest, chainRef);
   const activeAccount = resolveWalletTransactionAccount(context, transactionRequest);
@@ -124,21 +121,19 @@ export const requestSendTransactionApproval = async (
 
 export const rerunTransactionPrepare = async (context: WalletApiContext, input: RerunTransactionPrepareInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiTransactionsSchemas.rerunPrepare.parse(input);
-  await context.transactions.rerunApprovalPrepare({ approvalId: params.approvalId });
+  await context.transactions.rerunApprovalPrepare({ approvalId: input.approvalId });
   return null;
 };
 
 export const applyTransactionDraftEdit = async (context: WalletApiContext, input: ApplyTransactionDraftEditInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiTransactionsSchemas.applyDraftEdit.parse(input);
   await context.transactions.updateApprovalDraft({
-    approvalId: params.approvalId,
+    approvalId: input.approvalId,
     edit: {
-      namespace: params.edit.namespace,
-      changes: [...params.edit.changes],
+      namespace: input.edit.namespace,
+      changes: [...input.edit.changes],
     },
-    ...(params.mode !== undefined ? { mode: params.mode } : {}),
+    ...(input.mode !== undefined ? { mode: input.mode } : {}),
   });
   return null;
 };

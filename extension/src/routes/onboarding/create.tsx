@@ -4,7 +4,7 @@ import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetup
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildCreateEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 import { isWalletInitialized, isWalletReady } from "@/ui/lib/walletAvailability";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
@@ -60,7 +60,7 @@ function GenerateMnemonicRoute() {
     setIsGenerating(true);
     setError(null);
     try {
-      const response = await uiClient.onboarding.generateMnemonic({ wordCount: 12 });
+      const response = await app.wallet.setup.generateMnemonic({ wordCount: 12 });
       setMnemonicWords(response.words);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -90,8 +90,8 @@ function GenerateMnemonicRoute() {
     let navigatedToBackup = false;
     try {
       const res = vaultInitialized
-        ? await uiClient.keyrings.confirmNewMnemonic({ words })
-        : await uiClient.onboarding.createWalletFromMnemonic({
+        ? await app.wallet.keyrings.confirmNewMnemonic({ words })
+        : await app.wallet.setup.createWalletFromMnemonic({
             password: requireOnboardingPassword(password),
             words,
           });

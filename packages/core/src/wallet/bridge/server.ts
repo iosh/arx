@@ -1,7 +1,7 @@
 import { encodeWalletBridgeError } from "./errorEncoding.js";
 import { WALLET_BRIDGE_PROTOCOL_VERSION, type WalletBridgeReply, type WalletBridgeRequest } from "./protocol.js";
 
-export type WalletBridgeOperationExecutor = {
+export type WalletBridgeMethodExecutor = {
   executeUnknownPath(path: string, input: unknown): Promise<unknown>;
 };
 
@@ -9,7 +9,7 @@ export type WalletBridgeServer = {
   handleRequest(request: WalletBridgeRequest): Promise<WalletBridgeReply>;
 };
 
-export const createWalletBridgeServer = (deps: { executor: WalletBridgeOperationExecutor }): WalletBridgeServer => {
+export const createWalletBridgeServer = (deps: { executor: WalletBridgeMethodExecutor }): WalletBridgeServer => {
   const createErrorReply = (id: string, error: unknown): WalletBridgeReply => ({
     type: "wallet:error",
     version: WALLET_BRIDGE_PROTOCOL_VERSION,

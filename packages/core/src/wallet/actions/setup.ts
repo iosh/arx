@@ -1,6 +1,6 @@
 import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import { KeyringInvalidMnemonicError, KeyringInvalidPrivateKeyError } from "../../keyring/errors.js";
+import { KeyringInvalidMnemonicError } from "../../keyring/errors.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -14,7 +14,6 @@ import type {
   ImportWalletFromPrivateKeyInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiSetupSchemas } from "../schemas/setup.js";
 import { selectCreatedAccount } from "./createdAccountSelection.js";
 
 const sanitizeMnemonicPhraseFromWords = (words: readonly string[]): string =>
@@ -29,15 +28,6 @@ const validateBip39Mnemonic = (mnemonic: string): void => {
   if (!validateMnemonic(mnemonic, wordlist)) {
     throw new KeyringInvalidMnemonicError();
   }
-};
-
-const parsePrivateKeyHex = (value: string): string => {
-  const trimmed = value.trim();
-  const privateKeyHexWithPrefix = trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
-  if (!/^0x[0-9a-fA-F]{64}$/.test(privateKeyHexWithPrefix)) {
-    throw new KeyringInvalidPrivateKeyError();
-  }
-  return privateKeyHexWithPrefix;
 };
 
 const hasAnyOwnedAccounts = (context: WalletApiContext): boolean => {
@@ -68,8 +58,7 @@ const runWalletSetupFlow = async <T>(
 };
 
 export const generateMnemonic = async (context: WalletApiContext, input?: GenerateMnemonicInput) => {
-  const params = WalletApiSetupSchemas.generateMnemonic.parse(input);
-  const mnemonic = context.accounts.generateMnemonic(params?.wordCount ?? 12);
+  const mnemonic = context.accounts.generateMnemonic(input?.wordCount ?? 12);
   return { words: mnemonic.split(" ") };
 };
 
@@ -85,21 +74,20 @@ export const getWalletSetupStatus = (context: WalletApiContext) => {
 };
 
 export const createWalletFromMnemonic = async (context: WalletApiContext, input: CreateWalletFromMnemonicInput) => {
-  const params = WalletApiSetupSchemas.createWalletFromMnemonic.parse(input);
-  const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+  const mnemonic = sanitizeMnemonicPhraseFromWords(input.words);
   validateBip39Mnemonic(mnemonic);
   const command: ConfirmNewMnemonicParams = { mnemonic };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.skipBackup !== undefined) {
-    command.skipBackup = params.skipBackup;
+  if (input.skipBackup !== undefined) {
+    command.skipBackup = input.skipBackup;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
-  const result = await runWalletSetupFlow(context, params.password, async () => {
+  const result = await runWalletSetupFlow(context, input.password, async () => {
     return await context.accounts.confirmNewMnemonic(command);
   });
   const namespace = command.namespace ?? context.networks.getSelectedNamespace();
@@ -108,18 +96,17 @@ export const createWalletFromMnemonic = async (context: WalletApiContext, input:
 };
 
 export const importWalletFromMnemonic = async (context: WalletApiContext, input: ImportWalletFromMnemonicInput) => {
-  const params = WalletApiSetupSchemas.importWalletFromMnemonic.parse(input);
-  const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+  const mnemonic = sanitizeMnemonicPhraseFromWords(input.words);
   validateBip39Mnemonic(mnemonic);
   const command: ImportMnemonicParams = { mnemonic };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
-  const result = await runWalletSetupFlow(context, params.password, async () => {
+  const result = await runWalletSetupFlow(context, input.password, async () => {
     return await context.accounts.importMnemonic(command);
   });
   const namespace = command.namespace ?? context.networks.getSelectedNamespace();
@@ -128,17 +115,15 @@ export const importWalletFromMnemonic = async (context: WalletApiContext, input:
 };
 
 export const importWalletFromPrivateKey = async (context: WalletApiContext, input: ImportWalletFromPrivateKeyInput) => {
-  const params = WalletApiSetupSchemas.importWalletFromPrivateKey.parse(input);
-  const privateKey = parsePrivateKeyHex(params.privateKey);
-  const command: ImportPrivateKeyParams = { privateKey };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  const command: ImportPrivateKeyParams = { privateKey: input.privateKey };
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
-  const result = await runWalletSetupFlow(context, params.password, async () => {
+  const result = await runWalletSetupFlow(context, input.password, async () => {
     return await context.accounts.importPrivateKey(command);
   });
   const namespace = command.namespace ?? context.networks.getSelectedNamespace();

@@ -1,6 +1,6 @@
 import { ArxBaseError, type ErrorCause, type SerializedArxError } from "../../error.js";
-import { createWalletOperationClient, type WalletOperationClient } from "../operationClient.js";
-import { walletOperations } from "../operations.js";
+import type { TrustedWalletApi } from "../api.js";
+import { createTrustedWalletApiFromCall, type TrustedWalletApiCall } from "../apiFromCall.js";
 import { WALLET_BRIDGE_PROTOCOL_VERSION, type WalletBridgeReply, type WalletBridgeRequest } from "./protocol.js";
 
 export type WalletBridgeClientTransport = {
@@ -11,7 +11,7 @@ export type RemoteTrustedWalletClientOptions = {
   createRequestId?: () => string;
 };
 
-export type RemoteTrustedWalletClient = WalletOperationClient<typeof walletOperations>;
+export type RemoteTrustedWalletClient = TrustedWalletApi;
 
 export class WalletBridgeRemoteError extends ArxBaseError {
   static readonly code = "wallet.bridge.remote";
@@ -73,7 +73,7 @@ export class WalletBridgeTransportError extends ArxBaseError {
 
 const defaultCreateRequestId = () => globalThis.crypto.randomUUID();
 
-const sendRemoteWalletOperation = async (deps: {
+const sendRemoteWalletMethod = async (deps: {
   path: string;
   input: unknown;
   transport: WalletBridgeClientTransport;
@@ -115,14 +115,13 @@ export const createRemoteTrustedWalletClient = (
   options: RemoteTrustedWalletClientOptions = {},
 ): RemoteTrustedWalletClient => {
   const createRequestId = options.createRequestId ?? defaultCreateRequestId;
-  return createWalletOperationClient({
-    operations: walletOperations,
-    call: (path, input) =>
-      sendRemoteWalletOperation({
-        path,
-        input,
-        transport,
-        createRequestId,
-      }),
-  });
+  const call: TrustedWalletApiCall = async <TResult>(path: string, input?: unknown): Promise<TResult> =>
+    (await sendRemoteWalletMethod({
+      path,
+      input,
+      transport,
+      createRequestId,
+    })) as TResult;
+
+  return createTrustedWalletApiFromCall(call);
 };

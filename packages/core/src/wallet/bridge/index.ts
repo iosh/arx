@@ -24,5 +24,5 @@ export {
   parseWalletBridgeRequest,
   WALLET_BRIDGE_PROTOCOL_VERSION,
 } from "./protocol.js";
-export type { WalletBridgeOperationExecutor, WalletBridgeServer } from "./server.js";
+export type { WalletBridgeMethodExecutor, WalletBridgeServer } from "./server.js";
 export { createWalletBridgeServer } from "./server.js";

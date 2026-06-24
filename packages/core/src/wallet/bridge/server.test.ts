@@ -1,26 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
-import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
-import { createWalletOperationExecutor, type WalletOperationHandlerTree } from "../executor.js";
-import { defineWalletOperation, type WalletOperations } from "../operation.js";
+import { RpcInternalError, RpcUnsupportedMethodError } from "../../rpc/errors.js";
+import { createWalletMethodExecutor, type WalletMethodHandlerTree } from "../executor.js";
 import { createWalletBridgeServer } from "./server.js";
 
 const createTestServer = () => {
-  const operations = {
+  type TestApi = {
     setup: {
-      getStatus: defineWalletOperation<{ availability: "uninitialized" }>()({ input: z.undefined() }),
-    },
-  } as const satisfies WalletOperations;
+      getStatus(): Promise<{ availability: "uninitialized" }>;
+    };
+    session: {
+      unlock(input: { password: string }): Promise<{ status: "unlocked"; passwordLength: number }>;
+    };
+  };
 
   const handlers = {
     setup: {
       getStatus: () => ({ availability: "uninitialized" as const }),
     },
-  } as const satisfies WalletOperationHandlerTree<undefined, typeof operations>;
+    session: {
+      unlock: (_context, input) => ({ status: "unlocked" as const, passwordLength: input.password.length }),
+    },
+  } as const satisfies WalletMethodHandlerTree<undefined, TestApi>;
 
-  const executor = createWalletOperationExecutor({
+  const executor = createWalletMethodExecutor({
     context: undefined,
-    operations,
     handlers,
   });
 
@@ -28,7 +31,7 @@ const createTestServer = () => {
 };
 
 describe("wallet bridge server", () => {
-  it("handles valid requests through the wallet operation executor", async () => {
+  it("handles valid requests through the wallet method executor", async () => {
     const server = createTestServer();
 
     await expect(
@@ -44,9 +47,24 @@ describe("wallet bridge server", () => {
       id: "request-1",
       result: { availability: "uninitialized" },
     });
+
+    await expect(
+      server.handleRequest({
+        type: "wallet:request",
+        version: 1,
+        id: "request-2",
+        path: "session.unlock",
+        input: { password: "secret" },
+      }),
+    ).resolves.toEqual({
+      type: "wallet:response",
+      version: 1,
+      id: "request-2",
+      result: { status: "unlocked", passwordLength: 6 },
+    });
   });
 
-  it("encodes invalid params and unsupported paths as bridge errors", async () => {
+  it("encodes unsupported paths as bridge errors", async () => {
     const server = createTestServer();
 
     await expect(
@@ -54,25 +72,11 @@ describe("wallet bridge server", () => {
         type: "wallet:request",
         version: 1,
         id: "request-1",
-        path: "setup.getStatus",
-        input: {},
-      }),
-    ).resolves.toMatchObject({
-      type: "wallet:error",
-      id: "request-1",
-      error: { code: RpcInvalidParamsError.code },
-    });
-
-    await expect(
-      server.handleRequest({
-        type: "wallet:request",
-        version: 1,
-        id: "request-2",
         path: "setup.missing",
       }),
     ).resolves.toMatchObject({
       type: "wallet:error",
-      id: "request-2",
+      id: "request-1",
       error: { code: RpcUnsupportedMethodError.code },
     });
   });

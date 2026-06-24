@@ -1,4 +1,10 @@
-import type { ApprovalListEntry, UiBackupStatus, UiMethodResult } from "@arx/core/ui";
+import type { ApprovalListEntry } from "@arx/core/ui";
+import type {
+  WalletApiAccountsForCurrentChainResult,
+  WalletApiBackupStatusResult,
+  WalletApiChainSnapshot,
+  WalletApiNativeBalanceResult,
+} from "@arx/core/wallet";
 import {
   Activity,
   ArrowDownLeft,
@@ -27,11 +33,11 @@ import {
 import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
-  chain: UiMethodResult<"ui.networks.getSelectedChain">;
-  accounts: UiMethodResult<"ui.accounts.listCurrentChain">;
-  backupStatus: UiBackupStatus;
+  chain: WalletApiChainSnapshot;
+  accounts: WalletApiAccountsForCurrentChainResult;
+  backupStatus: WalletApiBackupStatusResult;
   approvals: ApprovalListEntry[];
-  nativeBalance: UiMethodResult<"ui.balances.getNative"> | null;
+  nativeBalance: WalletApiNativeBalanceResult | null;
   nativeBalanceLoading: boolean;
   nativeBalanceError: string | null;
   onMarkBackedUp: (keyringId: string) => Promise<void>;

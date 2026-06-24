@@ -1,9 +1,9 @@
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
-export type SendApprovalInput = Parameters<typeof uiClient.transactions.requestSendTransactionApproval>[0];
+export type SendApprovalInput = Parameters<typeof app.wallet.transactions.requestSendTransactionApproval>[0];
 
 /** Owns the send page's submission state and approval navigation flow. */
 export function useSendApprovalAction() {
@@ -18,7 +18,7 @@ export function useSendApprovalAction() {
     setErrorMessage(null);
 
     try {
-      const { approvalId } = await uiClient.transactions.requestSendTransactionApproval(input);
+      const { approvalId } = await app.wallet.transactions.requestSendTransactionApproval(input);
       await router.navigate({
         to: "/approve/$approvalId",
         params: { approvalId },

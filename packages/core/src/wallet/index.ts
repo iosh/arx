@@ -33,29 +33,7 @@ export type {
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
 } from "./api.js";
-export { WalletOperationBindingInvariantError } from "./errors.js";
-export type {
-  WalletOperation,
-  WalletOperationPath,
-  WalletOperations,
-} from "./operation.js";
-export { defineWalletOperation } from "./operation.js";
-export { walletOperations } from "./operations.js";
-export {
-  ApprovalResolveInputSchema,
-  WalletApiAccountsSchemas,
-  WalletApiApprovalsSchemas,
-  WalletApiBalancesSchemas,
-  WalletApiChainsSchemas,
-  WalletApiEip155TransactionDraftChangeSchema,
-  WalletApiKeyringsSchemas,
-  WalletApiNamespaceTransactionDraftEditSchema,
-  WalletApiSchemas,
-  WalletApiSessionSchemas,
-  WalletApiSetupSchemas,
-  WalletApiSharedSchemas,
-  WalletApiTransactionsSchemas,
-} from "./schemas.js";
+export { WalletMethodBindingInvariantError } from "./errors.js";
 export type {
   WalletApiAccountsByKeyringResult,
   WalletApiAccountsForCurrentChainResult,

@@ -1,7 +1,6 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { SwitchActiveAccountInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiAccountsSchemas } from "../schemas/accounts.js";
 
 const buildCurrentChainAccountSummary = (account: {
   accountKey: string;
@@ -30,12 +29,11 @@ export const listAccountsForCurrentChain = (context: WalletApiContext) => {
 };
 
 export const switchActiveAccount = async (context: WalletApiContext, input: SwitchActiveAccountInput) => {
-  const params = WalletApiAccountsSchemas.switchActive.parse(input);
-  const { namespace } = parseChainRef(params.chainRef);
+  const { namespace } = parseChainRef(input.chainRef);
   const active = await context.accounts.setActiveAccount({
     namespace,
-    chainRef: params.chainRef,
-    accountKey: params.accountKey ?? null,
+    chainRef: input.chainRef,
+    accountKey: input.accountKey ?? null,
   });
 
   return active ? buildCurrentChainAccountSummary(active) : null;

@@ -3,7 +3,6 @@ import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.
 import { buildTransactionTerminalReason } from "../../transactions/index.js";
 import type { ResolveApprovalInput, WalletApiApprovalDetailInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiApprovalsSchemas } from "../schemas/approvals.js";
 
 const toApprovalResolveInput = (input: ResolveApprovalInput): ApprovalResolveInput => {
   if (input.action === "approve") {
@@ -20,46 +19,44 @@ const toApprovalResolveInput = (input: ResolveApprovalInput): ApprovalResolveInp
 export const listPendingApprovals = async (context: WalletApiContext) => await context.approvalDetails.listPending();
 
 export const getApprovalDetail = async (context: WalletApiContext, input: WalletApiApprovalDetailInput) => {
-  const params = WalletApiApprovalsSchemas.getDetail.parse(input);
-  return await context.approvalDetails.getDetail(params.approvalId);
+  return await context.approvalDetails.getDetail(input.approvalId);
 };
 
 export const resolveApproval = async (context: WalletApiContext, input: ResolveApprovalInput) => {
-  const params = WalletApiApprovalsSchemas.resolve.parse(input);
-  const transactionApproval = context.transactions.getTransactionApproval(params.approvalId);
+  const transactionApproval = context.transactions.getTransactionApproval(input.approvalId);
   if (!transactionApproval) {
-    await context.approvals.resolve(toApprovalResolveInput(params));
+    await context.approvals.resolve(toApprovalResolveInput(input));
     return null;
   }
 
-  if (params.action === "reject") {
+  if (input.action === "reject") {
     await context.transactions.rejectTransactionApproval({
-      approvalId: params.approvalId,
+      approvalId: input.approvalId,
       reason: buildTransactionTerminalReason({
         kind: "user_rejected",
-        message: params.reason ?? "User rejected",
+        message: input.reason ?? "User rejected",
         code: "transaction.user_rejected",
       }),
     });
     return null;
   }
 
-  if (!params.expectedPrepareId) {
+  if (!input.expectedPrepareId) {
     throw new RpcInvalidParamsError({
       message: "Send-transaction approval requires expectedPrepareId.",
-      details: { approvalId: params.approvalId },
+      details: { approvalId: input.approvalId },
     });
   }
 
   const result = await context.transactions.approveAndSubmitTransaction({
-    approvalId: params.approvalId,
-    expectedPrepareId: params.expectedPrepareId,
+    approvalId: input.approvalId,
+    expectedPrepareId: input.expectedPrepareId,
   });
 
   if (result.status !== "submitted") {
     throw new RpcInvalidRequestError({
       message: "Transaction approval changed. Review it again.",
-      details: { approvalId: params.approvalId, status: result.status },
+      details: { approvalId: input.approvalId, status: result.status },
     });
   }
 

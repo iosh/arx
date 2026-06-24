@@ -7,7 +7,7 @@ import { useRefreshUiNetworksStatus, useUiNetworksStatus } from "@/ui/hooks/useU
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/networks")({
   beforeLoad: requireVaultInitialized,
@@ -19,7 +19,7 @@ function NetworkSwitchPage() {
   const networksQuery = useUiNetworksStatus();
   const refreshNetworksStatus = useRefreshUiNetworksStatus();
   const switchChainMutation = useMutation({
-    mutationFn: (chainRef: string) => uiClient.networks.switchActive({ chainRef }),
+    mutationFn: (chainRef: string) => app.wallet.networks.select({ chainRef }),
     onSuccess: async () => {
       await refreshNetworksStatus();
     },

@@ -7,7 +7,7 @@ import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetup
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: requireVaultInitialized,
@@ -24,13 +24,13 @@ function SettingsPage() {
   const setupStatusQuery = useUiSetupStatus();
   const refreshSetupStatus = useRefreshUiSetupStatus();
   const setAutoLockDurationMutation = useMutation({
-    mutationFn: (durationMs: number) => uiClient.session.setAutoLockDuration({ durationMs }),
+    mutationFn: (durationMs: number) => app.wallet.session.setAutoLockDuration({ durationMs }),
     onSuccess: async () => {
       await refreshSetupStatus();
     },
   });
   const lockMutation = useMutation({
-    mutationFn: () => uiClient.session.lock(),
+    mutationFn: () => app.wallet.session.lock(),
     onSuccess: async () => {
       await refreshSetupStatus();
     },

@@ -35,7 +35,7 @@ import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
 import type { WalletBridgeServer } from "../wallet/bridge/server.js";
 import { createWalletBridgeServer as createWalletBridgeProtocolServer } from "../wallet/bridge/server.js";
 import type { WalletApiContext } from "../wallet/context.js";
-import { createTrustedWalletApi, createTrustedWalletOperationExecutor } from "../wallet/createTrustedWalletApi.js";
+import { createTrustedWalletApi, createTrustedWalletMethodExecutor } from "../wallet/createTrustedWalletApi.js";
 import type { TrustedWalletApi } from "../wallet/index.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
@@ -572,7 +572,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const createUiAccess = (options: WalletCreateUiOptions) =>
     createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, options));
   const createWalletBridgeServer = (options: WalletCreateWalletBridgeOptions): WalletBridgeServer => {
-    const executor = createTrustedWalletOperationExecutor(
+    const executor = createTrustedWalletMethodExecutor(
       createTrustedWalletApiContext(runtimeCore, approvalReadService, {
         createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
         origin: options.uiOrigin,

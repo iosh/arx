@@ -24,7 +24,7 @@ import { formatPrivateKeyHex, isValidPrivateKey } from "@/ui/lib/privateKeyInput
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 import { createUiKeyringsQueryOptions } from "@/ui/lib/uiKeyringQueries";
 
 export const Route = createFileRoute("/accounts")({
@@ -40,20 +40,20 @@ function AccountsPage() {
   const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const switchAccountMutation = useMutation({
     mutationFn: ({ chainRef, accountKey }: { chainRef: string; accountKey?: string | null }) =>
-      uiClient.accounts.switchActive({ chainRef, accountKey }),
+      app.wallet.accounts.switchActive({ chainRef, accountKey }),
     onSuccess: async () => {
       await refreshCurrentChainAccounts();
     },
   });
   const deriveAccountMutation = useMutation({
-    mutationFn: (params: { keyringId: string }) => uiClient.keyrings.deriveAccount(params),
+    mutationFn: (params: { keyringId: string }) => app.wallet.keyrings.deriveAccount(params),
     onSuccess: async () => {
       await refreshCurrentChainAccounts();
     },
   });
   const importPrivateKeyMutation = useMutation({
     mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
-      uiClient.keyrings.importPrivateKey(params),
+      app.wallet.keyrings.importPrivateKey(params),
     onSuccess: async () => {
       await refreshCurrentChainAccounts();
     },

@@ -5,6 +5,9 @@ import { isUiEventName, isUiMethodName, parseUiMethodParams } from "./protocol/i
 
 describe("ui protocol registry", () => {
   it("recognizes method/event names", () => {
+    expect(isUiMethodName("ui.entry.getLaunchContext")).toBe(true);
+    expect(isUiMethodName("ui.onboarding.openTab")).toBe(true);
+    expect(isUiMethodName("ui.session.getStatus")).toBe(false);
     expect(isUiMethodName("ui.snapshot.get")).toBe(false);
     expect(isUiMethodName("ui.snapshot.nope")).toBe(false);
 
@@ -15,55 +18,13 @@ describe("ui protocol registry", () => {
   });
 
   it("validates method params (strict)", () => {
-    const params = parseUiMethodParams("ui.session.setAutoLockDuration", { durationMs: 60_000 });
-    expect(params.durationMs).toBe(60_000);
-    expect(() => parseUiMethodParams("ui.session.setAutoLockDuration", { durationMs: "60_000" })).toThrow();
-
-    expect(parseUiMethodParams("ui.session.lock", undefined)).toEqual({ reason: "manual" });
-    expect(parseUiMethodParams("ui.session.lock", {})).toEqual({ reason: "manual" });
-    expect(() => parseUiMethodParams("ui.session.lock", { reason: "__bad__" })).toThrow();
-
-    expect(
-      parseUiMethodParams("ui.approvals.resolve", {
-        approvalId: "approval-1",
-        action: "approve",
-        decision: {
-          accountKeys: ["eip155:0000000000000000000000000000000000000000"],
-        },
-      }),
-    ).toMatchObject({
-      approvalId: "approval-1",
-      action: "approve",
-    });
-    expect(() =>
-      parseUiMethodParams("ui.approvals.resolve", {
-        approvalId: "approval-1",
-        action: "approve",
-        decision: {
-          accountKeys: [
-            "eip155:0000000000000000000000000000000000000000",
-            "eip155:0000000000000000000000000000000000000000",
-          ],
-        },
-      }),
-    ).toThrow();
-
-    expect(parseUiMethodParams("ui.approvals.getDetail", { approvalId: "approval-1" })).toEqual({
-      approvalId: "approval-1",
-    });
-    expect(parseUiMethodParams("ui.transactions.listHistory", { status: "submitted", limit: 10 })).toEqual({
-      status: "submitted",
-      limit: 10,
-    });
-    expect(parseUiMethodParams("ui.transactions.getDetail", { transactionId: "tx-1" })).toEqual({
-      transactionId: "tx-1",
-    });
-    expect(parseUiMethodParams("ui.transactions.rerunPrepare", { approvalId: "approval-1" })).toEqual({
-      approvalId: "approval-1",
-    });
     expect(parseUiMethodParams("ui.entry.getBootstrap", { environment: "notification" })).toEqual({
       environment: "notification",
     });
+    expect(parseUiMethodParams("ui.onboarding.openTab", { reason: "manual_open" })).toEqual({
+      reason: "manual_open",
+    });
+    expect(() => parseUiMethodParams("ui.entry.getBootstrap", { environment: "sidepanel" })).toThrow();
   });
 });
 
@@ -73,9 +34,10 @@ describe("ui envelope parsing", () => {
       parseUiEnvelope({
         type: "ui:request",
         id: "1",
-        method: "ui.session.getStatus",
+        method: "ui.entry.getLaunchContext",
+        params: { environment: "popup" },
       }),
-    ).toMatchObject({ type: "ui:request", id: "1", method: "ui.session.getStatus" });
+    ).toMatchObject({ type: "ui:request", id: "1", method: "ui.entry.getLaunchContext" });
 
     expect(
       parseUiEnvelope({

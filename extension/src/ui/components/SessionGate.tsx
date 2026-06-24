@@ -1,10 +1,10 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiSessionStatusResult } from "@arx/core/wallet";
 import type { ReactNode } from "react";
 import { UnlockScreen } from "@/ui/screens/UnlockScreen";
 import { LoadingScreen } from "./LoadingScreen";
 
 type SessionGateProps = {
-  sessionStatus?: UiMethodResult<"ui.session.getStatus">;
+  sessionStatus?: WalletApiSessionStatusResult;
   isLoading: boolean;
   unlock: (password: string) => Promise<unknown>;
   children: ReactNode;

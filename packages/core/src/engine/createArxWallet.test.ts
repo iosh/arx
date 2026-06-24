@@ -497,14 +497,14 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes engine-owned provider and UI contracts", async () => {
+  it("exposes engine-owned provider, UI events, and trusted wallet API contracts", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
     });
 
     try {
-      const { wallet } = runtime;
+      const { wallet, walletApi } = runtime;
       const provider = wallet.createProvider();
       const ui = wallet.createUi({
         platform: createUiPlatform(),
@@ -522,16 +522,14 @@ describe("createArxWallet", () => {
           }),
         ]),
       );
-      await expect(ui.dispatch({ method: "ui.session.getStatus" })).resolves.toMatchObject({
+      await expect(walletApi.session.getStatus()).resolves.toMatchObject({
         vaultInitialized: true,
         isUnlocked: false,
       });
       events.length = 0;
-      await expect(ui.dispatch({ method: "ui.session.unlock", params: { password: PASSWORD } })).resolves.toMatchObject(
-        {
-          status: "unlocked",
-        },
-      );
+      await expect(walletApi.session.unlock({ password: PASSWORD })).resolves.toMatchObject({
+        status: "unlocked",
+      });
       expect(events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -543,8 +541,8 @@ describe("createArxWallet", () => {
       await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       wallet.session.lock("manual");
 
-      await expect(ui.dispatch({ method: "ui.session.getStatus" })).resolves.toMatchObject({ isUnlocked: false });
-      await expect(ui.dispatch({ method: "ui.accounts.listCurrentChain" })).resolves.toMatchObject({
+      await expect(walletApi.session.getStatus()).resolves.toMatchObject({ isUnlocked: false });
+      await expect(walletApi.accounts.listCurrentChain()).resolves.toMatchObject({
         totalCount: 1,
         active: {
           accountKey: ACCOUNT_KEY,

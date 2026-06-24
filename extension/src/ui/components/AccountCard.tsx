@@ -1,4 +1,4 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiNativeBalanceResult } from "@arx/core/wallet";
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Paragraph, useTheme, XStack, YStack } from "tamagui";
@@ -10,7 +10,7 @@ import { Button } from "./Button";
 export type AccountCardProps = {
   address: string | null;
   displayAddress: string | null;
-  nativeBalance: UiMethodResult<"ui.balances.getNative"> | null;
+  nativeBalance: WalletApiNativeBalanceResult | null;
   balanceLoading: boolean;
   balanceError: string | null;
   fallbackCurrencySymbol: string;

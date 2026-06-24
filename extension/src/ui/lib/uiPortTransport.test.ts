@@ -112,14 +112,26 @@ describe("createBrowserPortChannel", () => {
     const connectPromise = transport.connect(); // Don't await; keep it not-ready.
     await Promise.resolve(); // ensure port exists but not ready
 
-    expect(() => transport.postMessage({ type: "ui:request", id: "1", method: "ui.session.getStatus" })).toThrow(
-      /not ready/i,
-    );
+    expect(() =>
+      transport.postMessage({
+        type: "ui:request",
+        id: "1",
+        method: "ui.entry.getLaunchContext",
+        params: { environment: "popup" },
+      }),
+    ).toThrow(/not ready/i);
 
     port.emitMessage({ type: "ui:event", event: UI_EVENT_READY, payload: { ready: true } });
     await connectPromise;
 
-    expect(() => transport.postMessage({ type: "ui:request", id: "2", method: "ui.session.getStatus" })).not.toThrow();
+    expect(() =>
+      transport.postMessage({
+        type: "ui:request",
+        id: "2",
+        method: "ui.entry.getLaunchContext",
+        params: { environment: "popup" },
+      }),
+    ).not.toThrow();
   });
 
   it("ignores stale port disconnect after a retry connects a new port", async () => {

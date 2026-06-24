@@ -1,9 +1,3 @@
-import type { AccountSelectionService } from "../../accounts/runtime/types.js";
-import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
-import type { AttentionService } from "../../services/runtime/attention/index.js";
-import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
-import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
-import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type {
   TransactionApprovalsChangedHandler,
   TransactionsChangedHandler,
@@ -11,8 +5,6 @@ import type {
 import type { TrustedWalletApi } from "../../wallet/api.js";
 import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
-import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
-import type { UiApprovalResolveResult } from "./approvals/resolveService.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
@@ -51,46 +43,6 @@ export type UiResolvedContext = {
 };
 
 export type UiContextResolver = () => Promise<UiResolvedContext>;
-
-export type UiAccountsAccess = Pick<
-  AccountSelectionService,
-  "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "setActiveAccount"
->;
-
-export type UiApprovalsReadModelAccess = {
-  listPendingEntries(): Awaitable<ApprovalListEntry[]>;
-  getDetail(id: string): Awaitable<ApprovalDetail | null>;
-};
-
-export type UiApprovalsWriteAccess = {
-  resolve(input: UiMethodParams<"ui.approvals.resolve">): Awaitable<UiApprovalResolveResult>;
-};
-
-export type UiApprovalsAccess = {
-  read: UiApprovalsReadModelAccess;
-  write: UiApprovalsWriteAccess;
-};
-
-export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
-
-export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
-  Pick<
-    ChainViewsService,
-    | "buildWalletNetworksSnapshot"
-    | "findAvailableChainView"
-    | "getApprovalReviewChainView"
-    | "getActiveChainViewForNamespace"
-    | "getSelectedNamespace"
-    | "getSelectedChainView"
-    | "requireAvailableChainDefinition"
-  >;
-
-export type UiAttentionAccess = Pick<AttentionService, "getSnapshot">;
-
-export type UiNamespaceBindingsAccess = Pick<
-  NamespaceRuntimeBindingsRegistry,
-  "getUi" | "hasTransactionReceiptTracking"
->;
 
 export type UiEventSource = {
   onSessionChanged(listener: () => void): () => void;

@@ -174,10 +174,7 @@ const createActiveAccount = async (
   return address;
 };
 
-const createHandlersForRuntime = (
-  runtime: ReturnType<typeof createBackgroundRuntime>,
-  options?: { extensions?: readonly UiServerExtension[] },
-) => {
+const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   const approvalReadService = createApprovalReadService({
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
@@ -202,7 +199,7 @@ const createHandlersForRuntime = (
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  const wallet = createTrustedWalletApi({
+  return createTrustedWalletApi({
     session: walletSession,
     accounts: walletAccounts,
     networks: walletNetworks,
@@ -221,6 +218,13 @@ const createHandlersForRuntime = (
     namespaceBindings: runtime.services.namespaceBindings,
     transactions: runtime.transactions,
   });
+};
+
+const createHandlersForRuntime = (
+  runtime: ReturnType<typeof createBackgroundRuntime>,
+  options?: { extensions?: readonly UiServerExtension[] },
+) => {
+  const wallet = createTrustedWalletApiForRuntime(runtime);
 
   return createUiServerRuntime({
     wallet,
@@ -350,7 +354,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("resolves unlocked session state through ui.session.unlock", async () => {
+  it("resolves unlocked session state through wallet.session.unlock", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
     });
@@ -359,8 +363,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await runtime.services.session.createVault({ password: "test" });
 
-    const handlers = createHandlersForRuntime(runtime);
-    const result = await handlers["ui.session.unlock"]({ password: "test" });
+    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const result = await wallet.session.unlock({ password: "test" });
 
     expect(result).toMatchObject({
       status: "unlocked",
@@ -368,7 +372,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("persists selectedNamespace-derived UI chain when ui.networks.switchActive succeeds", async () => {
+  it("persists selectedNamespace-derived UI chain when wallet.networks.select succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
@@ -394,10 +398,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     expect(walletChainSelectionPort.saved.length).toBe(0);
-    await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
+    await wallet.networks.select({ chainRef: ALT_CHAIN.chainRef });
     await flushAsync();
 
     expect(walletChainSelectionPort.saved.length).toBeGreaterThan(0);
@@ -409,7 +413,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("does not change permissions when ui.networks.switchActive succeeds", async () => {
+  it("does not change permissions when wallet.networks.select succeeds", async () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const runtime = createTestRuntime({
       chainSeed,
@@ -434,10 +438,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       ],
     });
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     const before = structuredClone(runtime.services.permissions.getState());
-    await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
+    await wallet.networks.select({ chainRef: ALT_CHAIN.chainRef });
 
     expect(runtime.services.permissions.getState()).toEqual(before);
 
@@ -469,7 +473,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       ],
     });
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     const approvalPromise = runtime.services.approvals.create(
       {
@@ -492,7 +496,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const before = structuredClone(runtime.services.permissions.getState());
     await expect(
-      handlers["ui.approvals.resolve"]({ approvalId: "switch-chain-approval", action: "approve" }),
+      wallet.approvals.resolve({ approvalId: "switch-chain-approval", action: "approve" }),
     ).resolves.toBeNull();
     await expect(approvalPromise).resolves.toBeNull();
     expect(runtime.services.permissions.getState()).toEqual(before);
@@ -500,7 +504,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("resolves ui.balances.getNative via namespace runtime bindings", async () => {
+  it("resolves wallet.balances.getNative via namespace runtime bindings", async () => {
     const getBalance = vi.fn(async () => "0xde0b6b3a7640000");
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
@@ -532,7 +536,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasTransactionReceiptTracking: true,
     });
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     const activeAccount = runtime.services.accounts.getActiveAccountForNamespace({
       namespace: MAINNET_CHAIN.namespace,
@@ -543,7 +547,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     }
 
     await expect(
-      handlers["ui.balances.getNative"]({
+      wallet.balances.getNative({
         chainRef: MAINNET_CHAIN.chainRef,
         accountKey: activeAccount.accountKey,
       }),
@@ -672,10 +676,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     await expect(
-      handlers["ui.transactions.requestSendTransactionApproval"]({
+      wallet.transactions.requestSendTransactionApproval({
         request: {
           namespace: "eip155",
           payload: {
@@ -786,9 +790,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     const from = await createActiveAccount(runtime);
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
-    const result = await handlers["ui.transactions.requestSendTransactionApproval"]({
+    const result = await wallet.transactions.requestSendTransactionApproval({
       request: {
         namespace: "eip155",
         payload: {
@@ -818,27 +822,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("rejects extension handlers that override common UI methods", () => {
-    const runtime = createTestRuntime({
-      chainSeed: [MAINNET_CHAIN],
-    });
-
-    const overrideResolveExtension = {
-      id: "test.overrideResolve",
-      createHandlers: () => ({
-        "ui.approvals.resolve": (async () => ({
-          approvalId: "approval-id",
-          status: "rejected" as const,
-          terminalReason: "user_reject" as const,
-        })) as never,
-      }),
-    } satisfies UiServerExtension;
-
-    expect(() => createHandlersForRuntime(runtime, { extensions: [overrideResolveExtension] })).toThrow(
-      'UI method "ui.approvals.resolve" is already registered by "core.uiCommon" and cannot be registered again by "test.overrideResolve"',
-    );
-  });
-
   it("rejects conflicting UI methods across extensions", () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
@@ -865,7 +848,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     );
   });
 
-  it("reuses one UI surface correlation token per UiRuntimeAccess instance", async () => {
+  it("creates wallet transaction approvals across trusted wallet api instances", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -888,61 +871,35 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const platform = {
-      openOnboardingTab: async () => ({ activationPath: "create" as const }),
-      openNotificationPopup: async () => ({ activationPath: "create" as const }),
-    };
+    const firstWallet = createTrustedWalletApiForRuntime(runtime);
 
-    const firstUiAccess = runtime.createUiAccess({
-      platform,
-      uiOrigin: "chrome-extension://arx",
-    });
-
-    await firstUiAccess.dispatchRequest({
-      type: "ui:request",
-      id: "1",
-      method: "ui.transactions.requestSendTransactionApproval",
-      params: {
-        request: {
-          namespace: "eip155",
-          payload: {
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x2386f26fc10000",
-          },
+    await firstWallet.transactions.requestSendTransactionApproval({
+      request: {
+        namespace: "eip155",
+        payload: {
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x2386f26fc10000",
         },
       },
     });
-    await firstUiAccess.dispatchRequest({
-      type: "ui:request",
-      id: "2",
-      method: "ui.transactions.requestSendTransactionApproval",
-      params: {
-        request: {
-          namespace: "eip155",
-          payload: {
-            to: "0xcccccccccccccccccccccccccccccccccccccccc",
-            value: "0x470de4df820000",
-          },
+    await firstWallet.transactions.requestSendTransactionApproval({
+      request: {
+        namespace: "eip155",
+        payload: {
+          to: "0xcccccccccccccccccccccccccccccccccccccccc",
+          value: "0x470de4df820000",
         },
       },
     });
 
-    const secondUiAccess = runtime.createUiAccess({
-      platform,
-      uiOrigin: "chrome-extension://arx",
-    });
+    const secondWallet = createTrustedWalletApiForRuntime(runtime);
 
-    await secondUiAccess.dispatchRequest({
-      type: "ui:request",
-      id: "3",
-      method: "ui.transactions.requestSendTransactionApproval",
-      params: {
-        request: {
-          namespace: "eip155",
-          payload: {
-            to: "0xdddddddddddddddddddddddddddddddddddddddd",
-            value: "0x6a94d74f430000",
-          },
+    await secondWallet.transactions.requestSendTransactionApproval({
+      request: {
+        namespace: "eip155",
+        payload: {
+          to: "0xdddddddddddddddddddddddddddddddddddddddd",
+          value: "0x6a94d74f430000",
         },
       },
     });
@@ -964,10 +921,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(new Error("create approval failed"));
 
-    const handlers = createHandlersForRuntime(runtime);
+    const wallet = createTrustedWalletApiForRuntime(runtime);
 
     await expect(
-      handlers["ui.transactions.requestSendTransactionApproval"]({
+      wallet.transactions.requestSendTransactionApproval({
         request: {
           namespace: "eip155",
           payload: {

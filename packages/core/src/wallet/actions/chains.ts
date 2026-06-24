@@ -1,6 +1,5 @@
 import type { SelectWalletChainInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiChainsSchemas } from "../schemas/chains.js";
 
 export const getSelectedWalletChainRefForNamespace = (context: WalletApiContext, namespace: string): string => {
   try {
@@ -20,7 +19,6 @@ export const getSelectedWalletChain = (context: WalletApiContext) => context.net
 export const listWalletNetworks = (context: WalletApiContext) => context.networks.buildWalletNetworksSnapshot();
 
 export const selectWalletChain = async (context: WalletApiContext, input: SelectWalletChainInput) => {
-  const params = WalletApiChainsSchemas.selectWalletChain.parse(input);
-  await context.networks.selectChain(params.chainRef);
+  await context.networks.selectChain(input.chainRef);
   return context.networks.getSelectedChainView();
 };

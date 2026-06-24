@@ -1,4 +1,4 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiAccountsForCurrentChainResult, WalletApiChainSnapshot } from "@arx/core/wallet";
 import { ArrowUpRight } from "lucide-react";
 import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
@@ -16,8 +16,8 @@ const normalizeEvmAddressInput = (value: string) => {
 };
 
 type SendScreenProps = {
-  chain: UiMethodResult<"ui.networks.getSelectedChain">;
-  accounts: UiMethodResult<"ui.accounts.listCurrentChain">;
+  chain: WalletApiChainSnapshot;
+  accounts: WalletApiAccountsForCurrentChainResult;
   pending: boolean;
   errorMessage: string | null;
   onSubmit: (params: { to: string; value: Hex.Hex }) => void;

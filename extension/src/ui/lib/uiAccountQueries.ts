@@ -1,20 +1,24 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type {
+  WalletApiAccountsForCurrentChainResult,
+  WalletApiChainSnapshot,
+  WalletApiSessionStatusResult,
+} from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
 export const UI_CURRENT_CHAIN_ACCOUNTS_QUERY_KEY = ["uiCurrentChainAccounts"] as const;
 
 export type UiCurrentChainAccountsStatus = {
-  session: UiMethodResult<"ui.session.getStatus">;
-  chain: UiMethodResult<"ui.networks.getSelectedChain">;
-  accounts: UiMethodResult<"ui.accounts.listCurrentChain">;
+  session: WalletApiSessionStatusResult;
+  chain: WalletApiChainSnapshot;
+  accounts: WalletApiAccountsForCurrentChainResult;
 };
 
 export const fetchUiCurrentChainAccountsStatus = async (): Promise<UiCurrentChainAccountsStatus> => {
   const [session, chain, accounts] = await Promise.all([
-    uiClient.session.getStatus(),
-    uiClient.networks.getSelectedChain(),
-    uiClient.accounts.listCurrentChain(),
+    app.wallet.session.getStatus(),
+    app.wallet.networks.getSelectedChain(),
+    app.wallet.accounts.listCurrentChain(),
   ]);
   return { session, chain, accounts };
 };

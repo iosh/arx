@@ -1,16 +1,16 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiChainSnapshot, WalletApiNetworksResult } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
 export const UI_NETWORKS_QUERY_KEY = ["uiNetworks"] as const;
 
 export type UiNetworksStatus = {
-  selected: UiMethodResult<"ui.networks.getSelectedChain">;
-  networks: UiMethodResult<"ui.networks.list">;
+  selected: WalletApiChainSnapshot;
+  networks: WalletApiNetworksResult;
 };
 
 export const fetchUiNetworksStatus = async (): Promise<UiNetworksStatus> => {
-  const [selected, networks] = await Promise.all([uiClient.networks.getSelectedChain(), uiClient.networks.list()]);
+  const [selected, networks] = await Promise.all([app.wallet.networks.getSelectedChain(), app.wallet.networks.list()]);
   return { selected, networks };
 };
 

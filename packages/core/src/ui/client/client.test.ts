@@ -68,22 +68,22 @@ describe("ui client runtime", () => {
     });
 
     try {
-      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
+      const p = client.call("ui.onboarding.openTab", { reason: "manual_open" });
 
       const msg = await transport.nextSent();
       expect(msg).toMatchObject({
         type: "ui:request",
         id: "id1",
-        method: "ui.approvals.resolve",
-        params: { approvalId: "a", action: "reject" },
+        method: "ui.onboarding.openTab",
+        params: { reason: "manual_open" },
       });
 
       transport.emit({
         type: "ui:response",
         id: "id1",
-        result: null,
+        result: { activationPath: "focus" },
       });
-      await expect(p).resolves.toBeNull();
+      await expect(p).resolves.toEqual({ activationPath: "focus" });
     } finally {
       client.destroy();
     }
@@ -94,7 +94,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
+      const p = client.call("ui.onboarding.openTab", { reason: "manual_open" });
 
       await transport.nextSent();
 
@@ -127,7 +127,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
+      const p = client.call("ui.onboarding.openTab", { reason: "manual_open" });
 
       await transport.nextSent();
 
@@ -146,8 +146,8 @@ describe("ui client runtime", () => {
 
     try {
       const pendingRequest = client.call(
-        "ui.approvals.resolve",
-        { approvalId: "a", action: "reject" },
+        "ui.onboarding.openTab",
+        { reason: "manual_open" },
         { signal: controller.signal },
       );
 
@@ -192,7 +192,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const pendingRequest = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
+      const pendingRequest = client.call("ui.onboarding.openTab", { reason: "manual_open" });
 
       await transport.nextSent();
       transport.disconnectNow(new Error("port disconnected"));

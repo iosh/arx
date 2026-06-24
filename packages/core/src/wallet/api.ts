@@ -1,7 +1,13 @@
-import type { z } from "zod";
+import type { ApprovalAccountSelectionDecision } from "../approvals/queue/types.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { SessionLockState } from "../runtime/session/unlock/types.js";
-import type { WalletApiEip155TransactionDraftChangeSchema } from "./schemas/transactions.js";
-import type { WalletApiSchemas } from "./schemas.js";
+import type { AccountKey } from "../storage/records.js";
+import type { TransactionStatus } from "../transactions/aggregate/index.js";
+import type {
+  Eip155TransactionDraftChange,
+  NamespaceTransactionDraftEdit as TransactionNamespaceDraftEdit,
+  WalletTransactionRequest,
+} from "../transactions/index.js";
 import type {
   WalletApiAccountsByKeyringResult,
   WalletApiAccountsForCurrentChainResult,
@@ -28,56 +34,110 @@ import type {
   WalletApiTransactionsResult,
 } from "./types.js";
 
-type WalletApiInput<TSchema extends z.ZodTypeAny> = z.input<TSchema>;
+export type { Eip155TransactionDraftChange };
 
-export type UnlockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.unlock>;
-export type LockSessionInput = WalletApiInput<typeof WalletApiSchemas.session.lock>;
-export type SetAutoLockDurationInput = WalletApiInput<typeof WalletApiSchemas.session.setAutoLockDuration>;
+export type UnlockSessionInput = { password: string };
+export type LockSessionInput = { reason?: "manual" | "timeout" | "blur" | "suspend" | "reload" };
+export type SetAutoLockDurationInput = { durationMs: number };
 
-export type GenerateMnemonicInput = NonNullable<WalletApiInput<typeof WalletApiSchemas.setup.generateMnemonic>>;
-export type CreateWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.setup.createWalletFromMnemonic>;
-export type ImportWalletFromMnemonicInput = WalletApiInput<typeof WalletApiSchemas.setup.importWalletFromMnemonic>;
-export type ImportWalletFromPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.setup.importWalletFromPrivateKey>;
+export type GenerateMnemonicInput = { wordCount?: 12 | 24 };
+export type CreateWalletFromMnemonicInput = {
+  password: string;
+  words: readonly string[];
+  alias?: string;
+  skipBackup?: boolean;
+  namespace?: string;
+};
+export type ImportWalletFromMnemonicInput = {
+  password: string;
+  words: readonly string[];
+  alias?: string;
+  namespace?: string;
+};
+export type ImportWalletFromPrivateKeyInput = {
+  password: string;
+  privateKey: string;
+  alias?: string;
+  namespace?: string;
+};
 
-export type SwitchActiveAccountInput = WalletApiInput<typeof WalletApiSchemas.accounts.switchActive>;
-export type SelectWalletChainInput = WalletApiInput<typeof WalletApiSchemas.chains.selectWalletChain>;
-export type WalletApiNativeBalanceInput = WalletApiInput<typeof WalletApiSchemas.balances.getNative>;
+export type SwitchActiveAccountInput = {
+  chainRef: ChainRef;
+  accountKey?: AccountKey | null;
+};
+export type SelectWalletChainInput = { chainRef: ChainRef };
+export type WalletApiNativeBalanceInput = {
+  chainRef: ChainRef;
+  accountKey: AccountKey;
+};
 
-export type WalletApiApprovalDetailInput = WalletApiInput<typeof WalletApiSchemas.approvals.getDetail>;
-export type ResolveApprovalInput = WalletApiInput<typeof WalletApiSchemas.approvals.resolve>;
+export type WalletApiApprovalDetailInput = { approvalId: string };
+export type ResolveApprovalInput =
+  | {
+      approvalId: string;
+      action: "approve";
+      decision?: ApprovalAccountSelectionDecision;
+      expectedPrepareId?: string;
+    }
+  | {
+      approvalId: string;
+      action: "reject";
+      reason?: string;
+    };
 
-export type WalletApiAccountsByKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.getAccountsByKeyring>;
-export type ConfirmNewMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.confirmNewMnemonic>;
-export type ImportMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importMnemonic>;
-export type ImportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyrings.importPrivateKey>;
-export type DeriveAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.deriveAccount>;
-export type RenameKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.renameKeyring>;
-export type RenameAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.renameAccount>;
-export type MarkBackedUpInput = WalletApiInput<typeof WalletApiSchemas.keyrings.markBackedUp>;
-export type HideHdAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.hideHdAccount>;
-export type UnhideHdAccountInput = WalletApiInput<typeof WalletApiSchemas.keyrings.unhideHdAccount>;
-export type RemovePrivateKeyKeyringInput = WalletApiInput<typeof WalletApiSchemas.keyrings.removePrivateKeyKeyring>;
-export type ExportMnemonicInput = WalletApiInput<typeof WalletApiSchemas.keyrings.exportMnemonic>;
-export type ExportPrivateKeyInput = WalletApiInput<typeof WalletApiSchemas.keyrings.exportPrivateKey>;
+export type WalletApiAccountsByKeyringInput = {
+  keyringId: string;
+  includeHidden?: boolean;
+};
+export type ConfirmNewMnemonicInput = {
+  words: readonly string[];
+  alias?: string;
+  skipBackup?: boolean;
+  namespace?: string;
+};
+export type ImportMnemonicInput = {
+  words: readonly string[];
+  alias?: string;
+  namespace?: string;
+};
+export type ImportPrivateKeyInput = {
+  privateKey: string;
+  alias?: string;
+  namespace?: string;
+};
+export type DeriveAccountInput = { keyringId: string };
+export type RenameKeyringInput = { keyringId: string; alias: string };
+export type RenameAccountInput = { accountKey: AccountKey; alias: string };
+export type MarkBackedUpInput = { keyringId: string };
+export type HideHdAccountInput = { accountKey: AccountKey };
+export type UnhideHdAccountInput = { accountKey: AccountKey };
+export type RemovePrivateKeyKeyringInput = { keyringId: string };
+export type ExportMnemonicInput = { keyringId: string; password: string };
+export type ExportPrivateKeyInput = { accountKey: AccountKey; password: string };
 
-export type RequestSendTransactionApprovalInput = WalletApiInput<
-  typeof WalletApiSchemas.transactions.requestSendTransactionApproval
->;
-export type WalletApiTransactionsInput = WalletApiInput<typeof WalletApiSchemas.transactions.listHistory>;
-export type WalletApiTransactionDetailInput = WalletApiInput<typeof WalletApiSchemas.transactions.getDetail>;
-export type RerunTransactionPrepareInput = WalletApiInput<typeof WalletApiSchemas.transactions.rerunPrepare>;
-export type Eip155TransactionDraftChange = WalletApiInput<typeof WalletApiEip155TransactionDraftChangeSchema>;
-export type NamespaceTransactionDraftEdit = Omit<
-  WalletApiInput<typeof WalletApiSchemas.transactions.applyDraftEdit>["edit"],
-  "changes"
-> & {
+export type RequestSendTransactionApprovalInput = {
+  request: WalletTransactionRequest;
+};
+export type WalletApiTransactionsInput = {
+  namespace?: string;
+  chainRef?: ChainRef;
+  accountKey?: AccountKey;
+  status?: TransactionStatus;
+  limit?: number;
+  before?: {
+    createdAt: number;
+    id: string;
+  };
+};
+export type WalletApiTransactionDetailInput = { transactionId: string };
+export type RerunTransactionPrepareInput = { approvalId: string };
+export type NamespaceTransactionDraftEdit = Omit<TransactionNamespaceDraftEdit, "changes"> & {
   readonly changes: readonly Eip155TransactionDraftChange[];
 };
-export type ApplyTransactionDraftEditInput = Omit<
-  WalletApiInput<typeof WalletApiSchemas.transactions.applyDraftEdit>,
-  "edit"
-> & {
+export type ApplyTransactionDraftEditInput = {
+  approvalId: string;
   edit: NamespaceTransactionDraftEdit;
+  mode?: string;
 };
 
 export type TrustedWalletApi = Readonly<{

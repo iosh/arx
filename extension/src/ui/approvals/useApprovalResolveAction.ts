@@ -1,12 +1,12 @@
-import type { UiMethodParams } from "@arx/core/ui";
+import type { ResolveApprovalInput } from "@arx/core/wallet";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useUiEntryMetadata } from "@/ui/hooks/useUiEntryMetadata";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { ROUTES } from "@/ui/lib/routes";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
-export type ApprovalPendingAction = UiMethodParams<"ui.approvals.resolve">["action"] | null;
+export type ApprovalPendingAction = ResolveApprovalInput["action"] | null;
 
 export function useApprovalResolveAction() {
   const router = useRouter();
@@ -14,12 +14,12 @@ export function useApprovalResolveAction() {
   const [pendingAction, setPendingAction] = useState<ApprovalPendingAction>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function submitResolution(input: UiMethodParams<"ui.approvals.resolve">): Promise<boolean> {
+  async function submitResolution(input: ResolveApprovalInput): Promise<boolean> {
     setPendingAction(input.action);
     setErrorMessage(null);
 
     try {
-      await uiClient.approvals.resolve(input);
+      await app.wallet.approvals.resolve(input);
       if (entry.environment === "popup") {
         await router.navigate({ to: ROUTES.APPROVALS, replace: true });
       }

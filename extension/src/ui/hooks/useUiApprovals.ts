@@ -11,13 +11,13 @@ import {
   UI_APPROVALS_LIST_QUERY_KEY,
   uiApprovalDetailQueryKey,
 } from "@/ui/lib/uiApprovalQueries";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app, uiClient } from "@/ui/lib/uiBridgeClient";
 
 export function useUiApprovalsList() {
   const queryClient = useQueryClient();
   const query = useQuery<ApprovalListEntry[]>({
     queryKey: UI_APPROVALS_LIST_QUERY_KEY,
-    queryFn: async (): Promise<ApprovalListEntry[]> => await uiClient.approvals.listPending(),
+    queryFn: async (): Promise<ApprovalListEntry[]> => await app.wallet.approvals.listPending(),
     // Approval queries are fully event-driven; background events own invalidation.
     staleTime: Infinity,
     refetchOnWindowFocus: false,

@@ -23,7 +23,6 @@ import type {
   WalletApiAccountsByKeyringInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-import { WalletApiKeyringsSchemas } from "../schemas/keyrings.js";
 import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 import { selectCreatedAccount } from "./createdAccountSelection.js";
 import { assertSessionUnlocked } from "./session.js";
@@ -57,9 +56,8 @@ export const listKeyrings = (context: WalletApiContext) =>
   context.accounts.getKeyrings().map(buildKeyringMetaFromRecord);
 
 export const getAccountsByKeyring = (context: WalletApiContext, input: WalletApiAccountsByKeyringInput) => {
-  const params = WalletApiKeyringsSchemas.getAccountsByKeyring.parse(input);
   return context.accounts
-    .getAccountsByKeyring(params.keyringId, params.includeHidden ?? false)
+    .getAccountsByKeyring(input.keyringId, input.includeHidden ?? false)
     .map((record) => buildAccountMetaFromRecord(context, record));
 };
 
@@ -67,18 +65,17 @@ export const getBackupStatus = (context: WalletApiContext) => context.accounts.g
 
 export const confirmNewMnemonic = async (context: WalletApiContext, input: ConfirmNewMnemonicInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.confirmNewMnemonic.parse(input);
   const command: ConfirmNewMnemonicParams = {
-    mnemonic: params.words.join(" "),
+    mnemonic: input.words.join(" "),
   };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.skipBackup !== undefined) {
-    command.skipBackup = params.skipBackup;
+  if (input.skipBackup !== undefined) {
+    command.skipBackup = input.skipBackup;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
   const result = await context.accounts.confirmNewMnemonic(command);
@@ -92,15 +89,14 @@ export const confirmNewMnemonic = async (context: WalletApiContext, input: Confi
 
 export const importMnemonic = async (context: WalletApiContext, input: ImportMnemonicInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.importMnemonic.parse(input);
   const command: ImportMnemonicParams = {
-    mnemonic: params.words.join(" "),
+    mnemonic: input.words.join(" "),
   };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
   const result = await context.accounts.importMnemonic(command);
@@ -114,15 +110,14 @@ export const importMnemonic = async (context: WalletApiContext, input: ImportMne
 
 export const importPrivateKey = async (context: WalletApiContext, input: ImportPrivateKeyInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.importPrivateKey.parse(input);
   const command: ImportPrivateKeyParams = {
-    privateKey: params.privateKey,
+    privateKey: input.privateKey,
   };
-  if (params.alias !== undefined) {
-    command.alias = params.alias;
+  if (input.alias !== undefined) {
+    command.alias = input.alias;
   }
-  if (params.namespace !== undefined) {
-    command.namespace = params.namespace;
+  if (input.namespace !== undefined) {
+    command.namespace = input.namespace;
   }
 
   const result = await context.accounts.importPrivateKey(command);
@@ -136,65 +131,56 @@ export const importPrivateKey = async (context: WalletApiContext, input: ImportP
 
 export const deriveAccount = async (context: WalletApiContext, input: DeriveAccountInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.deriveAccount.parse(input);
-  return await context.accounts.deriveAccount(params.keyringId);
+  return await context.accounts.deriveAccount(input.keyringId);
 };
 
 export const renameKeyring = async (context: WalletApiContext, input: RenameKeyringInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.renameKeyring.parse(input);
-  await context.accounts.renameKeyring(params.keyringId, params.alias);
+  await context.accounts.renameKeyring(input.keyringId, input.alias);
   return null;
 };
 
 export const renameAccount = async (context: WalletApiContext, input: RenameAccountInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.renameAccount.parse(input);
-  await context.accounts.renameAccount(params.accountKey, params.alias);
+  await context.accounts.renameAccount(input.accountKey, input.alias);
   return null;
 };
 
 export const markBackedUp = async (context: WalletApiContext, input: MarkBackedUpInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.markBackedUp.parse(input);
-  await context.accounts.markBackedUp(params.keyringId);
+  await context.accounts.markBackedUp(input.keyringId);
   return null;
 };
 
 export const hideHdAccount = async (context: WalletApiContext, input: HideHdAccountInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.hideHdAccount.parse(input);
-  const namespace = getAccountKeyNamespace(params.accountKey);
+  const namespace = getAccountKeyNamespace(input.accountKey);
   const chainRef = getSelectedWalletChainRefForNamespace(context, namespace);
   const activeAccount = context.accounts.getActiveAccountForNamespace({ namespace, chainRef });
-  if (activeAccount?.accountKey === params.accountKey) {
+  if (activeAccount?.accountKey === input.accountKey) {
     throw new PermissionDeniedError();
   }
-  await context.accounts.hideHdAccount(params.accountKey);
+  await context.accounts.hideHdAccount(input.accountKey);
   return null;
 };
 
 export const unhideHdAccount = async (context: WalletApiContext, input: UnhideHdAccountInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.unhideHdAccount.parse(input);
-  await context.accounts.unhideHdAccount(params.accountKey);
+  await context.accounts.unhideHdAccount(input.accountKey);
   return null;
 };
 
 export const removePrivateKeyKeyring = async (context: WalletApiContext, input: RemovePrivateKeyKeyringInput) => {
   assertSessionUnlocked(context);
-  const params = WalletApiKeyringsSchemas.removePrivateKeyKeyring.parse(input);
-  await context.accounts.removePrivateKeyKeyring(params.keyringId);
+  await context.accounts.removePrivateKeyKeyring(input.keyringId);
   return null;
 };
 
 export const exportMnemonic = async (context: WalletApiContext, input: ExportMnemonicInput) => {
-  const params = WalletApiKeyringsSchemas.exportMnemonic.parse(input);
-  return { words: (await context.accounts.exportMnemonic(params.keyringId, params.password)).split(" ") };
+  return { words: (await context.accounts.exportMnemonic(input.keyringId, input.password)).split(" ") };
 };
 
 export const exportPrivateKey = async (context: WalletApiContext, input: ExportPrivateKeyInput) => {
-  const params = WalletApiKeyringsSchemas.exportPrivateKey.parse(input);
-  const secret = await context.accounts.exportPrivateKeyByAccountKey(params.accountKey, params.password);
+  const secret = await context.accounts.exportPrivateKeyByAccountKey(input.accountKey, input.password);
   return { privateKey: privateKeyBytesToHex(secret) };
 };

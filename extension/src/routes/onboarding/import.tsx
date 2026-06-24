@@ -5,7 +5,7 @@ import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 import { isWalletInitialized } from "@/ui/lib/walletAvailability";
 import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
@@ -65,9 +65,9 @@ function ImportSetupRoute() {
 
       const importMnemonic = async (words: string[]) => {
         if (vaultInitialized) {
-          return await uiClient.keyrings.importMnemonic({ words, alias: params.alias });
+          return await app.wallet.keyrings.importMnemonic({ words, alias: params.alias });
         }
-        return await uiClient.onboarding.importWalletFromMnemonic({
+        return await app.wallet.setup.importWalletFromMnemonic({
           password: getOnboardingPassword(),
           words,
           alias: params.alias,
@@ -76,9 +76,9 @@ function ImportSetupRoute() {
 
       const importPrivateKey = async (privateKey: string) => {
         if (vaultInitialized) {
-          return await uiClient.keyrings.importPrivateKey({ privateKey, alias: params.alias });
+          return await app.wallet.keyrings.importPrivateKey({ privateKey, alias: params.alias });
         }
-        return await uiClient.onboarding.importWalletFromPrivateKey({
+        return await app.wallet.setup.importWalletFromPrivateKey({
           password: getOnboardingPassword(),
           privateKey,
           alias: params.alias,

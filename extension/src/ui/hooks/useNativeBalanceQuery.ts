@@ -1,11 +1,11 @@
-import type { UiMethodResult } from "@arx/core/ui";
+import type { WalletApiNativeBalanceResult } from "@arx/core/wallet";
 import { useQuery } from "@tanstack/react-query";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/uiBridgeClient";
 
 const STALE_TIME_MS = 10_000;
 const POLL_INTERVAL_MS = 30_000;
 
-type NativeBalanceResult = UiMethodResult<"ui.balances.getNative">;
+type NativeBalanceResult = WalletApiNativeBalanceResult;
 
 export const nativeBalanceQueryKey = (params: { chainRef: string | null; accountKey: string | null }) =>
   ["nativeBalance", params.chainRef, params.accountKey] as const;
@@ -24,7 +24,7 @@ export function useNativeBalanceQuery(params: {
     queryFn: async () => {
       // enabled implies both are non-null, but keep a clear error if wiring changes.
       if (!chainRef || !accountKey) throw new Error("Missing chainRef/accountKey for native balance query");
-      return await uiClient.balances.getNative({ chainRef, accountKey });
+      return await app.wallet.balances.getNative({ chainRef, accountKey });
     },
     staleTime: STALE_TIME_MS,
     refetchInterval: enabled ? POLL_INTERVAL_MS : false,

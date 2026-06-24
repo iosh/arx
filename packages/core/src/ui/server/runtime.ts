@@ -1,8 +1,5 @@
 import type { UiMethodName } from "../protocol/index.js";
-import { createUiCommonHandlers } from "./handlers/index.js";
 import type { UiMethodHandlerMap, UiServerRuntime, UiServerRuntimeDeps } from "./types.js";
-
-const UI_COMMON_HANDLER_OWNER_ID = "core.uiCommon";
 
 const registerUiHandlers = (
   handlers: UiMethodHandlerMap,
@@ -40,8 +37,6 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
 
   const handlers: UiMethodHandlerMap = {};
   const handlerOwners = new Map<UiMethodName, string>();
-
-  registerUiHandlers(handlers, handlerOwners, createUiCommonHandlers(handlerDeps), UI_COMMON_HANDLER_OWNER_ID);
 
   for (const extension of deps.extensions ?? []) {
     registerUiHandlers(handlers, handlerOwners, extension.createHandlers(handlerDeps), extension.id);

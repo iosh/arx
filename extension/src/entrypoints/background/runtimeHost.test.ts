@@ -124,6 +124,7 @@ const makeRuntime = () => {
   const createUiAccess = vi.fn();
   const walletBridgeServer = {
     handleRequest: vi.fn(),
+    subscribeInvalidation: vi.fn(() => vi.fn()),
   };
   const createWalletBridgeServer = vi.fn(() => walletBridgeServer);
   const createProvider = vi.fn(() => provider);
@@ -295,7 +296,6 @@ describe("runtimeHost", () => {
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
       dispatchRequest: vi.fn(),
-      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
@@ -493,7 +493,6 @@ describe("runtimeHost", () => {
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
       dispatchRequest: vi.fn(),
-      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 

@@ -12,12 +12,8 @@ export type {
 } from "./protocol/envelopes.js";
 export { isUiProtocolMessage, parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
 export {
-  UI_EVENT_APPROVAL_DETAIL_CHANGED,
-  UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_READY,
-  UI_EVENT_SESSION_CHANGED,
-  UI_EVENT_TRANSACTIONS_CHANGED,
   uiEvents,
 } from "./protocol/events.js";
 export {

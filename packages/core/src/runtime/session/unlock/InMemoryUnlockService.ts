@@ -194,7 +194,7 @@ export class InMemoryUnlockService implements UnlockService {
   }
 
   onStateChanged(handler: (state: SessionLockState) => void) {
-    return this.#messenger.subscribe(UNLOCK_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(UNLOCK_STATE_CHANGED, handler);
   }
 
   onLocked(handler: (payload: { at: number; reason: UnlockReason }) => void) {

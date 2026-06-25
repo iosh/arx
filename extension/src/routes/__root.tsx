@@ -1,14 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
-import { useCallback } from "react";
 import { YStack } from "tamagui";
 import { getUiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { ApprovalsOrchestrator } from "@/ui/approvals";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
-import { useUiSessionEvents } from "@/ui/hooks/useUiSessionEvents";
 import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { useWalletInvalidations } from "@/ui/hooks/useWalletInvalidations";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
 import { app, uiClient } from "@/ui/lib/uiBridgeClient";
@@ -97,11 +96,7 @@ function RootInner() {
   });
   const enabled = setupStatusQuery.data?.session.isUnlocked ?? false;
   useIdleTimer(enabled);
-
-  const refreshSetupStatus = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: createUiSetupStatusQueryOptions().queryKey });
-  }, [queryClient]);
-  useUiSessionEvents(refreshSetupStatus);
+  useWalletInvalidations();
 
   return (
     <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>

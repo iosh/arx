@@ -13,6 +13,7 @@ import type {
   AccountKey,
   KeyringPayloadListener,
   KeyringServiceOptions,
+  KeyringStateListener,
   Payload,
   RuntimeAccountRef,
   RuntimeKeyring,
@@ -45,6 +46,7 @@ export class RuntimeKeyringState {
   #accounts = new Map<AccountKey, AccountRecord>();
   #payload: Payload = { keyrings: [] };
   #payloadListeners = new Set<KeyringPayloadListener>();
+  #stateListeners = new Set<KeyringStateListener>();
   #addressIndex = new Map<AccountKey, RuntimeAccountRef>();
 
   #subscriptions: Array<() => void> = [];
@@ -111,6 +113,11 @@ export class RuntimeKeyringState {
   onPayloadUpdated(handler: KeyringPayloadListener): () => void {
     this.#payloadListeners.add(handler);
     return () => this.#payloadListeners.delete(handler);
+  }
+
+  onStateChanged(handler: KeyringStateListener): () => void {
+    this.#stateListeners.add(handler);
+    return () => this.#stateListeners.delete(handler);
   }
 
   getRuntimeKeyring(keyringId: string): RuntimeKeyring | null {
@@ -192,20 +199,24 @@ export class RuntimeKeyringState {
 
     this.#reindexHydratedAccounts();
     await this.#notifyPayloadUpdated();
+    this.#notifyStateChanged();
   }
 
   replaceKeyringMeta(record: KeyringMetaRecord): void {
     this.#keyringMetas.set(record.id, cloneKeyringMeta(record));
+    this.#notifyStateChanged();
   }
 
   replaceAccountRecord(record: AccountRecord, strictIndex = true): void {
     this.#accounts.set(record.accountKey, cloneAccountRecord(record));
     this.#reindexHydratedAccounts(strictIndex);
+    this.#notifyStateChanged();
   }
 
   dropAccountRecord(accountKey: AccountKey, strictIndex = false): void {
     this.#accounts.delete(accountKey);
     this.#reindexHydratedAccounts(strictIndex);
+    this.#notifyStateChanged();
   }
 
   async dropKeyring(keyringId: string): Promise<void> {
@@ -233,6 +244,7 @@ export class RuntimeKeyringState {
 
     this.#reindexHydratedAccounts(false);
     await this.#notifyPayloadUpdated();
+    this.#notifyStateChanged();
   }
 
   async #hydrate() {
@@ -356,6 +368,7 @@ export class RuntimeKeyringState {
     this.#reindexHydratedAccounts(false);
     await this.#commitHydrationProjectionChanges(snapshot.reconciliation);
     await this.#reconcileNextDerivationIndex();
+    this.#notifyStateChanged();
 
     if (snapshot.shouldResealPayload) {
       await this.#notifyPayloadUpdated();
@@ -573,6 +586,16 @@ export class RuntimeKeyringState {
     }
   }
 
+  #notifyStateChanged(): void {
+    for (const listener of this.#stateListeners) {
+      try {
+        listener();
+      } catch (error) {
+        this.#options.logger?.("keyring: state listener threw", error);
+      }
+    }
+  }
+
   #reindexHydratedAccounts(strict = true) {
     this.#addressIndex.clear();
 
@@ -622,6 +645,7 @@ export class RuntimeKeyringState {
     this.#payload = { keyrings: [] };
     this.#hydrationPromise = null;
     this.#lastHydration = null;
+    this.#notifyStateChanged();
   }
 
   #getDefaultNamespace(): string {

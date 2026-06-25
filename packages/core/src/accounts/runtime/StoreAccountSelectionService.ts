@@ -154,7 +154,7 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   }
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void {
-    return this.#messenger.subscribe(ACCOUNTS_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(ACCOUNTS_STATE_CHANGED, handler);
   }
 
   #assertNamespaceChainContext(params: NamespaceChainContext): NamespaceChainContext {

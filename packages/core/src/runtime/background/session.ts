@@ -375,8 +375,6 @@ export const initSessionLayer = ({
     if (sessionListenersAttached) return;
 
     sessionListenersAttached = true;
-    // onStateChanged replays the current snapshot; ignore that initial emission to avoid
-    // persisting vault metadata when nothing actually changed.
     let lastSessionLockState = unlock.getState();
     sessionSubscriptions.push(
       unlock.onStateChanged(() => {

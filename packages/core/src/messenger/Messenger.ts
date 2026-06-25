@@ -16,10 +16,6 @@ export type PublishOptions<Payload> = {
 
 export type SubscribeOptions = {
   /**
-   * If "snapshot", immediately replay the last snapshot if present.
-   */
-  replay?: "none" | "snapshot";
-  /**
    * Optional AbortSignal for automatic cleanup.
    */
   signal?: AbortSignal;
@@ -109,14 +105,6 @@ export class Messenger {
     const set = this.#listeners.get(topic.name) ?? new Set<AnyListener>();
     set.add(handler as unknown as AnyListener);
     this.#listeners.set(topic.name, set);
-
-    if (options.replay === "snapshot" && this.#snapshots.has(topic.name)) {
-      try {
-        handler(this.#snapshots.get(topic.name) as T);
-      } catch (error) {
-        this.#onListenerError({ topic: topic.name, error });
-      }
-    }
 
     const unsubscribe = () => {
       const cur = this.#listeners.get(topic.name);

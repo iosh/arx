@@ -1,15 +1,30 @@
+import type { Unsubscribe } from "../../messenger/topic.js";
 import { encodeWalletBridgeError } from "./errorEncoding.js";
-import { WALLET_BRIDGE_PROTOCOL_VERSION, type WalletBridgeReply, type WalletBridgeRequest } from "./protocol.js";
+import {
+  WALLET_BRIDGE_PROTOCOL_VERSION,
+  type WalletBridgeInvalidationEvent,
+  type WalletBridgeReply,
+  type WalletBridgeRequest,
+  type WalletInvalidationTopic,
+} from "./protocol.js";
 
 export type WalletBridgeMethodExecutor = {
   executeUnknownPath(path: string, input: unknown): Promise<unknown>;
 };
 
-export type WalletBridgeServer = {
-  handleRequest(request: WalletBridgeRequest): Promise<WalletBridgeReply>;
+export type WalletInvalidationSource = {
+  subscribeInvalidation(listener: (event: { topic: WalletInvalidationTopic }) => void): Unsubscribe;
 };
 
-export const createWalletBridgeServer = (deps: { executor: WalletBridgeMethodExecutor }): WalletBridgeServer => {
+export type WalletBridgeServer = {
+  handleRequest(request: WalletBridgeRequest): Promise<WalletBridgeReply>;
+  subscribeInvalidation(listener: (event: WalletBridgeInvalidationEvent) => void): Unsubscribe;
+};
+
+export const createWalletBridgeServer = (deps: {
+  executor: WalletBridgeMethodExecutor;
+  events?: WalletInvalidationSource;
+}): WalletBridgeServer => {
   const createErrorReply = (id: string, error: unknown): WalletBridgeReply => ({
     type: "wallet:error",
     version: WALLET_BRIDGE_PROTOCOL_VERSION,
@@ -30,6 +45,20 @@ export const createWalletBridgeServer = (deps: { executor: WalletBridgeMethodExe
       } catch (error) {
         return createErrorReply(request.id, error);
       }
+    },
+    subscribeInvalidation: (listener) => {
+      if (!deps.events) {
+        return () => {};
+      }
+
+      return deps.events.subscribeInvalidation((event) => {
+        listener({
+          type: "wallet:event",
+          version: WALLET_BRIDGE_PROTOCOL_VERSION,
+          event: "wallet:invalidation",
+          topic: event.topic,
+        });
+      });
     },
   };
 };

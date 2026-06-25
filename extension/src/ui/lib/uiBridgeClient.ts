@@ -1,6 +1,6 @@
 import type { UiClient } from "@arx/core/ui";
 import { createUiClient } from "@arx/core/ui";
-import { createRemoteTrustedWalletClient } from "@arx/core/wallet/bridge";
+import { createRemoteTrustedWalletClient, createWalletEventApi } from "@arx/core/wallet/bridge";
 import { uiActivationActions } from "./uiActivationActions";
 import { createBrowserPortChannel, createUiProtocolTransport } from "./uiPortTransport";
 import { createWalletBridgePortTransport } from "./walletBridgePortTransport";
@@ -11,6 +11,7 @@ const baseClient: UiClient = createUiClient({
   transport: createUiProtocolTransport(sharedPortChannel),
   logger: console,
 });
+const walletBridgeTransport = createWalletBridgePortTransport(sharedPortChannel, { logger: console });
 
 const uiExtensionActions = (client: UiClient) => {
   const activation = uiActivationActions(client);
@@ -23,5 +24,6 @@ const uiExtensionActions = (client: UiClient) => {
 
 export const uiClient = baseClient.extend(uiExtensionActions);
 export const app = {
-  wallet: createRemoteTrustedWalletClient(createWalletBridgePortTransport(sharedPortChannel)),
+  wallet: createRemoteTrustedWalletClient(walletBridgeTransport),
+  walletEvents: createWalletEventApi(walletBridgeTransport),
 } as const;

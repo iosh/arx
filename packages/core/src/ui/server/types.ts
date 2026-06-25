@@ -1,9 +1,5 @@
-import type {
-  TransactionApprovalsChangedHandler,
-  TransactionsChangedHandler,
-} from "../../transactions/TransactionsService.js";
 import type { TrustedWalletApi } from "../../wallet/api.js";
-import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
+import type { UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
@@ -44,14 +40,6 @@ export type UiResolvedContext = {
 
 export type UiContextResolver = () => Promise<UiResolvedContext>;
 
-export type UiEventSource = {
-  onSessionChanged(listener: () => void): () => void;
-  onApprovalCreated(listener: () => void): () => void;
-  onApprovalFinished(listener: (event: { approvalId: string }) => void): () => void;
-  onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;
-  onTransactionsChanged(handler: TransactionsChangedHandler): () => void;
-};
-
 export type UiSurfaceIdentity = {
   transport: "ui";
   portId: string;
@@ -61,7 +49,6 @@ export type UiSurfaceIdentity = {
 
 export type UiRuntimeServerDeps = {
   wallet: TrustedWalletApi;
-  events: UiEventSource;
   platform: UiPlatformAdapter;
   uiOrigin: string;
   createId?: () => string;
@@ -102,5 +89,4 @@ export type UiRuntimeDispatchResult = {
 
 export type UiRuntimeAccess = {
   dispatchRequest: (raw: unknown) => Promise<UiRuntimeDispatchResult | null>;
-  subscribeUiEvents: (listener: (event: UiEventEnvelope) => void) => () => void;
 };

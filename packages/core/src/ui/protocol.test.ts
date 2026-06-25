@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseUiEnvelope } from "./protocol/envelopes.js";
-import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_READY, UI_EVENT_SESSION_CHANGED } from "./protocol/events.js";
+import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_READY } from "./protocol/events.js";
 import { isUiEventName, isUiMethodName, parseUiMethodParams } from "./protocol/index.js";
 
 describe("ui protocol registry", () => {
@@ -13,7 +13,6 @@ describe("ui protocol registry", () => {
 
     expect(isUiEventName(UI_EVENT_ENTRY_CHANGED)).toBe(true);
     expect(isUiEventName(UI_EVENT_READY)).toBe(true);
-    expect(isUiEventName(UI_EVENT_SESSION_CHANGED)).toBe(true);
     expect(isUiEventName("ui:unknown")).toBe(false);
   });
 

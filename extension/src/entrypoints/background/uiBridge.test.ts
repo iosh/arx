@@ -1,16 +1,12 @@
 import type { UiRuntimeAccess } from "@arx/core/runtime";
-import {
-  UI_CHANNEL,
-  UI_EVENT_READY,
-  UI_EVENT_SESSION_CHANGED,
-  type UiEventEnvelope,
-  type UiPortEnvelope,
-} from "@arx/core/ui";
+import { UI_CHANNEL, UI_EVENT_READY, type UiPortEnvelope } from "@arx/core/ui";
 import {
   WALLET_BRIDGE_PROTOCOL_VERSION,
+  type WalletBridgeInvalidationEvent,
   type WalletBridgeReply,
   type WalletBridgeRequest,
   type WalletBridgeServer,
+  type WalletInvalidationTopic,
 } from "@arx/core/wallet/bridge";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UiPort } from "./ui/portHub";
@@ -59,27 +55,15 @@ class FakePort {
 const createPort = () => new FakePort();
 
 const createUiAccess = (overrides?: Partial<UiRuntimeAccess>) => {
-  const listeners = new Set<(event: UiEventEnvelope) => void>();
   const uiAccess: UiRuntimeAccess = {
     dispatchRequest: vi.fn(async () => null),
-    subscribeUiEvents: vi.fn((listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }),
     ...overrides,
   };
 
-  return {
-    uiAccess,
-    emitUiEvent: (event: UiEventEnvelope) => {
-      for (const listener of listeners) {
-        listener(event);
-      }
-    },
-  };
+  return { uiAccess };
 };
 
-const createWalletBridgeServer = (
+const createWalletBridgeServerHarness = (
   handleRequest: WalletBridgeServer["handleRequest"] = vi.fn(
     async (request: WalletBridgeRequest): Promise<WalletBridgeReply> => ({
       type: "wallet:response",
@@ -88,9 +72,34 @@ const createWalletBridgeServer = (
       result: null,
     }),
   ),
-): WalletBridgeServer => ({
-  handleRequest,
-});
+) => {
+  const invalidationListeners = new Set<(event: WalletBridgeInvalidationEvent) => void>();
+  const server: WalletBridgeServer = {
+    handleRequest,
+    subscribeInvalidation: vi.fn((listener) => {
+      invalidationListeners.add(listener);
+      return () => invalidationListeners.delete(listener);
+    }),
+  };
+
+  return {
+    server,
+    emitInvalidation: (topic: WalletInvalidationTopic) => {
+      const event: WalletBridgeInvalidationEvent = {
+        type: "wallet:event",
+        version: WALLET_BRIDGE_PROTOCOL_VERSION,
+        event: "wallet:invalidation",
+        topic,
+      };
+
+      for (const listener of invalidationListeners) {
+        listener(event);
+      }
+
+      return event;
+    },
+  };
+};
 
 const attachReadyPort = (bridge: ReturnType<typeof createUiBridge>) => {
   const port = createPort();
@@ -101,15 +110,15 @@ const attachReadyPort = (bridge: ReturnType<typeof createUiBridge>) => {
 
 describe("uiBridge", () => {
   let uiAccess: UiRuntimeAccess;
-  let emitUiEvent: (event: UiEventEnvelope) => void;
   let walletBridgeServer: WalletBridgeServer;
+  let walletBridgeHarness: ReturnType<typeof createWalletBridgeServerHarness>;
   let bridge: ReturnType<typeof createUiBridge>;
 
   beforeEach(() => {
     const ui = createUiAccess();
     uiAccess = ui.uiAccess;
-    emitUiEvent = ui.emitUiEvent;
-    walletBridgeServer = createWalletBridgeServer();
+    walletBridgeHarness = createWalletBridgeServerHarness();
+    walletBridgeServer = walletBridgeHarness.server;
     bridge = createUiBridge({ uiAccess, walletBridgeServer });
   });
 
@@ -134,9 +143,10 @@ describe("uiBridge", () => {
         result: { availability: "ready" },
       }),
     );
+    const localWalletBridgeHarness = createWalletBridgeServerHarness(handleRequest);
     const localBridge = createUiBridge({
       uiAccess,
-      walletBridgeServer: createWalletBridgeServer(handleRequest),
+      walletBridgeServer: localWalletBridgeHarness.server,
     });
     const port = attachReadyPort(localBridge);
 
@@ -198,7 +208,7 @@ describe("uiBridge", () => {
     expect(port.messages).toContainEqual(reply);
   });
 
-  it("does not block ui events behind slow ui requests", async () => {
+  it("does not block wallet invalidations behind slow ui requests", async () => {
     let resolveDispatch!: (value: Awaited<ReturnType<UiRuntimeAccess["dispatchRequest"]>>) => void;
     let hasPendingDispatch = false;
     const ui = createUiAccess({
@@ -210,9 +220,10 @@ describe("uiBridge", () => {
           }),
       ),
     });
+    const localWalletBridgeHarness = createWalletBridgeServerHarness();
     const localBridge = createUiBridge({
       uiAccess: ui.uiAccess,
-      walletBridgeServer,
+      walletBridgeServer: localWalletBridgeHarness.server,
     });
     const queryPort = attachReadyPort(localBridge);
     const observerPort = attachReadyPort(localBridge);
@@ -225,17 +236,9 @@ describe("uiBridge", () => {
     });
     await vi.waitFor(() => expect(hasPendingDispatch).toBe(true));
 
-    ui.emitUiEvent({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed" },
-    });
+    const invalidation = localWalletBridgeHarness.emitInvalidation("accounts");
 
-    expect(observerPort.messages).toContainEqual({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed" },
-    });
+    expect(observerPort.messages).toContainEqual(invalidation);
     expect(queryPort.messages).not.toContainEqual(expect.objectContaining({ type: "ui:response", id: "ui-request-1" }));
 
     resolveDispatch({
@@ -248,11 +251,7 @@ describe("uiBridge", () => {
     });
     await pendingQuery;
 
-    expect(queryPort.messages).toContainEqual({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed" },
-    });
+    expect(queryPort.messages).toContainEqual(invalidation);
     expect(queryPort.messages.at(-1)).toEqual({
       type: "ui:response",
       id: "ui-request-1",
@@ -265,32 +264,16 @@ describe("uiBridge", () => {
     const healthyPort = attachReadyPort(bridge);
     stalePort.shouldThrowOnPostMessage = true;
 
-    emitUiEvent({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed" },
-    });
+    const firstInvalidation = walletBridgeHarness.emitInvalidation("accounts");
 
     expect(stalePort.messages).toEqual([]);
-    expect(healthyPort.messages).toContainEqual({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed" },
-    });
+    expect(healthyPort.messages).toContainEqual(firstInvalidation);
 
     healthyPort.messages = [];
     stalePort.shouldThrowOnPostMessage = false;
-    emitUiEvent({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed-again" },
-    });
+    const secondInvalidation = walletBridgeHarness.emitInvalidation("balances");
 
     expect(stalePort.messages).toEqual([]);
-    expect(healthyPort.messages).toContainEqual({
-      type: "ui:event",
-      event: UI_EVENT_SESSION_CHANGED,
-      payload: { reason: "changed-again" },
-    });
+    expect(healthyPort.messages).toContainEqual(secondInvalidation);
   });
 });

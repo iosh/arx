@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { UI_EVENT_SESSION_CHANGED } from "../protocol/events.js";
+import { UI_EVENT_ENTRY_CHANGED } from "../protocol/events.js";
 import { createUiClient, type UiTransport } from "./index.js";
 
 const createMockTransport = () => {
@@ -169,7 +169,7 @@ describe("ui client runtime", () => {
     const transport = createMockTransport();
     const client = createUiClient({ transport });
 
-    const unsubscribe = client.on(UI_EVENT_SESSION_CHANGED, () => {});
+    const unsubscribe = client.on(UI_EVENT_ENTRY_CHANGED, () => {});
 
     // First connect is async; allow it to start.
     await Promise.resolve();
@@ -240,7 +240,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport });
 
     try {
-      const unsubscribe = client.on(UI_EVENT_SESSION_CHANGED, () => {});
+      const unsubscribe = client.on(UI_EVENT_ENTRY_CHANGED, () => {});
 
       await Promise.resolve();
       transport.disconnectNow(new Error("port disconnected"));

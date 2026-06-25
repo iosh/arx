@@ -73,11 +73,11 @@ vi.mock("webextension-polyfill", () => ({
 
 const createUiAccess = () => ({
   dispatchRequest: vi.fn(),
-  subscribeUiEvents: vi.fn(() => vi.fn()),
 });
 
 const createWalletBridgeServer = () => ({
   handleRequest: vi.fn(),
+  subscribeInvalidation: vi.fn(() => vi.fn()),
 });
 
 const createUiEntryAccess = () => ({

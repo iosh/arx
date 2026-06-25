@@ -180,7 +180,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   }
 
   onStateChanged(handler: (state: ApprovalState) => void): () => void {
-    return this.#messenger.subscribe(APPROVAL_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(APPROVAL_STATE_CHANGED, handler);
   }
 
   onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void {

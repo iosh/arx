@@ -75,7 +75,6 @@ import type { WalletChainSelectionChangedHandler } from "../services/store/walle
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
-import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
@@ -376,7 +375,6 @@ export type WalletUiDispatchInput<M extends UiMethodName> =
 /** Engine-owned UI contract for wallet shells. */
 export type WalletUi = Readonly<{
   dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
-  subscribeUiEvents(listener: (event: UiEventEnvelope) => void): () => void;
 }>;
 
 /** Runtime-owned approval detail read model for shell bootstrap. */

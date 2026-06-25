@@ -208,6 +208,6 @@ export type TrustedWalletApi = Readonly<{
 }>;
 
 type AssertNever<T extends never> = T;
-type WalletApiForbiddenKey = "read" | "dispatch" | "dispatchRequest" | "buildSnapshotEvent" | "subscribeUiEvents";
+type WalletApiForbiddenKey = "read" | "dispatch" | "dispatchRequest" | "buildSnapshotEvent";
 
 type _TrustedWalletApiDoesNotExposeProtocolKeys = AssertNever<Extract<keyof TrustedWalletApi, WalletApiForbiddenKey>>;

@@ -1,10 +1,18 @@
 import { ArxBaseError, type ErrorCause, type SerializedArxError } from "../../error.js";
+import type { Unsubscribe } from "../../messenger/topic.js";
 import type { TrustedWalletApi } from "../api.js";
 import { createTrustedWalletApiFromCall, type TrustedWalletApiCall } from "../apiFromCall.js";
-import { WALLET_BRIDGE_PROTOCOL_VERSION, type WalletBridgeReply, type WalletBridgeRequest } from "./protocol.js";
+import {
+  WALLET_BRIDGE_PROTOCOL_VERSION,
+  type WalletBridgeEvent,
+  type WalletBridgeReply,
+  type WalletBridgeRequest,
+  type WalletInvalidationEvent,
+} from "./protocol.js";
 
 export type WalletBridgeClientTransport = {
   request(request: WalletBridgeRequest): Promise<WalletBridgeReply>;
+  subscribe?(listener: (event: WalletBridgeEvent) => void): Unsubscribe;
 };
 
 export type RemoteTrustedWalletClientOptions = {
@@ -12,6 +20,10 @@ export type RemoteTrustedWalletClientOptions = {
 };
 
 export type RemoteTrustedWalletClient = TrustedWalletApi;
+
+export type WalletEventApi = Readonly<{
+  subscribeInvalidation(listener: (event: WalletInvalidationEvent) => void): Unsubscribe;
+}>;
 
 export class WalletBridgeRemoteError extends ArxBaseError {
   static readonly code = "wallet.bridge.remote";
@@ -125,3 +137,20 @@ export const createRemoteTrustedWalletClient = (
 
   return createTrustedWalletApiFromCall(call);
 };
+
+export const createWalletEventApi = (transport: WalletBridgeClientTransport): WalletEventApi => ({
+  subscribeInvalidation: (listener) => {
+    const subscribe = transport.subscribe;
+    if (!subscribe) {
+      return () => {};
+    }
+
+    return subscribe((event) => {
+      if (event.event !== "wallet:invalidation") {
+        return;
+      }
+
+      listener({ topic: event.topic });
+    });
+  },
+});

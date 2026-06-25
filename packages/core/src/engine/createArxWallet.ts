@@ -32,8 +32,12 @@ import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
+import type { WalletInvalidationTopic } from "../wallet/bridge/protocol.js";
 import type { WalletBridgeServer } from "../wallet/bridge/server.js";
-import { createWalletBridgeServer as createWalletBridgeProtocolServer } from "../wallet/bridge/server.js";
+import {
+  createWalletBridgeServer as createWalletBridgeProtocolServer,
+  type WalletInvalidationSource,
+} from "../wallet/bridge/server.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createTrustedWalletApi, createTrustedWalletMethodExecutor } from "../wallet/createTrustedWalletApi.js";
 import type { TrustedWalletApi } from "../wallet/index.js";
@@ -247,17 +251,44 @@ const createWalletUiDeps = (
   return {
     server: {
       wallet,
-      events: {
-        onSessionChanged: (listener) => runtime.services.session.onStateChanged(listener),
-        onApprovalCreated: (listener) => runtime.services.approvals.onCreated(() => listener()),
-        onApprovalFinished: (listener) => runtime.services.approvals.onFinished(listener),
-        onTransactionApprovalsChanged: (handler) => runtime.transactions.onTransactionApprovalsChanged(handler),
-        onTransactionsChanged: (handler) => runtime.transactions.onTransactionsChanged(handler),
-      },
       platform: options.platform,
       uiOrigin: options.uiOrigin,
       ...(options.createId ? { createId: options.createId } : {}),
       ...(options.extensions ? { extensions: options.extensions } : {}),
+    },
+  };
+};
+
+const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore): WalletInvalidationSource => {
+  return {
+    subscribeInvalidation(listener) {
+      const emit = (...topics: WalletInvalidationTopic[]) => {
+        for (const topic of new Set(topics)) {
+          listener({ topic });
+        }
+      };
+      const unsubs = [
+        runtime.services.session.onStateChanged(() => emit("session", "setup")),
+        runtime.services.accounts.onStateChanged(() => emit("accounts", "setup", "balances")),
+        runtime.services.keyring.onStateChanged(() => emit("keyrings")),
+        runtime.services.walletChainSelection.subscribeChanged(() => {
+          emit("networks", "accounts", "balances");
+        }),
+        runtime.services.supportedChains.onChainUpdated(() => emit("networks", "balances")),
+        runtime.services.chainRpc.onEndpointsChanged(() => emit("networks", "balances")),
+        runtime.services.chainRpcDefaultEndpoints.subscribeChanged(() => emit("networks", "balances")),
+        runtime.services.chainRpcEndpointOverrides.subscribeChanged(() => emit("networks", "balances")),
+        runtime.services.approvals.onCreated(() => emit("approvals")),
+        runtime.services.approvals.onFinished(() => emit("approvals")),
+        runtime.transactions.onTransactionApprovalsChanged(() => emit("approvals")),
+        runtime.transactions.onTransactionsChanged(() => emit("transactions")),
+      ];
+
+      return () => {
+        for (const unsubscribe of unsubs) {
+          unsubscribe();
+        }
+      };
     },
   };
 };
@@ -579,7 +610,10 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       }),
     );
 
-    return createWalletBridgeProtocolServer({ executor });
+    return createWalletBridgeProtocolServer({
+      executor,
+      events: createWalletInvalidationSource(runtimeCore),
+    });
   };
   const walletApi = createTrustedWalletApi(
     createTrustedWalletApiContext(runtimeCore, approvalReadService, {

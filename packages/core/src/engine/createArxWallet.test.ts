@@ -497,7 +497,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes engine-owned provider, UI events, and trusted wallet API contracts", async () => {
+  it("exposes engine-owned provider and trusted wallet API contracts", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -506,38 +506,15 @@ describe("createArxWallet", () => {
     try {
       const { wallet, walletApi } = runtime;
       const provider = wallet.createProvider();
-      const ui = wallet.createUi({
-        platform: createUiPlatform(),
-        uiOrigin: "chrome-extension://arx/popup.html",
-      });
-      const events: unknown[] = [];
-      const unsubscribe = ui.subscribeUiEvents((event) => events.push(event));
 
       await wallet.session.createVault({ password: PASSWORD });
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            event: "ui:sessionChanged",
-            payload: { reason: "changed" },
-          }),
-        ]),
-      );
       await expect(walletApi.session.getStatus()).resolves.toMatchObject({
         vaultInitialized: true,
         isUnlocked: false,
       });
-      events.length = 0;
       await expect(walletApi.session.unlock({ password: PASSWORD })).resolves.toMatchObject({
         status: "unlocked",
       });
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            event: "ui:sessionChanged",
-            payload: { reason: "changed" },
-          }),
-        ]),
-      );
       await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       wallet.session.lock("manual");
 
@@ -569,8 +546,6 @@ describe("createArxWallet", () => {
         jsonrpc: "2.0",
         result: [],
       });
-
-      unsubscribe();
     } finally {
       await runtime.shutdown();
     }

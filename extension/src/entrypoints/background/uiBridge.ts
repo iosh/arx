@@ -19,7 +19,7 @@ export const createUiBridge = ({ uiAccess, walletBridgeServer }: BridgeDeps) => 
   const portHub = createUiPortHub();
   const readyHandshake = createUiReadyHandshake({ portHub });
 
-  uiAccess.subscribeUiEvents((event) => {
+  walletBridgeServer.subscribeInvalidation((event) => {
     portHub.broadcast(event);
   });
 

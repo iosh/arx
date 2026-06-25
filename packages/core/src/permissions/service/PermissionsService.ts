@@ -205,7 +205,7 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
   }
 
   onStateChanged(handler: (state: PermissionsState) => void): () => void {
-    return this.#messenger.subscribe(PERMISSION_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(PERMISSION_STATE_CHANGED, handler);
   }
 
   onOriginChanged(handler: (payload: OriginPermissions) => void): () => void {

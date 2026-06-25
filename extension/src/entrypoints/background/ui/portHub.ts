@@ -1,10 +1,10 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiPortEnvelope } from "@arx/core/ui";
-import type { WalletBridgeReply } from "@arx/core/wallet/bridge";
+import type { WalletBridgeEvent, WalletBridgeReply } from "@arx/core/wallet/bridge";
 import type browserDefaultType from "webextension-polyfill";
 
 export type UiPort = browserDefaultType.Runtime.Port;
-export type UiPortOutboundMessage = UiPortEnvelope | WalletBridgeReply;
+export type UiPortOutboundMessage = UiPortEnvelope | WalletBridgeReply | WalletBridgeEvent;
 
 const uiLog = createLogger("bg:ui");
 const portLog = extendLogger(uiLog, "port");
@@ -29,7 +29,7 @@ export const createUiPortHub = () => {
     }
   };
 
-  const broadcast = (envelope: UiPortEnvelope) => {
+  const broadcast = (envelope: UiPortOutboundMessage) => {
     for (const port of Array.from(ports)) {
       send(port, envelope);
     }

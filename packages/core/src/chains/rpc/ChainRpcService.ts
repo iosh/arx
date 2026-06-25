@@ -67,7 +67,7 @@ export class ChainRpcService implements ChainRpcReader, ChainRpcAccessUpdater {
   }
 
   onStateChanged(handler: (state: ChainRpcState) => void): () => void {
-    return this.#messenger.subscribe(CHAIN_RPC_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(CHAIN_RPC_STATE_CHANGED, handler);
   }
 
   onEndpointsChanged(handler: (event: ChainRpcEndpointsChangedEvent) => void): () => void {

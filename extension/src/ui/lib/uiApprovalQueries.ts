@@ -2,8 +2,10 @@ import type { ApprovalDetail } from "@arx/core/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import { app } from "@/ui/lib/uiBridgeClient";
 
-export const UI_APPROVALS_LIST_QUERY_KEY = ["uiApprovals", "list"] as const;
-export const uiApprovalDetailQueryKey = (approvalId: string) => ["uiApprovals", "detail", approvalId] as const;
+export const UI_APPROVALS_QUERY_KEY = ["uiApprovals"] as const;
+export const UI_APPROVALS_LIST_QUERY_KEY = [...UI_APPROVALS_QUERY_KEY, "list"] as const;
+export const uiApprovalDetailQueryKey = (approvalId: string) =>
+  [...UI_APPROVALS_QUERY_KEY, "detail", approvalId] as const;
 
 export const createUiApprovalDetailQueryOptions = (approvalId: string) => ({
   queryKey: uiApprovalDetailQueryKey(approvalId),

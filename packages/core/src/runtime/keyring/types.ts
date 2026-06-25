@@ -43,6 +43,7 @@ export type RuntimeKeyring = {
 export type Payload = { keyrings: VaultKeyringEntry[] };
 
 export type KeyringPayloadListener = (payload: Uint8Array | null) => void | Promise<void>;
+export type KeyringStateListener = () => void;
 
 export type RuntimeAccountRef = {
   namespace: string;

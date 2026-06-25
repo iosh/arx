@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ARX_ERROR_KIND } from "../../error.js";
-import { parseWalletBridgeReply, parseWalletBridgeRequest } from "./protocol.js";
+import {
+  isWalletBridgeEventMessage,
+  parseWalletBridgeEvent,
+  parseWalletBridgeReply,
+  parseWalletBridgeRequest,
+} from "./protocol.js";
 
 describe("wallet bridge protocol", () => {
   it("parses request, response, and error messages", () => {
@@ -47,6 +52,25 @@ describe("wallet bridge protocol", () => {
     ).toMatchObject({ type: "wallet:error", id: "request-1" });
   });
 
+  it("parses wallet invalidation events", () => {
+    expect(
+      parseWalletBridgeEvent({
+        type: "wallet:event",
+        version: 1,
+        event: "wallet:invalidation",
+        topic: "approvals",
+      }),
+    ).toEqual({
+      type: "wallet:event",
+      version: 1,
+      event: "wallet:invalidation",
+      topic: "approvals",
+    });
+
+    expect(isWalletBridgeEventMessage({ type: "wallet:event" })).toBe(true);
+    expect(isWalletBridgeEventMessage({ type: "wallet:response" })).toBe(false);
+  });
+
   it("rejects invalid message shapes", () => {
     expect(() =>
       parseWalletBridgeRequest({
@@ -62,6 +86,15 @@ describe("wallet bridge protocol", () => {
         type: "wallet:response",
         version: 1,
         id: "request-1",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseWalletBridgeEvent({
+        type: "wallet:event",
+        version: 1,
+        event: "wallet:invalidation",
+        topic: "approval-1",
       }),
     ).toThrow();
   });

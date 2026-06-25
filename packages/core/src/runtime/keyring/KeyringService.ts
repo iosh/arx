@@ -23,6 +23,7 @@ import type {
   KeyringMetaRecord,
   KeyringPayloadListener,
   KeyringServiceOptions,
+  KeyringStateListener,
   VaultKeyringEntry,
 } from "./types.js";
 
@@ -70,6 +71,10 @@ export class KeyringService {
 
   onPayloadUpdated(handler: KeyringPayloadListener): () => void {
     return this.#runtimeKeyringState.onPayloadUpdated(handler);
+  }
+
+  onStateChanged(handler: KeyringStateListener): () => void {
+    return this.#runtimeKeyringState.onStateChanged(handler);
   }
 
   hasNamespace(namespace: string): boolean {

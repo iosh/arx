@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ARX_ERROR_KIND, isArxBaseError } from "../../error.js";
 import {
   createRemoteTrustedWalletClient,
+  createWalletEventApi,
   type WalletBridgeClientTransport,
   WalletBridgeProtocolError,
   type WalletBridgeRemoteError,
 } from "./client.js";
-import type { WalletBridgeReply, WalletBridgeRequest } from "./protocol.js";
+import type { WalletBridgeEvent, WalletBridgeReply, WalletBridgeRequest } from "./protocol.js";
 
 describe("remote trusted wallet client", () => {
   it("sends wallet method requests", async () => {
@@ -144,5 +145,41 @@ describe("remote trusted wallet client", () => {
     const wallet = createRemoteTrustedWalletClient(transport, { createRequestId: () => "request-1" });
 
     await expect(wallet.setup.getStatus()).rejects.toSatisfy(isArxBaseError);
+  });
+});
+
+describe("wallet event api", () => {
+  it("forwards invalidation topics from wallet bridge events", () => {
+    let eventListener: ((event: WalletBridgeEvent) => void) | null = null;
+    const transport: WalletBridgeClientTransport = {
+      request: async (request) => ({
+        type: "wallet:response",
+        version: 1,
+        id: request.id,
+        result: null,
+      }),
+      subscribe: (listener) => {
+        eventListener = listener;
+        return () => {
+          eventListener = null;
+        };
+      },
+    };
+    const events: unknown[] = [];
+    const walletEvents = createWalletEventApi(transport);
+
+    const unsubscribe = walletEvents.subscribeInvalidation((event) => events.push(event));
+
+    eventListener?.({
+      type: "wallet:event",
+      version: 1,
+      event: "wallet:invalidation",
+      topic: "accounts",
+    });
+
+    unsubscribe();
+
+    expect(events).toEqual([{ topic: "accounts" }]);
+    expect(eventListener).toBeNull();
   });
 });

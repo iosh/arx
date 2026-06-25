@@ -111,7 +111,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
   }
 
   onStateChanged(handler: (state: ChainDefinitionsState) => void): () => void {
-    return this.#messenger.subscribe(CHAIN_DEFINITIONS_STATE_CHANGED, handler, { replay: "snapshot" });
+    return this.#messenger.subscribe(CHAIN_DEFINITIONS_STATE_CHANGED, handler);
   }
 
   onChainUpdated(handler: (update: ChainDefinitionsUpdate) => void): () => void {

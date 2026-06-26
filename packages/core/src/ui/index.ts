@@ -28,14 +28,3 @@ export {
   UiProtocol,
 } from "./protocol/index.js";
 export { uiMethods } from "./protocol/methods.js";
-export type { ListTransactionsQuery, UiTransaction } from "./protocol/models/transactions.js";
-export { ListTransactionsQuerySchema } from "./protocol/models/transactions.js";
-export type {
-  ApprovalDetail,
-  ApprovalListEntry,
-  ChainSnapshot,
-  UiAccountMeta,
-  UiBackupStatus,
-  UiKeyringMeta,
-  UiPermissionsSnapshot,
-} from "./protocol/schemas.js";

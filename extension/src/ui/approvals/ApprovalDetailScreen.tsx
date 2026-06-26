@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import type { ReactNode } from "react";
 import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";

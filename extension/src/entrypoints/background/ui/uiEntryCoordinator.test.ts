@@ -1,6 +1,6 @@
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/approvals";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryPlatform } from "../platform/uiPlatform";
 import type { BackgroundUiEntryAccess } from "../runtimeHost";

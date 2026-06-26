@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ROUTES } from "@/ui/lib/routes";

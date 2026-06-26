@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
 import { app } from "@/ui/lib/uiBridgeClient";
 

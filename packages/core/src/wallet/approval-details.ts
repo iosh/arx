@@ -1,17 +1,13 @@
-import { deriveApprovalReviewContext } from "../../../approvals/chainContext.js";
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../approvals/queue/types.js";
-import { getApprovalSelectableAccounts } from "../../../approvals/shared.js";
-import { eip155ChainIdHexFromChainRef } from "../../../chains/eip155/format.js";
-import type { WalletAccounts } from "../../../engine/types.js";
-import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
-import type { TransactionApproval, TransactionsService } from "../../../transactions/TransactionsService.js";
-import type {
-  ApprovalDetail,
-  ApprovalListEntry,
-  ApprovalSendTransactionDetail,
-} from "../../protocol/models/approvals.js";
+import { deriveApprovalReviewContext } from "../approvals/chainContext.js";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../approvals/queue/types.js";
+import { getApprovalSelectableAccounts } from "../approvals/shared.js";
+import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
+import type { WalletAccounts } from "../engine/types.js";
+import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
+import type { TransactionApproval, TransactionsService } from "../transactions/TransactionsService.js";
+import type { ApprovalDetail, ApprovalListEntry, ApprovalSendTransactionDetail } from "./types.js";
 
-type ApprovalReadServiceDeps = {
+export type ApprovalDetailsDeps = {
   approvals: {
     get(approvalId: string): ApprovalRecord | undefined;
     getState(): { pending: ApprovalQueueItem[] };
@@ -20,6 +16,11 @@ type ApprovalReadServiceDeps = {
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
   transactionApprovals?: Pick<TransactionsService, "getTransactionApproval" | "listTransactionApprovals">;
 };
+
+export type ApprovalDetails = Readonly<{
+  listPending(): Promise<ApprovalListEntry[]>;
+  getDetail(approvalId: string): Promise<ApprovalDetail | null>;
+}>;
 
 const isApprovalRecord = <K extends ApprovalRecord["kind"]>(
   record: ApprovalRecord,
@@ -85,11 +86,18 @@ const getApprovalRequestChainRef = (record: ApprovalRecord): string | undefined 
   return undefined;
 };
 
+const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"]) =>
+  accounts.map((account) => ({
+    accountKey: account.accountKey,
+    canonicalAddress: account.canonicalAddress,
+    displayAddress: account.displayAddress,
+  }));
+
 const buildSelectionDetail = (
   record:
     | ApprovalRecord<typeof ApprovalKinds.RequestAccounts>
     | ApprovalRecord<typeof ApprovalKinds.RequestPermissions>,
-  deps: ApprovalReadServiceDeps,
+  deps: ApprovalDetailsDeps,
 ): ApprovalDetail => {
   const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
     request: record.request,
@@ -104,11 +112,7 @@ const buildSelectionDetail = (
         canReject: true,
       },
       request: {
-        selectableAccounts: selectableAccounts.map((account) => ({
-          accountKey: account.accountKey,
-          canonicalAddress: account.canonicalAddress,
-          displayAddress: account.displayAddress,
-        })),
+        selectableAccounts: toSelectableAccounts(selectableAccounts),
         recommendedAccountKey,
       },
       review: null,
@@ -123,11 +127,7 @@ const buildSelectionDetail = (
       canReject: true,
     },
     request: {
-      selectableAccounts: selectableAccounts.map((account) => ({
-        accountKey: account.accountKey,
-        canonicalAddress: account.canonicalAddress,
-        displayAddress: account.displayAddress,
-      })),
+      selectableAccounts: toSelectableAccounts(selectableAccounts),
       recommendedAccountKey,
       requestedGrants: record.request.requestedGrants.flatMap((item) =>
         item.chainRefs.map((chainRef) => ({
@@ -146,7 +146,7 @@ const buildStaticDetail = (
     | ApprovalRecord<typeof ApprovalKinds.SignTypedData>
     | ApprovalRecord<typeof ApprovalKinds.SwitchChain>
     | ApprovalRecord<typeof ApprovalKinds.AddChain>,
-  deps: ApprovalReadServiceDeps,
+  deps: ApprovalDetailsDeps,
 ): ApprovalDetail => {
   switch (record.kind) {
     case ApprovalKinds.SignMessage:
@@ -269,14 +269,7 @@ const toTransactionReviewPrepare = (
   };
 };
 
-const buildTransactionOwnedSendTransactionDetail = async (
-  approval: TransactionApproval,
-  deps: ApprovalReadServiceDeps,
-): Promise<ApprovalSendTransactionDetail | null> => {
-  if (!deps.transactionApprovals) {
-    return null;
-  }
-
+const buildTransactionDetail = (approval: TransactionApproval): ApprovalSendTransactionDetail => {
   return {
     approvalId: approval.approvalId,
     kind: ApprovalKinds.SendTransaction,
@@ -303,24 +296,22 @@ const buildTransactionOwnedSendTransactionDetail = async (
   };
 };
 
-export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
-  const listPending = (): ApprovalListEntry[] | Promise<ApprovalListEntry[]> => {
-    const oldEntries = deps.approvals.getState().pending.map(toListEntry);
-    if (!deps.transactionApprovals) {
-      return oldEntries;
-    }
-    const transactionApprovals = deps.transactionApprovals;
+export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetails => {
+  const listPending = async (): Promise<ApprovalListEntry[]> => {
+    const [pending, transactionApprovals] = await Promise.all([
+      Promise.resolve(deps.approvals.getState().pending),
+      deps.transactionApprovals ? deps.transactionApprovals.listTransactionApprovals() : Promise.resolve([]),
+    ]);
 
-    return transactionApprovals.listTransactionApprovals().then((approvals) => {
-      const transactionEntries = approvals.map(toTransactionApprovalListEntry);
-      return [...oldEntries, ...transactionEntries].sort((left, right) => left.createdAt - right.createdAt);
-    });
+    return [...pending.map(toListEntry), ...transactionApprovals.map(toTransactionApprovalListEntry)].sort(
+      (left, right) => left.createdAt - right.createdAt,
+    );
   };
 
-  const getDetail = (approvalId: string): ApprovalDetail | null | Promise<ApprovalDetail | null> => {
+  const getDetail = async (approvalId: string): Promise<ApprovalDetail | null> => {
     const transactionApproval = deps.transactionApprovals?.getTransactionApproval(approvalId) ?? null;
     if (transactionApproval) {
-      return buildTransactionOwnedSendTransactionDetail(transactionApproval, deps);
+      return buildTransactionDetail(transactionApproval);
     }
 
     const record = deps.approvals.get(approvalId);

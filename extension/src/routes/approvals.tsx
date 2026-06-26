@@ -1,3 +1,4 @@
+import type { ApprovalListEntry } from "@arx/core/wallet";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Card, Paragraph, YStack } from "tamagui";
 import { getApprovalRoutePath, getApprovalTypeLabel } from "@/ui/approvals";
@@ -57,13 +58,7 @@ function ApprovalsPage() {
   );
 }
 
-function ApprovalListItem({
-  approval,
-  onSelect,
-}: {
-  approval: import("@arx/core/ui").ApprovalListEntry;
-  onSelect: () => void;
-}) {
+function ApprovalListItem({ approval, onSelect }: { approval: ApprovalListEntry; onSelect: () => void }) {
   const typeLabel = getApprovalTypeLabel(approval.kind);
 
   return (

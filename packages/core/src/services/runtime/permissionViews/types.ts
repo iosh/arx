@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { AccountKey } from "../../../storage/records.js";
-import type { UiPermissionsSnapshot } from "../../../ui/protocol/schemas.js";
+import type { PermissionsSnapshot } from "../../../wallet/types.js";
 
 export type PermittedAccountView = {
   accountKey: AccountKey;
@@ -24,5 +24,5 @@ export type PermissionViewsService = {
   assertAuthorized(origin: string, options: { chainRef: ChainRef }): Promise<void>;
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];
   // Protocol-specific permission surfaces adapt from the generic connection projection.
-  buildUiPermissionsSnapshot(): UiPermissionsSnapshot;
+  buildPermissionsSnapshot(): PermissionsSnapshot;
 };

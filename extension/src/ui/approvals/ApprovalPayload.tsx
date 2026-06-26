@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { AddChainPayload } from "./payloads/AddChainPayload";
 import { RequestAccountsPayload } from "./payloads/RequestAccountsPayload";
 import { RequestPermissionsPayload } from "./payloads/RequestPermissionsPayload";

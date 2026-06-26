@@ -1,4 +1,4 @@
-import type { ApprovalDetail, ApprovalListEntry } from "@arx/core/ui";
+import type { ApprovalDetail, ApprovalListEntry } from "@arx/core/wallet";
 
 const APPROVAL_TYPE_LABEL = {
   requestAccounts: "Connect Account",

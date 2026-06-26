@@ -10,8 +10,8 @@ export type WalletApiContext = {
   networks: WalletNetworks;
   approvals: WalletApprovals;
   approvalDetails: Readonly<{
-    listPending(): Promise<WalletApiPendingApprovalsResult> | WalletApiPendingApprovalsResult;
-    getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult> | WalletApiApprovalDetailResult;
+    listPending(): Promise<WalletApiPendingApprovalsResult>;
+    getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
   }>;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   createId: () => string;

@@ -15,7 +15,7 @@ export type ChainView = {
   };
 };
 
-export type UiNetworksSnapshot = {
+export type NetworksSnapshot = {
   selectedNamespace: string;
   active: ChainRef;
   known: ChainView[];
@@ -42,5 +42,5 @@ export type ChainViewsService = {
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
-  buildWalletNetworksSnapshot(): UiNetworksSnapshot;
+  buildWalletNetworksSnapshot(): NetworksSnapshot;
 };

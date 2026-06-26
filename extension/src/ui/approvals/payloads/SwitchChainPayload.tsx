@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { Card, Paragraph, YStack } from "tamagui";
 
 type SwitchChainApproval = Extract<ApprovalDetail, { kind: "switchChain" }>;

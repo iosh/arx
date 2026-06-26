@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { Paragraph, XStack, YStack } from "tamagui";
 import { AddressDisplay, Button, Card } from "@/ui/components";
 

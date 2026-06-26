@@ -1,4 +1,4 @@
-import type { ApprovalListEntry } from "@arx/core/ui";
+import type { ApprovalListEntry } from "@arx/core/wallet";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { ROUTES } from "@/ui/lib/routes";
 import { getApprovalRoutePath } from "./routes";

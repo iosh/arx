@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 
 export function readApprovalDetailForRoute(input: {
   initialDetail: ApprovalDetail;

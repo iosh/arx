@@ -16,7 +16,7 @@ import type {
   ChainView,
   ChainViewsService,
   FindAvailableChainViewParams,
-  UiNetworksSnapshot,
+  NetworksSnapshot,
 } from "./types.js";
 
 type CreateChainViewsServiceOptions = {
@@ -115,7 +115,7 @@ class DefaultChainViewsService implements ChainViewsService {
     return sortChainViews(views);
   }
 
-  buildWalletNetworksSnapshot(): UiNetworksSnapshot {
+  buildWalletNetworksSnapshot(): NetworksSnapshot {
     const selectedNamespace = this.#resolveSelectedNamespace();
     const active = this.getActiveChainViewForNamespace(selectedNamespace).chainRef;
 

@@ -16,7 +16,7 @@ import type {
   NamespaceTransactionSubmission,
   NamespaceTransactionTracking,
 } from "../transactions/namespace/types.js";
-import { createApprovalReadService } from "../ui/server/approvals/readService.js";
+import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { CreateBackgroundRuntimeResult } from "./__fixtures__/backgroundTestSetup.js";
 import {
   createChainDefinitionSeed,
@@ -165,7 +165,7 @@ const createNamespaceTransactionMock = (params: {
 };
 
 const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
-  createApprovalReadService({
+  createApprovalDetails({
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,

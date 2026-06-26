@@ -1,5 +1,5 @@
-import type { ApprovalListEntry } from "@arx/core/ui";
 import type {
+  ApprovalListEntry,
   WalletApiAccountsForCurrentChainResult,
   WalletApiBackupStatusResult,
   WalletApiChainSnapshot,

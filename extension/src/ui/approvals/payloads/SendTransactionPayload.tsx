@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { Card, Paragraph, XStack, YStack } from "tamagui";
 
 type SendTransactionApproval = Extract<ApprovalDetail, { kind: "sendTransaction" }>;

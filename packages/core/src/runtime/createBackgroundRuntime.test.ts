@@ -12,9 +12,9 @@ import {
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
-import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import type { UiServerExtension } from "../ui/server/types.js";
+import { createApprovalDetails } from "../wallet/approval-details.js";
 import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
 import {
   flushAsync,
@@ -175,7 +175,7 @@ const createActiveAccount = async (
 };
 
 const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
-  const approvalReadService = createApprovalReadService({
+  const approvalDetails = createApprovalDetails({
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,
@@ -207,8 +207,8 @@ const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackg
       approvals: runtime.services.approvals,
     }),
     approvalDetails: {
-      listPending: () => approvalReadService.listPending(),
-      getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
+      listPending: () => approvalDetails.listPending(),
+      getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
     },
     accountCodecs: runtime.services.accountCodecs,
     createId: () => crypto.randomUUID(),

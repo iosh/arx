@@ -1,4 +1,4 @@
-import type { ApprovalListEntry } from "@arx/core/ui";
+import type { ApprovalListEntry } from "@arx/core/wallet";
 import { describe, expect, it } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { getApprovalAttentionAction, getCurrentApprovalRouteId } from "./orchestration";

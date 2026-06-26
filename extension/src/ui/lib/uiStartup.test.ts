@@ -1,4 +1,5 @@
-import { type ApprovalDetail, UI_EVENT_ENTRY_CHANGED, type UiClientConnectionStatus } from "@arx/core/ui";
+import { UI_EVENT_ENTRY_CHANGED, type UiClientConnectionStatus } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { loadUiEntryBootstrap, startUiEntryLaunchContextSync } from "./uiStartup";

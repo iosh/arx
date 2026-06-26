@@ -1,4 +1,4 @@
-import type { UiKeyringMeta } from "@arx/core/ui";
+import type { KeyringMeta } from "@arx/core/wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Check } from "lucide-react";
@@ -66,7 +66,7 @@ function AccountsPage() {
   const [deriveOpen, setDeriveOpen] = useState(false);
   const [deriving, setDeriving] = useState(false);
   const [deriveErrorMessage, setDeriveErrorMessage] = useState<string | null>(null);
-  const [hdKeyrings, setHdKeyrings] = useState<UiKeyringMeta[]>([]);
+  const [hdKeyrings, setHdKeyrings] = useState<KeyringMeta[]>([]);
   const [selectedHdKeyringId, setSelectedHdKeyringId] = useState<string | null>(null);
   const [loadingHdKeyrings, setLoadingHdKeyrings] = useState(false);
 

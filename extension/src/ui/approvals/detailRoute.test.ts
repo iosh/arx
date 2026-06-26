@@ -1,4 +1,4 @@
-import type { ApprovalDetail } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/wallet";
 import { describe, expect, it } from "vitest";
 import { readApprovalDetailForRoute } from "./detailRoute";
 

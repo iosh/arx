@@ -58,7 +58,7 @@ import type {
 } from "../runtime/session/unlock/types.js";
 import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
-import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
+import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
@@ -76,9 +76,9 @@ import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
-import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
+import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
 export type NamespaceEngineFacts = Readonly<{
@@ -293,7 +293,7 @@ export type WalletNetworks = Readonly<{
   getActiveChainViewForNamespace(namespace: string): ChainView;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
-  buildWalletNetworksSnapshot(): UiNetworksSnapshot;
+  buildWalletNetworksSnapshot(): NetworksSnapshot;
   getChainRpcState(): ChainRpcState;
   getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
   addChain(chain: ChainDefinition, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
@@ -377,9 +377,10 @@ export type WalletUi = Readonly<{
   dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
 }>;
 
-/** Runtime-owned approval detail read model for shell bootstrap. */
+/** Runtime-owned approval access. */
 export type WalletApprovalDetails = Readonly<{
-  getDetail(approvalId: string): Promise<ApprovalDetail | null>;
+  listPending(): Promise<WalletApiPendingApprovalsResult>;
+  getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
 }>;
 
 /**

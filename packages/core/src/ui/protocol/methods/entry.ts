@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { ApprovalDetail } from "../models/approvals.js";
+import type { ApprovalDetail } from "../../../wallet/types.js";
 import { defineMethod } from "./types.js";
 
 const UI_ENVIRONMENTS = ["popup", "notification", "onboarding"] as const;

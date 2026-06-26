@@ -6,7 +6,6 @@ import type {
   ImportPrivateKeyParams,
 } from "../../runtime/keyring/KeyringService.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
-import type { UiAccountMeta, UiKeyringMeta } from "../../ui/protocol/schemas.js";
 import type {
   ConfirmNewMnemonicInput,
   DeriveAccountInput,
@@ -23,6 +22,7 @@ import type {
   WalletApiAccountsByKeyringInput,
 } from "../api.js";
 import type { WalletApiContext } from "../context.js";
+import type { AccountMeta, KeyringMeta } from "../types.js";
 import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 import { selectCreatedAccount } from "./createdAccountSelection.js";
 import { assertSessionUnlocked } from "./session.js";
@@ -30,7 +30,7 @@ import { assertSessionUnlocked } from "./session.js";
 const privateKeyBytesToHex = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): UiKeyringMeta => ({
+const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): KeyringMeta => ({
   id: record.id,
   type: record.type,
   createdAt: record.createdAt,
@@ -40,7 +40,7 @@ const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): UiKeyringMeta =>
     : {}),
 });
 
-const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): UiAccountMeta => ({
+const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): AccountMeta => ({
   accountKey: record.accountKey,
   canonicalAddress: context.accountCodecs.toCanonicalAddressFromAccountKey({
     accountKey: record.accountKey,

@@ -3,5 +3,5 @@ export type {
   ChainView,
   ChainViewsService,
   FindAvailableChainViewParams,
-  UiNetworksSnapshot,
+  NetworksSnapshot,
 } from "./types.js";

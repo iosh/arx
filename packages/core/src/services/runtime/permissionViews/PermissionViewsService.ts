@@ -4,7 +4,7 @@ import type { ChainRef } from "../../../chains/ids.js";
 import { PermissionNotConnectedError } from "../../../permissions/errors.js";
 import type { PermissionsReader } from "../../../permissions/service/types.js";
 import type { AccountKey } from "../../../storage/records.js";
-import type { UiPermissionsSnapshot } from "../../../ui/protocol/schemas.js";
+import type { PermissionsSnapshot } from "../../../wallet/types.js";
 import type { AuthorizationSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
@@ -74,9 +74,9 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     return this.getAuthorizationSnapshot(origin, options).accounts;
   }
 
-  buildUiPermissionsSnapshot(): UiPermissionsSnapshot {
+  buildPermissionsSnapshot(): PermissionsSnapshot {
     const state = this.#permissions.getState();
-    const origins: UiPermissionsSnapshot["origins"] = {};
+    const origins: PermissionsSnapshot["origins"] = {};
 
     for (const origin of Object.keys(state.origins).sort((left, right) => left.localeCompare(right))) {
       const originState = state.origins[origin];
@@ -84,7 +84,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
         continue;
       }
 
-      const namespaces: UiPermissionsSnapshot["origins"][string] = {};
+      const namespaces: PermissionsSnapshot["origins"][string] = {};
       for (const namespace of Object.keys(originState).sort((left, right) => left.localeCompare(right))) {
         const namespaceState = originState[namespace];
         if (!namespaceState) {

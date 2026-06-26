@@ -35,6 +35,17 @@ export type {
 } from "./api.js";
 export { WalletMethodBindingInvariantError } from "./errors.js";
 export type {
+  AccountMeta,
+  ApprovalDetail,
+  ApprovalListEntry,
+  ApprovalSelectableAccount,
+  BackupReminder,
+  BackupStatus,
+  KeyringMeta,
+  NetworksSnapshot,
+  PermissionsSnapshot,
+  ResolveApprovalResult,
+  Transaction,
   WalletApiAccountsByKeyringResult,
   WalletApiAccountsForCurrentChainResult,
   WalletApiApprovalDetailResult,

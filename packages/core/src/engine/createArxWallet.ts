@@ -28,10 +28,9 @@ import {
   createTransactionServices,
   TransactionAggregateStore,
 } from "../transactions/index.js";
-import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
-import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
+import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletInvalidationTopic } from "../wallet/bridge/protocol.js";
 import type { WalletBridgeServer } from "../wallet/bridge/server.js";
 import {
@@ -41,6 +40,7 @@ import {
 import type { WalletApiContext } from "../wallet/context.js";
 import { createTrustedWalletApi, createTrustedWalletMethodExecutor } from "../wallet/createTrustedWalletApi.js";
 import type { TrustedWalletApi } from "../wallet/index.js";
+import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletCreateUiOptions, WalletProvider } from "./types.js";
@@ -140,10 +140,8 @@ type ArxWalletRuntime = Readonly<{
   walletApi: TrustedWalletApi;
   createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
   createWalletBridgeServer(options: WalletCreateWalletBridgeOptions): WalletBridgeServer;
-  listPendingApprovals(): ReturnType<typeof createApprovalReadService>["listPending"] extends () => infer TResult
-    ? Promise<Awaited<TResult>>
-    : never;
-  getApprovalDetail(approvalId: string): Promise<ApprovalDetail | null>;
+  listPendingApprovals(): Promise<WalletApiPendingApprovalsResult>;
+  getApprovalDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
 }>;
 
 type WalletCreateWalletBridgeOptions = Readonly<{
@@ -153,11 +151,11 @@ type WalletCreateWalletBridgeOptions = Readonly<{
 
 const createUiTrustedWalletApi = (
   runtime: ArxWalletRuntimeCore,
-  approvalReadService: ReturnType<typeof createApprovalReadService>,
+  approvalDetails: ReturnType<typeof createApprovalDetails>,
   options: WalletCreateUiOptions,
 ): TrustedWalletApi => {
   return createTrustedWalletApi(
-    createTrustedWalletApiContext(runtime, approvalReadService, {
+    createTrustedWalletApiContext(runtime, approvalDetails, {
       createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
       origin: options.uiOrigin,
     }),
@@ -166,7 +164,7 @@ const createUiTrustedWalletApi = (
 
 const createTrustedWalletApiContext = (
   runtime: ArxWalletRuntimeCore,
-  approvalReadService: ReturnType<typeof createApprovalReadService>,
+  approvalDetails: ReturnType<typeof createApprovalDetails>,
   options: { createId: () => string; origin: string },
 ): WalletApiContext => {
   return {
@@ -192,8 +190,8 @@ const createTrustedWalletApiContext = (
       approvals: runtime.services.approvals,
     }),
     approvalDetails: {
-      listPending: () => approvalReadService.listPending(),
-      getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
+      listPending: () => approvalDetails.listPending(),
+      getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
     },
     accountCodecs: runtime.services.accountCodecs,
     createId: options.createId,
@@ -243,10 +241,10 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
 
 const createWalletUiDeps = (
   runtime: ArxWalletRuntimeCore,
-  approvalReadService: ReturnType<typeof createApprovalReadService>,
+  approvalDetails: ReturnType<typeof createApprovalDetails>,
   options: WalletCreateUiOptions,
 ): UiRuntimeDeps => {
-  const wallet = createUiTrustedWalletApi(runtime, approvalReadService, options);
+  const wallet = createUiTrustedWalletApi(runtime, approvalDetails, options);
 
   return {
     server: {
@@ -535,7 +533,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const approvals = createWalletApprovals({
     approvals: stateServices.approvals,
   });
-  const approvalReadService = createApprovalReadService({
+  const approvalDetails = createApprovalDetails({
     approvals: stateServices.approvals,
     accounts,
     chainViews: sessionScope.chainViews,
@@ -599,12 +597,12 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     dappConnections,
   });
   const createUi = (options: WalletCreateUiOptions) =>
-    createUiContract(createWalletUiDeps(runtimeCore, approvalReadService, options));
+    createUiContract(createWalletUiDeps(runtimeCore, approvalDetails, options));
   const createUiAccess = (options: WalletCreateUiOptions) =>
-    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalReadService, options));
+    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalDetails, options));
   const createWalletBridgeServer = (options: WalletCreateWalletBridgeOptions): WalletBridgeServer => {
     const executor = createTrustedWalletMethodExecutor(
-      createTrustedWalletApiContext(runtimeCore, approvalReadService, {
+      createTrustedWalletApiContext(runtimeCore, approvalDetails, {
         createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
         origin: options.uiOrigin,
       }),
@@ -616,7 +614,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     });
   };
   const walletApi = createTrustedWalletApi(
-    createTrustedWalletApiContext(runtimeCore, approvalReadService, {
+    createTrustedWalletApiContext(runtimeCore, approvalDetails, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
       origin: CORE_WALLET_API_ORIGIN,
     }),
@@ -670,8 +668,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     walletApi,
     createUiAccess,
     createWalletBridgeServer,
-    listPendingApprovals: async () => await approvalReadService.listPending(),
-    getApprovalDetail: async (approvalId) => await approvalReadService.getDetail(approvalId),
+    listPendingApprovals: async () => await approvalDetails.listPending(),
+    getApprovalDetail: async (approvalId) => await approvalDetails.getDetail(approvalId),
   };
 
   return runtime;

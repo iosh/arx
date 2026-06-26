@@ -90,7 +90,7 @@ describe("createPermissionViewsService", () => {
       code: "global.permission.not_connected",
     });
 
-    expect(service.buildUiPermissionsSnapshot()).toEqual({
+    expect(service.buildPermissionsSnapshot()).toEqual({
       origins: {
         [ORIGIN]: {
           eip155: {

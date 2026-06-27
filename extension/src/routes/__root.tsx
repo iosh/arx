@@ -8,9 +8,9 @@ import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { useWalletInvalidations } from "@/ui/hooks/useWalletInvalidations";
+import { app } from "@/ui/lib/app";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
-import { app, uiClient } from "@/ui/lib/uiBridgeClient";
 import { createUiSetupStatusQueryOptions, getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 // Router context type for route guards
 export interface RouterContext {
@@ -30,7 +30,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (preDecision.type === "openOnboardingAndClose") {
-      void uiClient.onboarding.openTab({ reason: preDecision.reason });
+      void app.host.onboarding.openTab({ reason: preDecision.reason });
       window.close();
       return;
     }
@@ -58,7 +58,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (decision.type === "openOnboardingAndClose") {
-      void uiClient.onboarding.openTab({ reason: decision.reason });
+      void app.host.onboarding.openTab({ reason: decision.reason });
       window.close();
       return;
     }

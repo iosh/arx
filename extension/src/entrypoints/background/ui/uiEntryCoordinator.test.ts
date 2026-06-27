@@ -279,8 +279,8 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
     harness.approvals.add(createRecord({ approvalId: "approval-1" }));
     harness.approvals.add(
@@ -319,8 +319,8 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
     harness.approvals.add(createRecord({ approvalId: "provider-approval" }));
     harness.approvals.add(
@@ -358,8 +358,8 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
     harness.approvals.add(createRecord({ approvalId: "provider-approval" }));
     harness.approvals.add(
@@ -404,8 +404,8 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
     harness.bus.emit(ATTENTION_REQUESTED, {
       reason: "unlock_required",
@@ -432,14 +432,12 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await expect(coordinator.start()).rejects.toThrow("ui entry access bootstrap failed");
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
     expect(harness.platform.openNotificationPopup).not.toHaveBeenCalled();
 
-    await vi.waitFor(() => {
-      coordinator.start();
-      expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(2);
-    });
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(2);
 
     harness.bus.emit(ATTENTION_REQUESTED, {
       reason: "unlock_required",
@@ -484,8 +482,8 @@ describe("uiEntryCoordinator", () => {
       onEntryChanged: harness.onEntryChanged,
     });
 
-    coordinator.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+    await coordinator.start();
+    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
     harness.setApprovalDetail(createApprovalDetail("approval-1"));
     harness.approvals.add(createRecord({ approvalId: "approval-1" }));

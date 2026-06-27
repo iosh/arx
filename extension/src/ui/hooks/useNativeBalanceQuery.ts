@@ -1,6 +1,6 @@
 import type { WalletApiNativeBalanceResult } from "@arx/core/wallet";
 import { useQuery } from "@tanstack/react-query";
-import { app } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/app";
 
 const STALE_TIME_MS = 10_000;
 const POLL_INTERVAL_MS = 30_000;

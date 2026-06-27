@@ -1,6 +1,6 @@
 import type { ApprovalDetail } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { app } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/app";
 
 export const UI_APPROVALS_QUERY_KEY = ["uiApprovals"] as const;
 export const UI_APPROVALS_LIST_QUERY_KEY = [...UI_APPROVALS_QUERY_KEY, "list"] as const;

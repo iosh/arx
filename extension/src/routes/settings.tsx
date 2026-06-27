@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Input, Paragraph, Slider, XStack } from "tamagui";
 import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
 import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { app } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: requireVaultInitialized,

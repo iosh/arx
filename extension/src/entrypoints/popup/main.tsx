@@ -8,8 +8,8 @@ import "./style.css";
 // Import the generated route tree
 import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
+import { app } from "@/ui/lib/app";
 import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { refreshUiSetupStatusIntoCache } from "@/ui/lib/uiSetupStatusQuery";
 import { loadUiEntryBootstrap, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
@@ -88,7 +88,7 @@ const boot = async () => {
     const needsOnboardingNow = needsOnboarding(walletStatus);
 
     if (needsOnboardingNow) {
-      void uiClient.onboarding.openTab({ reason: "onboarding_required" });
+      void app.host.onboarding.openTab({ reason: "onboarding_required" });
       window.close();
       return;
     }

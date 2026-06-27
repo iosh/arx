@@ -5,11 +5,11 @@ import { useNativeBalanceQuery } from "@/ui/hooks/useNativeBalanceQuery";
 import { useUiApprovalsList } from "@/ui/hooks/useUiApprovals";
 import { useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
 import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
-import { app } from "@/ui/lib/uiBridgeClient";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 
 export const Route = createFileRoute("/")({

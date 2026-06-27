@@ -1,6 +1,6 @@
 import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/approvals";
 import { createLogger, extendLogger } from "@arx/core/logger";
-import type { UiMethodParams, UiMethodResult } from "@arx/core/ui";
+import type { HostMethods, UiEntryBootstrap, UiEntryLaunchContext } from "@/lib/host";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { OnboardingOpenResult, UiEntryPlatform } from "../platform/uiPlatform";
@@ -16,9 +16,7 @@ type UiEntryCoordinatorDeps = {
   onEntryChanged?: (entry: UiEntryLaunchContext) => void;
 };
 
-type UiEntryLaunchContextParams = UiMethodParams<"ui.entry.getLaunchContext">;
-type UiEntryLaunchContext = UiMethodResult<"ui.entry.getLaunchContext">;
-type UiEntryBootstrap = UiMethodResult<"ui.entry.getBootstrap">;
+type UiEntryLaunchContextParams = Parameters<HostMethods["getEntryLaunchContext"]>[0];
 type UiApprovalEntry = Parameters<BackgroundUiEntryAccess["subscribeApprovalCreated"]>[0] extends (
   event: infer Event,
 ) => void
@@ -28,7 +26,7 @@ type UiApprovalEntry = Parameters<BackgroundUiEntryAccess["subscribeApprovalCrea
   : never;
 
 export type UiEntryCoordinator = {
-  start(): void;
+  start(): Promise<void>;
   destroy(): void;
   getEntryLaunchContext(params: UiEntryLaunchContextParams): UiEntryLaunchContext;
   getEntryBootstrap(params: UiEntryLaunchContextParams): Promise<UiEntryBootstrap>;
@@ -311,9 +309,13 @@ export const createUiEntryCoordinator = ({
     return await platform.openOnboardingTab(reason);
   };
 
-  const start = () => {
-    if (started || startTask) {
+  const start = async (): Promise<void> => {
+    if (started) {
       return;
+    }
+
+    if (startTask) {
+      return await startTask;
     }
 
     disposed = false;
@@ -359,10 +361,13 @@ export const createUiEntryCoordinator = ({
         clearSubscriptions();
         clearWindowTracking();
         entryLog("failed to start ui entry coordinator", error);
+        throw error;
       }
     })().finally(() => {
       startTask = null;
     });
+
+    return await startTask;
   };
 
   const destroy = () => {

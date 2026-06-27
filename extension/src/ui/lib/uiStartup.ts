@@ -1,20 +1,18 @@
-import { UI_EVENT_ENTRY_CHANGED, type UiMethodResult } from "@arx/core/ui";
 import type { QueryClient } from "@tanstack/react-query";
+import type { UiEntryBootstrap } from "@/lib/host";
 import { getUiEnvironment, hydrateUiEntryMetadata, type UiEntryMetadata } from "@/lib/uiEntryMetadata";
+import { app } from "./app";
 import { writeCachedUiApprovalDetail } from "./uiApprovalQueries";
-import { uiClient } from "./uiBridgeClient";
 
 export const loadUiEntryLaunchContext = async (): Promise<UiEntryMetadata> => {
   const environment = getUiEnvironment();
-  const metadata = await uiClient.entry.getLaunchContext({ environment });
+  const metadata = await app.host.entry.getLaunchContext({ environment });
   return hydrateUiEntryMetadata(metadata);
 };
 
-export const loadUiEntryBootstrap = async (
-  queryClient: QueryClient,
-): Promise<UiMethodResult<"ui.entry.getBootstrap">> => {
+export const loadUiEntryBootstrap = async (queryClient: QueryClient): Promise<UiEntryBootstrap> => {
   const environment = getUiEnvironment();
-  const bootstrap = await uiClient.entry.getBootstrap({ environment });
+  const bootstrap = await app.host.entry.getBootstrap({ environment });
 
   hydrateUiEntryMetadata(bootstrap.entry);
 
@@ -33,7 +31,7 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
   let disposed = false;
   let shouldReloadLaunchContext = false;
 
-  const stopEntryChanged = uiClient.on(UI_EVENT_ENTRY_CHANGED, (metadata) => {
+  const stopEntryChanged = app.hostEvents.subscribeEntryChanged((metadata) => {
     if (metadata.environment !== environment) {
       return;
     }
@@ -41,7 +39,7 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
     hydrateUiEntryMetadata(metadata);
   });
 
-  const stopConnectionStatus = uiClient.onConnectionStatus((status) => {
+  const stopConnectionStatus = app.onConnectionStatus((status) => {
     if (status === "disconnected") {
       shouldReloadLaunchContext = true;
       return;
@@ -53,7 +51,7 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
 
     shouldReloadLaunchContext = false;
 
-    void uiClient.entry
+    void app.host.entry
       .getLaunchContext({ environment })
       .then((metadata) => {
         if (disposed) {

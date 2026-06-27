@@ -11,16 +11,15 @@ import {
   createArxWalletRuntime,
   createCoreRuntimeFromArxWalletRuntime,
 } from "@arx/core/engine";
+import type { MethodExecutor } from "@arx/core/invoke";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
 import { buildTransactionTerminalReason } from "@arx/core/transactions";
-import type { WalletBridgeServer } from "@arx/core/wallet/bridge";
+import type { WalletInvalidationEvent } from "@arx/core/wallet";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
-import { createUiActivationExtension, type UiActivationEntries } from "./ui/uiActivationExtension";
 
 type BackgroundRuntimeCache = {
   core: CoreRuntime;
@@ -31,17 +30,11 @@ export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
   getCoreReady: () => Promise<CoreRuntime>;
   getOrInitProvider: () => Promise<CoreProviderApi>;
-  getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
-  getOrInitWalletBridgeServer: (uiOrigin: string) => Promise<WalletBridgeServer>;
+  getOrInitWalletMethodExecutor: (origin: string) => Promise<MethodExecutor>;
+  subscribeWalletInvalidation: (listener: (event: WalletInvalidationEvent) => void) => Promise<() => void>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
   applyDebugNamespacesFromEnv: () => void;
-};
-
-export type BackgroundUiAccessParams = {
-  platform: UiPlatformAdapter;
-  activation: UiActivationEntries;
-  uiOrigin: string;
 };
 
 type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
@@ -117,11 +110,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let runtimeCache: BackgroundRuntimeCache | null = null;
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
   let provider: CoreProviderApi | null = null;
-  let uiAccess: UiRuntimeAccess | null = null;
-  let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
-  let uiAccessParams: BackgroundUiAccessParams | null = null;
-  let walletBridgeServer: WalletBridgeServer | null = null;
-  let walletBridgeUiOrigin: string | null = null;
+  let walletMethodExecutor: MethodExecutor | null = null;
+  let walletMethodExecutorOrigin: string | null = null;
   let runtimeGeneration = 0;
 
   const runtimeLog = createLogger("bg:runtime");
@@ -190,78 +180,36 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     return active.core;
   };
 
-  const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
-    if (!uiAccessParams) return;
-    if (
-      uiAccessParams.platform === next.platform &&
-      uiAccessParams.activation === next.activation &&
-      uiAccessParams.uiOrigin === next.uiOrigin
-    ) {
+  const assertWalletMethodExecutorOriginStable = (origin: string) => {
+    if (!walletMethodExecutorOrigin) return;
+    if (walletMethodExecutorOrigin === origin) {
       return;
     }
 
-    throw new Error("Background runtime host UI access parameters must remain stable across calls");
+    throw new Error("Background runtime host wallet method executor origin must remain stable across calls");
   };
 
-  const assertWalletBridgeUiOriginStable = (uiOrigin: string) => {
-    if (!walletBridgeUiOrigin) return;
-    if (walletBridgeUiOrigin === uiOrigin) {
-      return;
+  const getOrInitWalletMethodExecutor = async (origin: string): Promise<MethodExecutor> => {
+    assertWalletMethodExecutorOriginStable(origin);
+    if (walletMethodExecutor) {
+      return walletMethodExecutor;
     }
 
-    throw new Error("Background runtime host wallet bridge parameters must remain stable across calls");
-  };
-
-  const getOrInitUiAccess = async ({
-    platform,
-    activation,
-    uiOrigin,
-  }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
-    assertUiAccessParamsMatch({ platform, activation, uiOrigin });
-    if (uiAccess) return uiAccess;
-    if (uiAccessPromise) return await uiAccessPromise;
-    uiAccessParams = { platform, activation, uiOrigin };
-    const accessGeneration = runtimeGeneration;
-
-    uiAccessPromise = (async () => {
-      const active = await getOrInitRuntimeCache();
-      const access = active.runtime.createUiAccess({
-        platform,
-        uiOrigin,
-        extensions: [createUiActivationExtension({ entries: activation })],
-      });
-
-      if (accessGeneration !== runtimeGeneration) {
-        throw new Error("Background runtime host was reset during UI access bootstrap");
-      }
-
-      uiAccess = access;
-      return access;
-    })();
-
-    try {
-      return await uiAccessPromise;
-    } catch (error) {
-      uiAccessParams = null;
-      throw error;
-    } finally {
-      uiAccessPromise = null;
-    }
-  };
-
-  const getOrInitWalletBridgeServer = async (uiOrigin: string): Promise<WalletBridgeServer> => {
-    assertWalletBridgeUiOriginStable(uiOrigin);
-    if (walletBridgeServer) return walletBridgeServer;
-    walletBridgeUiOrigin = uiOrigin;
+    walletMethodExecutorOrigin = origin;
 
     try {
       const active = await getOrInitRuntimeCache();
-      walletBridgeServer = active.runtime.createWalletBridgeServer({ uiOrigin });
-      return walletBridgeServer;
+      walletMethodExecutor = active.runtime.createWalletMethodExecutor({ origin });
+      return walletMethodExecutor;
     } catch (error) {
-      walletBridgeUiOrigin = null;
+      walletMethodExecutorOrigin = null;
       throw error;
     }
+  };
+
+  const subscribeWalletInvalidation = async (listener: (event: WalletInvalidationEvent) => void) => {
+    const active = await getOrInitRuntimeCache();
+    return active.runtime.subscribeWalletInvalidation(listener);
   };
 
   const getOrInitProvider = async (): Promise<CoreProviderApi> => {
@@ -395,10 +343,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const shutdown = async () => {
     runtimeGeneration += 1;
     provider = null;
-    uiAccess = null;
-    uiAccessParams = null;
-    walletBridgeServer = null;
-    walletBridgeUiOrigin = null;
+    walletMethodExecutor = null;
+    walletMethodExecutorOrigin = null;
     const activeRuntime = runtimeCache?.runtime ?? null;
     const pendingRuntimeCachePromise = runtimeCachePromise;
     runtimeCache = null;
@@ -426,8 +372,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     initializeRuntime,
     getCoreReady,
     getOrInitProvider,
-    getOrInitUiAccess,
-    getOrInitWalletBridgeServer,
+    getOrInitWalletMethodExecutor,
+    subscribeWalletInvalidation,
     getOrInitUiEntryAccess,
     shutdown,
     applyDebugNamespacesFromEnv,

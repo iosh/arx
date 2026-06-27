@@ -1,7 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { app } from "@/ui/lib/uiBridgeClient";
 
 export type SendApprovalInput = Parameters<typeof app.wallet.transactions.requestSendTransactionApproval>[0];
 

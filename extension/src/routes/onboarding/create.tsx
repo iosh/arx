@@ -1,10 +1,10 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildCreateEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
-import { app } from "@/ui/lib/uiBridgeClient";
 import { isWalletInitialized, isWalletReady } from "@/ui/lib/walletAvailability";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";

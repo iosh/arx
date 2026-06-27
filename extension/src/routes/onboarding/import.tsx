@@ -1,11 +1,11 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { app } from "@/ui/lib/uiBridgeClient";
 import { isWalletInitialized } from "@/ui/lib/walletAvailability";
 import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";

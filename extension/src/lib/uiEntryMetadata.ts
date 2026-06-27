@@ -1,34 +1,28 @@
-export const UI_ENVIRONMENTS = ["popup", "notification", "onboarding"] as const;
-export type UiEnvironment = (typeof UI_ENVIRONMENTS)[number];
+import {
+  parseUiEntryReason,
+  parseUiEnvironment,
+  UI_ENTRY_REASONS,
+  UI_ENVIRONMENTS,
+  type UiEntryContext,
+  type UiEntryLaunchContext,
+  type UiEntryReason,
+  type UiEnvironment,
+} from "@/lib/host";
 
-export const UI_ENTRY_REASONS = [
-  "idle",
-  "manual_open",
-  "install",
-  "onboarding_required",
-  "approval_created",
-  "unlock_required",
-] as const;
-export type UiEntryReason = (typeof UI_ENTRY_REASONS)[number];
-
-export type UiEntryContext = {
-  approvalId: string | null;
-  origin: string | null;
-  method: string | null;
-  chainRef: string | null;
-  namespace: string | null;
+export {
+  parseUiEntryReason,
+  parseUiEnvironment,
+  UI_ENTRY_REASONS,
+  UI_ENVIRONMENTS,
+  type UiEntryContext,
+  type UiEntryReason,
+  type UiEnvironment,
 };
 
-export type UiEntryMetadata = {
-  environment: UiEnvironment;
-  reason: UiEntryReason;
-  context: UiEntryContext;
-};
+export type UiEntryMetadata = UiEntryLaunchContext;
 
 type UiEntryMetadataListener = () => void;
 
-const UI_ENVIRONMENT_SET: ReadonlySet<string> = new Set(UI_ENVIRONMENTS);
-const UI_ENTRY_REASON_SET: ReadonlySet<string> = new Set(UI_ENTRY_REASONS);
 const UI_ENVIRONMENT_META_NAME = "arx:uiEnvironment";
 const EMPTY_UI_ENTRY_CONTEXT: UiEntryContext = {
   approvalId: null,
@@ -49,14 +43,6 @@ const toNonEmptyString = (value: string | null | undefined): string | null => {
 
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
-};
-
-export const parseUiEnvironment = (value: string): UiEnvironment | null => {
-  return UI_ENVIRONMENT_SET.has(value) ? (value as UiEnvironment) : null;
-};
-
-export const parseUiEntryReason = (value: string): UiEntryReason | null => {
-  return UI_ENTRY_REASON_SET.has(value) ? (value as UiEntryReason) : null;
 };
 
 const readMetaContent = (name: string): string => {

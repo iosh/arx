@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { app } from "../lib/uiBridgeClient";
+import { app } from "../lib/app";
 
 const DEBOUNCE_MS = 2_000;
 const MIN_INTERVAL_MS = 10_000;

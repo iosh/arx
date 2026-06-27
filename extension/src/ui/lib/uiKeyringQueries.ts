@@ -4,7 +4,7 @@ import type {
   WalletApiKeyringListResult,
 } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { app } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/app";
 
 export const UI_KEYRINGS_QUERY_KEY = ["uiKeyrings"] as const;
 export const UI_ACCOUNTS_BY_KEYRING_QUERY_KEY = ["uiAccountsByKeyring"] as const;

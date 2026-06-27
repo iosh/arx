@@ -2,9 +2,9 @@ import type { ResolveApprovalInput } from "@arx/core/wallet";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useUiEntryMetadata } from "@/ui/hooks/useUiEntryMetadata";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { ROUTES } from "@/ui/lib/routes";
-import { app } from "@/ui/lib/uiBridgeClient";
 
 export type ApprovalPendingAction = ResolveApprovalInput["action"] | null;
 

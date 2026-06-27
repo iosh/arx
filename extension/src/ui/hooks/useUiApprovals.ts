@@ -1,7 +1,7 @@
 import type { ApprovalDetail, ApprovalListEntry } from "@arx/core/wallet";
 import { useQuery } from "@tanstack/react-query";
+import { app } from "@/ui/lib/app";
 import { createUiApprovalDetailQueryOptions, UI_APPROVALS_LIST_QUERY_KEY } from "@/ui/lib/uiApprovalQueries";
-import { app } from "@/ui/lib/uiBridgeClient";
 
 export function useUiApprovalsList() {
   const query = useQuery<ApprovalListEntry[]>({

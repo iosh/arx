@@ -1,16 +1,18 @@
-import { isUiProtocolError, isUiRemoteError, type UiRemoteError } from "@arx/core/ui";
+import { type ArxBaseError, isArxBaseError } from "@arx/core";
+import { InvokeProtocolError, InvokeTransportError } from "@arx/core/invoke";
 
-export type WalletError = UiRemoteError;
+export type WalletError = ArxBaseError;
 
-/**
- * Type guard to check if error is a WalletError
- */
 export const isWalletError = (error: unknown): error is WalletError => {
-  return isUiRemoteError(error);
+  return isArxBaseError(error) && !(error instanceof InvokeProtocolError) && !(error instanceof InvokeTransportError);
+};
+
+const getWalletErrorCode = (error: WalletError): string => {
+  return error.code;
 };
 
 const getRemoteErrorMessage = (error: WalletError): string => {
-  switch (error.code) {
+  switch (getWalletErrorCode(error)) {
     case "approval.rejected":
     case "approval.user_dismissed":
       return "Request rejected by user";
@@ -29,10 +31,10 @@ const getRemoteErrorMessage = (error: WalletError): string => {
 };
 
 export const getErrorMessage = (error: unknown): string => {
-  if (isUiRemoteError(error)) {
+  if (isWalletError(error)) {
     return getRemoteErrorMessage(error);
   }
-  if (isUiProtocolError(error)) {
+  if (error instanceof InvokeProtocolError || error instanceof InvokeTransportError) {
     return "Unexpected wallet response. Please try again.";
   }
   if (error instanceof Error) {
@@ -42,7 +44,12 @@ export const getErrorMessage = (error: unknown): string => {
 };
 
 export const isUserRejection = (error: unknown): boolean => {
-  return isWalletError(error) && (error.code === "approval.rejected" || error.code === "approval.user_dismissed");
+  if (!isWalletError(error)) {
+    return false;
+  }
+
+  const code = getWalletErrorCode(error);
+  return code === "approval.rejected" || code === "approval.user_dismissed";
 };
 
 const getMessageText = (value: unknown) => {
@@ -52,8 +59,8 @@ const getMessageText = (value: unknown) => {
 };
 
 export const getUnlockErrorMessage = (error: unknown): string => {
-  if (isUiRemoteError(error)) {
-    if (error.code === "vault.invalid_password") {
+  if (isWalletError(error)) {
+    if (getWalletErrorCode(error) === "vault.invalid_password") {
       return "Incorrect password. Please try again.";
     }
     return getErrorMessage(error);
@@ -66,7 +73,7 @@ export const getUnlockErrorMessage = (error: unknown): string => {
 };
 
 export const getInitErrorMessage = (error: unknown): string => {
-  if (isUiRemoteError(error)) {
+  if (isWalletError(error)) {
     return getErrorMessage(error);
   }
   const message = getMessageText(error).toLowerCase();

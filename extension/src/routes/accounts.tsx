@@ -19,12 +19,12 @@ import {
 } from "@/ui/components";
 import { useRefreshUiCurrentChainAccounts, useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
 import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { formatPrivateKeyHex, isValidPrivateKey } from "@/ui/lib/privateKeyInput";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
-import { app } from "@/ui/lib/uiBridgeClient";
 import { createUiKeyringsQueryOptions } from "@/ui/lib/uiKeyringQueries";
 
 export const Route = createFileRoute("/accounts")({

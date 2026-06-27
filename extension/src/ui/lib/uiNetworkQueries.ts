@@ -1,6 +1,6 @@
 import type { WalletApiChainSnapshot, WalletApiNetworksResult } from "@arx/core/wallet";
 import type { QueryClient } from "@tanstack/react-query";
-import { app } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/app";
 
 export const UI_NETWORKS_QUERY_KEY = ["uiNetworks"] as const;
 

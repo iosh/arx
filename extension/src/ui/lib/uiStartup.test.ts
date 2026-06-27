@@ -1,4 +1,4 @@
-import { UI_EVENT_ENTRY_CHANGED, type UiClientConnectionStatus } from "@arx/core/ui";
+import type { InvokeConnectionStatus } from "@arx/core/invoke";
 import type { ApprovalDetail } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
@@ -9,11 +9,11 @@ const mocks = vi.hoisted(() => ({
   getBootstrap: vi.fn(),
   getLaunchContext: vi.fn(),
   getUiEnvironment: vi.fn(),
-  on: vi.fn(),
+  subscribeEntryChanged: vi.fn(),
   onConnectionStatus: vi.fn(),
   writeCachedUiApprovalDetail: vi.fn(),
   entryChangedListener: null as ((payload: UiEntryMetadata) => void) | null,
-  connectionStatusListener: null as ((status: UiClientConnectionStatus) => void) | null,
+  connectionStatusListener: null as ((status: InvokeConnectionStatus) => void) | null,
   stopEntryChanged: vi.fn(),
   stopConnectionStatus: vi.fn(),
 }));
@@ -27,14 +27,18 @@ vi.mock("./uiApprovalQueries", () => ({
   writeCachedUiApprovalDetail: mocks.writeCachedUiApprovalDetail,
 }));
 
-vi.mock("./uiBridgeClient", () => ({
-  uiClient: {
-    on: mocks.on,
-    onConnectionStatus: mocks.onConnectionStatus,
-    entry: {
-      getBootstrap: mocks.getBootstrap,
-      getLaunchContext: mocks.getLaunchContext,
+vi.mock("./app", () => ({
+  app: {
+    host: {
+      entry: {
+        getBootstrap: mocks.getBootstrap,
+        getLaunchContext: mocks.getLaunchContext,
+      },
     },
+    hostEvents: {
+      subscribeEntryChanged: mocks.subscribeEntryChanged,
+    },
+    onConnectionStatus: mocks.onConnectionStatus,
   },
 }));
 
@@ -88,14 +92,14 @@ describe("uiStartup", () => {
     mocks.stopConnectionStatus.mockReset();
     mocks.writeCachedUiApprovalDetail.mockReset();
 
-    mocks.on.mockReset();
-    mocks.on.mockImplementation((_event: string, listener: (payload: UiEntryMetadata) => void) => {
+    mocks.subscribeEntryChanged.mockReset();
+    mocks.subscribeEntryChanged.mockImplementation((listener: (payload: UiEntryMetadata) => void) => {
       mocks.entryChangedListener = listener;
       return mocks.stopEntryChanged;
     });
 
     mocks.onConnectionStatus.mockReset();
-    mocks.onConnectionStatus.mockImplementation((listener: (status: UiClientConnectionStatus) => void) => {
+    mocks.onConnectionStatus.mockImplementation((listener: (status: InvokeConnectionStatus) => void) => {
       mocks.connectionStatusListener = listener;
       return mocks.stopConnectionStatus;
     });
@@ -131,7 +135,7 @@ describe("uiStartup", () => {
     expect(mocks.getLaunchContext).toHaveBeenCalledWith({ environment: "notification" });
     expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledTimes(1);
     expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledWith(refreshedMetadata);
-    expect(mocks.on).toHaveBeenCalledWith(UI_EVENT_ENTRY_CHANGED, expect.any(Function));
+    expect(mocks.subscribeEntryChanged).toHaveBeenCalledWith(expect.any(Function));
 
     stop();
 

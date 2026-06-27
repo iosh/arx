@@ -9,7 +9,7 @@ import {
 } from "@/ui/lib/uiKeyringQueries";
 import { UI_NETWORKS_QUERY_KEY } from "@/ui/lib/uiNetworkQueries";
 import { createUiSetupStatusQueryOptions } from "@/ui/lib/uiSetupStatusQuery";
-import { app } from "../lib/uiBridgeClient";
+import { app } from "../lib/app";
 
 export const useWalletInvalidations = () => {
   const queryClient = useQueryClient();

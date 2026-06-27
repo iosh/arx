@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { app } from "@/ui/lib/uiBridgeClient";
+import { app } from "@/ui/lib/app";
 import {
   createUiKeyringBackupStatusQueryOptions,
   refreshUiKeyringBackupStatusIntoCache,

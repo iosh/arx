@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Paragraph, XStack } from "tamagui";
 import { Button, Card, ChainBadge, LoadingScreen, Screen } from "@/ui/components";
 import { useRefreshUiNetworksStatus, useUiNetworksStatus } from "@/ui/hooks/useUiNetworksStatus";
+import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { app } from "@/ui/lib/uiBridgeClient";
 
 export const Route = createFileRoute("/networks")({
   beforeLoad: requireVaultInitialized,

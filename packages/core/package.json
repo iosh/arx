@@ -24,10 +24,8 @@
     "./transactions": "./src/transactions/index.ts",
     "./transactions/eip155": "./src/transactions/namespace/eip155/index.ts",
     "./transactions/storage": "./src/transactions/storage/index.ts",
-    "./ui": "./src/ui/index.ts",
-    "./ui/server": "./src/ui/server/index.ts",
+    "./invoke": "./src/invoke/index.ts",
     "./wallet": "./src/wallet/index.ts",
-    "./wallet/bridge": "./src/wallet/bridge/index.ts",
     "./keyring": "./src/keyring/index.ts",
     "./services": "./src/services/index.ts"
   },

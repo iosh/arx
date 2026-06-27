@@ -1,3 +1,4 @@
+import type { MethodHandlerTree } from "../invoke/methods.js";
 import { listAccountsForCurrentChain, switchActiveAccount } from "./actions/accounts.js";
 import { getApprovalDetail, listPendingApprovals, resolveApproval } from "./actions/approvals.js";
 import { getNativeBalance } from "./actions/balances.js";
@@ -40,9 +41,8 @@ import {
   requestSendTransactionApproval,
   rerunTransactionPrepare,
 } from "./actions/transactions.js";
-import type { TrustedWalletApi } from "./api.js";
+import type { WalletApi } from "./api.js";
 import type { WalletApiContext } from "./context.js";
-import type { WalletMethodHandlerTree } from "./executor.js";
 
 export const walletMethodHandlers = {
   session: {
@@ -100,4 +100,4 @@ export const walletMethodHandlers = {
     rerunPrepare: rerunTransactionPrepare,
     applyDraftEdit: applyTransactionDraftEdit,
   },
-} as const satisfies WalletMethodHandlerTree<WalletApiContext, TrustedWalletApi>;
+} as const satisfies MethodHandlerTree<WalletApiContext, WalletApi>;

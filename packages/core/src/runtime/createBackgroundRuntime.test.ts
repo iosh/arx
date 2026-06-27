@@ -12,10 +12,8 @@ import {
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
-import { createUiServerRuntime } from "../ui/server/runtime.js";
-import type { UiServerExtension } from "../ui/server/types.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
-import { createTrustedWalletApi } from "../wallet/createTrustedWalletApi.js";
+import { createWalletApi } from "../wallet/createWalletApi.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -174,7 +172,7 @@ const createActiveAccount = async (
   return address;
 };
 
-const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
+const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   const approvalDetails = createApprovalDetails({
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
@@ -199,7 +197,7 @@ const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackg
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  return createTrustedWalletApi({
+  return createWalletApi({
     session: walletSession,
     accounts: walletAccounts,
     networks: walletNetworks,
@@ -212,34 +210,12 @@ const createTrustedWalletApiForRuntime = (runtime: ReturnType<typeof createBackg
     },
     accountCodecs: runtime.services.accountCodecs,
     createId: () => crypto.randomUUID(),
-    surface: {
+    caller: {
       origin: "chrome-extension://arx",
     },
     namespaceBindings: runtime.services.namespaceBindings,
     transactions: runtime.transactions,
   });
-};
-
-const createHandlersForRuntime = (
-  runtime: ReturnType<typeof createBackgroundRuntime>,
-  options?: { extensions?: readonly UiServerExtension[] },
-) => {
-  const wallet = createTrustedWalletApiForRuntime(runtime);
-
-  return createUiServerRuntime({
-    wallet,
-    platform: {
-      openOnboardingTab: async () => ({ activationPath: "create" }),
-      openNotificationPopup: async () => ({ activationPath: "create" }),
-    },
-    surface: {
-      transport: "ui",
-      portId: "ui",
-      origin: "chrome-extension://arx",
-      surfaceId: "11111111-1111-4111-8111-111111111111",
-    },
-    ...(options?.extensions ? { extensions: options.extensions } : {}),
-  }).handlers;
 };
 
 describe("createBackgroundRuntime (no snapshots)", () => {
@@ -363,7 +339,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await runtime.services.session.createVault({ password: "test" });
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
     const result = await wallet.session.unlock({ password: "test" });
 
     expect(result).toMatchObject({
@@ -398,7 +374,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     expect(walletChainSelectionPort.saved.length).toBe(0);
     await wallet.networks.select({ chainRef: ALT_CHAIN.chainRef });
@@ -438,7 +414,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       ],
     });
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     const before = structuredClone(runtime.services.permissions.getState());
     await wallet.networks.select({ chainRef: ALT_CHAIN.chainRef });
@@ -473,7 +449,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       ],
     });
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     const approvalPromise = runtime.services.approvals.create(
       {
@@ -536,7 +512,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasTransactionReceiptTracking: true,
     });
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     const activeAccount = runtime.services.accounts.getActiveAccountForNamespace({
       namespace: MAINNET_CHAIN.namespace,
@@ -676,7 +652,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     await expect(
       wallet.transactions.requestSendTransactionApproval({
@@ -790,7 +766,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     const from = await createActiveAccount(runtime);
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     const result = await wallet.transactions.requestSendTransactionApproval({
       request: {
@@ -822,33 +798,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("rejects conflicting UI methods across extensions", () => {
-    const runtime = createTestRuntime({
-      chainSeed: [MAINNET_CHAIN],
-    });
-
-    const firstActivationExtension = {
-      id: "test.activationOne",
-      createHandlers: () => ({
-        "ui.onboarding.openTab": (async () => ({ activationPath: "create" as const })) as never,
-      }),
-    } satisfies UiServerExtension;
-
-    const secondActivationExtension = {
-      id: "test.activationTwo",
-      createHandlers: () => ({
-        "ui.onboarding.openTab": (async () => ({ activationPath: "focus" as const })) as never,
-      }),
-    } satisfies UiServerExtension;
-
-    expect(() =>
-      createHandlersForRuntime(runtime, { extensions: [firstActivationExtension, secondActivationExtension] }),
-    ).toThrow(
-      'UI method "ui.onboarding.openTab" is already registered by "test.activationOne" and cannot be registered again by "test.activationTwo"',
-    );
-  });
-
-  it("creates wallet transaction approvals across trusted wallet api instances", async () => {
+  it("creates wallet transaction approvals across wallet api instances", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -871,7 +821,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const firstWallet = createTrustedWalletApiForRuntime(runtime);
+    const firstWallet = createWalletApiForRuntime(runtime);
 
     await firstWallet.transactions.requestSendTransactionApproval({
       request: {
@@ -892,7 +842,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    const secondWallet = createTrustedWalletApiForRuntime(runtime);
+    const secondWallet = createWalletApiForRuntime(runtime);
 
     await secondWallet.transactions.requestSendTransactionApproval({
       request: {
@@ -921,7 +871,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(new Error("create approval failed"));
 
-    const wallet = createTrustedWalletApiForRuntime(runtime);
+    const wallet = createWalletApiForRuntime(runtime);
 
     await expect(
       wallet.transactions.requestSendTransactionApproval({

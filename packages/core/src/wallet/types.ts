@@ -2,17 +2,14 @@ import type { ApprovalKind, ApprovalKinds } from "../approvals/queue/types.js";
 import type { ApprovalSource } from "../approvals/source.js";
 import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainView } from "../services/runtime/chainViews/types.js";
+import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountKey } from "../storage/records.js";
-import type {
-  JsonValue,
-  TransactionReplacementType,
-  TransactionSource,
-  TransactionStatus,
-  TransactionTerminalReason,
-} from "../transactions/aggregate/index.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
+import type { Transaction } from "../transactions/TransactionsService.js";
+
+export type { NetworksSnapshot } from "../services/runtime/chainViews/types.js";
+export type { Transaction } from "../transactions/TransactionsService.js";
 
 export type PermissionsSnapshot = {
   origins: Record<
@@ -164,40 +161,6 @@ export type ApprovalSendTransactionDetail = ApprovalDetailBase<
 export type ApprovalDetail = ApprovalAccountSelectionDetail | ApprovalStaticDetail | ApprovalSendTransactionDetail;
 
 export type ResolveApprovalResult = null;
-
-export type NetworksSnapshot = {
-  selectedNamespace: string;
-  active: ChainRef;
-  known: ChainView[];
-  available: ChainView[];
-};
-
-export type Transaction = {
-  id: string;
-  status: TransactionStatus;
-  namespace: string;
-  chainRef: ChainRef;
-  source: TransactionSource;
-  origin: string;
-  account: {
-    accountKey: AccountKey;
-    address: string;
-  };
-  submitted: JsonValue | null;
-  receipt: JsonValue | null;
-  replacement: {
-    replaces: {
-      transactionId: string;
-      type: TransactionReplacementType;
-    } | null;
-    replacedBy: {
-      transactionId: string;
-    } | null;
-  } | null;
-  terminalReason: TransactionTerminalReason | null;
-  createdAt: number;
-  updatedAt: number;
-};
 
 export type WalletApiSessionStatusResult = SessionStatus;
 

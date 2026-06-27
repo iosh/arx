@@ -106,7 +106,7 @@ export const requestSendTransactionApproval = async (
   const approval = await context.transactions.requestTransactionApproval({
     namespace: transactionRequest.namespace,
     chainRef: transactionRequest.chainRef,
-    origin: context.surface.origin,
+    origin: context.caller.origin,
     source: "wallet-ui",
     requestId: context.createId(),
     accountKey: activeAccount.accountKey,

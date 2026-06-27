@@ -8,7 +8,7 @@ import type {
   ProviderRuntimeRpcResponse,
 } from "../runtime/provider/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
-import type { TrustedWalletApi } from "../wallet/api.js";
+import type { WalletApi } from "../wallet/api.js";
 import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionState } from "./types.js";
 
 export type CoreUnsubscribe = () => void;
@@ -51,7 +51,7 @@ export type CoreProviderApi = Readonly<{
 
 export type CoreRuntime = Readonly<{
   provider: CoreProviderApi;
-  wallet: TrustedWalletApi;
+  wallet: WalletApi;
 }>;
 
 type AssertNever<T extends never> = T;

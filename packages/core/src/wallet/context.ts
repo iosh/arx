@@ -15,7 +15,7 @@ export type WalletApiContext = {
   }>;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   createId: () => string;
-  surface: {
+  caller: {
     origin: string;
   };
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;

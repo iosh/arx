@@ -298,10 +298,10 @@ const buildTransactionDetail = (approval: TransactionApproval): ApprovalSendTran
 
 export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetails => {
   const listPending = async (): Promise<ApprovalListEntry[]> => {
-    const [pending, transactionApprovals] = await Promise.all([
-      Promise.resolve(deps.approvals.getState().pending),
-      deps.transactionApprovals ? deps.transactionApprovals.listTransactionApprovals() : Promise.resolve([]),
-    ]);
+    const pending = deps.approvals.getState().pending;
+    const transactionApprovals = deps.transactionApprovals
+      ? await deps.transactionApprovals.listTransactionApprovals()
+      : [];
 
     return [...pending.map(toListEntry), ...transactionApprovals.map(toTransactionApprovalListEntry)].sort(
       (left, right) => left.createdAt - right.createdAt,

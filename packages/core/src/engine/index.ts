@@ -1,4 +1,4 @@
-export type { TrustedWalletApi } from "../wallet/index.js";
+export type { WalletApi } from "../wallet/index.js";
 export type { ApprovalDetail } from "../wallet/types.js";
 export type {
   CoreLogger,
@@ -29,7 +29,6 @@ export type {
   WalletApprovals,
   WalletAttention,
   WalletBackupStatus,
-  WalletCreateUiOptions,
   WalletDappConnections,
   WalletNamespaceModule,
   WalletNamespaces,
@@ -39,7 +38,5 @@ export type {
   WalletProviderConnectionState,
   WalletSession,
   WalletSetupState,
-  WalletUi,
-  WalletUiDispatchInput,
 } from "./types.js";
 export { assertValidWalletNamespaceModule } from "./validation.js";

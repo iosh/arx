@@ -1,7 +1,7 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
 import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manifestInterop.js";
-import type { ArxWallet, WalletCreateUiOptions } from "../engine/types.js";
+import type { ArxWallet } from "../engine/types.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type { Namespace } from "../rpc/handlers/types.js";
@@ -26,7 +26,6 @@ import type { WalletChainSelectionPort } from "../services/store/walletChainSele
 import type { WalletChainSelectionService } from "../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
-import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { BackgroundStateServices } from "./background/backgroundStateServices.js";
 import type { BackgroundRpcAccessPolicyHooks } from "./background/rpcAccessPolicy.js";
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
@@ -35,10 +34,7 @@ import type { BackgroundSessionServices, SessionOptions } from "./background/ses
 import type { KeyringService } from "./keyring/KeyringService.js";
 import type { ProviderRuntimeAccess } from "./provider/types.js";
 
-export type { UiMethodHandlerMap, UiPlatformAdapter, UiRuntimeAccess, UiServerExtension } from "../ui/server/types.js";
 export type { BackgroundSessionServices } from "./background/session.js";
-
-export type BackgroundRuntimeUiAccessOptions = WalletCreateUiOptions;
 
 export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "supportedChains"> & {
   messenger?: {
@@ -117,7 +113,6 @@ export type BackgroundRuntime = {
   };
   lifecycle: ReturnType<typeof assembleArxWalletRuntime>["lifecycle"];
   providerAccess: ProviderRuntimeAccess;
-  createUiAccess: (options: BackgroundRuntimeUiAccessOptions) => UiRuntimeAccess;
   wallet: ArxWallet;
 };
 
@@ -200,7 +195,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     },
     lifecycle: runtime.lifecycle,
     providerAccess: runtime.providerAccess,
-    createUiAccess: runtime.createUiAccess,
     wallet: runtime.wallet,
   };
 };

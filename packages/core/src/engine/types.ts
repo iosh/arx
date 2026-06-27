@@ -75,8 +75,6 @@ import type { WalletChainSelectionChangedHandler } from "../services/store/walle
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
-import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
-import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 
@@ -352,31 +350,6 @@ export type WalletProvider = Readonly<{
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
 }>;
 
-/** Options for creating a wallet UI contract. */
-export type WalletCreateUiOptions = Readonly<{
-  platform: UiPlatformAdapter;
-  uiOrigin: string;
-  createId?: () => string;
-  extensions?: readonly UiServerExtension[];
-}>;
-
-/** UI method dispatch input. */
-export type WalletUiDispatchInput<M extends UiMethodName> =
-  undefined extends UiMethodParams<M>
-    ? Readonly<{
-        method: M;
-        params?: UiMethodParams<M>;
-      }>
-    : Readonly<{
-        method: M;
-        params: UiMethodParams<M>;
-      }>;
-
-/** Engine-owned UI contract for wallet shells. */
-export type WalletUi = Readonly<{
-  dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
-}>;
-
 /** Runtime-owned approval access. */
 export type WalletApprovalDetails = Readonly<{
   listPending(): Promise<WalletApiPendingApprovalsResult>;
@@ -413,6 +386,4 @@ export type ArxWallet = Readonly<{
   dappConnections: WalletDappConnections;
   /** Create a provider-facing contract. */
   createProvider(): WalletProvider;
-  /** Create a UI-facing contract. */
-  createUi(options: WalletCreateUiOptions): WalletUi;
 }>;

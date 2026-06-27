@@ -99,11 +99,6 @@ const createWalletRuntime = async (params?: Parameters<typeof createWalletInput>
   return await createArxWalletRuntime(createWalletInput(params));
 };
 
-const createUiPlatform = () => ({
-  openOnboardingTab: vi.fn(async () => ({ activationPath: "focus" as const })),
-  openNotificationPopup: vi.fn(async () => ({ activationPath: "focus" as const })),
-});
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -497,7 +492,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes engine-owned provider and trusted wallet API contracts", async () => {
+  it("exposes engine-owned provider and wallet API contracts", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -546,29 +541,6 @@ describe("createArxWallet", () => {
         jsonrpc: "2.0",
         result: [],
       });
-    } finally {
-      await runtime.shutdown();
-    }
-  });
-
-  it("treats missing extension-owned UI methods as unsupported before validating params", async () => {
-    const runtime = await createWalletRuntime({
-      accountsPort: createSeededAccountsPort(),
-      permissionsPort: createSeededPermissionsPort(),
-    });
-
-    try {
-      const ui = runtime.wallet.createUi({
-        platform: createUiPlatform(),
-        uiOrigin: "chrome-extension://arx/popup.html",
-      });
-
-      await expect(
-        ui.dispatch({
-          method: "ui.onboarding.openTab",
-          params: {} as never,
-        }),
-      ).rejects.toMatchObject({ code: "global.rpc.unsupported_method" });
     } finally {
       await runtime.shutdown();
     }

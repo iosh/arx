@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VaultMetaSnapshot } from "../storage/index.js";
 import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
-import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   createChainMetadata,
   FakeVault,
@@ -17,6 +16,21 @@ import { decodePayload, encodePayload } from "./keyring/keyring-utils.js";
 
 const TEST_PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 const CORRUPTED_PRIVATE_KEY = "2222222222222222222222222222222222222222222222222222222222222222";
+
+type BackgroundContext = Awaited<ReturnType<typeof setupBackground>>;
+
+const unlockSession = async (context: BackgroundContext, password: string) => {
+  await context.runtime.services.session.unlock.unlock({ password });
+  await context.runtime.services.keyring.waitForReady();
+  return context.runtime.services.session.unlock.getState();
+};
+
+const lockSession = (context: BackgroundContext) => {
+  context.runtime.services.session.unlock.lock("manual");
+  return context.runtime.services.session.unlock.getState();
+};
+
+const isSessionUnlocked = (context: BackgroundContext) => context.runtime.services.sessionStatus.isUnlocked();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -275,24 +289,18 @@ describe("createBackgroundRuntime (vault integration)", () => {
     });
 
     try {
-      const sessionAccess = createUiSessionAccess({
-        session: context.runtime.services.session,
-        sessionStatus: context.runtime.services.sessionStatus,
-        keyring: context.runtime.services.keyring,
-      });
-
       await context.runtime.services.session.createVault({ password: "secret" });
-      await sessionAccess.unlock({ password: "secret" });
+      await unlockSession(context, "secret");
       await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
       const accountsBefore = await context.accountsPort.list();
       const keyringMetasBefore = await context.keyringMetasPort.list();
 
       await context.runtime.services.session.vault.commitSecret({ secret: new Uint8Array() });
-      sessionAccess.lock("manual");
+      lockSession(context);
 
-      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
-      expect(sessionAccess.isUnlocked()).toBe(false);
+      await expect(unlockSession(context, "secret")).rejects.toThrow();
+      expect(isSessionUnlocked(context)).toBe(false);
       await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
       await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
     } finally {
@@ -310,18 +318,12 @@ describe("createBackgroundRuntime (vault integration)", () => {
     });
 
     try {
-      const sessionAccess = createUiSessionAccess({
-        session: context.runtime.services.session,
-        sessionStatus: context.runtime.services.sessionStatus,
-        keyring: context.runtime.services.keyring,
-      });
-
       await context.runtime.services.session.createVault({ password: "secret" });
-      await sessionAccess.unlock({ password: "secret" });
+      await unlockSession(context, "secret");
       await context.runtime.services.session.vault.commitSecret({ secret: new Uint8Array() });
-      sessionAccess.lock("manual");
+      lockSession(context);
 
-      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ status: "unlocked" });
+      await expect(unlockSession(context, "secret")).resolves.toMatchObject({ status: "unlocked" });
       expect(decodePayload(context.runtime.services.session.vault.exportSecret())).toEqual({ keyrings: [] });
       await expect(context.accountsPort.list()).resolves.toEqual([]);
       await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
@@ -340,23 +342,17 @@ describe("createBackgroundRuntime (vault integration)", () => {
     });
 
     try {
-      const sessionAccess = createUiSessionAccess({
-        session: context.runtime.services.session,
-        sessionStatus: context.runtime.services.sessionStatus,
-        keyring: context.runtime.services.keyring,
-      });
-
       await context.runtime.services.session.createVault({ password: "secret" });
-      await sessionAccess.unlock({ password: "secret" });
+      await unlockSession(context, "secret");
       await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
       await expect(context.accountsPort.list()).resolves.toHaveLength(1);
       await expect(context.keyringMetasPort.list()).resolves.toHaveLength(1);
 
       await context.runtime.services.session.vault.commitSecret({ secret: encodePayload({ keyrings: [] }) });
-      sessionAccess.lock("manual");
+      lockSession(context);
 
-      await expect(sessionAccess.unlock({ password: "secret" })).resolves.toMatchObject({ status: "unlocked" });
+      await expect(unlockSession(context, "secret")).resolves.toMatchObject({ status: "unlocked" });
       await expect(context.accountsPort.list()).resolves.toEqual([]);
       await expect(context.keyringMetasPort.list()).resolves.toEqual([]);
     } finally {
@@ -374,14 +370,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
     });
 
     try {
-      const sessionAccess = createUiSessionAccess({
-        session: context.runtime.services.session,
-        sessionStatus: context.runtime.services.sessionStatus,
-        keyring: context.runtime.services.keyring,
-      });
-
       await context.runtime.services.session.createVault({ password: "secret" });
-      await sessionAccess.unlock({ password: "secret" });
+      await unlockSession(context, "secret");
       await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
       const accountsBefore = await context.accountsPort.list();
@@ -395,10 +385,10 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
       entry.payload = { mnemonic: new Array(12).fill("invalid") };
       await context.runtime.services.session.vault.commitSecret({ secret: encodePayload(payload) });
-      sessionAccess.lock("manual");
+      lockSession(context);
 
-      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
-      expect(sessionAccess.isUnlocked()).toBe(false);
+      await expect(unlockSession(context, "secret")).rejects.toThrow();
+      expect(isSessionUnlocked(context)).toBe(false);
       expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
       await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
       await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
@@ -417,14 +407,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
     });
 
     try {
-      const sessionAccess = createUiSessionAccess({
-        session: context.runtime.services.session,
-        sessionStatus: context.runtime.services.sessionStatus,
-        keyring: context.runtime.services.keyring,
-      });
-
       await context.runtime.services.session.createVault({ password: "secret" });
-      await sessionAccess.unlock({ password: "secret" });
+      await unlockSession(context, "secret");
       await context.runtime.services.keyring.importPrivateKey({ privateKey: TEST_PRIVATE_KEY });
 
       const accountsBefore = await context.accountsPort.list();
@@ -438,10 +422,10 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
       entry.payload = { privateKey: CORRUPTED_PRIVATE_KEY };
       await context.runtime.services.session.vault.commitSecret({ secret: encodePayload(payload) });
-      sessionAccess.lock("manual");
+      lockSession(context);
 
-      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
-      expect(sessionAccess.isUnlocked()).toBe(false);
+      await expect(unlockSession(context, "secret")).rejects.toThrow();
+      expect(isSessionUnlocked(context)).toBe(false);
       expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
       await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
       await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);

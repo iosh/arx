@@ -140,7 +140,26 @@ export type ApplyTransactionDraftEditInput = {
   mode?: string;
 };
 
-export type TrustedWalletApi = Readonly<{
+export const WALLET_TARGET = "wallet" as const;
+export const WALLET_INVALIDATION_EVENT = "invalidation" as const;
+
+export const WALLET_INVALIDATION_TOPICS = [
+  "session",
+  "setup",
+  "accounts",
+  "networks",
+  "keyrings",
+  "approvals",
+  "transactions",
+  "balances",
+] as const;
+
+export type WalletInvalidationTopic = (typeof WALLET_INVALIDATION_TOPICS)[number];
+export type WalletInvalidationEvent = {
+  topic: WalletInvalidationTopic;
+};
+
+export type WalletApi = Readonly<{
   session: Readonly<{
     getStatus(): Promise<WalletApiSessionStatusResult>;
     unlock(input: UnlockSessionInput): Promise<SessionLockState>;
@@ -206,8 +225,3 @@ export type TrustedWalletApi = Readonly<{
     applyDraftEdit(input: ApplyTransactionDraftEditInput): Promise<null>;
   }>;
 }>;
-
-type AssertNever<T extends never> = T;
-type WalletApiForbiddenKey = "read" | "dispatch" | "dispatchRequest" | "buildSnapshotEvent";
-
-type _TrustedWalletApiDoesNotExposeProtocolKeys = AssertNever<Extract<keyof TrustedWalletApi, WalletApiForbiddenKey>>;

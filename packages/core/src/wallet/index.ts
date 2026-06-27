@@ -24,16 +24,26 @@ export type {
   SelectWalletChainInput,
   SetAutoLockDurationInput,
   SwitchActiveAccountInput,
-  TrustedWalletApi,
   UnhideHdAccountInput,
   UnlockSessionInput,
+  WalletApi,
   WalletApiAccountsByKeyringInput,
   WalletApiApprovalDetailInput,
   WalletApiNativeBalanceInput,
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
+  WalletInvalidationEvent,
+  WalletInvalidationTopic,
 } from "./api.js";
-export { WalletMethodBindingInvariantError } from "./errors.js";
+export { WALLET_INVALIDATION_EVENT, WALLET_INVALIDATION_TOPICS, WALLET_TARGET } from "./api.js";
+export type { WalletApiCall } from "./apiClient.js";
+export { createWalletApiClient } from "./apiClient.js";
+export type { WalletMethodExecutor } from "./createWalletApi.js";
+export {
+  createWalletApi,
+  createWalletApiFromExecutor,
+  createWalletMethodExecutor,
+} from "./createWalletApi.js";
 export type {
   AccountMeta,
   ApprovalDetail,
@@ -42,7 +52,6 @@ export type {
   BackupReminder,
   BackupStatus,
   KeyringMeta,
-  NetworksSnapshot,
   PermissionsSnapshot,
   ResolveApprovalResult,
   Transaction,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { RpcUnsupportedMethodError } from "../rpc/errors.js";
-import { createWalletMethodExecutor, type WalletMethodHandlerTree } from "./executor.js";
+import { createMethodExecutor, type MethodHandlerTree } from "./methods.js";
 
-describe("wallet method executor", () => {
-  it("dispatches a trusted wallet method path", async () => {
+describe("method executor", () => {
+  it("dispatches a method path", async () => {
     type TestApi = {
       sample: {
         echo(input: { value: string }): Promise<string>;
@@ -14,13 +14,13 @@ describe("wallet method executor", () => {
       sample: {
         echo: (context: TestContext, input: { value: string }) => `${context.prefix}:${input.value}`,
       },
-    } as const satisfies WalletMethodHandlerTree<TestContext, TestApi>;
-    const executor = createWalletMethodExecutor({
-      context: { prefix: "wallet" },
+    } as const satisfies MethodHandlerTree<TestContext, TestApi>;
+    const executor = createMethodExecutor({
+      context: { prefix: "invoke" },
       handlers,
     });
 
-    await expect(executor.executeUnknownPath("sample.echo", { value: "status" })).resolves.toBe("wallet:status");
+    await expect(executor.executePath("sample.echo", { value: "status" })).resolves.toBe("invoke:status");
   });
 
   it("rejects unsupported paths", async () => {
@@ -33,12 +33,12 @@ describe("wallet method executor", () => {
       setup: {
         getStatus: () => ({ availability: "uninitialized" as const }),
       },
-    } as const satisfies WalletMethodHandlerTree<undefined, TestApi>;
-    const executor = createWalletMethodExecutor({
+    } as const satisfies MethodHandlerTree<undefined, TestApi>;
+    const executor = createMethodExecutor({
       context: undefined,
       handlers,
     });
 
-    await expect(executor.executeUnknownPath("setup.missing", undefined)).rejects.toThrow(RpcUnsupportedMethodError);
+    await expect(executor.executePath("setup.missing", undefined)).rejects.toThrow(RpcUnsupportedMethodError);
   });
 });

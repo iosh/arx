@@ -14,6 +14,7 @@ export type { ArxErrorDetails, ErrorCause, JsonValue, SerializedArxError } from 
 export {
   ARX_ERROR_KIND,
   ArxBaseError,
+  deserializeArxError,
   isArxBaseError,
   serializeArxError,
 } from "./error.js";

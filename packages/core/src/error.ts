@@ -52,6 +52,22 @@ export const serializeArxError = (error: ArxBaseError): SerializedArxError => {
   };
 };
 
+class DeserializedArxError extends ArxBaseError {
+  static readonly code = "error.deserialized";
+
+  constructor(error: SerializedArxError) {
+    super(error.message, {
+      code: error.code,
+      ...(error.details !== undefined ? { details: error.details } : {}),
+    });
+    this.name = error.name;
+  }
+}
+
+export const deserializeArxError = (error: SerializedArxError): ArxBaseError => {
+  return new DeserializedArxError(error);
+};
+
 export const toJsonSafe = (value: unknown): JsonValue | undefined => {
   if (value === undefined) return undefined;
   try {

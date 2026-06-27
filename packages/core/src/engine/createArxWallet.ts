@@ -1,4 +1,5 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
+import type { MethodExecutor } from "../invoke/methods.js";
 import type { ViolationMode } from "../messenger/Messenger.js";
 import {
   createRpcHintNamespaceResolver,
@@ -28,22 +29,14 @@ import {
   createTransactionServices,
   TransactionAggregateStore,
 } from "../transactions/index.js";
-import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
-import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
-import type { WalletInvalidationTopic } from "../wallet/bridge/protocol.js";
-import type { WalletBridgeServer } from "../wallet/bridge/server.js";
-import {
-  createWalletBridgeServer as createWalletBridgeProtocolServer,
-  type WalletInvalidationSource,
-} from "../wallet/bridge/server.js";
 import type { WalletApiContext } from "../wallet/context.js";
-import { createTrustedWalletApi, createTrustedWalletMethodExecutor } from "../wallet/createTrustedWalletApi.js";
-import type { TrustedWalletApi } from "../wallet/index.js";
+import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
+import type { WalletApi, WalletInvalidationEvent, WalletInvalidationTopic } from "../wallet/index.js";
 import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
-import type { ArxWallet, CreateArxWalletInput, WalletCreateUiOptions, WalletProvider } from "./types.js";
+import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
 import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
 import {
   createWalletAccounts,
@@ -137,32 +130,19 @@ type ArxWalletRuntime = Readonly<{
   }>;
   provider: WalletProvider;
   providerAccess: ProviderRuntimeAccess;
-  walletApi: TrustedWalletApi;
-  createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
-  createWalletBridgeServer(options: WalletCreateWalletBridgeOptions): WalletBridgeServer;
+  walletApi: WalletApi;
+  createWalletMethodExecutor(options: WalletCreateWalletMethodExecutorOptions): MethodExecutor;
+  subscribeWalletInvalidation(listener: (event: WalletInvalidationEvent) => void): () => void;
   listPendingApprovals(): Promise<WalletApiPendingApprovalsResult>;
   getApprovalDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
 }>;
 
-type WalletCreateWalletBridgeOptions = Readonly<{
-  uiOrigin: string;
+type WalletCreateWalletMethodExecutorOptions = Readonly<{
+  origin: string;
   createId?: () => string;
 }>;
 
-const createUiTrustedWalletApi = (
-  runtime: ArxWalletRuntimeCore,
-  approvalDetails: ReturnType<typeof createApprovalDetails>,
-  options: WalletCreateUiOptions,
-): TrustedWalletApi => {
-  return createTrustedWalletApi(
-    createTrustedWalletApiContext(runtime, approvalDetails, {
-      createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
-      origin: options.uiOrigin,
-    }),
-  );
-};
-
-const createTrustedWalletApiContext = (
+const createWalletApiContext = (
   runtime: ArxWalletRuntimeCore,
   approvalDetails: ReturnType<typeof createApprovalDetails>,
   options: { createId: () => string; origin: string },
@@ -195,7 +175,7 @@ const createTrustedWalletApiContext = (
     },
     accountCodecs: runtime.services.accountCodecs,
     createId: options.createId,
-    surface: {
+    caller: {
       origin: options.origin,
     },
     namespaceBindings: runtime.services.namespaceBindings,
@@ -239,27 +219,9 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
   return Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined;
 };
 
-const createWalletUiDeps = (
-  runtime: ArxWalletRuntimeCore,
-  approvalDetails: ReturnType<typeof createApprovalDetails>,
-  options: WalletCreateUiOptions,
-): UiRuntimeDeps => {
-  const wallet = createUiTrustedWalletApi(runtime, approvalDetails, options);
-
+const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore) => {
   return {
-    server: {
-      wallet,
-      platform: options.platform,
-      uiOrigin: options.uiOrigin,
-      ...(options.createId ? { createId: options.createId } : {}),
-      ...(options.extensions ? { extensions: options.extensions } : {}),
-    },
-  };
-};
-
-const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore): WalletInvalidationSource => {
-  return {
-    subscribeInvalidation(listener) {
+    subscribeInvalidation(listener: (event: WalletInvalidationEvent) => void) {
       const emit = (...topics: WalletInvalidationTopic[]) => {
         for (const topic of new Set(topics)) {
           listener({ topic });
@@ -596,25 +558,17 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     runtimeAccess: providerAccess,
     dappConnections,
   });
-  const createUi = (options: WalletCreateUiOptions) =>
-    createUiContract(createWalletUiDeps(runtimeCore, approvalDetails, options));
-  const createUiAccess = (options: WalletCreateUiOptions) =>
-    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, approvalDetails, options));
-  const createWalletBridgeServer = (options: WalletCreateWalletBridgeOptions): WalletBridgeServer => {
-    const executor = createTrustedWalletMethodExecutor(
-      createTrustedWalletApiContext(runtimeCore, approvalDetails, {
+  const walletInvalidationSource = createWalletInvalidationSource(runtimeCore);
+  const buildWalletMethodExecutor = (options: WalletCreateWalletMethodExecutorOptions): MethodExecutor => {
+    return createWalletMethodExecutor(
+      createWalletApiContext(runtimeCore, approvalDetails, {
         createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
-        origin: options.uiOrigin,
+        origin: options.origin,
       }),
     );
-
-    return createWalletBridgeProtocolServer({
-      executor,
-      events: createWalletInvalidationSource(runtimeCore),
-    });
   };
-  const walletApi = createTrustedWalletApi(
-    createTrustedWalletApiContext(runtimeCore, approvalDetails, {
+  const walletApi = createWalletApi(
+    createWalletApiContext(runtimeCore, approvalDetails, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
       origin: CORE_WALLET_API_ORIGIN,
     }),
@@ -630,7 +584,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     attention,
     dappConnections,
     createProvider: () => provider,
-    createUi,
   };
   let shutdownPromise: Promise<void> | null = null;
   const shutdown = async () => {
@@ -666,8 +619,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     provider,
     providerAccess,
     walletApi,
-    createUiAccess,
-    createWalletBridgeServer,
+    createWalletMethodExecutor: buildWalletMethodExecutor,
+    subscribeWalletInvalidation: walletInvalidationSource.subscribeInvalidation,
     listPendingApprovals: async () => await approvalDetails.listPending(),
     getApprovalDetail: async (approvalId) => await approvalDetails.getDetail(approvalId),
   };

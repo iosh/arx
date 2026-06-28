@@ -1,5 +1,5 @@
 import type { MethodCall, MethodHandlerTree } from "@arx/core/invoke";
-import { createMethodApiFromHandlers } from "@arx/core/invoke";
+import { createMethodApiProxy } from "@arx/core/invoke";
 import type { ApprovalDetail } from "@arx/core/wallet";
 
 export const UI_CHANNEL = "arx:ui" as const;
@@ -84,5 +84,5 @@ export const hostMethodHandlers = {
 } as const satisfies MethodHandlerTree<HostMethods, HostApi>;
 
 export const createHostApiClient = (call: MethodCall): HostApi => {
-  return createMethodApiFromHandlers<HostMethods, HostApi>(hostMethodHandlers, call);
+  return createMethodApiProxy<HostApi>(call);
 };

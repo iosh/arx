@@ -7,8 +7,13 @@ export type {
 export { createInvokeClient } from "./client.js";
 export type { InvokeTransportErrorReason } from "./errors.js";
 export { InvokeProtocolError, InvokeTransportError } from "./errors.js";
-export type { MethodCall, MethodExecutor, MethodHandler, MethodHandlerTree } from "./methods.js";
-export { createMethodApiFromHandlers, createMethodExecutor } from "./methods.js";
+export type {
+  MethodCall,
+  MethodExecutor,
+  MethodHandler,
+  MethodHandlerTree,
+} from "./methods.js";
+export { createMethodApiProxy, createMethodExecutor } from "./methods.js";
 export type {
   InvokeChannel,
   InvokeEvent,

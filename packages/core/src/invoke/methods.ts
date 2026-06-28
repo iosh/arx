@@ -50,25 +50,24 @@ const bindMethodHandlers = <TContext, TApi extends object>(
   return bindingsByPath;
 };
 
-const createMethodApiNode = (node: unknown, call: MethodCall, segments: string[]): unknown => {
-  if (typeof node === "function") {
-    const path = segments.join(".");
-    return (...args: unknown[]) => call(path, args[0]);
-  }
+const createMethodApiProxyNode = (call: MethodCall, segments: readonly string[]): unknown => {
+  const path = segments.join(".");
+  const target = () => undefined;
 
-  const apiNode: Record<string, unknown> = {};
-  for (const [key, childNode] of Object.entries(node as Record<string, unknown>)) {
-    apiNode[key] = createMethodApiNode(childNode, call, [...segments, key]);
-  }
-  return apiNode;
+  return new Proxy(target, {
+    apply: (_target, _thisArg, args) => call(path, args[0]),
+    get: (_target, property) => {
+      if (property === "then" || typeof property !== "string") {
+        return undefined;
+      }
+
+      return createMethodApiProxyNode(call, [...segments, property]);
+    },
+  });
 };
 
-export const createMethodApiFromHandlers = <TContext, TApi extends object>(
-  handlers: MethodHandlerTree<TContext, TApi>,
-  call: MethodCall,
-): TApi => {
-  return createMethodApiNode(handlers, call, []) as TApi;
-};
+export const createMethodApiProxy = <TApi extends object>(call: MethodCall): TApi =>
+  createMethodApiProxyNode(call, []) as TApi;
 
 export const createMethodExecutor = <TContext, TApi extends object>(deps: {
   context: TContext;

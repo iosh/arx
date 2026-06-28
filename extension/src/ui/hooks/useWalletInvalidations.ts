@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { UI_CURRENT_CHAIN_ACCOUNTS_QUERY_KEY } from "@/ui/lib/uiAccountQueries";
 import { UI_APPROVALS_QUERY_KEY } from "@/ui/lib/uiApprovalQueries";
+import { UI_NATIVE_BALANCE_QUERY_KEY } from "@/ui/lib/uiBalanceQueries";
 import {
   UI_ACCOUNTS_BY_KEYRING_QUERY_KEY,
   UI_KEYRING_BACKUP_STATUS_QUERY_KEY,
@@ -29,7 +30,7 @@ export const useWalletInvalidations = () => {
       }
 
       if (event.topic === "balances") {
-        void queryClient.invalidateQueries({ queryKey: ["nativeBalance"] });
+        void queryClient.invalidateQueries({ queryKey: UI_NATIVE_BALANCE_QUERY_KEY });
       }
 
       if (event.topic === "keyrings") {

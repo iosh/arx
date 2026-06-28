@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getUiEnvironment: vi.fn(),
   subscribeEntryChanged: vi.fn(),
   onConnectionStatus: vi.fn(),
+  refreshUiSetupStatusIntoCache: vi.fn(),
   writeCachedUiApprovalDetail: vi.fn(),
   entryChangedListener: null as ((payload: UiEntryMetadata) => void) | null,
   connectionStatusListener: null as ((status: InvokeConnectionStatus) => void) | null,
@@ -24,7 +25,12 @@ vi.mock("@/lib/uiEntryMetadata", () => ({
 }));
 
 vi.mock("./uiApprovalQueries", () => ({
+  UI_APPROVALS_QUERY_KEY: ["uiApprovals"],
   writeCachedUiApprovalDetail: mocks.writeCachedUiApprovalDetail,
+}));
+
+vi.mock("./uiSetupStatusQuery", () => ({
+  refreshUiSetupStatusIntoCache: mocks.refreshUiSetupStatusIntoCache,
 }));
 
 vi.mock("./app", () => ({
@@ -90,6 +96,19 @@ describe("uiStartup", () => {
 
     mocks.stopEntryChanged.mockReset();
     mocks.stopConnectionStatus.mockReset();
+    mocks.refreshUiSetupStatusIntoCache.mockReset();
+    mocks.refreshUiSetupStatusIntoCache.mockResolvedValue({
+      session: {
+        status: "unlocked",
+        isUnlocked: true,
+        vaultInitialized: true,
+        autoLockDurationMs: 300_000,
+        nextAutoLockAt: null,
+      },
+      onboarding: {
+        availability: "ready",
+      },
+    });
     mocks.writeCachedUiApprovalDetail.mockReset();
 
     mocks.subscribeEntryChanged.mockReset();
@@ -106,6 +125,9 @@ describe("uiStartup", () => {
   });
 
   it("reloads launch context only after a reconnect", async () => {
+    const queryClient = {
+      invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    };
     const refreshedMetadata = createMetadata({
       reason: "unlock_required",
       context: {
@@ -118,7 +140,7 @@ describe("uiStartup", () => {
     });
     mocks.getLaunchContext.mockResolvedValue(refreshedMetadata);
 
-    const stop = startUiEntryLaunchContextSync();
+    const stop = startUiEntryLaunchContextSync(queryClient as never);
 
     mocks.connectionStatusListener?.("connected");
     await Promise.resolve();
@@ -128,14 +150,23 @@ describe("uiStartup", () => {
 
     mocks.connectionStatusListener?.("disconnected");
     mocks.connectionStatusListener?.("connected");
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(mocks.getLaunchContext).toHaveBeenCalledTimes(1);
-    expect(mocks.getLaunchContext).toHaveBeenCalledWith({ environment: "notification" });
-    expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledTimes(1);
-    expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledWith(refreshedMetadata);
-    expect(mocks.subscribeEntryChanged).toHaveBeenCalledWith(expect.any(Function));
+    await vi.waitFor(() => {
+      expect(mocks.getLaunchContext).toHaveBeenCalledTimes(1);
+      expect(mocks.getLaunchContext).toHaveBeenCalledWith({ environment: "notification" });
+      expect(mocks.refreshUiSetupStatusIntoCache).toHaveBeenCalledTimes(1);
+      expect(mocks.refreshUiSetupStatusIntoCache).toHaveBeenCalledWith(queryClient);
+      expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledTimes(1);
+      expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledWith(refreshedMetadata);
+      expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(7);
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiCurrentChainAccounts"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiNetworks"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiApprovals"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["nativeBalance"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiKeyrings"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiKeyringBackupStatus"] });
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["uiAccountsByKeyring"] });
+      expect(mocks.subscribeEntryChanged).toHaveBeenCalledWith(expect.any(Function));
+    });
 
     stop();
 

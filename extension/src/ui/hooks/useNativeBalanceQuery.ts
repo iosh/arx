@@ -1,14 +1,13 @@
 import type { WalletApiNativeBalanceResult } from "@arx/core/wallet";
 import { useQuery } from "@tanstack/react-query";
 import { app } from "@/ui/lib/app";
+import { createUiNativeBalanceQueryKey } from "@/ui/lib/uiBalanceQueries";
 
 const STALE_TIME_MS = 10_000;
 const POLL_INTERVAL_MS = 30_000;
 
 type NativeBalanceResult = WalletApiNativeBalanceResult;
-
-export const nativeBalanceQueryKey = (params: { chainRef: string | null; accountKey: string | null }) =>
-  ["nativeBalance", params.chainRef, params.accountKey] as const;
+export const nativeBalanceQueryKey = createUiNativeBalanceQueryKey;
 
 export function useNativeBalanceQuery(params: {
   chainRef: string | null;

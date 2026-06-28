@@ -1,8 +1,27 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type { UiEntryBootstrap } from "@/lib/host";
 import { getUiEnvironment, hydrateUiEntryMetadata, type UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { app } from "./app";
-import { writeCachedUiApprovalDetail } from "./uiApprovalQueries";
+import { UI_CURRENT_CHAIN_ACCOUNTS_QUERY_KEY } from "./uiAccountQueries";
+import { UI_NATIVE_BALANCE_QUERY_KEY } from "./uiBalanceQueries";
+import { UI_APPROVALS_QUERY_KEY, writeCachedUiApprovalDetail } from "./uiApprovalQueries";
+import {
+  UI_ACCOUNTS_BY_KEYRING_QUERY_KEY,
+  UI_KEYRING_BACKUP_STATUS_QUERY_KEY,
+  UI_KEYRINGS_QUERY_KEY,
+} from "./uiKeyringQueries";
+import { UI_NETWORKS_QUERY_KEY } from "./uiNetworkQueries";
+import { refreshUiSetupStatusIntoCache } from "./uiSetupStatusQuery";
+
+const reconnectInvalidationQueryKeys: readonly QueryKey[] = [
+  UI_CURRENT_CHAIN_ACCOUNTS_QUERY_KEY,
+  UI_NETWORKS_QUERY_KEY,
+  UI_APPROVALS_QUERY_KEY,
+  UI_NATIVE_BALANCE_QUERY_KEY,
+  UI_KEYRINGS_QUERY_KEY,
+  UI_KEYRING_BACKUP_STATUS_QUERY_KEY,
+  UI_ACCOUNTS_BY_KEYRING_QUERY_KEY,
+] as const;
 
 export const loadUiEntryLaunchContext = async (): Promise<UiEntryMetadata> => {
   const environment = getUiEnvironment();
@@ -26,7 +45,12 @@ export const loadUiEntryBootstrap = async (queryClient: QueryClient): Promise<Ui
   return bootstrap;
 };
 
-export const startUiEntryLaunchContextSync = (): (() => void) => {
+const refreshWalletQueriesAfterReconnect = async (queryClient: QueryClient): Promise<void> => {
+  await refreshUiSetupStatusIntoCache(queryClient);
+  await Promise.all(reconnectInvalidationQueryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+};
+
+export const startUiEntryLaunchContextSync = (queryClient: QueryClient): (() => void) => {
   const environment = getUiEnvironment();
   let disposed = false;
   let shouldReloadLaunchContext = false;
@@ -51,9 +75,11 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
 
     shouldReloadLaunchContext = false;
 
-    void app.host.entry
-      .getLaunchContext({ environment })
-      .then((metadata) => {
+    void Promise.all([
+      app.host.entry.getLaunchContext({ environment }),
+      refreshWalletQueriesAfterReconnect(queryClient),
+    ])
+      .then(([metadata]) => {
         if (disposed) {
           return;
         }
@@ -65,7 +91,7 @@ export const startUiEntryLaunchContextSync = (): (() => void) => {
           return;
         }
 
-        console.warn("[uiStartup] failed to refresh launch context after reconnect", error);
+        console.warn("[uiStartup] failed to refresh UI state after reconnect", error);
       });
   });
 

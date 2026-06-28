@@ -64,7 +64,7 @@ const renderStartupError = (message: string) => {
 };
 
 const boot = async () => {
-  startUiEntryLaunchContextSync();
+  startUiEntryLaunchContextSync(queryClient);
 
   try {
     await loadUiEntryBootstrap(queryClient);

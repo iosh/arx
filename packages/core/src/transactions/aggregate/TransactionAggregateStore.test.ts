@@ -157,7 +157,7 @@ const createService = () => {
 
   return {
     store: new TransactionAggregateStore({
-      storage: storage.port,
+      transactionsPort: storage.port,
       now: () => now,
       createId: () => {
         nextId += 1;
@@ -197,7 +197,7 @@ describe("TransactionAggregateStore", () => {
     const seededStorage = createInMemoryTransactionsStoragePort([stored]);
 
     const freshProcess = new TransactionAggregateStore({
-      storage: seededStorage.port,
+      transactionsPort: seededStorage.port,
       now: () => 2_000,
       createId: () => "unused-id",
     });

@@ -241,7 +241,7 @@ const createServices = (namespaces: NamespaceTransactions) => {
   let nextPrepareId = 0;
   const storage = createInMemoryTransactionsStoragePort();
   const aggregateStore = new TransactionAggregateStore({
-    storage: storage.port,
+    transactionsPort: storage.port,
     now: () => now,
     createId: () => {
       nextTransactionId += 1;

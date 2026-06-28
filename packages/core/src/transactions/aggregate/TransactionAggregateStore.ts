@@ -25,7 +25,7 @@ import type {
 } from "./types.js";
 
 type TransactionAggregateStoreDeps = {
-  storage: TransactionsStoragePort;
+  transactionsPort: TransactionsStoragePort;
   now?: () => number;
   createId?: () => string;
 };
@@ -34,10 +34,10 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
 
 export class TransactionAggregateStore {
   #service: TransactionAggregateService;
-  #storage: TransactionsStoragePort;
+  #transactionsPort: TransactionsStoragePort;
 
   constructor(deps: TransactionAggregateStoreDeps) {
-    this.#storage = deps.storage;
+    this.#transactionsPort = deps.transactionsPort;
     this.#service = new TransactionAggregateService({
       ...(deps.now !== undefined ? { now: deps.now } : {}),
       ...(deps.createId !== undefined ? { createId: deps.createId } : {}),
@@ -45,13 +45,13 @@ export class TransactionAggregateStore {
   }
 
   async loadTransactionAggregate(transactionId: string): Promise<TransactionAggregate | null> {
-    const aggregate = await this.#storage.loadTransactionAggregate(transactionId);
+    const aggregate = await this.#transactionsPort.loadTransactionAggregate(transactionId);
     return aggregate ? cloneAggregate(aggregate) : null;
   }
 
   async createApprovedTransaction(input: CreateApprovedTransactionInput): Promise<TransactionAggregate> {
     const aggregate = this.#service.createApprovedTransaction(input);
-    await this.#storage.insertApprovedTransactionAggregate({ aggregate });
+    await this.#transactionsPort.insertApprovedTransactionAggregate({ aggregate });
     return aggregate;
   }
 
@@ -140,24 +140,24 @@ export class TransactionAggregateStore {
   }
 
   async listTransactionHistory(query?: ListTransactionHistoryQuery): Promise<TransactionRecord[]> {
-    const records = await this.#storage.listTransactionHistory(query);
+    const records = await this.#transactionsPort.listTransactionHistory(query);
     return structuredClone(records);
   }
 
   async findTransactionRecordsByConflictKey(key: TransactionConflictKey): Promise<TransactionRecord[]> {
-    const records = await this.#storage.findTransactionRecordsByConflictKey(key);
+    const records = await this.#transactionsPort.findTransactionRecordsByConflictKey(key);
     return structuredClone(records);
   }
 
   async listRecoverableTransactionAggregates(
     query?: ListRecoverableTransactionAggregatesQuery,
   ): Promise<TransactionAggregate[]> {
-    const aggregates = await this.#storage.listRecoverableTransactionAggregates(query);
+    const aggregates = await this.#transactionsPort.listRecoverableTransactionAggregates(query);
     return structuredClone(aggregates);
   }
 
   async listRestartActions(query?: ListRecoverableTransactionAggregatesQuery): Promise<TransactionRestartAction[]> {
-    const aggregates = await this.#storage.listRecoverableTransactionAggregates(query);
+    const aggregates = await this.#transactionsPort.listRecoverableTransactionAggregates(query);
     return aggregates.flatMap((aggregate) => this.#service.listRestartActions(aggregate));
   }
 
@@ -165,13 +165,13 @@ export class TransactionAggregateStore {
     transactionId: string,
     mutate: (aggregate: TransactionAggregate) => TransactionAggregate,
   ): Promise<TransactionAggregate> {
-    const aggregate = await this.#storage.loadTransactionAggregate(transactionId);
+    const aggregate = await this.#transactionsPort.loadTransactionAggregate(transactionId);
     if (!aggregate) {
       throw new TransactionAggregateNotFoundError(transactionId);
     }
 
     const next = mutate(aggregate);
-    await this.#storage.saveTransactionAggregate(next);
+    await this.#transactionsPort.saveTransactionAggregate(next);
     return next;
   }
 }

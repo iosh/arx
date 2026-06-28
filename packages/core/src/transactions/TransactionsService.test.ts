@@ -135,7 +135,7 @@ const createHarness = (params?: {
   let nextPrepareId = 0;
   const storage = createInMemoryTransactionsStoragePort();
   const aggregateStore = new TransactionAggregateStore({
-    storage,
+    transactionsPort: storage,
     now: () => 1_000,
     createId: () => {
       nextTransactionId += 1;

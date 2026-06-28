@@ -340,7 +340,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
   const transactionAggregateStore = new TransactionAggregateStore({
-    storage: input.storage.ports.transactions,
+    transactionsPort: input.storage.ports.transactions,
     now: bootstrapScope.storageNow,
     ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
   });

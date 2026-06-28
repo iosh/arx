@@ -233,7 +233,7 @@ const createServices = (params?: {
   ]);
 
   const aggregateStore = new TransactionAggregateStore({
-    storage: storage.port,
+    transactionsPort: storage.port,
     now: () => now,
     createId: () => {
       nextId += 1;
@@ -525,7 +525,7 @@ describe("createTransactionServices", () => {
     ]);
 
     const aggregateStore = new TransactionAggregateStore({
-      storage: {
+      transactionsPort: {
         ...storage.port,
         async saveTransactionAggregate(aggregate) {
           if (aggregate.record.status === "submitted") {
@@ -633,7 +633,7 @@ describe("createTransactionServices", () => {
       ],
     ]);
     const aggregateStore = new TransactionAggregateStore({
-      storage: storage.port,
+      transactionsPort: storage.port,
       now: () => now,
       createId: () => {
         nextId += 1;

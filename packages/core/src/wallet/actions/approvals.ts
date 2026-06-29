@@ -1,7 +1,7 @@
 import type { ApprovalResolveInput } from "../../approvals/queue/types.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
 import { buildTransactionTerminalReason } from "../../transactions/index.js";
-import type { ResolveApprovalInput, WalletApiApprovalDetailInput } from "../api.js";
+import type { DismissApprovalInput, ResolveApprovalInput, WalletApiApprovalDetailInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
 
 const toApprovalResolveInput = (input: ResolveApprovalInput): ApprovalResolveInput => {
@@ -20,6 +20,28 @@ export const listPendingApprovals = async (context: WalletApiContext) => await c
 
 export const getApprovalDetail = async (context: WalletApiContext, input: WalletApiApprovalDetailInput) => {
   return await context.approvalDetails.getDetail(input.approvalId);
+};
+
+export const dismissApproval = async (context: WalletApiContext, input: DismissApprovalInput) => {
+  const transactionApproval = context.transactions.getTransactionApproval(input.approvalId);
+  if (!transactionApproval) {
+    await context.approvals.cancel({
+      approvalId: input.approvalId,
+      reason: "user_dismissed",
+    });
+    return null;
+  }
+
+  await context.transactions.cancelTransactionApproval({
+    approvalId: input.approvalId,
+    reason: buildTransactionTerminalReason({
+      kind: "approval_cancelled",
+      code: "approval.user_dismissed",
+      message: "Approval dismissed by user.",
+      details: { reason: "user_dismissed" },
+    }),
+  });
+  return null;
 };
 
 export const resolveApproval = async (context: WalletApiContext, input: ResolveApprovalInput) => {

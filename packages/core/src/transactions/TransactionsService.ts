@@ -253,6 +253,7 @@ export type WalletTransactionAccess = Pick<
   | "listTransactions"
   | "approveAndSubmitTransaction"
   | "rejectTransactionApproval"
+  | "cancelTransactionApproval"
 >;
 
 export type TransactionsEvents = {

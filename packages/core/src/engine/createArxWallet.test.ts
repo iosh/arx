@@ -260,6 +260,47 @@ describe("createArxWallet", () => {
     }
   });
 
+  it("dismisses pending approvals through the wallet API with user-dismissed semantics", async () => {
+    const runtime = await createWalletRuntime();
+
+    try {
+      const { walletApi, wallet } = runtime;
+      await wallet.session.createVault({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+
+      const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+      const approvalId = "approval-dismiss-sign-message";
+      const handle = wallet.approvals.create(
+        {
+          approvalId,
+          kind: ApprovalKinds.SignMessage,
+          origin: ORIGIN,
+          namespace: EIP155_NAMESPACE,
+          chainRef: EIP155_CHAIN_REF,
+          createdAt: 2_000,
+          request: {
+            chainRef: EIP155_CHAIN_REF,
+            from: address,
+            message: "0x68656c6c6f",
+          },
+        },
+        {
+          origin: ORIGIN,
+          source: "provider",
+          requestId: "request-dismiss-1",
+        },
+      );
+
+      await expect(walletApi.approvals.dismiss({ approvalId })).resolves.toBeNull();
+      await expect(handle.settled).rejects.toMatchObject({
+        code: "approval.user_dismissed",
+      });
+      expect(wallet.approvals.getState()).toEqual({ pending: [] });
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
   it("rejects empty namespace modules", async () => {
     await expect(createArxWallet(createWalletInput({ modules: [] }))).rejects.toThrow(
       /requires at least one wallet namespace module/,

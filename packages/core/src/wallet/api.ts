@@ -72,6 +72,7 @@ export type WalletApiNativeBalanceInput = {
 };
 
 export type WalletApiApprovalDetailInput = { approvalId: string };
+export type DismissApprovalInput = { approvalId: string };
 export type ResolveApprovalInput =
   | {
       approvalId: string;
@@ -194,6 +195,7 @@ export type WalletApi = Readonly<{
   approvals: Readonly<{
     listPending(): Promise<WalletApiPendingApprovalsResult>;
     getDetail(input: WalletApiApprovalDetailInput): Promise<WalletApiApprovalDetailResult>;
+    dismiss(input: DismissApprovalInput): Promise<null>;
     resolve(input: ResolveApprovalInput): Promise<WalletApiResolveApprovalResult>;
   }>;
 

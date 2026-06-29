@@ -1,6 +1,6 @@
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/approvals";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
-import type { ApprovalDetail } from "@arx/core/wallet";
+import type { ApprovalDetail, ApprovalListEntry } from "@arx/core/wallet";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryPlatform } from "../platform/uiPlatform";
 import type { BackgroundUiEntryAccess } from "../runtimeHost";
@@ -47,9 +47,6 @@ class FakeBus {
 
 class FakeApprovalQueueService {
   #pending: ApprovalQueueItemLike[] = [];
-  #createdHandlers = new Set<(event: { record: ApprovalRecordLike }) => void>();
-  #finishedHandlers = new Set<(event: { approvalId: string }) => void>();
-  #stateHandlers = new Set<() => void>();
 
   cancel = vi.fn(async ({ approvalId }: { approvalId: string; reason: string }) => {
     const nextPending = this.#pending.filter((item) => item.approvalId !== approvalId);
@@ -58,29 +55,10 @@ class FakeApprovalQueueService {
     }
 
     this.#pending = nextPending;
-    this.#emitState();
-    for (const handler of this.#finishedHandlers) {
-      handler({ approvalId });
-    }
   });
 
   getState() {
     return { pending: [...this.#pending] };
-  }
-
-  onCreated(handler: (event: { record: ApprovalRecordLike }) => void) {
-    this.#createdHandlers.add(handler);
-    return () => this.#createdHandlers.delete(handler);
-  }
-
-  onFinished(handler: (event: { approvalId: string }) => void) {
-    this.#finishedHandlers.add(handler);
-    return () => this.#finishedHandlers.delete(handler);
-  }
-
-  onStateChanged(handler: () => void) {
-    this.#stateHandlers.add(handler);
-    return () => this.#stateHandlers.delete(handler);
   }
 
   add(record: ApprovalRecordLike) {
@@ -96,31 +74,6 @@ class FakeApprovalQueueService {
         createdAt: record.createdAt,
       },
     ];
-    this.#emitState();
-    for (const handler of this.#createdHandlers) {
-      handler({ record });
-    }
-  }
-
-  #emitState() {
-    for (const handler of this.#stateHandlers) {
-      handler();
-    }
-  }
-}
-
-class FakeUnlock {
-  #lockedHandlers = new Set<() => void>();
-
-  onLocked(handler: () => void) {
-    this.#lockedHandlers.add(handler);
-    return () => this.#lockedHandlers.delete(handler);
-  }
-
-  lock() {
-    for (const handler of this.#lockedHandlers) {
-      handler();
-    }
   }
 }
 
@@ -168,7 +121,6 @@ const buildHarness = (
 ) => {
   const bus = new FakeBus();
   const approvals = new FakeApprovalQueueService();
-  const unlock = new FakeUnlock();
   const trackedWindowClosers = new Map<number, () => void>();
   const notificationOpenResults =
     options?.notificationOpenResults ??
@@ -182,6 +134,18 @@ const buildHarness = (
   let shouldFailFirstUiEntryAccess = options?.failFirstUiEntryAccess ?? false;
   const onEntryChanged = vi.fn();
   const approvalDetails = new Map<string, ApprovalDetail>();
+  const approvalInvalidationHandlers = new Set<() => void>();
+
+  const listPendingApprovals = (): ApprovalListEntry[] =>
+    approvals.getState().pending.map((item) => ({
+      approvalId: item.approvalId,
+      kind: item.kind,
+      source: item.source,
+      origin: item.origin,
+      namespace: item.namespace,
+      chainRef: item.chainRef,
+      createdAt: item.createdAt,
+    }));
 
   const platform: UiEntryPlatform = {
     openOnboardingTab: vi.fn(async () => {
@@ -217,33 +181,14 @@ const buildHarness = (
       return {
         subscribeUnlockAttentionRequested: (handler: (payload: unknown) => void) =>
           bus.subscribe(ATTENTION_REQUESTED, handler),
-        subscribeApprovalCreated: (
-          handler: BackgroundUiEntryAccess["subscribeApprovalCreated"] extends (listener: infer Listener) => unknown
-            ? Listener
-            : never,
-        ) =>
-          approvals.onCreated(({ record }) =>
-            handler({
-              approval: {
-                approvalId: record.approvalId,
-                kind: record.kind,
-                source: record.requester.source,
-                origin: record.origin,
-                namespace: record.namespace,
-                chainRef: record.chainRef,
-                createdAt: record.createdAt,
-              },
-            }),
-          ),
-        subscribeApprovalFinished: (handler: (event: { approvalId: string }) => void) => approvals.onFinished(handler),
-        subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
-        subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
-        cancelApproval: approvals.cancel,
-        cancelPendingApprovals: async (reason: string) => {
-          const pendingIds = approvals.getState().pending.map((item) => item.approvalId);
-          await Promise.all(pendingIds.map((approvalId) => approvals.cancel({ approvalId, reason })));
+        subscribeApprovalInvalidation: (handler: () => void) => {
+          approvalInvalidationHandlers.add(handler);
+          return () => approvalInvalidationHandlers.delete(handler);
         },
-        getPendingApprovalCount: async () => approvals.getState().pending.length,
+        dismissApproval: async ({ approvalId }: { approvalId: string }) => {
+          await approvals.cancel({ approvalId, reason: "user_dismissed" });
+        },
+        listPendingApprovals: async () => listPendingApprovals(),
         getApprovalDetail: async (approvalId: string) => approvalDetails.get(approvalId) ?? null,
         hasInitializedVault: () => true,
       };
@@ -256,7 +201,11 @@ const buildHarness = (
     onEntryChanged,
     platform,
     runtimeHost,
-    unlock,
+    emitApprovalInvalidation() {
+      for (const handler of approvalInvalidationHandlers) {
+        handler();
+      }
+    },
     setApprovalDetail(detail: ApprovalDetail) {
       approvalDetails.set(detail.approvalId, detail);
     },
@@ -293,6 +242,7 @@ describe("uiEntryCoordinator", () => {
         },
       }),
     );
+    harness.emitApprovalInvalidation();
 
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(2));
 
@@ -333,56 +283,11 @@ describe("uiEntryCoordinator", () => {
         },
       }),
     );
+    harness.emitApprovalInvalidation();
 
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 
     harness.closeWindow(31);
-
-    await vi.waitFor(() =>
-      expect(harness.approvals.cancel).toHaveBeenCalledWith({
-        approvalId: "provider-approval",
-        reason: "user_dismissed",
-      }),
-    );
-
-    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual(["ui-approval"]);
-
-    coordinator.destroy();
-  });
-
-  it("keeps pending approvals alive when the session locks and still cancels them if the tracked popup closes", async () => {
-    const harness = buildHarness([41]);
-    const coordinator = createUiEntryCoordinator({
-      runtimeHost: harness.runtimeHost,
-      platform: harness.platform,
-      onEntryChanged: harness.onEntryChanged,
-    });
-
-    await coordinator.start();
-    expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
-
-    harness.approvals.add(createRecord({ approvalId: "provider-approval" }));
-    harness.approvals.add(
-      createRecord({
-        approvalId: "ui-approval",
-        requester: {
-          origin: "chrome-extension://wallet",
-          source: "wallet-ui",
-          requestId: "ui-request",
-        },
-      }),
-    );
-
-    await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
-
-    harness.unlock.lock();
-    expect(harness.approvals.cancel).not.toHaveBeenCalled();
-    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual([
-      "provider-approval",
-      "ui-approval",
-    ]);
-
-    harness.closeWindow(41);
 
     await vi.waitFor(() =>
       expect(harness.approvals.cancel).toHaveBeenCalledWith({
@@ -487,6 +392,15 @@ describe("uiEntryCoordinator", () => {
 
     harness.setApprovalDetail(createApprovalDetail("approval-1"));
     harness.approvals.add(createRecord({ approvalId: "approval-1" }));
+    harness.emitApprovalInvalidation();
+    await vi.waitFor(() =>
+      expect(coordinator.getEntryLaunchContext({ environment: "notification" })).toMatchObject({
+        reason: "approval_created",
+        context: {
+          approvalId: "approval-1",
+        },
+      }),
+    );
 
     const bootstrap = await coordinator.getEntryBootstrap({ environment: "notification" });
 

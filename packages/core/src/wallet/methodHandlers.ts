@@ -1,6 +1,6 @@
 import type { MethodHandlerTree } from "../invoke/methods.js";
 import { listAccountsForCurrentChain, switchActiveAccount } from "./actions/accounts.js";
-import { getApprovalDetail, listPendingApprovals, resolveApproval } from "./actions/approvals.js";
+import { dismissApproval, getApprovalDetail, listPendingApprovals, resolveApproval } from "./actions/approvals.js";
 import { getNativeBalance } from "./actions/balances.js";
 import { getSelectedWalletChain, listWalletNetworks, selectWalletChain } from "./actions/chains.js";
 import {
@@ -74,6 +74,7 @@ export const walletMethodHandlers = {
   approvals: {
     listPending: listPendingApprovals,
     getDetail: getApprovalDetail,
+    dismiss: dismissApproval,
     resolve: resolveApproval,
   },
   keyrings: {

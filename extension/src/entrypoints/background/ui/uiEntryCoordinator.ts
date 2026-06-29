@@ -1,5 +1,6 @@
-import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/approvals";
+import { getApprovalType } from "@arx/core/approvals";
 import { createLogger, extendLogger } from "@arx/core/logger";
+import type { ApprovalListEntry } from "@arx/core/wallet";
 import type { HostMethods, UiEntryBootstrap, UiEntryLaunchContext } from "@/lib/host";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
@@ -17,14 +18,6 @@ type UiEntryCoordinatorDeps = {
 };
 
 type UiEntryLaunchContextParams = Parameters<HostMethods["getEntryLaunchContext"]>[0];
-type UiApprovalEntry = Parameters<BackgroundUiEntryAccess["subscribeApprovalCreated"]>[0] extends (
-  event: infer Event,
-) => void
-  ? Event extends { approval: infer Approval }
-    ? Approval
-    : never
-  : never;
-
 export type UiEntryCoordinator = {
   start(): Promise<void>;
   destroy(): void;
@@ -65,6 +58,7 @@ export const createUiEntryCoordinator = ({
   const subscriptions: Array<() => void> = [];
   const trackedWindowIds = new Set<number>();
   const approvalWindowTracker = createApprovalWindowTracker();
+  const seenProviderApprovalIds = new Set<string>();
   const entryByEnvironment = new Map<UiEntryLaunchContextParams["environment"], UiEntryLaunchContext>();
   let started = false;
   let disposed = false;
@@ -131,6 +125,7 @@ export const createUiEntryCoordinator = ({
   const clearWindowTracking = () => {
     trackedWindowIds.clear();
     approvalWindowTracker.clear();
+    seenProviderApprovalIds.clear();
     platform.clearWindowCloseTracks();
   };
 
@@ -147,17 +142,13 @@ export const createUiEntryCoordinator = ({
     }
   };
 
-  const cancelApprovalIds = async (
-    uiEntryAccess: BackgroundUiEntryAccess,
-    approvalIds: string[],
-    reason: ApprovalTerminalReason,
-  ) => {
+  const dismissApprovalIds = async (uiEntryAccess: BackgroundUiEntryAccess, approvalIds: readonly string[]) => {
     await Promise.all(
       approvalIds.map(async (approvalId) => {
         try {
-          await uiEntryAccess.cancelApproval({ approvalId, reason });
+          await uiEntryAccess.dismissApproval({ approvalId });
         } catch (error) {
-          entryLog("failed to cancel approval", { approvalId, reason, error });
+          entryLog("failed to dismiss approval", { approvalId, error });
         }
       }),
     );
@@ -172,7 +163,7 @@ export const createUiEntryCoordinator = ({
     platform.trackWindowClose(windowId, () => {
       trackedWindowIds.delete(windowId);
       const approvalIds = approvalWindowTracker.takeWindowApprovalIds(windowId);
-      void cancelApprovalIds(uiEntryAccess, approvalIds, "user_dismissed");
+      void dismissApprovalIds(uiEntryAccess, approvalIds);
     });
   };
 
@@ -239,7 +230,7 @@ export const createUiEntryCoordinator = ({
       });
   };
 
-  const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, approval: UiApprovalEntry) => {
+  const openNotificationForApproval = (uiEntryAccess: BackgroundUiEntryAccess, approval: ApprovalListEntry) => {
     if (approval.source !== "provider") {
       return;
     }
@@ -298,6 +289,39 @@ export const createUiEntryCoordinator = ({
       });
   };
 
+  const syncPendingApprovals = async (uiEntryAccess: BackgroundUiEntryAccess) => {
+    const approvals = await uiEntryAccess.listPendingApprovals();
+    const providerApprovalIds = new Set(
+      approvals.filter((approval) => approval.source === "provider").map((approval) => approval.approvalId),
+    );
+
+    for (const approvalId of Array.from(seenProviderApprovalIds)) {
+      if (providerApprovalIds.has(approvalId)) {
+        continue;
+      }
+
+      seenProviderApprovalIds.delete(approvalId);
+      approvalWindowTracker.deleteApproval(approvalId);
+    }
+
+    if (providerApprovalIds.size === 0) {
+      clearWindowTracking();
+      return;
+    }
+
+    for (const approval of approvals) {
+      if (approval.source !== "provider") {
+        continue;
+      }
+      if (seenProviderApprovalIds.has(approval.approvalId)) {
+        continue;
+      }
+
+      seenProviderApprovalIds.add(approval.approvalId);
+      openNotificationForApproval(uiEntryAccess, approval);
+    }
+  };
+
   const openOnboardingTab = async (reason: string) => {
     setEntry(
       createUiEntryMetadata({
@@ -332,29 +356,17 @@ export const createUiEntryCoordinator = ({
           }),
         );
         subscriptions.push(
-          uiEntryAccess.subscribeApprovalCreated(({ approval }) => {
-            openNotificationForApproval(uiEntryAccess, approval);
+          uiEntryAccess.subscribeApprovalInvalidation(() => {
+            void syncPendingApprovals(uiEntryAccess).catch((error) => {
+              entryLog("failed to sync pending approvals", error);
+            });
           }),
         );
-        subscriptions.push(
-          uiEntryAccess.subscribeApprovalFinished(({ approvalId }) => {
-            approvalWindowTracker.deleteApproval(approvalId);
-          }),
-        );
-        subscriptions.push(
-          uiEntryAccess.subscribeApprovalStateChanged(() => {
-            void uiEntryAccess
-              .getPendingApprovalCount()
-              .then((pendingApprovalCount) => {
-                if (pendingApprovalCount === 0) {
-                  clearWindowTracking();
-                }
-              })
-              .catch((error) => {
-                entryLog("failed to read pending approval count", error);
-              });
-          }),
-        );
+
+        await syncPendingApprovals(uiEntryAccess).catch((error) => {
+          entryLog("failed to load initial pending approvals", error);
+          throw error;
+        });
 
         started = true;
       } catch (error) {

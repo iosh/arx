@@ -1,11 +1,4 @@
 import {
-  type ApprovalKind,
-  ApprovalKinds,
-  type ApprovalSource,
-  type ApprovalTerminalReason,
-} from "@arx/core/approvals";
-import {
-  type ApprovalDetail,
   type CoreProviderApi,
   type CoreRuntime,
   createArxWalletRuntime,
@@ -14,8 +7,7 @@ import {
 import type { MethodExecutor } from "@arx/core/invoke";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
-import { buildTransactionTerminalReason } from "@arx/core/transactions";
-import type { WalletInvalidationEvent } from "@arx/core/wallet";
+import type { ApprovalDetail, ApprovalListEntry, WalletInvalidationEvent } from "@arx/core/wallet";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -37,46 +29,15 @@ export type BackgroundRuntimeHost = {
   applyDebugNamespacesFromEnv: () => void;
 };
 
-type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
-type BackgroundRuntimeApprovals = BackgroundRuntime["services"]["approvals"];
-type BackgroundRuntimeTransactions = BackgroundRuntime["transactions"];
-type BackgroundRuntimeUnlock = BackgroundRuntime["services"]["session"]["unlock"];
-
-type RuntimeApprovalCreatedEvent = Parameters<Parameters<BackgroundRuntimeApprovals["onCreated"]>[0]>[0];
-type ApprovalSessionLockedListener = Parameters<BackgroundRuntimeUnlock["onLocked"]>[0];
-type RuntimeTransactionApproval = NonNullable<ReturnType<BackgroundRuntimeTransactions["getTransactionApproval"]>>;
-
-export type BackgroundApprovalEntry = {
-  approvalId: string;
-  kind: ApprovalKind;
-  origin: string;
-  namespace: string;
-  chainRef: string;
-  createdAt: number;
-  source: ApprovalSource;
-};
-
-export type BackgroundApprovalCreatedEvent = {
-  approval: BackgroundApprovalEntry;
-};
-
-export type BackgroundApprovalFinishedEvent = {
-  approvalId: string;
-};
-
 export type BackgroundUnlockAttentionRequestedPayload = AttentionRequest & { reason: "unlock_required" };
 
 export type BackgroundUiEntryAccess = {
   subscribeUnlockAttentionRequested: (
     listener: (payload: BackgroundUnlockAttentionRequestedPayload) => void,
   ) => () => void;
-  subscribeApprovalCreated: (listener: (event: BackgroundApprovalCreatedEvent) => void) => () => void;
-  subscribeApprovalFinished: (listener: (event: BackgroundApprovalFinishedEvent) => void) => () => void;
-  subscribeApprovalStateChanged: (listener: () => void) => () => void;
-  subscribeSessionLocked: (listener: ApprovalSessionLockedListener) => () => void;
-  cancelApproval: (params: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
-  cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
-  getPendingApprovalCount: () => Promise<number>;
+  subscribeApprovalInvalidation: (listener: () => void) => () => void;
+  dismissApproval: (params: { approvalId: string }) => Promise<void>;
+  listPendingApprovals: () => Promise<ApprovalListEntry[]>;
   getApprovalDetail: (approvalId: string) => Promise<ApprovalDetail | null>;
   hasInitializedVault: () => boolean;
 };
@@ -84,27 +45,6 @@ export type BackgroundUiEntryAccess = {
 const isUnlockAttentionRequest = (payload: AttentionRequest): payload is BackgroundUnlockAttentionRequestedPayload => {
   return payload.reason === "unlock_required";
 };
-
-const toGenericApprovalEntry = (record: RuntimeApprovalCreatedEvent["record"]): BackgroundApprovalEntry => ({
-  approvalId: record.approvalId,
-  kind: record.kind,
-  origin: record.origin,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  createdAt: record.createdAt,
-  source: record.requester.source,
-});
-
-const buildTransactionApprovalCancelReason = (reason: ApprovalTerminalReason) =>
-  buildTransactionTerminalReason({
-    kind: "approval_cancelled",
-    code: `ui.${reason}`,
-    message:
-      reason === "user_dismissed"
-        ? "User dismissed the transaction approval window."
-        : "Transaction approval was cancelled by the UI.",
-    details: { reason },
-  });
 
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
@@ -229,28 +169,14 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const getOrInitUiEntryAccess = async (): Promise<BackgroundUiEntryAccess> => {
     const active = await getOrInitRuntimeCache();
+    const subscribeApprovalInvalidation = (listener: () => void) =>
+      active.runtime.subscribeWalletInvalidation((event) => {
+        if (event.topic !== "approvals") {
+          return;
+        }
 
-    const buildTransactionApprovalEntry = (approval: RuntimeTransactionApproval): BackgroundApprovalEntry => ({
-      approvalId: approval.approvalId,
-      kind: ApprovalKinds.SendTransaction,
-      origin: approval.origin,
-      namespace: approval.namespace,
-      chainRef: approval.chainRef,
-      createdAt: approval.createdAt,
-      source: approval.source,
-    });
-
-    const cancelApproval = async ({ approvalId, reason }: { approvalId: string; reason: ApprovalTerminalReason }) => {
-      const transaction = await active.runtime.transactions.cancelTransactionApproval({
-        approvalId,
-        reason: buildTransactionApprovalCancelReason(reason),
+        listener();
       });
-      if (transaction) {
-        return;
-      }
-
-      await active.runtime.services.approvals.cancel({ approvalId, reason });
-    };
 
     return {
       subscribeUnlockAttentionRequested: (listener) =>
@@ -261,81 +187,12 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
           listener(payload);
         }),
-      subscribeApprovalCreated: (listener) => {
-        const unsubscribeGeneric = active.runtime.services.approvals.onCreated((event) => {
-          listener({ approval: toGenericApprovalEntry(event.record) });
-        });
-        const createdTransactionApprovalIds = new Set<string>();
-        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
-          for (const approvalId of approvalIds) {
-            const approval = active.runtime.transactions.getTransactionApproval(approvalId);
-            if (!approval) {
-              createdTransactionApprovalIds.delete(approvalId);
-              continue;
-            }
-            if (createdTransactionApprovalIds.has(approvalId)) {
-              continue;
-            }
-
-            createdTransactionApprovalIds.add(approvalId);
-            listener({ approval: buildTransactionApprovalEntry(approval) });
-          }
-        });
-
-        return () => {
-          unsubscribeGeneric();
-          unsubscribeTransactions();
-        };
+      subscribeApprovalInvalidation,
+      dismissApproval: async ({ approvalId }) => {
+        await active.core.wallet.approvals.dismiss({ approvalId });
       },
-      subscribeApprovalFinished: (listener) => {
-        const unsubscribeGeneric = active.runtime.services.approvals.onFinished((event) => {
-          listener({ approvalId: event.approvalId });
-        });
-        const activeTransactionApprovalIds = new Set<string>();
-        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
-          for (const approvalId of approvalIds) {
-            const approval = active.runtime.transactions.getTransactionApproval(approvalId);
-            if (approval) {
-              activeTransactionApprovalIds.add(approvalId);
-              continue;
-            }
-
-            if (!activeTransactionApprovalIds.delete(approvalId)) {
-              continue;
-            }
-
-            listener({ approvalId });
-          }
-        });
-
-        return () => {
-          unsubscribeGeneric();
-          unsubscribeTransactions();
-        };
-      },
-      subscribeApprovalStateChanged: (listener) => {
-        const unsubscribeGeneric = active.runtime.services.approvals.onStateChanged(() => listener());
-        const unsubscribeTransactions = active.runtime.transactions.onTransactionApprovalsChanged(() => listener());
-
-        return () => {
-          unsubscribeGeneric();
-          unsubscribeTransactions();
-        };
-      },
-      subscribeSessionLocked: (listener) => active.runtime.services.session.unlock.onLocked(listener),
-      cancelApproval,
-      cancelPendingApprovals: async (reason) => {
-        const genericApprovalIds = active.runtime.services.approvals.getState().pending.map((item) => item.approvalId);
-        const transactionApprovalIds = (await active.runtime.transactions.listTransactionApprovals()).map(
-          (approval) => approval.approvalId,
-        );
-        const approvalIds = Array.from(new Set([...genericApprovalIds, ...transactionApprovalIds]));
-        await Promise.all(approvalIds.map((approvalId) => cancelApproval({ approvalId, reason })));
-      },
-      getPendingApprovalCount: async () =>
-        active.runtime.services.approvals.getState().pending.length +
-        (await active.runtime.transactions.listTransactionApprovals()).length,
-      getApprovalDetail: (approvalId) => active.runtime.getApprovalDetail(approvalId),
+      listPendingApprovals: async () => await active.core.wallet.approvals.listPending(),
+      getApprovalDetail: async (approvalId) => await active.core.wallet.approvals.getDetail({ approvalId }),
       hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),
     };
   };

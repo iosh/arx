@@ -3,6 +3,7 @@ export type {
   ConfirmNewMnemonicInput,
   CreateWalletFromMnemonicInput,
   DeriveAccountInput,
+  DismissApprovalInput,
   Eip155TransactionDraftChange,
   ExportMnemonicInput,
   ExportPrivateKeyInput,

@@ -1,6 +1,6 @@
 import type { MethodExecutor } from "@arx/core/invoke";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
-import type { WalletInvalidationEvent } from "@arx/core/wallet";
+import type { ApprovalDetail, ApprovalListEntry, WalletInvalidationEvent } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
@@ -12,10 +12,7 @@ const {
   enableDebugNamespacesMock,
 } = vi.hoisted(() => ({
   createArxWalletRuntimeMock: vi.fn(),
-  createCoreRuntimeFromArxWalletRuntimeMock: vi.fn((runtime: { provider: unknown }) => ({
-    provider: runtime.provider,
-    wallet: {},
-  })),
+  createCoreRuntimeFromArxWalletRuntimeMock: vi.fn(),
   getExtensionStorageMock: vi.fn(),
   disableDebugNamespacesMock: vi.fn(),
   enableDebugNamespacesMock: vi.fn(),
@@ -69,54 +66,14 @@ const makeRuntime = () => {
     return () => invalidationListeners.delete(listener);
   });
 
-  const onCreated = vi.fn(() => vi.fn());
-  const onFinished = vi.fn(() => vi.fn());
-  const onApprovalsStateChanged = vi.fn(() => vi.fn());
-  const cancelApproval = vi.fn(async () => {});
-  const transactionApprovalHandlers = new Set<(approvalIds: readonly string[]) => void>();
-  const transactionApprovals = new Map<string, unknown>();
-  const onTransactionApprovalsChanged = vi.fn((handler: (approvalIds: readonly string[]) => void) => {
-    transactionApprovalHandlers.add(handler);
-    return () => transactionApprovalHandlers.delete(handler);
-  });
-  const getTransactionApproval = vi.fn((approvalId: string) => transactionApprovals.get(approvalId) ?? null);
-  const listTransactionApprovals = vi.fn(async () => Array.from(transactionApprovals.values()));
-  const cancelTransactionApproval = vi.fn(async ({ approvalId }: { approvalId: string }) => {
-    const approval = transactionApprovals.get(approvalId) ?? null;
-    if (!approval) {
-      return null;
-    }
-
-    transactionApprovals.delete(approvalId);
-    for (const handler of transactionApprovalHandlers) {
-      handler([approvalId]);
-    }
-    return approval;
-  });
-
-  const onLocked = vi.fn(() => vi.fn());
   const unsubscribeBus = vi.fn();
   const subscribe = vi.fn(() => unsubscribeBus);
   const provider = {
     getConnectionState: vi.fn(async () => ({ snapshot: null, accounts: [], connected: false })),
   };
-  const getApprovalDetail = vi.fn(async () => null);
-
-  const addTransactionApproval = () => {
-    const approval = {
-      approvalId: "transaction-approval-1",
-      source: "provider",
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      createdAt: 1_000,
-    };
-
-    transactionApprovals.set(approval.approvalId, approval);
-    for (const handler of transactionApprovalHandlers) {
-      handler([approval.approvalId]);
-    }
-  };
+  const listPendingApprovals = vi.fn<() => Promise<ApprovalListEntry[]>>(async () => []);
+  const getApprovalDetail = vi.fn<(approvalId: string) => Promise<ApprovalDetail | null>>(async () => null);
+  const dismissApproval = vi.fn(async () => null);
 
   return {
     walletExecutor,
@@ -127,44 +84,33 @@ const makeRuntime = () => {
       }
       return event;
     },
-    addTransactionApproval,
+    coreWalletApi: {
+      approvals: {
+        listPending: listPendingApprovals,
+        getDetail: vi.fn(async (input?: { approvalId: string }) => await getApprovalDetail(input?.approvalId ?? "")),
+        dismiss: dismissApproval,
+      },
+    },
     runtime: {
       bus: { subscribe },
       services: {
-        approvals: {
-          onCreated,
-          onFinished,
-          onStateChanged: onApprovalsStateChanged,
-          cancel: cancelApproval,
-          getState: () => ({ pending: [{ approvalId: "approval-1", source: "provider" }] }),
-        },
-        session: {
-          unlock: {
-            onLocked,
-          },
-        },
         sessionStatus: {
           hasInitializedVault: () => true,
         },
       },
-      transactions: {
-        onTransactionApprovalsChanged,
-        getTransactionApproval,
-        listTransactionApprovals,
-        cancelTransactionApproval,
-      },
+      transactions: {},
       provider,
       createWalletMethodExecutor,
       subscribeWalletInvalidation,
-      getApprovalDetail,
       shutdown,
     },
     createWalletMethodExecutor,
     subscribeWalletInvalidation,
     shutdown,
     subscribe,
-    cancelApproval,
-    cancelTransactionApproval,
+    listPendingApprovals,
+    getApprovalDetail,
+    dismissApproval,
   };
 };
 
@@ -193,6 +139,10 @@ describe("runtimeHost", () => {
   it("initializes runtime once and caches the wallet executor for a stable origin", async () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
+    createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
+      provider: runtimeHarness.runtime.provider,
+      wallet: runtimeHarness.coreWalletApi,
+    });
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
@@ -221,6 +171,10 @@ describe("runtimeHost", () => {
   it("forwards wallet invalidations and runtime bus events", async () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
+    createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
+      provider: runtimeHarness.runtime.provider,
+      wallet: runtimeHarness.coreWalletApi,
+    });
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
@@ -268,54 +222,84 @@ describe("runtimeHost", () => {
     unsubscribe();
   });
 
-  it("exposes transaction approvals through the UI entry approval stream", async () => {
+  it("routes UI entry approval access through core wallet approvals", async () => {
     const runtimeHarness = makeRuntime();
+    runtimeHarness.listPendingApprovals.mockResolvedValue([
+      {
+        approvalId: "transaction-approval-1",
+        kind: "sendTransaction",
+        source: "provider",
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 1_000,
+      },
+    ]);
+    runtimeHarness.getApprovalDetail.mockResolvedValue({
+      approvalId: "transaction-approval-1",
+      kind: "sendTransaction",
+      source: "provider",
+      origin: "https://dapp.example",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      createdAt: 1_000,
+      actions: {
+        canApprove: true,
+        canReject: true,
+      },
+      request: {
+        approvalId: "transaction-approval-1",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        prepareId: "prepare-1",
+      },
+      review: {
+        updatedAt: 1_000,
+        details: null,
+        prepare: {
+          state: "ready",
+        },
+      },
+    });
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
+    createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
+      provider: runtimeHarness.runtime.provider,
+      wallet: runtimeHarness.coreWalletApi,
+    });
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
     });
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
-    const createdListener = vi.fn();
-    const finishedListener = vi.fn();
+    const approvalInvalidationListener = vi.fn();
+    const unsubscribe = uiEntryAccess.subscribeApprovalInvalidation(approvalInvalidationListener);
 
-    uiEntryAccess.subscribeApprovalCreated(createdListener);
-    uiEntryAccess.subscribeApprovalFinished(finishedListener);
+    runtimeHarness.emitInvalidation("approvals");
+    expect(approvalInvalidationListener).toHaveBeenCalledTimes(1);
 
-    runtimeHarness.addTransactionApproval();
-    runtimeHarness.addTransactionApproval();
-
-    await vi.waitFor(() => expect(createdListener).toHaveBeenCalledTimes(1));
-    expect(createdListener).toHaveBeenCalledWith({
-      approval: {
+    await expect(uiEntryAccess.listPendingApprovals()).resolves.toEqual([
+      {
         approvalId: "transaction-approval-1",
         kind: "sendTransaction",
+        source: "provider",
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
         createdAt: 1_000,
-        source: "provider",
       },
-    });
-    await expect(uiEntryAccess.getPendingApprovalCount()).resolves.toBe(2);
-
-    await uiEntryAccess.cancelApproval({
+    ]);
+    await expect(uiEntryAccess.getApprovalDetail("transaction-approval-1")).resolves.toMatchObject({
       approvalId: "transaction-approval-1",
-      reason: "user_dismissed",
+      kind: "sendTransaction",
     });
 
-    expect(runtimeHarness.cancelTransactionApproval).toHaveBeenCalledWith({
+    await uiEntryAccess.dismissApproval({
       approvalId: "transaction-approval-1",
-      reason: expect.objectContaining({
-        kind: "approval_cancelled",
-        code: "ui.user_dismissed",
-      }),
     });
-    expect(runtimeHarness.cancelApproval).not.toHaveBeenCalled();
-    await vi.waitFor(() =>
-      expect(finishedListener).toHaveBeenCalledWith({
-        approvalId: "transaction-approval-1",
-      }),
-    );
+
+    expect(runtimeHarness.listPendingApprovals).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.getApprovalDetail).toHaveBeenCalledWith("transaction-approval-1");
+    expect(runtimeHarness.dismissApproval).toHaveBeenCalledWith({ approvalId: "transaction-approval-1" });
+    unsubscribe();
   });
 });

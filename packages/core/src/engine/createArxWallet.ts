@@ -34,7 +34,6 @@ import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
 import type { WalletApi, WalletInvalidationEvent, WalletInvalidationTopic } from "../wallet/index.js";
-import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
@@ -137,8 +136,6 @@ type ArxWalletRuntime = Readonly<{
   walletApi: WalletApi;
   createWalletMethodExecutor(options: WalletCreateWalletMethodExecutorOptions): MethodExecutor;
   subscribeWalletInvalidation(listener: (event: WalletInvalidationEvent) => void): () => void;
-  listPendingApprovals(): Promise<WalletApiPendingApprovalsResult>;
-  getApprovalDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
 }>;
 
 type WalletCreateWalletMethodExecutorOptions = Readonly<{
@@ -636,8 +633,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     walletApi,
     createWalletMethodExecutor: buildWalletMethodExecutor,
     subscribeWalletInvalidation: walletInvalidationSource.subscribeInvalidation,
-    listPendingApprovals: async () => await approvalDetails.listPending(),
-    getApprovalDetail: async (approvalId) => await approvalDetails.getDetail(approvalId),
   };
 
   return runtime;

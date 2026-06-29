@@ -15,17 +15,11 @@ export function buildWelcomeIntentNavigation(params: {
   setupStatus?: OnboardingSetupStatusLike | null;
   intent: OnboardingIntent;
 }): { to: string; search?: { intent: OnboardingIntent } } {
-  const shouldSkipPassword = params.setupStatus?.onboarding.availability === "empty";
-
   if (params.intent === "create") {
-    return shouldSkipPassword
-      ? { to: ROUTES.ONBOARDING_CREATE }
-      : { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "create" } };
+    return { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "create" } };
   }
 
-  return shouldSkipPassword
-    ? { to: ROUTES.ONBOARDING_IMPORT }
-    : { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" } };
+  return { to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" } };
 }
 
 /**

@@ -57,6 +57,7 @@ export interface VaultService {
   initialize(params: SealVaultParams): Promise<VaultEnvelope>;
   unlock(params: UnlockVaultParams): Promise<void>;
   lock(): void;
+  clear(): void;
 
   exportSecret(): Uint8Array;
   // Uses the current unlocked session key.

@@ -1,7 +1,7 @@
-export type WalletAvailability = "uninitialized" | "empty" | "ready";
+export type WalletAvailability = "uninitialized" | "ready";
 
 export const isWalletInitialized = (availability: WalletAvailability | undefined): boolean => {
-  return availability !== undefined && availability !== "uninitialized";
+  return availability === "ready";
 };
 
 export const isWalletReady = (availability: WalletAvailability | undefined): boolean => {

@@ -1,7 +1,7 @@
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { isOnboardingPath } from "./onboardingPaths";
 import { ROUTES } from "./routes";
-import { isWalletInitialized, isWalletReady, type WalletAvailability } from "./walletAvailability";
+import { isWalletReady, type WalletAvailability } from "./walletAvailability";
 
 type SetupStatusLike = {
   onboarding: { availability: WalletAvailability };
@@ -44,8 +44,6 @@ export function decideRootBeforeLoad(params: {
 
   const onboardingNeeded = needsOnboarding(setupStatus);
   const hasAccounts = isWalletReady(setupStatus.onboarding.availability);
-  const hasVault = isWalletInitialized(setupStatus.onboarding.availability);
-
   if (entry.environment === "onboarding") {
     const target = hasAccounts ? ROUTES.ONBOARDING_COMPLETE : ROUTES.ONBOARDING_WELCOME;
 
@@ -57,12 +55,9 @@ export function decideRootBeforeLoad(params: {
     return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   }
 
-  if (entry.environment === "notification" && !hasVault) {
+  if (entry.environment === "notification" && onboardingNeeded) {
     return { type: "close" };
   }
 
-  if (hasVault) return { type: "allow" };
-
-  if (entry.environment === "popup") return { type: "openOnboardingAndClose", reason: "onboarding_required" };
-  return { type: "close" };
+  return { type: "allow" };
 }

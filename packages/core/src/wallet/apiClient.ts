@@ -4,5 +4,4 @@ import type { WalletApi } from "./api.js";
 
 export type WalletApiCall = MethodCall;
 
-export const createWalletApiClient = (call: WalletApiCall): WalletApi =>
-  createMethodApiProxy<WalletApi>(call);
+export const createWalletApiClient = (call: WalletApiCall): WalletApi => createMethodApiProxy<WalletApi>(call);

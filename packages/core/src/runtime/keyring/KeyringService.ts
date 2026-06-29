@@ -16,10 +16,13 @@ import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
 import { AccountKeySchema, type AccountRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
 import { SessionLockedError } from "../session/errors.js";
+import { encodePayload } from "./keyring-utils.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 import { RuntimeKeyringState } from "./RuntimeKeyringState.js";
 import type {
   AccountKey,
+  InitialHdKeyringDraft,
+  InitialPrivateKeyKeyringDraft,
   KeyringMetaRecord,
   KeyringPayloadListener,
   KeyringServiceOptions,
@@ -45,6 +48,8 @@ export type ImportPrivateKeyParams = {
   alias?: string;
   namespace?: string;
 };
+
+export type { InitialHdKeyringDraft, InitialPrivateKeyKeyringDraft } from "./types.js";
 
 export class KeyringService {
   #options: KeyringServiceOptions;
@@ -114,64 +119,62 @@ export class KeyringService {
 
   async importPrivateKey(params: ImportPrivateKeyParams) {
     await this.#waitForUnlockedRuntimeKeyrings();
-
-    const namespace = params.namespace ?? this.#defaultNamespace();
-    const config = this.#getConfig(namespace);
-    const factory = config.factories["private-key"];
-    if (!factory) throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
-
-    const instance = factory();
-    instance.loadFromPrivateKey(params.privateKey);
-    const [account] = instance.getAccounts();
-    if (!account) throw new KeyringSecretUnavailableError();
-
-    const canonical = this.#toCanonicalString(namespace, account.address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    this.#assertNoDuplicate(accountKey);
-
-    const now = this.#options.now();
-    const keyringId = this.#options.uuid();
-
-    const secret = instance.exportPrivateKey(canonical);
-    const secretHex = bytesToHex(secret);
-    zeroize(secret);
-
-    const payloadEntry: VaultKeyringEntry = {
-      keyringId,
-      type: "private-key",
-      createdAt: now,
-      version: KEYRING_VAULT_ENTRY_VERSION,
-      namespace,
-      // Persist without a 0x prefix for stable encoding across platforms.
-      payload: { privateKey: secretHex },
-    };
-
-    const meta: KeyringMetaRecord = {
-      id: keyringId,
-      type: "private-key",
-      alias: params.alias,
-      createdAt: now,
-    };
-
-    const record = this.#buildAccountRecord({
-      namespace,
-      address: canonical,
-      keyringId,
-      createdAt: now,
-      alias: params.alias,
-    });
+    const draft = this.#buildInitialPrivateKeyKeyring(params);
 
     await this.#persistNewKeyring({
-      keyringId,
-      kind: "private-key",
-      namespace,
-      instance,
-      meta,
-      accounts: [record],
-      payloadEntry,
+      keyringId: draft.keyringId,
+      kind: draft.kind,
+      namespace: draft.namespace,
+      instance: draft.instance,
+      meta: draft.meta,
+      accounts: draft.accounts,
+      payloadEntry: draft.payloadEntry,
     });
 
-    return { keyringId, account: { ...account, address: canonical } };
+    const [record] = draft.accounts;
+    if (!record) {
+      throw new KeyringSecretUnavailableError();
+    }
+
+    return {
+      keyringId: draft.keyringId,
+      account: {
+        address: draft.defaultAccountAddress,
+        derivationPath: null,
+        derivationIndex: null,
+        source: "imported" as const,
+      },
+    };
+  }
+
+  buildInitialHdKeyring(params: ConfirmNewMnemonicParams): InitialHdKeyringDraft {
+    return this.#buildInitialHdKeyring(params);
+  }
+
+  buildInitialPrivateKeyKeyring(params: ImportPrivateKeyParams): InitialPrivateKeyKeyringDraft {
+    return this.#buildInitialPrivateKeyKeyring(params);
+  }
+
+  async commitInitialKeyring(draft: InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft): Promise<void> {
+    await this.#persistNewKeyring({
+      keyringId: draft.keyringId,
+      kind: draft.kind,
+      namespace: draft.namespace,
+      instance: draft.instance,
+      meta: draft.meta,
+      accounts: draft.accounts,
+      payloadEntry: draft.payloadEntry,
+    });
+  }
+
+  async removeCommittedInitialKeyring(keyringId: string): Promise<void> {
+    await this.#removeKeyring({ keyringId });
+  }
+
+  encodeInitialDraftPayload(draft: InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft): Uint8Array {
+    return encodePayload({
+      keyrings: [structuredClone(draft.payloadEntry)],
+    });
   }
 
   async deriveAccount(keyringId: string) {
@@ -380,8 +383,22 @@ export class KeyringService {
   }
 
   async #createHdKeyringFromMnemonic(params: ConfirmNewMnemonicParams) {
-    this.#requireUnlockedSession();
+    const draft = this.#buildInitialHdKeyring(params);
 
+    await this.#persistNewKeyring({
+      keyringId: draft.keyringId,
+      kind: draft.kind,
+      namespace: draft.namespace,
+      instance: draft.instance,
+      meta: draft.meta,
+      accounts: draft.accounts,
+      payloadEntry: draft.payloadEntry,
+    });
+
+    return { keyringId: draft.keyringId, address: draft.defaultAccountAddress };
+  }
+
+  #buildInitialHdKeyring(params: ConfirmNewMnemonicParams): InitialHdKeyringDraft {
     const normalized = params.mnemonic.trim().replace(/\s+/g, " ");
     if (!validateMnemonic(normalized, wordlist)) {
       throw new KeyringInvalidMnemonicError();
@@ -418,44 +435,93 @@ export class KeyringService {
     const now = this.#options.now();
     const keyringId = this.#options.uuid();
 
-    const payloadEntry: VaultKeyringEntry = {
-      keyringId,
-      type: "hd",
-      createdAt: now,
-      version: KEYRING_VAULT_ENTRY_VERSION,
-      namespace,
-      payload: { mnemonic: words, passphrase: undefined },
-    };
-
-    const meta: KeyringMetaRecord = {
-      id: keyringId,
-      type: "hd",
-      alias: params.alias,
-      needsBackup: !params.skipBackup,
-      nextDerivationIndex: 1,
-      createdAt: now,
-    };
-
-    const record = this.#buildAccountRecord({
-      namespace,
-      address: canonical,
-      keyringId,
-      createdAt: now,
-      derivationIndex: 0,
-      alias: params.alias,
-    });
-
-    await this.#persistNewKeyring({
+    return {
       keyringId,
       kind: "hd",
       namespace,
       instance,
-      meta,
-      accounts: [record],
-      payloadEntry,
-    });
+      defaultAccountAddress: canonical,
+      payloadEntry: {
+        keyringId,
+        type: "hd",
+        createdAt: now,
+        version: KEYRING_VAULT_ENTRY_VERSION,
+        namespace,
+        payload: { mnemonic: words, passphrase: undefined },
+      },
+      meta: {
+        id: keyringId,
+        type: "hd",
+        alias: params.alias,
+        needsBackup: !params.skipBackup,
+        nextDerivationIndex: 1,
+        createdAt: now,
+      },
+      accounts: [
+        this.#buildAccountRecord({
+          namespace,
+          address: canonical,
+          keyringId,
+          createdAt: now,
+          derivationIndex: 0,
+          alias: params.alias,
+        }),
+      ],
+    };
+  }
 
-    return { keyringId, address: canonical };
+  #buildInitialPrivateKeyKeyring(params: ImportPrivateKeyParams): InitialPrivateKeyKeyringDraft {
+    const namespace = params.namespace ?? this.#defaultNamespace();
+    const config = this.#getConfig(namespace);
+    const factory = config.factories["private-key"];
+    if (!factory) throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
+
+    const instance = factory();
+    instance.loadFromPrivateKey(params.privateKey);
+    const [account] = instance.getAccounts();
+    if (!account) throw new KeyringSecretUnavailableError();
+
+    const canonical = this.#toCanonicalString(namespace, account.address);
+    const accountKey = this.#toAccountKey(namespace, canonical);
+    this.#assertNoDuplicate(accountKey);
+
+    const now = this.#options.now();
+    const keyringId = this.#options.uuid();
+
+    const secret = instance.exportPrivateKey(canonical);
+    const secretHex = bytesToHex(secret);
+    zeroize(secret);
+
+    return {
+      keyringId,
+      kind: "private-key",
+      namespace,
+      instance,
+      defaultAccountAddress: canonical,
+      payloadEntry: {
+        keyringId,
+        type: "private-key",
+        createdAt: now,
+        version: KEYRING_VAULT_ENTRY_VERSION,
+        namespace,
+        payload: { privateKey: secretHex },
+      },
+      meta: {
+        id: keyringId,
+        type: "private-key",
+        alias: params.alias,
+        createdAt: now,
+      },
+      accounts: [
+        this.#buildAccountRecord({
+          namespace,
+          address: canonical,
+          keyringId,
+          createdAt: now,
+          alias: params.alias,
+        }),
+      ],
+    };
   }
 
   async #persistNewKeyring(params: {

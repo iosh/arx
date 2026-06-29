@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RpcUnsupportedMethodError } from "../rpc/errors.js";
-import {
-  createMethodApiProxy,
-  createMethodExecutor,
-  type MethodHandlerTree,
-} from "./methods.js";
+import { createMethodApiProxy, createMethodExecutor, type MethodHandlerTree } from "./methods.js";
 
 describe("method executor", () => {
   it("dispatches a method path", async () => {

@@ -48,13 +48,13 @@ export type CreateWalletFromMnemonicInput = {
   skipBackup?: boolean;
   namespace?: string;
 };
-export type ImportWalletFromMnemonicInput = {
+export type RestoreWalletFromMnemonicInput = {
   password: string;
   words: readonly string[];
   alias?: string;
   namespace?: string;
 };
-export type ImportWalletFromPrivateKeyInput = {
+export type RestoreWalletFromPrivateKeyInput = {
   password: string;
   privateKey: string;
   alias?: string;
@@ -172,8 +172,8 @@ export type WalletApi = Readonly<{
     getStatus(): Promise<WalletApiSetupStatusResult>;
     generateMnemonic(input?: GenerateMnemonicInput): Promise<WalletApiGenerateMnemonicResult>;
     createWalletFromMnemonic(input: CreateWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
-    importWalletFromMnemonic(input: ImportWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
-    importWalletFromPrivateKey(input: ImportWalletFromPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
+    restoreWalletFromMnemonic(input: RestoreWalletFromMnemonicInput): Promise<WalletApiCreationResult>;
+    restoreWalletFromPrivateKey(input: RestoreWalletFromPrivateKeyInput): Promise<WalletApiImportPrivateKeyResult>;
   }>;
 
   accounts: Readonly<{

@@ -6,7 +6,6 @@ import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { isWalletInitialized } from "@/ui/lib/walletAvailability";
 import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 
@@ -44,13 +43,11 @@ function ImportSetupRoute() {
   useEffect(() => {
     if (password) return;
     if (!setupStatus) return;
-    if (isWalletInitialized(setupStatus.onboarding.availability)) return;
     router.navigate({ to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" }, replace: true });
   }, [password, router, setupStatus]);
 
   const handleImport = async (params: { value: string; mode: ImportMode; alias?: string }) => {
-    const vaultInitialized = isWalletInitialized(setupStatus?.onboarding.availability);
-    if (!vaultInitialized && !password) return;
+    if (!password) return;
 
     if (!params.value.trim()) {
       setError("Enter a recovery phrase or private key");
@@ -64,10 +61,7 @@ function ImportSetupRoute() {
       const getOnboardingPassword = () => requireOnboardingPassword(password);
 
       const importMnemonic = async (words: string[]) => {
-        if (vaultInitialized) {
-          return await app.wallet.keyrings.importMnemonic({ words, alias: params.alias });
-        }
-        return await app.wallet.setup.importWalletFromMnemonic({
+        return await app.wallet.setup.restoreWalletFromMnemonic({
           password: getOnboardingPassword(),
           words,
           alias: params.alias,
@@ -75,10 +69,7 @@ function ImportSetupRoute() {
       };
 
       const importPrivateKey = async (privateKey: string) => {
-        if (vaultInitialized) {
-          return await app.wallet.keyrings.importPrivateKey({ privateKey, alias: params.alias });
-        }
-        return await app.wallet.setup.importWalletFromPrivateKey({
+        return await app.wallet.setup.restoreWalletFromPrivateKey({
           password: getOnboardingPassword(),
           privateKey,
           alias: params.alias,

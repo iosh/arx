@@ -31,8 +31,8 @@ import {
   createWalletFromMnemonic,
   generateMnemonic,
   getWalletSetupStatus,
-  importWalletFromMnemonic,
-  importWalletFromPrivateKey,
+  restoreWalletFromMnemonic,
+  restoreWalletFromPrivateKey,
 } from "./actions/setup.js";
 import {
   applyTransactionDraftEdit,
@@ -56,8 +56,8 @@ export const walletMethodHandlers = {
     getStatus: getWalletSetupStatus,
     generateMnemonic,
     createWalletFromMnemonic,
-    importWalletFromMnemonic,
-    importWalletFromPrivateKey,
+    restoreWalletFromMnemonic,
+    restoreWalletFromPrivateKey,
   },
   accounts: {
     listCurrentChain: listAccountsForCurrentChain,

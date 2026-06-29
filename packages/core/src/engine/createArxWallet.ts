@@ -29,6 +29,7 @@ import {
   createTransactionServices,
   TransactionAggregateStore,
 } from "../transactions/index.js";
+import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
@@ -87,6 +88,9 @@ type ArxWalletRuntimeCore = Readonly<{
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
+  setup: {
+    workflow: ReturnType<typeof createWalletSetupWorkflow>;
+  };
 }>;
 
 export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
@@ -180,6 +184,7 @@ const createWalletApiContext = (
     },
     namespaceBindings: runtime.services.namespaceBindings,
     transactions: runtime.transactions,
+    setup: runtime.setup,
   };
 };
 
@@ -548,11 +553,21 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyringExport: sessionScope.keyringExport,
     keyring: sessionScope.keyringService,
   };
+  const setup = {
+    workflow: createWalletSetupWorkflow({
+      session: sessionScope.sessionLayer.session,
+      keyring: sessionScope.keyringService,
+      accounts: stateServices.accounts,
+      settings: sessionScope.settingsService,
+      accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    }),
+  };
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
     transactions: transactionServices.transactions,
     transactionMonitor: transactionServices.monitor,
     services,
+    setup,
   };
   const provider = createWalletProvider({
     runtimeAccess: providerAccess,

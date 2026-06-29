@@ -3,7 +3,7 @@ import type { RouterContext } from "@/routes/__root";
 import type { UiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 import { getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 import { ROUTES } from "./routes";
-import { isWalletInitialized, isWalletReady } from "./walletAvailability";
+import { isWalletReady } from "./walletAvailability";
 
 /**
  * Route guard responsibilities:
@@ -16,7 +16,6 @@ import { isWalletInitialized, isWalletReady } from "./walletAvailability";
  */
 
 const hasAccounts = (status?: UiSetupStatus) => isWalletReady(status?.onboarding.availability);
-const hasVault = (status: UiSetupStatus) => isWalletInitialized(status.onboarding.availability);
 
 /**
  * Requires vault to be initialized.
@@ -27,7 +26,7 @@ export const requireVaultInitialized = async ({ context }: { context: RouterCont
   if (!status) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!hasVault(status)) {
+  if (!hasAccounts(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
   }
 };
@@ -39,9 +38,6 @@ export const requireOnboardingPasswordAllowed = async ({ context }: { context: R
   if (hasAccounts(status)) {
     throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
-  if (hasVault(status)) {
-    throw redirect({ to: ROUTES.ONBOARDING_WELCOME });
-  }
 };
 
 /**
@@ -51,7 +47,6 @@ export const requireOnboardingPasswordAllowed = async ({ context }: { context: R
 export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
   const status = await getOrFetchUiSetupStatus(context.queryClient, { fresh: true });
   if (!status) return;
-  if (!hasVault(status)) return;
   if (hasAccounts(status)) return;
 
   throw redirect({ to: ROUTES.ONBOARDING_WELCOME, replace: true });

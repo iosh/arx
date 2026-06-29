@@ -90,6 +90,7 @@ export type BackgroundSessionScope = {
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
+  settingsService: ReturnType<typeof initRuntimeStoreServices>["settingsService"];
   walletChainSelection: WalletChainSelectionService;
   providerChainSelection: ProviderChainSelectionService;
   chainRpcDefaultEndpoints: ChainRpcDefaultEndpointsService;
@@ -292,6 +293,7 @@ export const createBackgroundSessionScope = ({
     chainViews,
     chainActivation,
     attention,
+    settingsService,
     walletChainSelection,
     providerChainSelection,
     chainRpcDefaultEndpoints,

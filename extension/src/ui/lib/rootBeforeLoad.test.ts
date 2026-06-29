@@ -6,16 +6,8 @@ const SETUP_UNINITIALIZED = {
   onboarding: { availability: "uninitialized" as const },
 };
 
-const SETUP_NO_ACCOUNTS = {
-  onboarding: { availability: "empty" as const },
-};
-
 const SETUP_READY = {
   onboarding: { availability: "ready" as const },
-};
-
-const SETUP_EMPTY = {
-  onboarding: { availability: "empty" as const },
 };
 
 const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => ({
@@ -31,8 +23,8 @@ const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => (
 });
 
 describe("decideRootBeforeLoad", () => {
-  it("needsOnboarding stays true when vault exists but has no accounts", () => {
-    expect(needsOnboarding(SETUP_EMPTY)).toBe(true);
+  it("needsOnboarding stays true until the wallet is ready", () => {
+    expect(needsOnboarding(SETUP_UNINITIALIZED)).toBe(true);
   });
 
   it("popup + onboarding path => openOnboardingAndClose", () => {
@@ -78,30 +70,6 @@ describe("decideRootBeforeLoad", () => {
       decideRootBeforeLoad({
         entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
-        setupStatus: SETUP_EMPTY,
-      }),
-    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
-
-    expect(
-      decideRootBeforeLoad({
-        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
-        pathname: "/accounts",
-        setupStatus: SETUP_EMPTY,
-      }),
-    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
-
-    expect(
-      decideRootBeforeLoad({
-        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
-        pathname: "/",
-        setupStatus: SETUP_NO_ACCOUNTS,
-      }),
-    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
-
-    expect(
-      decideRootBeforeLoad({
-        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
-        pathname: "/",
         setupStatus: SETUP_READY,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/complete", replace: true });
@@ -111,20 +79,30 @@ describe("decideRootBeforeLoad", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/",
-      setupStatus: SETUP_NO_ACCOUNTS,
+      setupStatus: SETUP_UNINITIALIZED,
     });
 
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
   });
 
-  it("popup + non-onboarding path + locked no-accounts setup => openOnboardingAndClose", () => {
+  it("ready popup stays allowed on non-onboarding path", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/",
-      setupStatus: SETUP_EMPTY,
+      setupStatus: SETUP_READY,
     });
 
-    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
+    expect(decision).toEqual({ type: "allow" });
+  });
+
+  it("ready approval notification stays allowed on non-onboarding path", () => {
+    const decision = decideRootBeforeLoad({
+      entry: createEntry({ environment: "notification", reason: "approval_created" }),
+      pathname: "/approve",
+      setupStatus: SETUP_READY,
+    });
+
+    expect(decision).toEqual({ type: "allow" });
   });
 
   it("idle notification entry closes immediately", () => {

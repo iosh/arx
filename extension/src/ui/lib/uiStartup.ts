@@ -3,8 +3,8 @@ import type { UiEntryBootstrap } from "@/lib/host";
 import { getUiEnvironment, hydrateUiEntryMetadata, type UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { app } from "./app";
 import { UI_CURRENT_CHAIN_ACCOUNTS_QUERY_KEY } from "./uiAccountQueries";
-import { UI_NATIVE_BALANCE_QUERY_KEY } from "./uiBalanceQueries";
 import { UI_APPROVALS_QUERY_KEY, writeCachedUiApprovalDetail } from "./uiApprovalQueries";
+import { UI_NATIVE_BALANCE_QUERY_KEY } from "./uiBalanceQueries";
 import {
   UI_ACCOUNTS_BY_KEYRING_QUERY_KEY,
   UI_KEYRING_BACKUP_STATUS_QUERY_KEY,

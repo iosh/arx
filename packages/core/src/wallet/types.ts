@@ -181,7 +181,7 @@ export type WalletApiGenerateMnemonicResult = {
   words: string[];
 };
 
-export type WalletSetupAvailability = "uninitialized" | "empty" | "ready";
+export type WalletSetupAvailability = "uninitialized" | "ready";
 
 export type WalletApiSetupStatusResult = {
   availability: WalletSetupAvailability;

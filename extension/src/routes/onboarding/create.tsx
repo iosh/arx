@@ -5,7 +5,7 @@ import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildCreateEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
-import { isWalletInitialized, isWalletReady } from "@/ui/lib/walletAvailability";
+import { isWalletReady } from "@/ui/lib/walletAvailability";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 
@@ -81,20 +81,17 @@ function GenerateMnemonicRoute() {
       return;
     }
 
-    const vaultInitialized = isWalletInitialized(walletAvailability);
-    if (!vaultInitialized && !password) return;
+    if (!password) return;
     if (words.length === 0 || isGenerating || isSubmitting) return;
 
     setIsSubmitting(true);
     setError(null);
     let navigatedToBackup = false;
     try {
-      const res = vaultInitialized
-        ? await app.wallet.keyrings.confirmNewMnemonic({ words })
-        : await app.wallet.setup.createWalletFromMnemonic({
-            password: requireOnboardingPassword(password),
-            words,
-          });
+      const res = await app.wallet.setup.createWalletFromMnemonic({
+        password: requireOnboardingPassword(password),
+        words,
+      });
 
       // Keep words for backup confirmation; clear password once the vault setup is complete.
       clearPassword();

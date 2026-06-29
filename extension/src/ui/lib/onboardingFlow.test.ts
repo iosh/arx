@@ -5,10 +5,6 @@ const SETUP_UNINITIALIZED = {
   onboarding: { availability: "uninitialized" as const },
 };
 
-const SETUP_NO_ACCOUNTS = {
-  onboarding: { availability: "empty" as const },
-};
-
 const SETUP_READY = {
   onboarding: { availability: "ready" as const },
 };
@@ -22,15 +18,6 @@ describe("buildWelcomeIntentNavigation", () => {
     expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_UNINITIALIZED, intent: "import" })).toEqual({
       to: "/onboarding/password",
       search: { intent: "import" },
-    });
-  });
-
-  it("skips password on the vault-initialized no-accounts compatibility boundary", () => {
-    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_NO_ACCOUNTS, intent: "create" })).toEqual({
-      to: "/onboarding/create",
-    });
-    expect(buildWelcomeIntentNavigation({ setupStatus: SETUP_NO_ACCOUNTS, intent: "import" })).toEqual({
-      to: "/onboarding/import",
     });
   });
 });
@@ -49,17 +36,6 @@ describe("buildCreateEntryRedirect", () => {
       search: { intent: "create" },
       replace: true,
     });
-  });
-
-  it("allows create to continue without a password on the compatibility boundary", () => {
-    expect(
-      buildCreateEntryRedirect({
-        setupStatus: SETUP_NO_ACCOUNTS,
-        password: null,
-        mnemonicWords: null,
-        mnemonicKeyringId: null,
-      }),
-    ).toBeNull();
   });
 
   it("returns completed onboarding sessions to complete when mnemonic state is gone", () => {

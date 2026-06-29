@@ -51,6 +51,27 @@ export type RuntimeAccountRef = {
   accountKey: AccountKey;
 };
 
+export type InitialKeyringDraftBase = {
+  keyringId: string;
+  kind: KeyringKind;
+  namespace: string;
+  meta: KeyringMetaRecord;
+  accounts: AccountRecord[];
+  payloadEntry: VaultKeyringEntry;
+};
+
+export type InitialHdKeyringDraft = InitialKeyringDraftBase & {
+  kind: "hd";
+  instance: HierarchicalDeterministicKeyring;
+  defaultAccountAddress: string;
+};
+
+export type InitialPrivateKeyKeyringDraft = InitialKeyringDraftBase & {
+  kind: "private-key";
+  instance: SimpleKeyring;
+  defaultAccountAddress: string;
+};
+
 // Centralized runtime state
 export type KeyringRuntimeState = {
   keyrings: Map<string, RuntimeKeyring>;

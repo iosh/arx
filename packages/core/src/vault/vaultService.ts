@@ -237,6 +237,11 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
       clearSession();
     },
 
+    clear(): void {
+      clearSession();
+      envelope = null;
+    },
+
     exportSecret(): Uint8Array {
       if (!secret || !derivedKey) {
         throw new VaultLockedError();

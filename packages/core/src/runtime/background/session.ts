@@ -37,7 +37,9 @@ export type BackgroundSessionServices = {
   vault: VaultService;
   unlock: UnlockService;
   createVault(params: CreateVaultParams): Promise<VaultEnvelope>;
+  createVaultWithSecret(params: CreateVaultParams & { secret: Uint8Array }): Promise<VaultEnvelope>;
   importVault(envelope: VaultEnvelope): Promise<VaultEnvelope>;
+  clearVault(): Promise<void>;
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
   persistVaultMeta(): Promise<void>;
@@ -241,6 +243,10 @@ export const initSessionLayer = ({
       baseVault.lock();
       scheduleVaultMetaPersist();
     },
+    clear() {
+      baseVault.clear();
+      cleanupVaultPersistTimer();
+    },
     exportSecret() {
       return baseVault.exportSecret();
     },
@@ -308,14 +314,27 @@ export const initSessionLayer = ({
   };
 
   const createSessionVault = async (params: CreateVaultParams): Promise<VaultEnvelope> => {
-    assertSessionLockedForVaultLifecycle("createVault");
-    const envelope = await vaultProxy.initialize({
+    return await createSessionVaultWithSecret({
       password: params.password,
       secret: encodePayload({ keyrings: [] }),
     });
-    unlock.syncVaultStatus();
-    notifySessionStateChanged();
-    return envelope;
+  };
+
+  const createSessionVaultWithSecret = async (
+    params: CreateVaultParams & { secret: Uint8Array },
+  ): Promise<VaultEnvelope> => {
+    assertSessionLockedForVaultLifecycle("createVault");
+    try {
+      const envelope = await vaultProxy.initialize({
+        password: params.password,
+        secret: params.secret,
+      });
+      unlock.syncVaultStatus();
+      notifySessionStateChanged();
+      return envelope;
+    } finally {
+      zeroize(params.secret);
+    }
   };
 
   const importSessionVault = async (envelope: VaultEnvelope): Promise<VaultEnvelope> => {
@@ -335,6 +354,23 @@ export const initSessionLayer = ({
     }
 
     return importedEnvelope;
+  };
+
+  const clearSessionVault = async (): Promise<void> => {
+    cleanupVaultPersistTimer();
+    vaultInitializedAt = null;
+    lastPersistedVaultMeta = null;
+    unlock.lock("reload");
+    keyringService.detach();
+    vaultProxy.clear();
+    try {
+      await vaultMetaPort?.clearVaultMeta();
+    } catch (error) {
+      storageLogger("session: failed to clear vault meta", error);
+    }
+    unlock.syncVaultStatus();
+    notifySessionStateChanged();
+    void keyringService.attach().catch((error) => storageLogger("session: keyring attach failed", error));
   };
 
   const keyringService = new KeyringService({
@@ -467,7 +503,9 @@ export const initSessionLayer = ({
     vault: vaultProxy,
     unlock,
     createVault: createSessionVault,
+    createVaultWithSecret: createSessionVaultWithSecret,
     importVault: importSessionVault,
+    clearVault: clearSessionVault,
     getVaultMetaState: () => {
       const unlockState = unlock.getState();
 

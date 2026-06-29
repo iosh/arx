@@ -244,6 +244,7 @@ describe("createCoreRuntime", () => {
       words: TEST_MNEMONIC.split(" "),
     });
     await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ isUnlocked: true });
+    await expect(core.wallet.setup.getStatus()).resolves.toEqual({ availability: "ready" });
 
     await expect(core.wallet.session.resetAutoLockTimer()).resolves.toMatchObject({ status: "unlocked" });
     await expect(core.wallet.session.setAutoLockDuration({ durationMs: 5 * 60 * 1000 })).resolves.toMatchObject({

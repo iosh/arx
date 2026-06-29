@@ -1,5 +1,11 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
-import type { WalletAccounts, WalletApprovals, WalletNetworks, WalletSession } from "../engine/types.js";
+import type {
+  WalletAccounts,
+  WalletApprovals,
+  WalletNetworks,
+  WalletSession,
+  WalletSetupServices,
+} from "../engine/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { WalletTransactionAccess } from "../transactions/TransactionsService.js";
 import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "./types.js";
@@ -20,4 +26,5 @@ export type WalletApiContext = {
   };
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
   transactions: WalletTransactionAccess;
+  setup: WalletSetupServices;
 };

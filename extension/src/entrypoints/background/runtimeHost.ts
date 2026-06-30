@@ -6,8 +6,13 @@ import {
 } from "@arx/core/engine";
 import type { MethodExecutor } from "@arx/core/invoke";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
-import type { ApprovalDetail, ApprovalListEntry, WalletInvalidationEvent } from "@arx/core/wallet";
+import {
+  type ApprovalDetail,
+  type ApprovalListEntry,
+  WALLET_UI_CALLER_ORIGIN,
+  type WalletApiAttentionSnapshot,
+  type WalletInvalidationEvent,
+} from "@arx/core/wallet";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -22,28 +27,25 @@ export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
   getCoreReady: () => Promise<CoreRuntime>;
   getOrInitProvider: () => Promise<CoreProviderApi>;
-  getOrInitWalletMethodExecutor: (origin: string) => Promise<MethodExecutor>;
+  getOrInitWalletMethodExecutor: () => Promise<MethodExecutor>;
   subscribeWalletInvalidation: (listener: (event: WalletInvalidationEvent) => void) => Promise<() => void>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
   applyDebugNamespacesFromEnv: () => void;
 };
 
-export type BackgroundUnlockAttentionRequestedPayload = AttentionRequest & { reason: "unlock_required" };
+export type BackgroundUnlockAttentionRequestedPayload = WalletApiAttentionSnapshot["queue"][number] & {
+  reason: "unlock_required";
+};
 
 export type BackgroundUiEntryAccess = {
-  subscribeUnlockAttentionRequested: (
-    listener: (payload: BackgroundUnlockAttentionRequestedPayload) => void,
-  ) => () => void;
+  subscribeUnlockAttentionInvalidation: (listener: () => void) => () => void;
+  listUnlockAttentionRequests: () => Promise<BackgroundUnlockAttentionRequestedPayload[]>;
   subscribeApprovalInvalidation: (listener: () => void) => () => void;
   dismissApproval: (params: { approvalId: string }) => Promise<void>;
   listPendingApprovals: () => Promise<ApprovalListEntry[]>;
   getApprovalDetail: (approvalId: string) => Promise<ApprovalDetail | null>;
-  hasInitializedVault: () => boolean;
-};
-
-const isUnlockAttentionRequest = (payload: AttentionRequest): payload is BackgroundUnlockAttentionRequestedPayload => {
-  return payload.reason === "unlock_required";
+  getSessionStatus: () => Promise<Awaited<ReturnType<CoreRuntime["wallet"]["session"]["getStatus"]>>>;
 };
 
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
@@ -51,7 +53,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
   let provider: CoreProviderApi | null = null;
   let walletMethodExecutor: MethodExecutor | null = null;
-  let walletMethodExecutorOrigin: string | null = null;
   let runtimeGeneration = 0;
 
   const runtimeLog = createLogger("bg:runtime");
@@ -120,29 +121,18 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     return active.core;
   };
 
-  const assertWalletMethodExecutorOriginStable = (origin: string) => {
-    if (!walletMethodExecutorOrigin) return;
-    if (walletMethodExecutorOrigin === origin) {
-      return;
-    }
-
-    throw new Error("Background runtime host wallet method executor origin must remain stable across calls");
-  };
-
-  const getOrInitWalletMethodExecutor = async (origin: string): Promise<MethodExecutor> => {
-    assertWalletMethodExecutorOriginStable(origin);
+  const getOrInitWalletMethodExecutor = async (): Promise<MethodExecutor> => {
     if (walletMethodExecutor) {
       return walletMethodExecutor;
     }
 
-    walletMethodExecutorOrigin = origin;
-
     try {
       const active = await getOrInitRuntimeCache();
-      walletMethodExecutor = active.runtime.createWalletMethodExecutor({ origin });
+      walletMethodExecutor = active.runtime.createWalletMethodExecutor({
+        origin: WALLET_UI_CALLER_ORIGIN,
+      });
       return walletMethodExecutor;
     } catch (error) {
-      walletMethodExecutorOrigin = null;
       throw error;
     }
   };
@@ -177,23 +167,31 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
         listener();
       });
+    const subscribeUnlockAttentionInvalidation = (listener: () => void) =>
+      active.runtime.subscribeWalletInvalidation((event) => {
+        if (event.topic !== "attention") {
+          return;
+        }
+
+        listener();
+      });
+    const listUnlockAttentionRequests = async (): Promise<BackgroundUnlockAttentionRequestedPayload[]> => {
+      const snapshot = await active.core.wallet.attention.getSnapshot();
+      return snapshot.queue.filter((request): request is BackgroundUnlockAttentionRequestedPayload => {
+        return request.reason === "unlock_required";
+      });
+    };
 
     return {
-      subscribeUnlockAttentionRequested: (listener) =>
-        active.runtime.bus.subscribe(ATTENTION_REQUESTED, (payload) => {
-          if (!isUnlockAttentionRequest(payload)) {
-            return;
-          }
-
-          listener(payload);
-        }),
+      subscribeUnlockAttentionInvalidation,
+      listUnlockAttentionRequests,
       subscribeApprovalInvalidation,
       dismissApproval: async ({ approvalId }) => {
         await active.core.wallet.approvals.dismiss({ approvalId });
       },
       listPendingApprovals: async () => await active.core.wallet.approvals.listPending(),
       getApprovalDetail: async (approvalId) => await active.core.wallet.approvals.getDetail({ approvalId }),
-      hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),
+      getSessionStatus: async () => await active.core.wallet.session.getStatus(),
     };
   };
 
@@ -201,7 +199,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     runtimeGeneration += 1;
     provider = null;
     walletMethodExecutor = null;
-    walletMethodExecutorOrigin = null;
     const activeRuntime = runtimeCache?.runtime ?? null;
     const pendingRuntimeCachePromise = runtimeCachePromise;
     runtimeCache = null;

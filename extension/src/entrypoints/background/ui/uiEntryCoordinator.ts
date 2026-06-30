@@ -167,6 +167,11 @@ export const createUiEntryCoordinator = ({
     });
   };
 
+  const hasInitializedVault = async (uiEntryAccess: BackgroundUiEntryAccess) => {
+    const sessionStatus = await uiEntryAccess.getSessionStatus();
+    return sessionStatus.vaultInitialized;
+  };
+
   const openNotificationForUnlockAttention = (
     uiEntryAccess: BackgroundUiEntryAccess,
     request: BackgroundUnlockAttentionRequestedPayload,
@@ -178,17 +183,6 @@ export const createUiEntryCoordinator = ({
       chainRef: request.chainRef,
       namespace: request.namespace,
     });
-
-    if (!uiEntryAccess.hasInitializedVault()) {
-      entryLog("skip notification window (vault uninitialized)", {
-        reason: request.reason,
-        origin: request.origin,
-        method: request.method,
-        chainRef: request.chainRef,
-        namespace: request.namespace,
-      });
-      return;
-    }
 
     setEntry(
       createUiEntryMetadata({
@@ -236,16 +230,6 @@ export const createUiEntryCoordinator = ({
     }
 
     const method = getApprovalType(approval.kind);
-    if (!uiEntryAccess.hasInitializedVault()) {
-      entryLog("skip notification window (vault uninitialized)", {
-        reason: "approval_created",
-        origin: approval.origin,
-        method,
-        chainRef: approval.chainRef,
-        namespace: approval.namespace,
-      });
-      return;
-    }
 
     setEntry(
       createUiEntryMetadata({
@@ -289,6 +273,21 @@ export const createUiEntryCoordinator = ({
       });
   };
 
+  const syncUnlockAttentionRequests = async (uiEntryAccess: BackgroundUiEntryAccess) => {
+    if (!(await hasInitializedVault(uiEntryAccess))) {
+      entryLog("skip unlock attention sync (vault uninitialized)");
+      return;
+    }
+
+    const requests = await uiEntryAccess.listUnlockAttentionRequests();
+    const request = requests.at(-1);
+    if (!request) {
+      return;
+    }
+
+    openNotificationForUnlockAttention(uiEntryAccess, request);
+  };
+
   const syncPendingApprovals = async (uiEntryAccess: BackgroundUiEntryAccess) => {
     const approvals = await uiEntryAccess.listPendingApprovals();
     const providerApprovalIds = new Set(
@@ -318,6 +317,17 @@ export const createUiEntryCoordinator = ({
       }
 
       seenProviderApprovalIds.add(approval.approvalId);
+      if (!(await hasInitializedVault(uiEntryAccess))) {
+        entryLog("skip notification window (vault uninitialized)", {
+          reason: "approval_created",
+          origin: approval.origin,
+          method: getApprovalType(approval.kind),
+          chainRef: approval.chainRef,
+          namespace: approval.namespace,
+        });
+        continue;
+      }
+
       openNotificationForApproval(uiEntryAccess, approval);
     }
   };
@@ -351,8 +361,10 @@ export const createUiEntryCoordinator = ({
         }
 
         subscriptions.push(
-          uiEntryAccess.subscribeUnlockAttentionRequested((request) => {
-            openNotificationForUnlockAttention(uiEntryAccess, request);
+          uiEntryAccess.subscribeUnlockAttentionInvalidation(() => {
+            void syncUnlockAttentionRequests(uiEntryAccess).catch((error) => {
+              entryLog("failed to sync unlock attention requests", error);
+            });
           }),
         );
         subscriptions.push(
@@ -365,6 +377,10 @@ export const createUiEntryCoordinator = ({
 
         await syncPendingApprovals(uiEntryAccess).catch((error) => {
           entryLog("failed to load initial pending approvals", error);
+          throw error;
+        });
+        await syncUnlockAttentionRequests(uiEntryAccess).catch((error) => {
+          entryLog("failed to load initial unlock attention requests", error);
           throw error;
         });
 

@@ -111,4 +111,8 @@ export class InMemoryAttentionService implements AttentionService {
     this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
     return state;
   }
+
+  onStateChanged(handler: (state: AttentionState) => void): () => void {
+    return this.#messenger.subscribe(ATTENTION_STATE_CHANGED, handler);
+  }
 }

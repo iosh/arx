@@ -1,6 +1,11 @@
 import type { MethodExecutor } from "@arx/core/invoke";
-import { ATTENTION_REQUESTED } from "@arx/core/services";
-import type { ApprovalDetail, ApprovalListEntry, WalletInvalidationEvent } from "@arx/core/wallet";
+import {
+  type ApprovalDetail,
+  type ApprovalListEntry,
+  WALLET_UI_CALLER_ORIGIN,
+  type WalletApiAttentionSnapshot,
+  type WalletInvalidationEvent,
+} from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
@@ -65,15 +70,23 @@ const makeRuntime = () => {
     invalidationListeners.add(listener);
     return () => invalidationListeners.delete(listener);
   });
-
-  const unsubscribeBus = vi.fn();
-  const subscribe = vi.fn(() => unsubscribeBus);
   const provider = {
     getConnectionState: vi.fn(async () => ({ snapshot: null, accounts: [], connected: false })),
   };
   const listPendingApprovals = vi.fn<() => Promise<ApprovalListEntry[]>>(async () => []);
   const getApprovalDetail = vi.fn<(approvalId: string) => Promise<ApprovalDetail | null>>(async () => null);
   const dismissApproval = vi.fn(async () => null);
+  const getAttentionSnapshot = vi.fn<() => Promise<WalletApiAttentionSnapshot>>(async () => ({
+    queue: [],
+    count: 0,
+  }));
+  const getSessionStatus = vi.fn(async () => ({
+    status: "locked",
+    isUnlocked: false,
+    vaultInitialized: true,
+    autoLockDurationMs: null,
+    nextAutoLockAt: null,
+  }));
 
   return {
     walletExecutor,
@@ -85,6 +98,12 @@ const makeRuntime = () => {
       return event;
     },
     coreWalletApi: {
+      session: {
+        getStatus: getSessionStatus,
+      },
+      attention: {
+        getSnapshot: getAttentionSnapshot,
+      },
       approvals: {
         listPending: listPendingApprovals,
         getDetail: vi.fn(async (input?: { approvalId: string }) => await getApprovalDetail(input?.approvalId ?? "")),
@@ -92,10 +111,9 @@ const makeRuntime = () => {
       },
     },
     runtime: {
-      bus: { subscribe },
       services: {
-        sessionStatus: {
-          hasInitializedVault: () => true,
+        attention: {
+          onStateChanged: vi.fn(() => vi.fn()),
         },
       },
       transactions: {},
@@ -107,10 +125,11 @@ const makeRuntime = () => {
     createWalletMethodExecutor,
     subscribeWalletInvalidation,
     shutdown,
-    subscribe,
     listPendingApprovals,
     getApprovalDetail,
     dismissApproval,
+    getAttentionSnapshot,
+    getSessionStatus,
   };
 };
 
@@ -136,7 +155,7 @@ describe("runtimeHost", () => {
     });
   });
 
-  it("initializes runtime once and caches the wallet executor for a stable origin", async () => {
+  it("initializes runtime once and caches the wallet executor", async () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
@@ -150,25 +169,21 @@ describe("runtimeHost", () => {
 
     await runtimeHost.initializeRuntime();
     const provider = await runtimeHost.getOrInitProvider();
-    const firstExecutor = await runtimeHost.getOrInitWalletMethodExecutor("chrome-extension://test");
-    const secondExecutor = await runtimeHost.getOrInitWalletMethodExecutor("chrome-extension://test");
+    const firstExecutor = await runtimeHost.getOrInitWalletMethodExecutor();
+    const secondExecutor = await runtimeHost.getOrInitWalletMethodExecutor();
 
     expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
     expect(createCoreRuntimeFromArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
     expect(provider).toBe(runtimeHarness.runtime.provider);
-    expect(firstExecutor).toBe(runtimeHarness.walletExecutor);
-    expect(secondExecutor).toBe(runtimeHarness.walletExecutor);
     expect(runtimeHarness.createWalletMethodExecutor).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.createWalletMethodExecutor).toHaveBeenCalledWith({
-      origin: "chrome-extension://test",
+      origin: WALLET_UI_CALLER_ORIGIN,
     });
-
-    await expect(runtimeHost.getOrInitWalletMethodExecutor("https://different.example")).rejects.toThrow(
-      "origin must remain stable",
-    );
+    expect(firstExecutor).toBe(secondExecutor);
+    expect(firstExecutor).toBe(runtimeHarness.walletExecutor);
   });
 
-  it("forwards wallet invalidations and runtime bus events", async () => {
+  it("forwards wallet invalidations to subscribers and UI entry access", async () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
@@ -188,36 +203,13 @@ describe("runtimeHost", () => {
     expect(invalidationListener).toHaveBeenCalledWith(emitted);
 
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
-    const unlockListener = vi.fn();
-    uiEntryAccess.subscribeUnlockAttentionRequested(unlockListener);
+    const attentionInvalidationListener = vi.fn();
+    const unsubscribeAttention = uiEntryAccess.subscribeUnlockAttentionInvalidation(attentionInvalidationListener);
 
-    const busSubscriptions = runtimeHarness.subscribe.mock.calls as unknown as Array<
-      [unknown, (payload: Record<string, unknown>) => void]
-    >;
-    const attentionHandler = busSubscriptions.find((call) => Object.is(call[0], ATTENTION_REQUESTED))?.[1];
-    if (!attentionHandler) {
-      throw new Error("attention handler was not registered");
-    }
+    runtimeHarness.emitInvalidation("attention");
 
-    attentionHandler({
-      reason: "unlock_required",
-      origin: "https://dapp.example",
-      method: "eth_requestAccounts",
-      chainRef: "eip155:1",
-      namespace: "eip155",
-      requestedAt: 1_000,
-      expiresAt: 2_000,
-    });
-
-    expect(unlockListener).toHaveBeenCalledWith({
-      reason: "unlock_required",
-      origin: "https://dapp.example",
-      method: "eth_requestAccounts",
-      chainRef: "eip155:1",
-      namespace: "eip155",
-      requestedAt: 1_000,
-      expiresAt: 2_000,
-    });
+    expect(attentionInvalidationListener).toHaveBeenCalledTimes(1);
+    unsubscribeAttention();
 
     unsubscribe();
   });

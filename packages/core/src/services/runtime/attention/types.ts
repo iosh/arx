@@ -35,4 +35,5 @@ export type AttentionService = {
   getSnapshot(): AttentionState;
   clear(): AttentionState;
   clearExpired(): AttentionState;
+  onStateChanged(handler: (state: AttentionState) => void): () => void;
 };

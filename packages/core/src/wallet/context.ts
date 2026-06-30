@@ -8,13 +8,20 @@ import type {
 } from "../engine/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { WalletTransactionAccess } from "../transactions/TransactionsService.js";
-import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "./types.js";
+import type {
+  WalletApiApprovalDetailResult,
+  WalletApiAttentionSnapshotResult,
+  WalletApiPendingApprovalsResult,
+} from "./types.js";
 
 export type WalletApiContext = {
   session: WalletSession;
   accounts: WalletAccounts;
   networks: WalletNetworks;
   approvals: WalletApprovals;
+  attention: Readonly<{
+    getSnapshot(): WalletApiAttentionSnapshotResult;
+  }>;
   approvalDetails: Readonly<{
     listPending(): Promise<WalletApiPendingApprovalsResult>;
     getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;

@@ -33,7 +33,12 @@ import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
-import type { WalletApi, WalletInvalidationEvent, WalletInvalidationTopic } from "../wallet/index.js";
+import {
+  WALLET_UI_CALLER_ORIGIN,
+  type WalletApi,
+  type WalletInvalidationEvent,
+  type WalletInvalidationTopic,
+} from "../wallet/index.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
@@ -58,8 +63,6 @@ const DEFAULT_RPC_ACCESS_POLICY = {
   isInternalOrigin: () => false,
   shouldRequestUnlockAttention: () => false,
 } satisfies BackgroundRpcAccessPolicyHooks;
-
-const CORE_WALLET_API_ORIGIN = "arx://core-ui";
 
 type WalletRuntimeServices = Readonly<
   BackgroundStateServices & {
@@ -170,6 +173,9 @@ const createWalletApiContext = (
     approvals: createWalletApprovals({
       approvals: runtime.services.approvals,
     }),
+    attention: {
+      getSnapshot: () => runtime.services.attention.getSnapshot(),
+    },
     approvalDetails: {
       listPending: () => approvalDetails.listPending(),
       getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
@@ -242,6 +248,7 @@ const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore) => {
         runtime.services.chainRpcEndpointOverrides.subscribeChanged(() => emit("networks", "balances")),
         runtime.services.approvals.onCreated(() => emit("approvals")),
         runtime.services.approvals.onFinished(() => emit("approvals")),
+        runtime.services.attention.onStateChanged(() => emit("attention")),
         runtime.transactions.onTransactionApprovalsChanged(() => emit("approvals")),
         runtime.transactions.onTransactionsChanged(() => emit("transactions")),
       ];
@@ -582,7 +589,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const walletApi = createWalletApi(
     createWalletApiContext(runtimeCore, approvalDetails, {
       createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
-      origin: CORE_WALLET_API_ORIGIN,
+      origin: WALLET_UI_CALLER_ORIGIN,
     }),
   );
 

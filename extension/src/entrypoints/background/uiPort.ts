@@ -51,7 +51,6 @@ const createFailureReply = (request: InvokeRequest, error: unknown): InvokeFailu
 export const createBackgroundUiPort = (deps: {
   runtimeHost: Pick<BackgroundRuntimeHost, "getOrInitWalletMethodExecutor" | "subscribeWalletInvalidation">;
   host: HostMethods;
-  walletOrigin: string;
 }): BackgroundUiPort => {
   const ports = new Set<UiPort>();
   const removePortListeners = new Map<UiPort, () => void>();
@@ -84,7 +83,7 @@ export const createBackgroundUiPort = (deps: {
 
   const resolveExecutor = async (target: string): Promise<MethodExecutor> => {
     if (target === WALLET_TARGET) {
-      return await deps.runtimeHost.getOrInitWalletMethodExecutor(deps.walletOrigin);
+      return await deps.runtimeHost.getOrInitWalletMethodExecutor();
     }
 
     if (target === HOST_TARGET) {

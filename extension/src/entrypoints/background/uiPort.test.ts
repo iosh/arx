@@ -73,7 +73,6 @@ describe("createBackgroundUiPort", () => {
         getEntryBootstrap: vi.fn(async () => ({ entry: popupEntry, requestedApproval: null })),
         openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       },
-      walletOrigin: "chrome-extension://test",
     });
 
     await uiPort.start();
@@ -134,7 +133,6 @@ describe("createBackgroundUiPort", () => {
         getEntryBootstrap: vi.fn(async () => ({ entry: popupEntry, requestedApproval: null })),
         openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       },
-      walletOrigin: "chrome-extension://test",
     });
 
     await uiPort.start();

@@ -7,6 +7,7 @@ import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountKey } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import type { Transaction } from "../transactions/TransactionsService.js";
+import type { WalletApiAttentionSnapshot } from "./api.js";
 
 export type { NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 export type { Transaction } from "../transactions/TransactionsService.js";
@@ -176,6 +177,8 @@ export type WalletApiAutoLockResult = {
   autoLockDurationMs: number;
   nextAutoLockAt: number | null;
 };
+
+export type WalletApiAttentionSnapshotResult = WalletApiAttentionSnapshot;
 
 export type WalletApiGenerateMnemonicResult = {
   words: string[];

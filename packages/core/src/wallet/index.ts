@@ -30,13 +30,19 @@ export type {
   WalletApi,
   WalletApiAccountsByKeyringInput,
   WalletApiApprovalDetailInput,
+  WalletApiAttentionSnapshot,
   WalletApiNativeBalanceInput,
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
   WalletInvalidationEvent,
   WalletInvalidationTopic,
 } from "./api.js";
-export { WALLET_INVALIDATION_EVENT, WALLET_INVALIDATION_TOPICS, WALLET_TARGET } from "./api.js";
+export {
+  WALLET_INVALIDATION_EVENT,
+  WALLET_INVALIDATION_TOPICS,
+  WALLET_TARGET,
+  WALLET_UI_CALLER_ORIGIN,
+} from "./api.js";
 export type { WalletApiCall } from "./apiClient.js";
 export { createWalletApiClient } from "./apiClient.js";
 export type { WalletMethodExecutor } from "./createWalletApi.js";
@@ -59,6 +65,7 @@ export type {
   WalletApiAccountsByKeyringResult,
   WalletApiAccountsForCurrentChainResult,
   WalletApiApprovalDetailResult,
+  WalletApiAttentionSnapshotResult,
   WalletApiAutoLockResult,
   WalletApiBackupStatusResult,
   WalletApiChainSnapshot,

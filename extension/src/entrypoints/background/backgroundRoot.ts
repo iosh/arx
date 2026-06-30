@@ -30,7 +30,6 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       getEntryBootstrap: (params) => uiEntries.getEntryBootstrap(params),
       openOnboardingTab: (reason) => uiEntries.openOnboardingTab(reason),
     },
-    walletOrigin: extensionOrigin,
   });
   const uiEntries = createUiEntryCoordinator({
     runtimeHost,

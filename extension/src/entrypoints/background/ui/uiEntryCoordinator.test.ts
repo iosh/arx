@@ -1,5 +1,4 @@
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/approvals";
-import { ATTENTION_REQUESTED } from "@arx/core/services";
 import type { ApprovalDetail, ApprovalListEntry } from "@arx/core/wallet";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryPlatform } from "../platform/uiPlatform";
@@ -20,30 +19,6 @@ type OnboardingOpenResult = Awaited<ReturnType<UiEntryPlatform["openOnboardingTa
 type UiEntryRuntimeHost = {
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
 };
-
-class FakeBus {
-  #handlers = new Map<unknown, Set<(payload: unknown) => void>>();
-
-  subscribe(topic: unknown, handler: (payload: unknown) => void) {
-    const handlers = this.#handlers.get(topic) ?? new Set<(payload: unknown) => void>();
-    handlers.add(handler);
-    this.#handlers.set(topic, handlers);
-    return () => {
-      handlers.delete(handler);
-      if (handlers.size === 0) {
-        this.#handlers.delete(topic);
-      }
-    };
-  }
-
-  emit(topic: unknown, payload: unknown) {
-    const handlers = this.#handlers.get(topic);
-    if (!handlers) return;
-    for (const handler of handlers) {
-      handler(payload);
-    }
-  }
-}
 
 class FakeApprovalQueueService {
   #pending: ApprovalQueueItemLike[] = [];
@@ -119,7 +94,6 @@ const buildHarness = (
     onboardingOpenResults?: OnboardingOpenResult[];
   },
 ) => {
-  const bus = new FakeBus();
   const approvals = new FakeApprovalQueueService();
   const trackedWindowClosers = new Map<number, () => void>();
   const notificationOpenResults =
@@ -135,6 +109,16 @@ const buildHarness = (
   const onEntryChanged = vi.fn();
   const approvalDetails = new Map<string, ApprovalDetail>();
   const approvalInvalidationHandlers = new Set<() => void>();
+  const unlockAttentionInvalidationHandlers = new Set<() => void>();
+  let unlockAttentionRequests: Array<{
+    reason: "unlock_required";
+    origin: string;
+    method: string;
+    chainRef: string | null;
+    namespace: string | null;
+    requestedAt: number;
+    expiresAt: number;
+  }> = [];
 
   const listPendingApprovals = (): ApprovalListEntry[] =>
     approvals.getState().pending.map((item) => ({
@@ -179,8 +163,11 @@ const buildHarness = (
       }
 
       return {
-        subscribeUnlockAttentionRequested: (handler: (payload: unknown) => void) =>
-          bus.subscribe(ATTENTION_REQUESTED, handler),
+        subscribeUnlockAttentionInvalidation: (handler: () => void) => {
+          unlockAttentionInvalidationHandlers.add(handler);
+          return () => unlockAttentionInvalidationHandlers.delete(handler);
+        },
+        listUnlockAttentionRequests: async () => unlockAttentionRequests,
         subscribeApprovalInvalidation: (handler: () => void) => {
           approvalInvalidationHandlers.add(handler);
           return () => approvalInvalidationHandlers.delete(handler);
@@ -190,19 +177,40 @@ const buildHarness = (
         },
         listPendingApprovals: async () => listPendingApprovals(),
         getApprovalDetail: async (approvalId: string) => approvalDetails.get(approvalId) ?? null,
-        hasInitializedVault: () => true,
+        getSessionStatus: async () => ({
+          status: "locked" as const,
+          isUnlocked: false,
+          vaultInitialized: true,
+          autoLockDurationMs: null,
+          nextAutoLockAt: null,
+        }),
       };
     }) as unknown as UiEntryRuntimeHost["getOrInitUiEntryAccess"],
   };
 
   return {
     approvals,
-    bus,
     onEntryChanged,
     platform,
     runtimeHost,
     emitApprovalInvalidation() {
       for (const handler of approvalInvalidationHandlers) {
+        handler();
+      }
+    },
+    emitUnlockAttentionRequests(
+      requests: Array<{
+        reason: "unlock_required";
+        origin: string;
+        method: string;
+        chainRef: string | null;
+        namespace: string | null;
+        requestedAt: number;
+        expiresAt: number;
+      }>,
+    ) {
+      unlockAttentionRequests = requests;
+      for (const handler of unlockAttentionInvalidationHandlers) {
         handler();
       }
     },
@@ -312,13 +320,17 @@ describe("uiEntryCoordinator", () => {
     await coordinator.start();
     expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1);
 
-    harness.bus.emit(ATTENTION_REQUESTED, {
-      reason: "unlock_required",
-      origin: "https://dapp.example",
-      method: "eth_requestAccounts",
-      chainRef: "eip155:1",
-      namespace: "eip155",
-    });
+    harness.emitUnlockAttentionRequests([
+      {
+        reason: "unlock_required",
+        origin: "https://dapp.example",
+        method: "eth_requestAccounts",
+        chainRef: "eip155:1",
+        namespace: "eip155",
+        requestedAt: 1_000,
+        expiresAt: 2_000,
+      },
+    ]);
 
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 
@@ -344,13 +356,17 @@ describe("uiEntryCoordinator", () => {
     await coordinator.start();
     expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(2);
 
-    harness.bus.emit(ATTENTION_REQUESTED, {
-      reason: "unlock_required",
-      origin: "https://dapp.example",
-      method: "eth_requestAccounts",
-      chainRef: "eip155:1",
-      namespace: "eip155",
-    });
+    harness.emitUnlockAttentionRequests([
+      {
+        reason: "unlock_required",
+        origin: "https://dapp.example",
+        method: "eth_requestAccounts",
+        chainRef: "eip155:1",
+        namespace: "eip155",
+        requestedAt: 1_000,
+        expiresAt: 2_000,
+      },
+    ]);
 
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 

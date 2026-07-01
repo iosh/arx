@@ -29,23 +29,23 @@
     "events": "3.3.0",
     "lucide-react": "^0.562.0",
     "ox": "catalog:",
-    "react": "19.1.1",
-    "react-dom": "19.1.1",
-    "react-native-web": "^0.21.2",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-native-web": "0.21.2",
     "tamagui": "1.141.5",
     "webextension-polyfill": "catalog:",
-    "zustand": "^5.0.10"
+    "zustand": "5.0.14"
   },
   "devDependencies": {
     "@tanstack/router-cli": "^1.166.30",
     "@tanstack/router-plugin": "^1.167.18",
     "@types/jsdom": "27.0.0",
-    "@types/react": "19.1.12",
-    "@types/react-dom": "19.1.9",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "@types/webextension-polyfill": "catalog:",
     "@wxt-dev/module-react": "1.2.2",
     "jsdom": "27.2.0",
     "typescript": "catalog:",
-    "wxt": "0.20.26"
+    "wxt": "0.20.27"
   }
 }

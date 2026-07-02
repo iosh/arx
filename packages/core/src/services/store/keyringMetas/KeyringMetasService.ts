@@ -1,14 +1,26 @@
+import type { Messenger } from "../../../messenger/index.js";
 import type { KeyringMetaRecord } from "../../../storage/records.js";
-import { createSignal } from "../_shared/signal.js";
 import type { KeyringMetasPort } from "./port.js";
-import type { KeyringMetasChangedPayload, KeyringMetasService } from "./types.js";
+import { KEYRING_METAS_STORE_CHANGED } from "./topics.js";
+import type { KeyringMetasService } from "./types.js";
 
 export type CreateKeyringMetasServiceOptions = {
+  messenger: Messenger;
   port: KeyringMetasPort;
 };
 
-export const createKeyringMetasService = ({ port }: CreateKeyringMetasServiceOptions): KeyringMetasService => {
-  const changed = createSignal<KeyringMetasChangedPayload>();
+const areKeyringMetaRecordsEqual = (left: KeyringMetaRecord, right: KeyringMetaRecord): boolean =>
+  left.id === right.id &&
+  left.type === right.type &&
+  left.alias === right.alias &&
+  left.needsBackup === right.needsBackup &&
+  left.nextDerivationIndex === right.nextDerivationIndex &&
+  left.createdAt === right.createdAt;
+
+export const createKeyringMetasService = ({
+  messenger,
+  port,
+}: CreateKeyringMetasServiceOptions): KeyringMetasService => {
   const get = async (id: KeyringMetaRecord["id"]) => {
     return await port.get(id);
   };
@@ -18,17 +30,27 @@ export const createKeyringMetasService = ({ port }: CreateKeyringMetasServiceOpt
   };
 
   const upsert = async (record: KeyringMetaRecord) => {
+    const existing = await port.get(record.id);
+    if (existing && areKeyringMetaRecordsEqual(existing, record)) {
+      return;
+    }
+
     await port.upsert(record);
-    changed.emit({ kind: "upsert", id: record.id });
+    messenger.publish(KEYRING_METAS_STORE_CHANGED, { kind: "upsert", id: record.id });
   };
 
   const remove = async (id: KeyringMetaRecord["id"]) => {
+    const existing = await port.get(id);
+    if (!existing) {
+      return;
+    }
+
     await port.remove(id);
-    changed.emit({ kind: "remove", id });
+    messenger.publish(KEYRING_METAS_STORE_CHANGED, { kind: "remove", id });
   };
 
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(KEYRING_METAS_STORE_CHANGED, handler),
 
     get,
     list,

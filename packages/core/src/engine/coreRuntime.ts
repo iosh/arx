@@ -53,6 +53,6 @@ export type CoreRuntime = Readonly<{
 }>;
 
 type AssertNever<T extends never> = T;
-type CoreRuntimeInternalKey = "services" | "rpc" | "bus" | "lifecycle" | "shutdown";
+type CoreRuntimeInternalKey = "services" | "rpc" | "messenger" | "lifecycle" | "shutdown";
 
 type _CoreRuntimeDoesNotExposeInternalKeys = AssertNever<Extract<keyof CoreRuntime, CoreRuntimeInternalKey>>;

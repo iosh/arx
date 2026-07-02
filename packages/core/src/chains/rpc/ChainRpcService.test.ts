@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { Messenger } from "../../messenger/Messenger.js";
+import { createMessenger } from "../../messenger/index.js";
 import { ChainRpcService } from "./ChainRpcService.js";
 import { assertNonEmptyRpcEndpoints } from "./config.js";
-import { CHAIN_RPC_TOPICS } from "./topics.js";
 
 const createService = () => {
-  const bus = new Messenger();
+  const messenger = createMessenger();
   return new ChainRpcService({
-    messenger: bus.scope({ publish: CHAIN_RPC_TOPICS }),
+    messenger,
     initialAccesses: [
       {
         chainRef: "eip155:1",

@@ -1,16 +1,14 @@
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
+import type { Messenger } from "../../../messenger/index.js";
 import type { WalletChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
-import { createSignal } from "../_shared/signal.js";
 import type { WalletChainSelectionPort } from "./port.js";
-import type {
-  UpdateWalletChainSelectionParams,
-  WalletChainSelectionChangedPayload,
-  WalletChainSelectionService,
-} from "./types.js";
+import { WALLET_CHAIN_SELECTION_STORE_CHANGED } from "./topics.js";
+import type { UpdateWalletChainSelectionParams, WalletChainSelectionService } from "./types.js";
 
 export type CreateWalletChainSelectionServiceOptions = {
+  messenger: Messenger;
   port: WalletChainSelectionPort;
   defaults: {
     selectedNamespace: string;
@@ -19,13 +17,26 @@ export type CreateWalletChainSelectionServiceOptions = {
   now?: () => number;
 };
 
+const areChainRefRecordsEqual = (left: Record<string, ChainRef>, right: Record<string, ChainRef>): boolean => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
+};
+
+const areWalletChainSelectionRecordsEqual = (
+  left: WalletChainSelectionRecord,
+  right: WalletChainSelectionRecord,
+): boolean =>
+  left.selectedNamespace === right.selectedNamespace &&
+  areChainRefRecordsEqual(left.chainRefByNamespace, right.chainRefByNamespace);
+
 export const createWalletChainSelectionService = ({
+  messenger,
   port,
   defaults,
   now,
 }: CreateWalletChainSelectionServiceOptions): WalletChainSelectionService => {
   const clock = now ?? Date.now;
-  const changed = createSignal<WalletChainSelectionChangedPayload>();
   const run = createSerialQueue();
   let cached: WalletChainSelectionRecord | null = null;
 
@@ -34,7 +45,7 @@ export const createWalletChainSelectionService = ({
 
   const emitChanged = (previous: WalletChainSelectionRecord | null, next: WalletChainSelectionRecord) => {
     cached = next;
-    changed.emit({
+    messenger.publish(WALLET_CHAIN_SELECTION_STORE_CHANGED, {
       previous: previous ? structuredClone(previous) : null,
       next: structuredClone(next),
     });
@@ -100,6 +111,11 @@ export const createWalletChainSelectionService = ({
         updatedAt: clock(),
       };
 
+      if (previous && areWalletChainSelectionRecordsEqual(previous, next)) {
+        cached = previous;
+        return structuredClone(previous);
+      }
+
       await port.put(next);
       emitChanged(previous, next);
       return structuredClone(next);
@@ -119,7 +135,7 @@ export const createWalletChainSelectionService = ({
   };
 
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(WALLET_CHAIN_SELECTION_STORE_CHANGED, handler),
     get,
     getSnapshot,
     getSelectedNamespace,

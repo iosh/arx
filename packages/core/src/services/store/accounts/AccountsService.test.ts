@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createMessenger } from "../../../messenger/index.js";
 import type { AccountKey, AccountRecord } from "../../../storage/records.js";
 import { createAccountsService } from "./AccountsService.js";
 import type { AccountsPort } from "./port.js";
@@ -33,6 +34,8 @@ const createInMemoryPort = (seed: AccountRecord[] = []) => {
   return { port, store, writes };
 };
 
+const createService = (port: AccountsPort) => createAccountsService({ messenger: createMessenger(), port });
+
 describe("AccountsService", () => {
   it("list() filters hidden by default and sorts by createdAt asc", async () => {
     const seed: AccountRecord[] = [
@@ -58,7 +61,7 @@ describe("AccountsService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createAccountsService({ port });
+    const service = createService(port);
 
     const visible = await service.list();
     expect(visible.map((r) => r.accountKey)).toEqual([
@@ -76,7 +79,7 @@ describe("AccountsService", () => {
 
   it("setHidden() is a no-op when account does not exist (no changed event)", async () => {
     const { port, writes } = createInMemoryPort();
-    const service = createAccountsService({ port });
+    const service = createService(port);
 
     let changed = 0;
     service.subscribeChanged(() => {
@@ -103,7 +106,7 @@ describe("AccountsService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createAccountsService({ port });
+    const service = createService(port);
 
     let changed = 0;
     service.subscribeChanged(() => {

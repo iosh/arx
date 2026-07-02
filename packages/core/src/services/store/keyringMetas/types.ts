@@ -1,5 +1,5 @@
+import type { Unsubscribe } from "../../../messenger/index.js";
 import type { KeyringMetaRecord } from "../../../storage/records.js";
-import type { Unsubscribe } from "../_shared/signal.js";
 
 export type KeyringMetasChangedPayload =
   | { kind: "upsert"; id: KeyringMetaRecord["id"] }

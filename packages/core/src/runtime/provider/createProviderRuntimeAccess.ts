@@ -1,5 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import { isArxBaseError } from "../../error.js";
+import { eventTopic, type Messenger } from "../../messenger/index.js";
 import { PermissionNotConnectedError } from "../../permissions/errors.js";
 import {
   isJsonRpcErrorLike,
@@ -12,7 +13,6 @@ import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHi
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import { createSignal, type StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { ProviderChainSelectionChangedHandler } from "../../services/store/providerChainSelection/types.js";
 import { InvalidProviderConnectionScopeError } from "./errors.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
@@ -55,6 +55,7 @@ type ProviderRuntimeExecuteRequest = (args: {
 }) => Promise<unknown>;
 
 type ProviderRuntimeAccessDeps = {
+  messenger: Messenger;
   getIsInitialized: () => boolean;
   getSessionStatus: () => { isUnlocked: boolean };
   resolveProviderChain: (input: ProviderRuntimeConnectionQuery) => ProviderRuntimeResolvedChain;
@@ -80,10 +81,10 @@ type ProviderRuntimeAccessDeps = {
   providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
-  subscribeChainRpcStateChanged: StateChangeSubscription;
+  subscribeChainRpcStateChanged: (listener: () => void) => () => void;
   subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
-  subscribeAccountsStateChanged: StateChangeSubscription;
-  subscribePermissionsStateChanged: StateChangeSubscription;
+  subscribeAccountsStateChanged: (listener: () => void) => () => void;
+  subscribePermissionsStateChanged: (listener: () => void) => () => void;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -130,6 +131,8 @@ const createRuntimeNotInitializedError = () =>
   new RpcInternalError({
     message: "Background runtime is not initialized (call lifecycle.initialize() first).",
   });
+
+const PROVIDER_CONNECTION_STATE_CHANGED = eventTopic<ProviderConnectionStateChange>("provider:connectionStateChanged");
 
 const parseProviderConnectionScope = ({ origin, namespace }: ProviderConnectionScope): ProviderConnectionScope => {
   if (origin.length === 0 || origin.trim() !== origin) {
@@ -183,6 +186,7 @@ const deriveProviderConnectionStateChange = (args: {
 };
 
 export const createProviderRuntimeAccess = ({
+  messenger,
   getIsInitialized,
   getSessionStatus,
   resolveProviderChain,
@@ -209,7 +213,6 @@ export const createProviderRuntimeAccess = ({
     state: ProviderRuntimeConnectionState;
   };
 
-  const connectionStateChanged = createSignal<ProviderConnectionStateChange>();
   const activeScopesByOrigin = new Map<string, Map<string, ActiveConnectionScopeState>>();
   let connectionStateReconcileQueue: Promise<void> = Promise.resolve();
 
@@ -595,7 +598,7 @@ export const createProviderRuntimeAccess = ({
     });
 
     if (change) {
-      connectionStateChanged.emit({
+      messenger.publish(PROVIDER_CONNECTION_STATE_CHANGED, {
         ...change,
         scope: { ...change.scope },
         previous: copyConnectionState(change.previous),
@@ -642,7 +645,7 @@ export const createProviderRuntimeAccess = ({
   };
 
   const subscribeConnectionStateChanged = (listener: ProviderConnectionStateChangedHandler) => {
-    return connectionStateChanged.subscribe((change) => {
+    return messenger.subscribe(PROVIDER_CONNECTION_STATE_CHANGED, (change) => {
       listener({
         scope: { ...change.scope },
         previous: copyConnectionState(change.previous),

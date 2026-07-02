@@ -2,7 +2,7 @@ import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
 import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manifestInterop.js";
 import type { ArxWallet } from "../engine/types.js";
-import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
+import type { Messenger } from "../messenger/index.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type { Namespace } from "../rpc/handlers/types.js";
 import type { RpcInvocationHint, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
@@ -37,9 +37,6 @@ import type { ProviderRuntimeAccess } from "./provider/types.js";
 export type { BackgroundSessionServices } from "./background/session.js";
 
 export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "supportedChains"> & {
-  messenger?: {
-    violationMode?: ViolationMode;
-  };
   rpcAccessPolicy: BackgroundRpcAccessPolicyHooks;
   walletChainSelection: {
     port: WalletChainSelectionPort;
@@ -80,7 +77,7 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
 };
 
 export type BackgroundRuntime = {
-  bus: Messenger;
+  messenger: Messenger;
   transactions: ReturnType<typeof assembleArxWalletRuntime>["transactions"];
   transactionMonitor: ReturnType<typeof assembleArxWalletRuntime>["transactionMonitor"];
   services: BackgroundStateServices & {
@@ -167,7 +164,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     runtime: {
       boot: false,
       lifecycleLabel: "createBackgroundRuntime",
-      ...(options.messenger ? { messenger: options.messenger } : {}),
       assemblyOptions: {
         ...(options.approvals ? { approvals: options.approvals } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
@@ -180,7 +176,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   });
 
   return {
-    bus: runtime.bus,
+    messenger: runtime.messenger,
     transactions: runtime.transactions,
     transactionMonitor: runtime.transactionMonitor,
     services: runtime.services,

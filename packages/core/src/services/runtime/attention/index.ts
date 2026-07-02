@@ -1,5 +1,5 @@
+import type { Messenger } from "../../../messenger/index.js";
 import { InMemoryAttentionService } from "./InMemoryAttentionService.js";
-import type { AttentionMessenger } from "./topics.js";
 import type { AttentionService } from "./types.js";
 
 export { InMemoryAttentionService } from "./InMemoryAttentionService.js";
@@ -14,7 +14,7 @@ export type {
 } from "./types.js";
 
 export const createAttentionService = (opts: {
-  messenger: AttentionMessenger;
+  messenger: Messenger;
   now?: () => number;
   defaultTtlMs?: number;
   maxQueueSize?: number;

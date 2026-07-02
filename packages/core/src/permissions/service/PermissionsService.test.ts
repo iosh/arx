@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { Messenger } from "../../messenger/Messenger.js";
+import { createMessenger } from "../../messenger/index.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { PermissionRecord } from "../../storage/records.js";
 import { PermissionsService } from "./PermissionsService.js";
-import { PERMISSION_TOPICS } from "./topics.js";
 
 const ORIGIN = "https://dapp.example";
 const NAMESPACE = "eip155";
@@ -61,7 +60,7 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
 describe("PermissionsService", () => {
   it("grantAuthorization() writes one authorization record and publishes originChanged", async () => {
     const { port, store } = createInMemoryPort();
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
 
     const service = new PermissionsService({
       messenger,
@@ -101,7 +100,7 @@ describe("PermissionsService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
@@ -135,7 +134,7 @@ describe("PermissionsService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
@@ -170,7 +169,7 @@ describe("PermissionsService", () => {
     ];
 
     const { port, store } = createInMemoryPort(seed);
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
@@ -211,7 +210,7 @@ describe("PermissionsService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
@@ -235,7 +234,7 @@ describe("PermissionsService", () => {
 
   it("grantAuthorization() rejects chainRefs that drift across namespaces", async () => {
     const { port } = createInMemoryPort();
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const messenger = createMessenger();
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();

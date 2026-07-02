@@ -1,4 +1,5 @@
 import { parseChainRef } from "../../chains/caip.js";
+import type { Messenger } from "../../messenger/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
 import { TransportDisconnectedError } from "../../runtime/provider/errors.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
@@ -10,7 +11,7 @@ import {
   ApprovalUserDismissedError,
 } from "../errors.js";
 import type { ApprovalExecutor } from "../types.js";
-import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
+import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED } from "./topics.js";
 import type {
   ApprovalCreatedEvent,
   ApprovalCreateParams,
@@ -39,7 +40,7 @@ import {
 } from "./utils.js";
 
 type CreateInMemoryApprovalQueueServiceOptions = {
-  messenger: ApprovalMessenger;
+  messenger: Messenger;
   autoRejectMessage?: string;
   ttlMs?: number;
   logger?: (message: string, error?: unknown) => void;
@@ -156,7 +157,7 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
 };
 
 export class InMemoryApprovalQueueService implements ApprovalQueueService {
-  #messenger: ApprovalMessenger;
+  #messenger: Messenger;
   #autoRejectMessage: string;
   #ttlMs: number;
   #logger?: ((message: string, error?: unknown) => void) | undefined;

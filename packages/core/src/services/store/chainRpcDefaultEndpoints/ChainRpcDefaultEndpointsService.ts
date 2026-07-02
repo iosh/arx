@@ -1,30 +1,28 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcEndpoint } from "../../../chains/metadata.js";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
-import { createSignal } from "../_shared/signal.js";
 import type { ChainRpcDefaultEndpointsPort } from "./port.js";
-import type {
-  ChainRpcDefaultEndpointsChangedPayload,
-  ChainRpcDefaultEndpointsSeed,
-  ChainRpcDefaultEndpointsService,
-} from "./types.js";
+import { CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED } from "./topics.js";
+import type { ChainRpcDefaultEndpointsSeed, ChainRpcDefaultEndpointsService } from "./types.js";
 
 const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] =>
   structuredClone(rpcEndpoints) as RpcEndpoint[];
 
 export type CreateChainRpcDefaultEndpointsServiceOptions = {
+  messenger: Messenger;
   port: ChainRpcDefaultEndpointsPort;
   now?: () => number;
 };
 
 export const createChainRpcDefaultEndpointsService = ({
+  messenger,
   port,
   now,
 }: CreateChainRpcDefaultEndpointsServiceOptions): ChainRpcDefaultEndpointsService => {
   const clock = now ?? Date.now;
-  const changed = createSignal<ChainRpcDefaultEndpointsChangedPayload>();
   const run = createSerialQueue();
   const cache = new Map<ChainRef, ChainRpcDefaultEndpointsRecord>();
 
@@ -90,7 +88,7 @@ export const createChainRpcDefaultEndpointsService = ({
       cache.set(chainRef, clonedNext);
 
       if (shouldWrite) {
-        changed.emit({
+        messenger.publish(CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED, {
           chainRef,
           previous: previousRecord,
           next: toRecord(clonedNext),
@@ -119,7 +117,7 @@ export const createChainRpcDefaultEndpointsService = ({
           continue;
         }
 
-        if (previous && areRpcEndpointsEqual(previous.rpcEndpoints, rpcEndpoints)) {
+        if (previous?.source === seed.source && areRpcEndpointsEqual(previous.rpcEndpoints, rpcEndpoints)) {
           cache.set(seed.chainRef, toRecord(previous));
           continue;
         }
@@ -132,7 +130,7 @@ export const createChainRpcDefaultEndpointsService = ({
         };
         await port.upsert(next);
         cache.set(seed.chainRef, toRecord(next));
-        changed.emit({
+        messenger.publish(CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED, {
           chainRef: seed.chainRef,
           previous: previous ? toRecord(previous) : null,
           next: toRecord(next),
@@ -146,7 +144,7 @@ export const createChainRpcDefaultEndpointsService = ({
 
         await port.remove(previous.chainRef);
         cache.delete(previous.chainRef);
-        changed.emit({
+        messenger.publish(CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED, {
           chainRef: previous.chainRef,
           previous: toRecord(previous),
           next: null,
@@ -165,7 +163,7 @@ export const createChainRpcDefaultEndpointsService = ({
 
       await port.remove(chainRef);
       cache.delete(chainRef);
-      changed.emit({
+      messenger.publish(CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED, {
         chainRef,
         previous: toRecord(previous),
         next: null,
@@ -174,7 +172,7 @@ export const createChainRpcDefaultEndpointsService = ({
   };
 
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED, handler),
     get,
     getAll,
     readDefaultEndpoints,

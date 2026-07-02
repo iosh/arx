@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createMessenger } from "../../../messenger/index.js";
 import type { KeyringMetaRecord } from "../../../storage/records.js";
 import { createKeyringMetasService } from "./KeyringMetasService.js";
 import type { KeyringMetasPort } from "./port.js";
@@ -27,10 +28,12 @@ const createInMemoryPort = (seed: KeyringMetaRecord[] = []) => {
   return { port, store, writes };
 };
 
+const createService = (port: KeyringMetasPort) => createKeyringMetasService({ messenger: createMessenger(), port });
+
 describe("KeyringMetasService", () => {
   it("upsert() and get() roundtrip and emit changed", async () => {
     const { port } = createInMemoryPort();
-    const service = createKeyringMetasService({ port });
+    const service = createService(port);
 
     let changed = 0;
     service.subscribeChanged(() => {
@@ -67,7 +70,7 @@ describe("KeyringMetasService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createKeyringMetasService({ port });
+    const service = createService(port);
 
     const list = await service.list();
     expect(list.length).toBe(2);
@@ -84,7 +87,7 @@ describe("KeyringMetasService", () => {
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createKeyringMetasService({ port });
+    const service = createService(port);
 
     let changed = 0;
     service.subscribeChanged(() => {

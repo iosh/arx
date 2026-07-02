@@ -1,4 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { Messenger } from "../../messenger/index.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import { PermissionNotConnectedError } from "../errors.js";
 import {
@@ -15,7 +16,7 @@ import {
   parsePermissionChainRefForNamespace,
   parsePermissionNamespace,
 } from "./state.js";
-import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionsMessenger } from "./topics.js";
+import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED } from "./topics.js";
 import type {
   ChainPermissionAuthorization,
   GrantAuthorizationOptions,
@@ -35,12 +36,12 @@ const sortStrings = <T extends string>(values: readonly T[]): T[] => {
 };
 
 export type PermissionsServiceOptions = {
-  messenger: PermissionsMessenger;
+  messenger: Messenger;
   port: PermissionsPort;
 };
 
 export class PermissionsService implements PermissionsReader, PermissionsWriter, PermissionsEvents {
-  #messenger: PermissionsMessenger;
+  #messenger: Messenger;
   #port: PermissionsPort;
   #state: PermissionsState = { origins: {} };
   #ready: Promise<void>;
@@ -288,17 +289,13 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
   }
 
   #publishState() {
-    this.#messenger.publish(PERMISSION_STATE_CHANGED, clonePermissionsState(this.#state), { force: true });
+    this.#messenger.publish(PERMISSION_STATE_CHANGED, clonePermissionsState(this.#state));
   }
 
   #publishOrigin(origin: string) {
-    this.#messenger.publish(
-      PERMISSION_ORIGIN_CHANGED,
-      {
-        origin,
-        namespaces: cloneOriginPermissionState(this.#state.origins[origin] ?? {}),
-      },
-      { force: true },
-    );
+    this.#messenger.publish(PERMISSION_ORIGIN_CHANGED, {
+      origin,
+      namespaces: cloneOriginPermissionState(this.#state.origins[origin] ?? {}),
+    });
   }
 }

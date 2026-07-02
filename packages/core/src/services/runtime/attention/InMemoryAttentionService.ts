@@ -1,4 +1,5 @@
-import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED, type AttentionMessenger } from "./topics.js";
+import type { Messenger } from "../../../messenger/index.js";
+import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED } from "./topics.js";
 import type {
   AttentionRequest,
   AttentionRequestResult,
@@ -13,7 +14,7 @@ const DEFAULT_MAX_QUEUE_SIZE = 20;
 type Entry = { key: string; request: AttentionRequest };
 
 export class InMemoryAttentionService implements AttentionService {
-  #messenger: AttentionMessenger;
+  #messenger: Messenger;
   #now: () => number;
   #defaultTtlMs: number;
   #maxQueueSize: number;
@@ -21,7 +22,7 @@ export class InMemoryAttentionService implements AttentionService {
   #byKey = new Map<string, AttentionRequest>();
 
   constructor(opts: {
-    messenger: AttentionMessenger;
+    messenger: Messenger;
     now?: () => number;
     defaultTtlMs?: number;
     maxQueueSize?: number;
@@ -46,7 +47,7 @@ export class InMemoryAttentionService implements AttentionService {
     const existing = this.#byKey.get(key);
 
     if (existing && existing.expiresAt > now) {
-      this.#messenger.publish(ATTENTION_REQUESTED, existing, { force: true });
+      this.#messenger.publish(ATTENTION_REQUESTED, existing);
       return { enqueued: false, request: null, state: this.getSnapshot() };
     }
 

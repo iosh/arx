@@ -1,4 +1,4 @@
-import type { Messenger } from "../../messenger/Messenger.js";
+import type { Messenger } from "../../messenger/index.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
@@ -11,7 +11,6 @@ import { encodePayload } from "../keyring/keyring-utils.js";
 import type { NamespaceConfig } from "../keyring/namespaces.js";
 import { DEFAULT_AUTO_LOCK_MS } from "../session/unlock/constants.js";
 import { InMemoryUnlockService } from "../session/unlock/InMemoryUnlockService.js";
-import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../session/unlock/topics.js";
 import type { UnlockService, UnlockServiceOptions } from "../session/unlock/types.js";
 import { RuntimeHydrationError } from "./errors.js";
 
@@ -48,7 +47,7 @@ export type BackgroundSessionServices = {
 };
 
 type SessionLayerParams = {
-  bus: Messenger;
+  messenger: Messenger;
   vaultMetaPort?: VaultMetaPort;
   accountsStore: AccountsService;
   keyringMetas: KeyringMetasService;
@@ -74,7 +73,7 @@ export type SessionLayerResult = {
 };
 
 export const initSessionLayer = ({
-  bus,
+  messenger,
   vaultMetaPort,
   accountsStore,
   keyringMetas,
@@ -277,7 +276,7 @@ export const initSessionLayer = ({
   };
 
   const unlockOptions: UnlockServiceOptions = {
-    messenger: bus.scope({ name: "unlock", publish: UNLOCK_TOPICS }),
+    messenger,
     vault: {
       unlock: async (params) => {
         await vaultProxy.unlock(params);
@@ -411,16 +410,8 @@ export const initSessionLayer = ({
     if (sessionListenersAttached) return;
 
     sessionListenersAttached = true;
-    let lastSessionLockState = unlock.getState();
     sessionSubscriptions.push(
       unlock.onStateChanged(() => {
-        const next = unlock.getState();
-        const isEqual = UNLOCK_STATE_CHANGED.isEqual ?? Object.is;
-        if (isEqual(lastSessionLockState, next)) {
-          lastSessionLockState = next;
-          return;
-        }
-        lastSessionLockState = next;
         scheduleVaultMetaPersist();
         notifySessionStateChanged();
       }),

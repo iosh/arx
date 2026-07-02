@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Messenger } from "../../messenger/Messenger.js";
+import { createMessenger } from "../../messenger/index.js";
 import type { ApprovalExecutor } from "../types.js";
 import { InMemoryApprovalQueueService } from "./InMemoryApprovalQueueService.js";
-import { APPROVAL_TOPICS } from "./topics.js";
 import {
   type ApprovalCreatedEvent,
   type ApprovalCreateParams,
@@ -43,8 +42,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("create() requires requester", async () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
     const request = createRequest();
 
     // @ts-expect-error - requester is required
@@ -52,8 +51,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("create() rejects approvals whose request chainRef does not match the record chainRef", async () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
     const request = createRequest({
       request: { chainRef: "eip155:10", suggestedAccounts: ["0xabc"] },
     });
@@ -62,8 +61,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("create() rejects request-permissions approvals with empty descriptor chainRefs", async () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
     const request = {
       approvalId: "a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0",
       kind: ApprovalKinds.RequestPermissions,
@@ -86,11 +85,11 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("create() enqueues + resolve(approve) finalizes + resolves the original promise", async () => {
-    const messenger = new Messenger();
+    const messenger = createMessenger();
     const value = ["0xabc"];
     const executor = createExecutor(value);
     const queue = new InMemoryApprovalQueueService({
-      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      messenger,
       getExecutor: () => executor,
     });
 
@@ -113,11 +112,11 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("allows synchronous onCreated handlers to resolve without races", async () => {
-    const messenger = new Messenger();
+    const messenger = createMessenger();
     const value = ["0xabc"];
     const executor = createExecutor(value);
     const queue = new InMemoryApprovalQueueService({
-      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      messenger,
       getExecutor: () => executor,
     });
 
@@ -135,14 +134,14 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("prevents duplicate approve execution while approval settlement is in flight", async () => {
-    const messenger = new Messenger();
+    const messenger = createMessenger();
     const value = ["0xabc"];
     const approve = vi.fn(async () => {
       await Promise.resolve();
       return value;
     });
     const queue = new InMemoryApprovalQueueService({
-      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      messenger,
       getExecutor: () => ({
         approve,
         reject: vi.fn(async () => {}),
@@ -168,8 +167,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("cancel() rejects caller-disconnected approvals and removes them from state", async () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const request = createRequest({ approvalId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" });
     const handle = queue.create(request, requester);
@@ -183,8 +182,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("resolve(reject) preserves caller-provided Error instance", async () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const request = createRequest({ approvalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
     const handle = queue.create(request, requester);
@@ -201,8 +200,8 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("sorts pending approvals by createdAt and id", () => {
-    const messenger = new Messenger();
-    const queue = new InMemoryApprovalQueueService({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     queue.create(createRequest({ approvalId: "approval-b", createdAt: 2_000 }), requester);
     queue.create(createRequest({ approvalId: "approval-a", createdAt: 2_000 }), requester);
@@ -212,11 +211,11 @@ describe("InMemoryApprovalQueueService", () => {
   });
 
   it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {
-    const messenger = new Messenger();
+    const messenger = createMessenger();
     const value = ["0xabc"];
     const executor = createExecutor(value);
     const queue = new InMemoryApprovalQueueService({
-      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      messenger,
       getExecutor: () => executor,
     });
 
@@ -273,9 +272,9 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("expires approvals after ttlMs to avoid hanging requests", async () => {
     vi.useFakeTimers();
-    const messenger = new Messenger();
+    const messenger = createMessenger();
     const queue = new InMemoryApprovalQueueService({
-      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      messenger,
       ttlMs: 1_000,
     });
 

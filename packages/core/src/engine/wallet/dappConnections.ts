@@ -1,5 +1,5 @@
+import { eventTopic, type Messenger } from "../../messenger/index.js";
 import type { ProviderRuntimeConnectionQuery, ProviderRuntimeConnectionState } from "../../runtime/provider/types.js";
-import { createSignal } from "../../services/store/_shared/signal.js";
 import type { DappConnectionRecord, DappConnectionsState, WalletDappConnections } from "../types.js";
 
 type DappConnectionsRecord = {
@@ -17,9 +17,14 @@ export type DappConnectionWriter = Readonly<{
 
 export type WalletDappConnectionsController = WalletDappConnections & DappConnectionWriter;
 
-export const createWalletDappConnections = (deps: { now?: () => number } = {}): WalletDappConnectionsController => {
+const WALLET_DAPP_CONNECTIONS_STATE_CHANGED = eventTopic<DappConnectionsState>("wallet:dappConnections:stateChanged");
+
+export const createWalletDappConnections = (deps: {
+  messenger: Messenger;
+  now?: () => number;
+}): WalletDappConnectionsController => {
+  const { messenger } = deps;
   const { now = Date.now } = deps;
-  const changed = createSignal<DappConnectionsState>();
   const connections = new Map<string, Map<string, DappConnectionsRecord>>();
 
   const readConnectionRecord = (origin: string, namespace: string): DappConnectionsRecord | null =>
@@ -80,7 +85,7 @@ export const createWalletDappConnections = (deps: { now?: () => number } = {}): 
   };
 
   const emitChanged = () => {
-    changed.emit(buildStateSnapshot());
+    messenger.publish(WALLET_DAPP_CONNECTIONS_STATE_CHANGED, buildStateSnapshot());
   };
 
   const recordConnection = (
@@ -122,6 +127,6 @@ export const createWalletDappConnections = (deps: { now?: () => number } = {}): 
     isConnected: (origin, options) => Boolean(readConnectionRecord(origin, options.namespace)),
     record: recordConnection,
     remove: removeConnection,
-    onStateChanged: (listener) => changed.subscribe(listener),
+    onStateChanged: (listener) => messenger.subscribe(WALLET_DAPP_CONNECTIONS_STATE_CHANGED, listener),
   };
 };

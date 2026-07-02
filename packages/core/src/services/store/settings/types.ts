@@ -1,5 +1,5 @@
+import type { Unsubscribe } from "../../../messenger/index.js";
 import type { AccountKey, SettingsRecord } from "../../../storage/records.js";
-import type { Unsubscribe } from "../_shared/signal.js";
 
 export type SettingsChangedPayload = { next: SettingsRecord };
 

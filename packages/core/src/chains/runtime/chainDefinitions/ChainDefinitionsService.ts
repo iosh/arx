@@ -1,3 +1,4 @@
+import type { Messenger } from "../../../messenger/index.js";
 import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { getChainRefNamespace } from "../../caip.js";
@@ -10,11 +11,7 @@ import {
   parseEntity,
   prepareChainDefinitionForStorage,
 } from "./state.js";
-import {
-  CHAIN_DEFINITIONS_STATE_CHANGED,
-  CHAIN_DEFINITIONS_UPDATED,
-  type ChainDefinitionsMessenger,
-} from "./topics.js";
+import { CHAIN_DEFINITIONS_STATE_CHANGED, CHAIN_DEFINITIONS_UPDATED } from "./topics.js";
 import type {
   ChainDefinitionsService,
   ChainDefinitionsState,
@@ -24,7 +21,7 @@ import type {
 } from "./types.js";
 
 type SupportedChainsServiceOptions = {
-  messenger: ChainDefinitionsMessenger;
+  messenger: Messenger;
   port: ChainDefinitionsPort;
   now?: () => number;
   logger?: (message: string, error?: unknown) => void;
@@ -37,7 +34,7 @@ type ReconcileOptions = {
 };
 
 export class InMemoryChainDefinitionsService implements ChainDefinitionsService {
-  #messenger: ChainDefinitionsMessenger;
+  #messenger: Messenger;
   #port: ChainDefinitionsPort;
   #now: () => number;
   #logger: (message: string, error?: unknown) => void;

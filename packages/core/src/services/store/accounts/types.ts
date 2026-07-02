@@ -1,5 +1,5 @@
+import type { Unsubscribe } from "../../../messenger/index.js";
 import type { AccountKey, AccountRecord } from "../../../storage/records.js";
-import type { Unsubscribe } from "../_shared/signal.js";
 
 export type AccountsChangedPayload =
   | { kind: "upsert"; accountKey: AccountKey }

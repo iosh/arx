@@ -1,6 +1,5 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import type { MethodExecutor } from "../invoke/methods.js";
-import type { ViolationMode } from "../messenger/Messenger.js";
 import {
   createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
@@ -86,7 +85,7 @@ type WalletRuntimeServices = Readonly<
 >;
 
 type ArxWalletRuntimeCore = Readonly<{
-  bus: BackgroundBootstrapScope["bus"];
+  messenger: BackgroundBootstrapScope["messenger"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
@@ -100,9 +99,6 @@ export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
     runtime?: Readonly<{
       boot?: boolean;
       lifecycleLabel?: string;
-      messenger?: Readonly<{
-        violationMode?: ViolationMode;
-      }>;
       assemblyOptions?: BackgroundAssemblyOptions;
       rpcClients?: RpcLayerOptions;
       rpcAccessPolicy?: BackgroundRpcAccessPolicyHooks;
@@ -114,7 +110,7 @@ export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
 type ArxWalletRuntime = Readonly<{
   wallet: ArxWallet;
   shutdown(): Promise<void>;
-  bus: BackgroundBootstrapScope["bus"];
+  messenger: BackgroundBootstrapScope["messenger"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
@@ -297,7 +293,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const bootstrapScope: BackgroundBootstrapScope = createBackgroundBootstrapScope({
     rpcRegistry,
     namespaceBootstrap: namespaceStages.bootstrap,
-    ...(input.runtime?.messenger ? { messengerOptions: input.runtime.messenger } : {}),
     ...(storageOptions ? { storageOptions } : {}),
     ...(assemblyOptions?.approvals ? { approvalOptions: assemblyOptions.approvals } : {}),
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
@@ -374,7 +369,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     transactionRestartRecovery: input.runtime?.transactionRestartRecovery ?? "run",
     chainRpcBootstrap: backgroundSupportScope.chainRpcBootstrap,
     sessionLayer: sessionScope.sessionLayer,
-    bus: bootstrapScope.bus,
     logger: bootstrapScope.storageLogger,
   });
   const stateServices = sessionScope.stateServices;
@@ -455,6 +449,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     },
   });
   const providerAccess = createProviderRuntimeAccess({
+    messenger: bootstrapScope.messenger,
     getIsInitialized: () => lifecycle.getIsInitialized(),
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
     resolveProviderChain,
@@ -525,6 +520,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     attention: sessionScope.attention,
   });
   const dappConnections = createWalletDappConnections({
+    messenger: bootstrapScope.messenger,
     ...(input.env?.now ? { now: input.env.now } : {}),
   });
   const syncDappConnectionFromProviderState = (
@@ -567,7 +563,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     }),
   };
   const runtimeCore: ArxWalletRuntimeCore = {
-    bus: bootstrapScope.bus,
+    messenger: bootstrapScope.messenger,
     transactions: transactionServices.transactions,
     transactionMonitor: transactionServices.monitor,
     services,
@@ -621,7 +617,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const runtime: ArxWalletRuntime = {
     wallet,
     shutdown,
-    bus: bootstrapScope.bus,
+    messenger: bootstrapScope.messenger,
     transactions: transactionServices.transactions,
     transactionMonitor: transactionServices.monitor,
     services,

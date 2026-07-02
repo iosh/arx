@@ -102,7 +102,6 @@ const createTestRuntime = (params?: {
   storage?: Parameters<typeof createBackgroundRuntime>[0]["storage"];
   session?: Parameters<typeof createBackgroundRuntime>[0]["session"];
   transactions?: Parameters<typeof createBackgroundRuntime>[0]["transactions"];
-  messenger?: Parameters<typeof createBackgroundRuntime>[0]["messenger"];
   rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
   approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
   chainRpcDefaultEndpoints?: Parameters<typeof createBackgroundRuntime>[0]["chainRpcDefaultEndpoints"];
@@ -144,7 +143,6 @@ const createTestRuntime = (params?: {
     ...(params?.storage ? { storage: params.storage } : {}),
     ...(params?.session ? { session: params.session } : {}),
     ...(params?.transactions ? { transactions: params.transactions } : {}),
-    ...(params?.messenger ? { messenger: params.messenger } : {}),
     ...(params?.rpcClients ? { rpcClients: params.rpcClients } : {}),
     ...(params?.approvals ? { approvals: params.approvals } : {}),
   });

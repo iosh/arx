@@ -2,13 +2,14 @@ import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js"
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import { KeyringAccountNotFoundError } from "../../keyring/errors.js";
+import type { Messenger } from "../../messenger/index.js";
 import { PermissionDeniedError } from "../../permissions/errors.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { AccountKey } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
-import { ACCOUNTS_STATE_CHANGED, type AccountMessenger } from "./topics.js";
+import { ACCOUNTS_STATE_CHANGED } from "./topics.js";
 import type {
   AccountSelectionService,
   ActiveAccountView,
@@ -20,7 +21,7 @@ import type {
 } from "./types.js";
 
 type Options = {
-  messenger: AccountMessenger;
+  messenger: Messenger;
   accounts: AccountsService;
   settings: SettingsService;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey" | "toDisplayAddressFromAccountKey">;
@@ -28,7 +29,7 @@ type Options = {
 };
 
 export class StoreAccountSelectionService implements AccountSelectionService {
-  #messenger: AccountMessenger;
+  #messenger: Messenger;
   #accounts: AccountsService;
   #settings: SettingsService;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey" | "toDisplayAddressFromAccountKey">;
@@ -231,7 +232,7 @@ export class StoreAccountSelectionService implements AccountSelectionService {
       if (isSameMultiNamespaceAccountsState(prev, next)) return;
 
       this.#state = cloneMultiNamespaceAccountsState(next);
-      this.#messenger.publish(ACCOUNTS_STATE_CHANGED, cloneMultiNamespaceAccountsState(this.#state), { force: true });
+      this.#messenger.publish(ACCOUNTS_STATE_CHANGED, cloneMultiNamespaceAccountsState(this.#state));
     })().finally(() => {
       this.#refreshPromise = null;
     });

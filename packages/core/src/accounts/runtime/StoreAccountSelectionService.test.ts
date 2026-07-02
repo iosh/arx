@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
-import { Messenger } from "../../messenger/index.js";
+import { createMessenger } from "../../messenger/index.js";
 import { MemoryAccountsPort, MemorySettingsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createAccountsService } from "../../services/store/accounts/index.js";
 import { createSettingsService } from "../../services/store/settings/index.js";
 import type { AccountRecord, SettingsRecord } from "../../storage/records.js";
 import { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
-import { ACCOUNTS_TOPICS } from "./topics.js";
 
 const chainRef = "eip155:1" as const;
 const namespace = "eip155" as const;
@@ -26,11 +25,11 @@ const addressOf = (payloadHex: string) => `0x${payloadHex}`;
 const createService = async (params?: { accounts?: AccountRecord[]; settings?: SettingsRecord | null }) => {
   const accountsPort = new MemoryAccountsPort(params?.accounts ?? []);
   const settingsPort = new MemorySettingsPort(params?.settings ?? { id: "settings", updatedAt: 0 });
-  const messenger = new Messenger();
-  const accounts = createAccountsService({ port: accountsPort });
-  const settings = createSettingsService({ port: settingsPort, now: () => 10_000 });
+  const messenger = createMessenger();
+  const accounts = createAccountsService({ messenger, port: accountsPort });
+  const settings = createSettingsService({ messenger, port: settingsPort, now: () => 10_000 });
   const service = new StoreAccountSelectionService({
-    messenger: messenger.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
+    messenger,
     accounts,
     settings,
     accountCodecs: createAccountCodecRegistry([eip155Codec]),

@@ -1,24 +1,19 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { StoreAccountSelectionService } from "../../accounts/runtime/StoreAccountSelectionService.js";
-import { ACCOUNTS_TOPICS } from "../../accounts/runtime/topics.js";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import { InMemoryApprovalQueueService } from "../../approvals/queue/InMemoryApprovalQueueService.js";
-import { APPROVAL_TOPICS } from "../../approvals/queue/topics.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainDefinitionSeed } from "../../chains/definition.js";
 import type { RpcEndpoint } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
-import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
 import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
-import { CHAIN_DEFINITIONS_TOPICS } from "../../chains/runtime/chainDefinitions/topics.js";
 import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { Messenger } from "../../messenger/Messenger.js";
+import type { Messenger } from "../../messenger/index.js";
 import { PermissionsService } from "../../permissions/service/PermissionsService.js";
-import { PERMISSION_TOPICS } from "../../permissions/service/topics.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
@@ -59,14 +54,14 @@ export type BackgroundStateServicesInitResult = {
 };
 
 export const initBackgroundStateServices = ({
-  bus,
+  messenger,
   accountCodecs,
   accountsService,
   settingsService,
   permissionsPort,
   options,
 }: {
-  bus: Messenger;
+  messenger: Messenger;
   accountCodecs: AccountCodecRegistry;
   accountsService: AccountsService;
   settingsService: SettingsService;
@@ -82,12 +77,12 @@ export const initBackgroundStateServices = ({
   const supportedChainSeed = (supportedChainsOptions.seed ?? []).map((seed) => seed.definition);
 
   const chainRpcService = new ChainRpcService({
-    messenger: bus.scope({ name: "chainRpc", publish: CHAIN_RPC_TOPICS }),
+    messenger,
     initialAccesses: [],
   });
 
   const accountSelectionService: AccountSelectionService = new StoreAccountSelectionService({
-    messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
+    messenger,
     accounts: accountsService,
     settings: settingsService,
     accountCodecs,
@@ -96,7 +91,7 @@ export const initBackgroundStateServices = ({
   let approvalExecutor: ApprovalExecutor | undefined;
 
   const approvalQueueService = new InMemoryApprovalQueueService({
-    messenger: bus.scope({ name: "approvals", publish: APPROVAL_TOPICS }),
+    messenger,
     ...(approvalOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: approvalOptions.autoRejectMessage }
       : {}),
@@ -106,13 +101,13 @@ export const initBackgroundStateServices = ({
   });
 
   const permissionsService = new PermissionsService({
-    messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
+    messenger,
     port: permissionsPort,
   });
   const permissionsReady = permissionsService.waitForHydration();
 
   const chainDefinitionsService = new InMemoryChainDefinitionsService({
-    messenger: bus.scope({ name: "chainDefinitions", publish: CHAIN_DEFINITIONS_TOPICS }),
+    messenger,
     port: supportedChainsOptions.port,
     seed: supportedChainSeed,
     ...(supportedChainsOptions.now ? { now: supportedChainsOptions.now } : {}),

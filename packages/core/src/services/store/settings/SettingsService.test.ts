@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createMessenger } from "../../../messenger/index.js";
 import type { SettingsRecord } from "../../../storage/records.js";
 import type { SettingsPort } from "./port.js";
 import { createSettingsService } from "./SettingsService.js";
@@ -17,16 +18,19 @@ const createInMemoryPort = () => {
   return { port, getRaw: () => record };
 };
 
+const createService = (params: { port: SettingsPort; now?: () => number }) =>
+  createSettingsService({ messenger: createMessenger(), ...params });
+
 describe("SettingsService", () => {
   it("returns null when settings are missing", async () => {
     const { port } = createInMemoryPort();
-    const service = createSettingsService({ port });
+    const service = createService({ port });
     expect(await service.get()).toBeNull();
   });
 
   it("upserts settings when missing", async () => {
     const { port } = createInMemoryPort();
-    const service = createSettingsService({ port, now: () => 123 });
+    const service = createService({ port, now: () => 123 });
 
     const next = await service.update({
       selectedAccountKeysByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
@@ -41,7 +45,7 @@ describe("SettingsService", () => {
 
   it("merges updates and preserves unset fields", async () => {
     const { port } = createInMemoryPort();
-    const service = createSettingsService({ port, now: () => 500 });
+    const service = createService({ port, now: () => 500 });
 
     const after = await service.update({
       selectedAccountKeysByNamespace: { eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
@@ -55,7 +59,7 @@ describe("SettingsService", () => {
 
   it("patches per-namespace selected account ids", async () => {
     const { port } = createInMemoryPort();
-    const service = createSettingsService({ port, now: () => 1 });
+    const service = createService({ port, now: () => 1 });
 
     const first = await service.update({
       selectedAccountKeysByNamespace: {
@@ -78,7 +82,7 @@ describe("SettingsService", () => {
 
   it("trims namespace keys on write", async () => {
     const { port } = createInMemoryPort();
-    const service = createSettingsService({ port, now: () => 10 });
+    const service = createService({ port, now: () => 10 });
 
     const first = await service.update({
       selectedAccountKeysByNamespace: { " eip155 ": "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },

@@ -1,7 +1,7 @@
+import type { Messenger } from "../../messenger/index.js";
 import { ChainNotAvailableError, ChainRpcAccessConfigError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
 import { areRpcEndpointsEqual, cloneChainRpcAccess, cloneNonEmptyRpcEndpoints } from "./config.js";
-import type { ChainRpcMessenger } from "./topics.js";
 import { CHAIN_RPC_ENDPOINTS_CHANGED, CHAIN_RPC_STATE_CHANGED } from "./topics.js";
 import type {
   ChainRpcAccess,
@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 
 type ChainRpcServiceOptions = {
-  messenger: ChainRpcMessenger;
+  messenger: Messenger;
   initialAccesses: readonly ChainRpcAccess[];
 };
 
@@ -34,7 +34,7 @@ const buildAccessMap = (accesses: readonly ChainRpcAccess[]) => {
 };
 
 export class ChainRpcService implements ChainRpcReader, ChainRpcAccessUpdater {
-  #messenger: ChainRpcMessenger;
+  #messenger: Messenger;
   #accessByChainRef = new Map<ChainRef, ChainRpcAccess>();
 
   constructor({ messenger, initialAccesses }: ChainRpcServiceOptions) {
@@ -101,7 +101,7 @@ export class ChainRpcService implements ChainRpcReader, ChainRpcAccessUpdater {
     this.#publishState();
 
     for (const chainRef of sortChainRefs(Array.from(changedChainRefs))) {
-      this.#messenger.publish(CHAIN_RPC_ENDPOINTS_CHANGED, { chainRef }, { force: true });
+      this.#messenger.publish(CHAIN_RPC_ENDPOINTS_CHANGED, { chainRef });
     }
   }
 

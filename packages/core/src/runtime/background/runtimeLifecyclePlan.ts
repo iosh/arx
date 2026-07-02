@@ -1,4 +1,3 @@
-import type { Messenger } from "../../messenger/Messenger.js";
 import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
 import type { ChainRpcBootstrap } from "./chainRpcBootstrap.js";
@@ -58,7 +57,6 @@ export const createBackgroundRuntimeLifecycle = ({
   transactionRestartRecovery,
   chainRpcBootstrap,
   sessionLayer,
-  bus,
   logger,
 }: {
   runtimeLifecycle: RuntimeLifecycle;
@@ -71,7 +69,6 @@ export const createBackgroundRuntimeLifecycle = ({
   transactionRestartRecovery?: "run" | "skip";
   chainRpcBootstrap: ChainRpcBootstrap;
   sessionLayer: SessionLayerResult;
-  bus: Messenger;
   logger: (message: string, error?: unknown) => void;
 }): BackgroundLifecycleHandle => {
   const coreReadyPlugin: RuntimePlugin = {
@@ -152,11 +149,6 @@ export const createBackgroundRuntimeLifecycle = ({
     },
   };
 
-  const busPlugin: RuntimePlugin = {
-    name: "messenger",
-    destroy: () => bus.clear(),
-  };
-
   const initializeOrder =
     transactionRestartRecovery === "skip"
       ? ([coreReadyPlugin, transactionMonitoringPlugin, chainRpcBootstrapPlugin] as const)
@@ -164,7 +156,7 @@ export const createBackgroundRuntimeLifecycle = ({
   const hydrateOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [chainRpcBootstrapPlugin] as const;
   const startOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
-  const destroyOrder = [sessionPlugin, accountSelectionServicePlugin, busPlugin] as const;
+  const destroyOrder = [sessionPlugin, accountSelectionServicePlugin] as const;
 
   return {
     initialize: async () =>

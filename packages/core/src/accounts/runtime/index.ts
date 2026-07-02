@@ -1,5 +1,5 @@
 export { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
-export { ACCOUNTS_STATE_CHANGED, ACCOUNTS_TOPICS } from "./topics.js";
+export { ACCOUNTS_STATE_CHANGED } from "./topics.js";
 export type {
   AccountAddress,
   AccountSelectionService,

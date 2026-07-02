@@ -1,3 +1,4 @@
+import type { Messenger } from "../../messenger/index.js";
 import { createAccountsService } from "../../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
@@ -32,6 +33,7 @@ export type RuntimeStoreServices = {
 };
 
 export const initRuntimeStoreServices = ({
+  messenger,
   settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
@@ -41,6 +43,7 @@ export const initRuntimeStoreServices = ({
   selectionDefaults,
   now,
 }: {
+  messenger: Messenger;
   settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
@@ -50,28 +53,32 @@ export const initRuntimeStoreServices = ({
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   now: () => number;
 }): RuntimeStoreServices => {
-  const settingsService = createSettingsService({ port: settingsPort, now });
+  const settingsService = createSettingsService({ messenger, port: settingsPort, now });
 
   const walletChainSelection = createWalletChainSelectionService({
+    messenger,
     port: walletChainSelectionPort,
     defaults: selectionDefaults,
     now,
   });
   const providerChainSelection = createProviderChainSelectionService({
+    messenger,
     port: providerChainSelectionPort,
     now,
   });
   const chainRpcDefaultEndpoints = createChainRpcDefaultEndpointsService({
+    messenger,
     port: chainRpcDefaultEndpointsPort,
     now,
   });
   const chainRpcEndpointOverrides = createChainRpcEndpointOverridesService({
+    messenger,
     port: chainRpcEndpointOverridesPort,
     now,
   });
 
-  const accountsStore = createAccountsService({ port: ports.accounts });
-  const keyringMetas = createKeyringMetasService({ port: ports.keyringMetas });
+  const accountsStore = createAccountsService({ messenger, port: ports.accounts });
+  const keyringMetas = createKeyringMetasService({ messenger, port: ports.keyringMetas });
 
   return {
     settingsService,

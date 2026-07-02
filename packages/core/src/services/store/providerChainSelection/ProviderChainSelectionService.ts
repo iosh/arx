@@ -1,17 +1,15 @@
 import { assertNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
+import type { Messenger } from "../../../messenger/index.js";
 import type { ProviderChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
-import { createSignal } from "../_shared/signal.js";
 import { ProviderChainSelectionInvalidKeyError } from "./errors.js";
 import type { ProviderChainSelectionPort } from "./port.js";
-import type {
-  ProviderChainSelectionChangedPayload,
-  ProviderChainSelectionKey,
-  ProviderChainSelectionService,
-} from "./types.js";
+import { PROVIDER_CHAIN_SELECTION_STORE_CHANGED } from "./topics.js";
+import type { ProviderChainSelectionKey, ProviderChainSelectionService } from "./types.js";
 
 export type CreateProviderChainSelectionServiceOptions = {
+  messenger: Messenger;
   port: ProviderChainSelectionPort;
   now?: () => number;
 };
@@ -39,11 +37,11 @@ const cloneRecord = (record: ProviderChainSelectionRecord): ProviderChainSelecti
 });
 
 export const createProviderChainSelectionService = ({
+  messenger,
   port,
   now,
 }: CreateProviderChainSelectionServiceOptions): ProviderChainSelectionService => {
   const clock = now ?? Date.now;
-  const changed = createSignal<ProviderChainSelectionChangedPayload>();
   const run = createSerialQueue();
   const cache = new Map<string, Map<string, ProviderChainSelectionRecord>>();
 
@@ -126,7 +124,7 @@ export const createProviderChainSelectionService = ({
 
       await port.upsert(next);
       cacheRecord(next);
-      changed.emit({
+      messenger.publish(PROVIDER_CHAIN_SELECTION_STORE_CHANGED, {
         ...key,
         previous: previous ? cloneRecord(previous) : null,
         next: cloneRecord(next),
@@ -145,7 +143,7 @@ export const createProviderChainSelectionService = ({
       }
 
       await port.remove(key);
-      changed.emit({
+      messenger.publish(PROVIDER_CHAIN_SELECTION_STORE_CHANGED, {
         ...key,
         previous: cloneRecord(previous),
         next: null,
@@ -154,7 +152,7 @@ export const createProviderChainSelectionService = ({
   };
 
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(PROVIDER_CHAIN_SELECTION_STORE_CHANGED, handler),
     loadAll,
     get,
     getSnapshot: readCached,

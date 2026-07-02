@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Messenger } from "../../../messenger/Messenger.js";
+import { createMessenger } from "../../../messenger/index.js";
 import {
   CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   type ChainDefinitionEntity,
@@ -9,7 +9,6 @@ import { getChainRefNamespace } from "../../caip.js";
 import type { ChainDefinition } from "../../definition.js";
 import type { ChainDefinitionsPort } from "../../index.js";
 import { InMemoryChainDefinitionsService } from "./ChainDefinitionsService.js";
-import { CHAIN_DEFINITIONS_TOPICS } from "./topics.js";
 import type { ChainDefinitionsState, ChainDefinitionsUpdate } from "./types.js";
 
 const createEip155Definition = (reference: number, overrides: Partial<ChainDefinition> = {}): ChainDefinition => {
@@ -77,7 +76,7 @@ class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
 
 describe("InMemoryChainDefinitionsService", () => {
   it("reconciles builtin seed on startup and prunes stale builtin entries", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const messenger = createMessenger();
     const mainnet = createEip155Definition(1, { displayName: "Ethereum" });
     const optimism = createEip155Definition(10, { displayName: "Optimism" });
     const custom = createEip155Definition(8453, { displayName: "Base" });
@@ -118,7 +117,7 @@ describe("InMemoryChainDefinitionsService", () => {
   });
 
   it("upserts custom chains, preserves origin, and emits updates", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const messenger = createMessenger();
     const port = new MemoryChainDefinitionsPort();
     const chainDefinitions = new InMemoryChainDefinitionsService({ messenger, port, seed: [], now: () => 2_000 });
 
@@ -153,7 +152,7 @@ describe("InMemoryChainDefinitionsService", () => {
   });
 
   it("dedupes idempotent custom upserts", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const messenger = createMessenger();
     const port = new MemoryChainDefinitionsPort();
     const chainDefinitions = new InMemoryChainDefinitionsService({ messenger, port, seed: [], now: () => 1_000 });
 
@@ -176,7 +175,7 @@ describe("InMemoryChainDefinitionsService", () => {
   });
 
   it("returns noop for builtin-equivalent custom upserts and rejects builtin conflicts", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const messenger = createMessenger();
     const mainnet = createEip155Definition(1, { displayName: "Ethereum" });
     const chainDefinitions = new InMemoryChainDefinitionsService({
       messenger,
@@ -199,7 +198,7 @@ describe("InMemoryChainDefinitionsService", () => {
   });
 
   it("removes only custom chains", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const messenger = createMessenger();
     const mainnet = createEip155Definition(1);
     const base = createEip155Definition(8453);
     const port = new MemoryChainDefinitionsPort([

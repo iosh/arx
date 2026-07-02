@@ -1,5 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { JsonValue } from "../../error.js";
+import type { Unsubscribe } from "../../messenger/index.js";
 import type {
   JsonRpcParams,
   JsonRpcRequest,
@@ -7,7 +8,6 @@ import type {
   RpcProviderRequestContext,
 } from "../../rpc/index.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import type { Unsubscribe } from "../../services/store/_shared/signal.js";
 import type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 
 export type { ProviderRuntimeRequestScope } from "./providerRequests.js";

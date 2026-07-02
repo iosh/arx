@@ -1,15 +1,24 @@
+import type { Messenger } from "../../../messenger/index.js";
 import type { AccountKey, AccountRecord } from "../../../storage/records.js";
-import { createSignal } from "../_shared/signal.js";
 import type { AccountsPort } from "./port.js";
-import type { AccountsChangedPayload, AccountsService, ListAccountsParams } from "./types.js";
+import { ACCOUNTS_STORE_CHANGED } from "./topics.js";
+import type { AccountsService, ListAccountsParams } from "./types.js";
 
 export type CreateAccountsServiceOptions = {
+  messenger: Messenger;
   port: AccountsPort;
 };
 
-export const createAccountsService = ({ port }: CreateAccountsServiceOptions): AccountsService => {
-  const changed = createSignal<AccountsChangedPayload>();
+const areAccountRecordsEqual = (left: AccountRecord, right: AccountRecord): boolean =>
+  left.accountKey === right.accountKey &&
+  left.namespace === right.namespace &&
+  left.keyringId === right.keyringId &&
+  left.derivationIndex === right.derivationIndex &&
+  left.alias === right.alias &&
+  Boolean(left.hidden) === Boolean(right.hidden) &&
+  left.createdAt === right.createdAt;
 
+export const createAccountsService = ({ messenger, port }: CreateAccountsServiceOptions): AccountsService => {
   const get = async (accountKey: AccountKey) => {
     return await port.get(accountKey);
   };
@@ -24,18 +33,33 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     return filtered;
   };
   const upsert = async (record: AccountRecord) => {
+    const existing = await port.get(record.accountKey);
+    if (existing && areAccountRecordsEqual(existing, record)) {
+      return;
+    }
+
     await port.upsert(record);
-    changed.emit({ kind: "upsert", accountKey: record.accountKey });
+    messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "upsert", accountKey: record.accountKey });
   };
 
   const remove = async (accountKey: AccountKey) => {
+    const existing = await port.get(accountKey);
+    if (!existing) {
+      return;
+    }
+
     await port.remove(accountKey);
-    changed.emit({ kind: "remove", accountKey });
+    messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "remove", accountKey });
   };
 
   const removeByKeyringId = async (keyringId: AccountRecord["keyringId"]) => {
+    const accounts = await port.list();
+    if (!accounts.some((account) => account.keyringId === keyringId)) {
+      return;
+    }
+
     await port.removeByKeyringId(keyringId);
-    changed.emit({ kind: "removeByKeyringId", keyringId });
+    messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "removeByKeyringId", keyringId });
   };
 
   const setHidden = async (params: { accountKey: AccountKey; hidden: boolean }) => {
@@ -47,11 +71,15 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
       ...(params.hidden ? { hidden: true } : { hidden: undefined }),
     };
 
+    if (areAccountRecordsEqual(existing, next)) {
+      return;
+    }
+
     await port.upsert(next);
-    changed.emit({ kind: "setHidden", accountKey: next.accountKey });
+    messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "setHidden", accountKey: next.accountKey });
   };
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(ACCOUNTS_STORE_CHANGED, handler),
 
     get,
     list,

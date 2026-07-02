@@ -3,7 +3,7 @@ import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainDefinitionSeed } from "../../chains/definition.js";
 import type { RpcEndpoint } from "../../chains/metadata.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
-import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
+import { createMessenger, type Messenger } from "../../messenger/index.js";
 import {
   materializeNamespaceRuntimeSupport,
   type NamespaceRuntimeBindingsRegistry,
@@ -16,7 +16,7 @@ import {
 import type { RpcHandlerDeps } from "../../rpc/handlers/types.js";
 import type { RpcRegistry } from "../../rpc/index.js";
 import { type AccountSigningService, createAccountSigningService } from "../../services/runtime/accountSigning.js";
-import { ATTENTION_TOPICS, createAttentionService } from "../../services/runtime/attention/index.js";
+import { createAttentionService } from "../../services/runtime/attention/index.js";
 import { createChainActivationService } from "../../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createKeyringExportService, type KeyringExportService } from "../../services/runtime/keyringExport.js";
@@ -56,10 +56,6 @@ type StorageOptions = {
   logger?: (message: string, error?: unknown) => void;
 };
 
-type MessengerOptions = {
-  violationMode?: ViolationMode;
-};
-
 export type BackgroundTransactionOptions = {
   namespaces?: NamespaceTransactions;
 };
@@ -69,7 +65,7 @@ export type BackgroundAssemblyOptions = BackgroundStateServiceOptions & {
 };
 
 export type BackgroundBootstrapScope = {
-  bus: Messenger;
+  messenger: Messenger;
   rpcRegistry: RpcRegistry;
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   registeredNamespaces: ReadonlySet<string>;
@@ -125,7 +121,6 @@ const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLay
 export const createBackgroundBootstrapScope = ({
   rpcRegistry,
   namespaceBootstrap,
-  messengerOptions,
   storageOptions,
   approvalOptions,
   transactionOptions,
@@ -133,7 +128,6 @@ export const createBackgroundBootstrapScope = ({
 }: {
   rpcRegistry: RpcRegistry;
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
-  messengerOptions?: MessengerOptions;
   storageOptions?: StorageOptions;
   approvalOptions?: BackgroundAssemblyOptions["approvals"];
   transactionOptions?: BackgroundAssemblyOptions["transactions"];
@@ -142,11 +136,7 @@ export const createBackgroundBootstrapScope = ({
   registerRpcModules(rpcRegistry, namespaceBootstrap.rpcModules);
 
   const storageLogger = storageOptions?.logger ?? (() => {});
-  const bus = new Messenger({
-    violationMode: messengerOptions?.violationMode ?? "throw",
-    onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
-    onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
-  });
+  const messenger = createMessenger();
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const chainAdmission = buildRuntimeChainAdmission({
@@ -165,7 +155,7 @@ export const createBackgroundBootstrapScope = ({
   };
 
   return {
-    bus,
+    messenger,
     rpcRegistry,
     namespaceBootstrap,
     registeredNamespaces,
@@ -216,6 +206,7 @@ export const createBackgroundSessionScope = ({
     accountsStore,
     keyringMetas,
   } = initRuntimeStoreServices({
+    messenger: bootstrapScope.messenger,
     settingsPort,
     walletChainSelectionPort,
     providerChainSelectionPort,
@@ -227,7 +218,7 @@ export const createBackgroundSessionScope = ({
   });
 
   const stateServicesInit = initBackgroundStateServices({
-    bus: bootstrapScope.bus,
+    messenger: bootstrapScope.messenger,
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     accountsService: accountsStore,
     settingsService,
@@ -252,7 +243,7 @@ export const createBackgroundSessionScope = ({
   });
 
   const attention = createAttentionService({
-    messenger: bootstrapScope.bus.scope({ name: "attention", publish: ATTENTION_TOPICS }),
+    messenger: bootstrapScope.messenger,
     now: bootstrapScope.storageNow,
   });
 
@@ -260,7 +251,7 @@ export const createBackgroundSessionScope = ({
   const resolvedKeyringNamespaces = sessionOptions?.keyringNamespaces ?? namespaceSession.keyringNamespaces;
   const resolvedSessionOptions = extractSessionLayerOptions(sessionOptions);
   const sessionLayer = initSessionLayer({
-    bus: bootstrapScope.bus,
+    messenger: bootstrapScope.messenger,
     accountsStore,
     keyringMetas,
     keyringNamespaces: resolvedKeyringNamespaces,

@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ChainDefinitionSeed } from "../../chains/definition.js";
 import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../../chains/metadata.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
-import { CHAIN_RPC_TOPICS } from "../../chains/rpc/topics.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
-import { CHAIN_DEFINITIONS_TOPICS } from "../../chains/runtime/chainDefinitions/topics.js";
 import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
-import { Messenger } from "../../messenger/Messenger.js";
+import { createMessenger } from "../../messenger/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
 import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
@@ -70,9 +68,9 @@ const toDefaultEndpointRecord = (chain: TestChain, updatedAt = 10) => ({
 });
 
 const createChainRpcService = () => {
-  const bus = new Messenger();
+  const messenger = createMessenger();
   return new ChainRpcService({
-    messenger: bus.scope({ publish: CHAIN_RPC_TOPICS }),
+    messenger,
     initialAccesses: [],
   });
 };
@@ -84,9 +82,10 @@ const createSelectionService = (
     chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
   },
   now = () => 1_000,
-) => {
+): { port: MemoryWalletChainSelectionPort; service: ReturnType<typeof createWalletChainSelectionService> } => {
   const port = new MemoryWalletChainSelectionPort(seed);
   const service = createWalletChainSelectionService({
+    messenger: createMessenger(),
     port,
     defaults,
     now,
@@ -97,9 +96,13 @@ const createSelectionService = (
 const createChainRpcEndpointOverrides = (
   seed: ConstructorParameters<typeof MemoryChainRpcEndpointOverridesPort>[0] = [],
   now = () => 1_000,
-) => {
+): {
+  port: MemoryChainRpcEndpointOverridesPort;
+  service: ReturnType<typeof createChainRpcEndpointOverridesService>;
+} => {
   const port = new MemoryChainRpcEndpointOverridesPort(seed);
   const service = createChainRpcEndpointOverridesService({
+    messenger: createMessenger(),
     port,
     now,
   });
@@ -109,9 +112,13 @@ const createChainRpcEndpointOverrides = (
 const createChainRpcDefaultEndpoints = (
   seed: ConstructorParameters<typeof MemoryChainRpcDefaultEndpointsPort>[0] = [],
   now = () => 1_000,
-) => {
+): {
+  port: MemoryChainRpcDefaultEndpointsPort;
+  service: ReturnType<typeof createChainRpcDefaultEndpointsService>;
+} => {
   const port = new MemoryChainRpcDefaultEndpointsPort(seed);
   const service = createChainRpcDefaultEndpointsService({
+    messenger: createMessenger(),
     port,
     now,
   });
@@ -128,9 +135,9 @@ const toCustomChainDefinition = (chain: TestChain) => ({
 });
 
 const createSupportedChains = async (params: { builtin?: TestChain[]; custom?: TestChain[] }) => {
-  const bus = new Messenger();
+  const messenger = createMessenger();
   const chainDefinitions = new InMemoryChainDefinitionsService({
-    messenger: bus.scope({ publish: CHAIN_DEFINITIONS_TOPICS }),
+    messenger,
     port: new MemoryChainDefinitionsPort((params.custom ?? []).map(toCustomChainDefinition)),
     seed: (params.builtin ?? []).map((chain) => deriveChainDefinitionFromMetadata(chain)),
     now: () => 0,

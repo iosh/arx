@@ -20,6 +20,18 @@ const cloneState = (state: SessionLockState): SessionLockState => {
   };
 };
 
+const areSessionLockStatesEqual = (prev: SessionLockState, next: SessionLockState) => {
+  if (prev.status !== next.status) return false;
+  if (prev.autoLockDurationMs !== next.autoLockDurationMs) return false;
+  if (prev.nextAutoLockAt !== next.nextAutoLockAt) return false;
+
+  if (prev.status === "unlocked" && next.status === "unlocked") {
+    return prev.unlockedAt === next.unlockedAt;
+  }
+
+  return true;
+};
+
 const assertPositiveNumber = (value: number, label: string) => {
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(`${label} must be a positive number`);
@@ -46,6 +58,7 @@ export class InMemoryUnlockService implements UnlockService {
   #now: () => number;
   #setTimeout: typeof setTimeout;
   #clearTimeout: typeof clearTimeout;
+  #lastPublishedState: SessionLockState | null = null;
 
   constructor(options: UnlockServiceOptions) {
     this.#messenger = options.messenger;
@@ -206,7 +219,13 @@ export class InMemoryUnlockService implements UnlockService {
   }
 
   #publishState() {
-    this.#messenger.publish(UNLOCK_STATE_CHANGED, cloneState(this.#state));
+    const next = cloneState(this.#state);
+    if (this.#lastPublishedState && areSessionLockStatesEqual(this.#lastPublishedState, next)) {
+      return;
+    }
+
+    this.#lastPublishedState = cloneState(next);
+    this.#messenger.publish(UNLOCK_STATE_CHANGED, next);
   }
 
   #armAutoLockTimer(timeout: number, timestamp = this.#now()) {

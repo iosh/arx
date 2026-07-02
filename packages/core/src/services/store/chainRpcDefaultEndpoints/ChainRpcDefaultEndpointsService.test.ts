@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcEndpoint } from "../../../chains/metadata.js";
+import { createMessenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
 import { createChainRpcDefaultEndpointsService } from "./ChainRpcDefaultEndpointsService.js";
 import type { ChainRpcDefaultEndpointsPort } from "./port.js";
@@ -55,11 +56,13 @@ const createMemoryPort = (seed: ChainRpcDefaultEndpointsRecord[] = []): MemoryCh
 };
 
 const endpoint = (url: string): RpcEndpoint => ({ url, type: "public" });
+const createService = (params: { port: ChainRpcDefaultEndpointsPort; now?: () => number }) =>
+  createChainRpcDefaultEndpointsService({ messenger: createMessenger(), ...params });
 
 describe("ChainRpcDefaultEndpointsService", () => {
   it("persists default RPC endpoints and serves detached cached endpoints", async () => {
     const port = createMemoryPort();
-    const service = createChainRpcDefaultEndpointsService({ port, now: () => 1_000 });
+    const service = createService({ port, now: () => 1_000 });
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 
@@ -101,7 +104,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
       updatedAt: 200,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([mainnet, solana]);
-    const service = createChainRpcDefaultEndpointsService({ port, now: () => 1_000 });
+    const service = createService({ port, now: () => 1_000 });
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 
@@ -175,7 +178,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
       updatedAt: 100,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([record]);
-    const service = createChainRpcDefaultEndpointsService({ port, now: () => 1_000 });
+    const service = createService({ port, now: () => 1_000 });
     const listener = vi.fn();
     service.subscribeChanged(listener);
 

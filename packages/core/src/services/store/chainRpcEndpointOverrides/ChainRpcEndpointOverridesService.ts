@@ -1,30 +1,28 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { RpcEndpoint } from "../../../chains/metadata.js";
-import { assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
-import { createSignal } from "../_shared/signal.js";
 import type { ChainRpcEndpointOverridesPort } from "./port.js";
-import type { ChainRpcEndpointOverridesService } from "./types.js";
+import { CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED } from "./topics.js";
+import type { ChainRpcEndpointOverridesChangedPayload, ChainRpcEndpointOverridesService } from "./types.js";
 
 const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] =>
   structuredClone(rpcEndpoints) as RpcEndpoint[];
 
 export type CreateChainRpcEndpointOverridesServiceOptions = {
+  messenger: Messenger;
   port: ChainRpcEndpointOverridesPort;
   now?: () => number;
 };
 
 export const createChainRpcEndpointOverridesService = ({
+  messenger,
   port,
   now,
 }: CreateChainRpcEndpointOverridesServiceOptions): ChainRpcEndpointOverridesService => {
   const clock = now ?? Date.now;
-  const changed = createSignal<{
-    chainRef: ChainRef;
-    previous: ChainRpcEndpointOverrideRecord | null;
-    next: ChainRpcEndpointOverrideRecord | null;
-  }>();
   const run = createSerialQueue();
   const cache = new Map<ChainRef, ChainRpcEndpointOverrideRecord>();
 
@@ -68,6 +66,12 @@ export const createChainRpcEndpointOverridesService = ({
 
     return await run(async () => {
       const previous = await port.get(chainRef);
+      if (previous && areRpcEndpointsEqual(previous.rpcEndpoints, rpcEndpoints)) {
+        const previousRecord = toRecord(previous);
+        cache.set(chainRef, previousRecord);
+        return toRecord(previousRecord);
+      }
+
       const next: ChainRpcEndpointOverrideRecord = {
         chainRef,
         rpcEndpoints,
@@ -77,11 +81,12 @@ export const createChainRpcEndpointOverridesService = ({
       await port.upsert(next);
       const clonedNext = toRecord(next);
       cache.set(chainRef, clonedNext);
-      changed.emit({
+      const payload: ChainRpcEndpointOverridesChangedPayload = {
         chainRef,
         previous: previous ? toRecord(previous) : null,
         next: toRecord(clonedNext),
-      });
+      };
+      messenger.publish(CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED, payload);
       return toRecord(clonedNext);
     });
   };
@@ -96,7 +101,7 @@ export const createChainRpcEndpointOverridesService = ({
 
       await port.remove(chainRef);
       cache.delete(chainRef);
-      changed.emit({
+      messenger.publish(CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED, {
         chainRef,
         previous: toRecord(previous),
         next: null,
@@ -105,7 +110,7 @@ export const createChainRpcEndpointOverridesService = ({
   };
 
   return {
-    subscribeChanged: changed.subscribe,
+    subscribeChanged: (handler) => messenger.subscribe(CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED, handler),
     get,
     getAll,
     readEndpointOverride,

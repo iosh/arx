@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { Messenger } from "../../../messenger/Messenger.js";
+import { createMessenger } from "../../../messenger/index.js";
 import { InMemoryAttentionService } from "./InMemoryAttentionService.js";
-import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED, ATTENTION_TOPICS } from "./topics.js";
+import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED } from "./topics.js";
 
 const setup = (opts?: { maxQueueSize?: number }) => {
   let t = 1_000;
-  const messenger = new Messenger().scope({ publish: ATTENTION_TOPICS });
+  const messenger = createMessenger();
   const requested: unknown[] = [];
   const stateChanged: unknown[] = [];
   messenger.subscribe(ATTENTION_REQUESTED, (p) => requested.push(p));

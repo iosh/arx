@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { Messenger } from "../../../messenger/Messenger.js";
+import { createMessenger } from "../../../messenger/index.js";
 import { InMemoryUnlockService } from "./InMemoryUnlockService.js";
-import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_TOPICS, UNLOCK_UNLOCKED } from "./topics.js";
+import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_UNLOCKED } from "./topics.js";
 import type { SessionLockState, UnlockLockedPayload, UnlockUnlockedPayload } from "./types.js";
-
-const createMessenger = () => new Messenger().scope({ publish: UNLOCK_TOPICS });
 
 describe("InMemoryUnlockService", () => {
   it("unlocks the vault, emits events, and schedules auto lock", async () => {

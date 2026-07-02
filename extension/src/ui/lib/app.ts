@@ -1,8 +1,8 @@
-import { createInvokeClient, type InvokeConnectionStatus } from "@arx/core/invoke";
+import { createInvokeClient, createMethodApiProxy, type InvokeConnectionStatus } from "@arx/core/invoke";
 import {
-  createWalletApiClient,
   WALLET_INVALIDATION_EVENT,
   WALLET_TARGET,
+  type WalletApi,
   type WalletInvalidationEvent,
 } from "@arx/core/wallet";
 import { createHostApiClient, HOST_ENTRY_CHANGED_EVENT, HOST_TARGET, type UiEntryLaunchContext } from "@/lib/host";
@@ -25,7 +25,7 @@ const call = <TResult>(target: AppTarget, action: string, input?: unknown) => {
 };
 
 export const app = {
-  wallet: createWalletApiClient((action, input) => call(WALLET_TARGET, action, input)),
+  wallet: createMethodApiProxy<WalletApi>((action, input) => call(WALLET_TARGET, action, input)),
   host: createHostApiClient((action, input) => call(HOST_TARGET, action, input)),
   walletEvents: {
     subscribeInvalidation(listener: (event: WalletInvalidationEvent) => void) {

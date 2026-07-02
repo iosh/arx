@@ -38,7 +38,7 @@ import type {
 export type { Eip155TransactionDraftChange };
 
 export type UnlockSessionInput = { password: string };
-export type LockSessionInput = { reason?: "manual" | "timeout" | "blur" | "suspend" | "reload" };
+export type LockSessionInput = { reason?: "manual" | "timeout" | "suspend" | "reload" };
 export type SetAutoLockDurationInput = { durationMs: number };
 
 export type GenerateMnemonicInput = { wordCount?: 12 | 24 };

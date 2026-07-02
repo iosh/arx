@@ -11,7 +11,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./engine": "./src/engine/index.ts",
-    "./logger": "./src/utils/logger.ts",
     "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
     "./approvals": "./src/approvals/index.ts",
@@ -38,11 +37,9 @@
     "ox": "catalog:",
     "viem": "2.39.0",
     "zod": "4.4.3",
-    "debug": "4.4.3",
     "eventemitter3": "catalog:"
   },
   "devDependencies": {
-    "typescript": "catalog:",
-    "@types/debug": "4.1.12"
+    "typescript": "catalog:"
   }
 }

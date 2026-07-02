@@ -1,5 +1,4 @@
 import type { CoreProviderApi } from "@arx/core/engine";
-import { createLogger, extendLogger } from "@arx/core/logger";
 import {
   CHANNEL,
   type Envelope,
@@ -28,6 +27,8 @@ export type ProviderPortServer = {
   handleConnect(port: Runtime.Port): void;
 };
 
+const LOG_PREFIX = "[arx:bg:runtime:providerPort]";
+
 export const createProviderPortServer = ({
   extensionOrigin,
   getOrInitProvider,
@@ -35,9 +36,6 @@ export const createProviderPortServer = ({
   const messageHandlers = new Map<Runtime.Port, (message: unknown) => void>();
   const disconnectHandlers = new Map<Runtime.Port, () => void>();
   const subscriptions: Array<() => void> = [];
-
-  const runtimeLog = createLogger("bg:runtime");
-  const portLog = extendLogger(runtimeLog, "providerPort");
 
   let provider: CoreProviderApi | null = null;
   let providerPromise: Promise<CoreProviderApi> | null = null;
@@ -101,13 +99,7 @@ export const createProviderPortServer = ({
     try {
       port.postMessage(envelope);
       return true;
-    } catch (error) {
-      const origin = getPortOrigin(port, extensionOrigin);
-      portLog("postMessage failed", {
-        error,
-        envelopeType: envelope.type,
-        origin,
-      });
+    } catch {
       return false;
     }
   };
@@ -121,7 +113,7 @@ export const createProviderPortServer = ({
     try {
       activeProvider.deactivateConnectionScope(scope);
     } catch (error) {
-      portLog("failed to disconnect provider connection scope", {
+      console.warn(LOG_PREFIX, "failed to disconnect provider connection scope", {
         error,
         namespace: scope.namespace,
         origin: scope.origin,
@@ -153,8 +145,9 @@ export const createProviderPortServer = ({
         portId,
         sessionId,
       });
-    } catch (error) {
-      portLog(logReason, { error, origin, sessionId });
+    } catch {
+      // Request-scope cleanup is best-effort once a port is already being torn down.
+      void logReason;
     }
   };
 
@@ -186,7 +179,6 @@ export const createProviderPortServer = ({
   };
 
   const disconnectFinalizer = createProviderDisconnectFinalizer({
-    extensionOrigin,
     getProvider: getCachedProvider,
     getSessionIdForPort: (port) => providerPortSessions.readSessionId(port),
     getPendingRequestMap: (port) => providerPortSessions.readPendingRequestMap(port),
@@ -196,7 +188,6 @@ export const createProviderPortServer = ({
     detachPortFromConnection,
     removePortState: (port) => providerPortSessions.removePortState(port),
     cancelRequestScope: cancelRequestScopeForPort,
-    portLog,
   });
 
   const postEnvelopeOrDrop = (port: Runtime.Port, envelope: Envelope, reason: string) => {
@@ -312,7 +303,7 @@ export const createProviderPortServer = ({
         started = true;
       } catch (error) {
         clearSubscriptions();
-        portLog("failed to start provider port server", { error });
+        console.error(LOG_PREFIX, "failed to start provider port server", { error });
       } finally {
         startTask = null;
       }
@@ -330,7 +321,6 @@ export const createProviderPortServer = ({
     providerPortSessions.registerConnectedPort(port, {
       origin,
     });
-    portLog("connect", { origin, portName: port.name, total: providerPortSessions.countConnectedPorts() });
 
     const handleMessage = (message: unknown) => {
       const envelope = parseProviderEnvelope(message);

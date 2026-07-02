@@ -6,8 +6,6 @@ export {
   toCanonicalAddressFromAccountKey,
   toDisplayAddressFromAccountKey,
 } from "./accountKey.js";
-export type { AccountRef } from "./accountRef.js";
-export { toAccountRefFromAccountKey } from "./accountRef.js";
 export type { AccountCodec, CanonicalAddress } from "./codec.js";
 export {
   AccountCodecRegistry,

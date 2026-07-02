@@ -46,6 +46,5 @@ export {
   KEYRING_VAULT_ENTRY_VERSION,
   VAULT_META_SNAPSHOT_VERSION,
 } from "./storage/index.js";
-export * from "./utils/logger.js";
 export * from "./vault/index.js";
 export * from "./wallet/index.js";

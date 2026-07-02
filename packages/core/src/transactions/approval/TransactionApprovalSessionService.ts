@@ -11,7 +11,6 @@ import type {
 } from "../namespace/types.js";
 import { TransactionResourceLock } from "../TransactionResourceLock.js";
 import type { TransactionPrepared, TransactionRequest } from "../types.js";
-import { createMissingNamespaceTransactionError } from "../utils.js";
 import { TransactionApprovalSessionInvariantError, TransactionApprovalSessionNotFoundError } from "./errors.js";
 import type {
   ApproveTransactionApprovalSessionInput,
@@ -635,7 +634,9 @@ export class TransactionApprovalSessionService {
   #requireProposal(namespace: string): NamespaceTransactionProposal {
     const proposal = this.#namespaces.require(namespace).proposal;
     if (!proposal) {
-      throw createMissingNamespaceTransactionError(namespace);
+      const error = new Error(`No namespace transaction registered for namespace ${namespace}`);
+      error.name = "NamespaceTransactionMissingError";
+      throw error;
     }
     return proposal;
   }

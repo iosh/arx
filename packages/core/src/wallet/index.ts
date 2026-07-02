@@ -43,8 +43,6 @@ export {
   WALLET_TARGET,
   WALLET_UI_CALLER_ORIGIN,
 } from "./api.js";
-export type { WalletApiCall } from "./apiClient.js";
-export { createWalletApiClient } from "./apiClient.js";
 export type { WalletMethodExecutor } from "./createWalletApi.js";
 export {
   createWalletApi,

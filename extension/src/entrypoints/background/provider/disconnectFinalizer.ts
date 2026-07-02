@@ -2,12 +2,10 @@ import type { WalletProvider } from "@arx/core/engine";
 import { type ProviderRuntimeRpcError, TransportDisconnectedError } from "@arx/core/runtime";
 import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
-import { getPortOrigin } from "../origin";
 import type { ProviderConnectionScope } from "./providerPortConnections";
 import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
-  extensionOrigin: string;
   getProvider: () => WalletProvider | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
@@ -20,12 +18,10 @@ type ProviderDisconnectFinalizerDeps = {
   } | null;
   removePortState: (port: Runtime.Port) => void;
   cancelRequestScope: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
-  portLog: (message: string, details?: Record<string, unknown>) => void;
 };
 
 export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinalizerDeps) => {
   const {
-    extensionOrigin,
     getProvider,
     getSessionIdForPort,
     getPendingRequestMap,
@@ -35,7 +31,6 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     detachPortFromConnection,
     removePortState,
     cancelRequestScope,
-    portLog,
   } = deps;
 
   const encodeDisconnectError = (overrideError?: ProviderRuntimeRpcError): ProviderRuntimeRpcError => {
@@ -106,13 +101,12 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
 
     try {
       rejectPendingWithDisconnectForSession(port, sessionId);
-    } catch (error) {
-      const origin = getPortOrigin(port, extensionOrigin);
-      portLog("session rotation cleanup error", { origin, error, sessionId });
+    } catch {
+      // The port is already rotating; pending replies are best-effort.
     }
   };
 
-  const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
+  const dropStalePort = (port: Runtime.Port, _reason: string, _error?: unknown) => {
     const sessionId = getSessionIdForPort(port);
     if (sessionId) {
       void cancelRequestScope(port, sessionId, "failed to expire request scope on stale port");
@@ -120,9 +114,6 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
 
     cleanupPortState(port);
     disconnectPort(port);
-
-    const origin = getPortOrigin(port, extensionOrigin);
-    portLog("drop stale port", { origin, reason, error });
   };
 
   const finalizePortDisconnect = (port: Runtime.Port) => {
@@ -133,15 +124,11 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
 
     try {
       rejectPendingWithDisconnect(port);
-    } catch (error) {
-      const origin = getPortOrigin(port, extensionOrigin);
-      portLog("disconnect cleanup error", { origin, error });
+    } catch {
+      // The port is already disconnected; pending replies are best-effort.
     } finally {
       cleanupPortState(port);
     }
-
-    const origin = getPortOrigin(port, extensionOrigin);
-    portLog("disconnect", { origin });
   };
 
   const broadcastDisconnectForPorts = (ports: Runtime.Port[]) => {

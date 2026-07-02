@@ -9,19 +9,13 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
-const {
-  createArxWalletRuntimeMock,
-  createCoreRuntimeFromArxWalletRuntimeMock,
-  getExtensionStorageMock,
-  disableDebugNamespacesMock,
-  enableDebugNamespacesMock,
-} = vi.hoisted(() => ({
-  createArxWalletRuntimeMock: vi.fn(),
-  createCoreRuntimeFromArxWalletRuntimeMock: vi.fn(),
-  getExtensionStorageMock: vi.fn(),
-  disableDebugNamespacesMock: vi.fn(),
-  enableDebugNamespacesMock: vi.fn(),
-}));
+const { createArxWalletRuntimeMock, createCoreRuntimeFromArxWalletRuntimeMock, getExtensionStorageMock } = vi.hoisted(
+  () => ({
+    createArxWalletRuntimeMock: vi.fn(),
+    createCoreRuntimeFromArxWalletRuntimeMock: vi.fn(),
+    getExtensionStorageMock: vi.fn(),
+  }),
+);
 
 const { installedNamespaces } = vi.hoisted(() => ({
   installedNamespaces: {
@@ -42,13 +36,6 @@ vi.mock("@/platform/namespaces/installed", () => ({
 
 vi.mock("@/platform/storage", () => ({
   getExtensionStorage: getExtensionStorageMock,
-}));
-
-vi.mock("@arx/core/logger", () => ({
-  createLogger: () => vi.fn(),
-  extendLogger: () => vi.fn(),
-  disableDebugNamespaces: disableDebugNamespacesMock,
-  enableDebugNamespaces: enableDebugNamespacesMock,
 }));
 
 vi.mock("webextension-polyfill", () => ({

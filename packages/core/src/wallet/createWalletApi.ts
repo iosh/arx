@@ -1,6 +1,5 @@
-import { createMethodExecutor, type MethodExecutor } from "../invoke/methods.js";
+import { createMethodApiProxy, createMethodExecutor, type MethodCall, type MethodExecutor } from "../invoke/methods.js";
 import type { WalletApi } from "./api.js";
-import { createWalletApiClient, type WalletApiCall } from "./apiClient.js";
 import type { WalletApiContext } from "./context.js";
 import { walletMethodHandlers } from "./methodHandlers.js";
 
@@ -14,10 +13,10 @@ export const createWalletMethodExecutor = (context: WalletApiContext): WalletMet
 };
 
 export const createWalletApiFromExecutor = (executor: MethodExecutor): WalletApi => {
-  const call: WalletApiCall = async <TResult>(path: string, input?: unknown): Promise<TResult> => {
+  const call: MethodCall = async <TResult>(path: string, input?: unknown): Promise<TResult> => {
     return (await executor.executePath(path, input)) as TResult;
   };
-  return createWalletApiClient(call);
+  return createMethodApiProxy<WalletApi>(call);
 };
 
 export const createWalletApi = (context: WalletApiContext): WalletApi => {

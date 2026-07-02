@@ -1,4 +1,3 @@
-import { createLogger } from "@arx/core/logger";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { UI_CHANNEL } from "@/lib/host";
@@ -15,7 +14,6 @@ export type BackgroundRoot = {
 };
 
 export const createBackgroundRoot = (): BackgroundRoot => {
-  const rootLog = createLogger("bg:root");
   const extensionOrigin = getExtensionOrigin();
   const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
   const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
@@ -68,9 +66,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       return;
     }
 
-    void uiEntries.openOnboardingTab("install").catch((error) => {
-      rootLog("failed to open onboarding tab on install", error);
-    });
+    void uiEntries.openOnboardingTab("install").catch(() => {});
   };
 
   const handleConnect = (port: Runtime.Port) => {
@@ -96,7 +92,6 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     }
 
     initializePromise = (async () => {
-      runtimeHost.applyDebugNamespacesFromEnv();
       attachBrowserListeners();
 
       try {

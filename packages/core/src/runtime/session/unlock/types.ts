@@ -2,7 +2,7 @@ import type { Unsubscribe } from "../../../messenger/topic.js";
 import type { UnlockVaultParams, VaultStatus } from "../../../vault/types.js";
 import type { UnlockMessenger } from "./topics.js";
 
-export type UnlockReason = "manual" | "timeout" | "blur" | "suspend" | "reload";
+export type UnlockReason = "manual" | "timeout" | "suspend" | "reload";
 
 export type UninitializedSessionLockState = {
   status: "uninitialized";

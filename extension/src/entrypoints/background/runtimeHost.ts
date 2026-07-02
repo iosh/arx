@@ -5,7 +5,6 @@ import {
   createCoreRuntimeFromArxWalletRuntime,
 } from "@arx/core/engine";
 import type { MethodExecutor } from "@arx/core/invoke";
-import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import {
   type ApprovalDetail,
   type ApprovalListEntry,
@@ -13,7 +12,6 @@ import {
   type WalletApiAttentionSnapshot,
   type WalletInvalidationEvent,
 } from "@arx/core/wallet";
-import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
@@ -31,7 +29,6 @@ export type BackgroundRuntimeHost = {
   subscribeWalletInvalidation: (listener: (event: WalletInvalidationEvent) => void) => Promise<() => void>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
-  applyDebugNamespacesFromEnv: () => void;
 };
 
 export type BackgroundUnlockAttentionRequestedPayload = WalletApiAttentionSnapshot["queue"][number] & {
@@ -54,21 +51,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let provider: CoreProviderApi | null = null;
   let walletMethodExecutor: MethodExecutor | null = null;
   let runtimeGeneration = 0;
-
-  const runtimeLog = createLogger("bg:runtime");
-  const hostLog = extendLogger(runtimeLog, "host");
-
-  const applyDebugNamespacesFromEnv = () => {
-    const raw: unknown = (import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.VITE_ARX_DEBUG_NAMESPACES;
-    const namespaces = typeof raw === "string" ? raw.trim() : "";
-
-    if (!namespaces) {
-      disableDebugNamespaces();
-      return;
-    }
-
-    enableDebugNamespaces(namespaces);
-  };
 
   const initializeRuntime = async () => {
     await getOrInitRuntimeCache();
@@ -105,7 +87,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       const next: BackgroundRuntimeCache = { core, runtime };
 
       runtimeCache = next;
-      hostLog("runtime initialized", { runtimeId: browser.runtime.id });
       return next;
     })();
 
@@ -125,16 +106,11 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     if (walletMethodExecutor) {
       return walletMethodExecutor;
     }
-
-    try {
-      const active = await getOrInitRuntimeCache();
-      walletMethodExecutor = active.runtime.createWalletMethodExecutor({
-        origin: WALLET_UI_CALLER_ORIGIN,
-      });
-      return walletMethodExecutor;
-    } catch (error) {
-      throw error;
-    }
+    const active = await getOrInitRuntimeCache();
+    walletMethodExecutor = active.runtime.createWalletMethodExecutor({
+      origin: WALLET_UI_CALLER_ORIGIN,
+    });
+    return walletMethodExecutor;
   };
 
   const subscribeWalletInvalidation = async (listener: (event: WalletInvalidationEvent) => void) => {
@@ -230,6 +206,5 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     subscribeWalletInvalidation,
     getOrInitUiEntryAccess,
     shutdown,
-    applyDebugNamespacesFromEnv,
   };
 };

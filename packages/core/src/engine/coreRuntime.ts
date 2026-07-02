@@ -13,12 +13,10 @@ import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionS
 
 export type CoreUnsubscribe = () => void;
 
-export type CoreLogger = (message: string, error?: unknown) => void;
-
 export type CoreRuntimeEnvironment = Readonly<{
   now?: () => number;
   createId?: () => string;
-  logger?: CoreLogger;
+  logger?: (message: string, error?: unknown) => void;
 }>;
 
 export type CoreRuntimeBootOptions = Readonly<{

@@ -1,7 +1,6 @@
 import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../error.js";
-import { createLogger, extendLogger } from "../utils/logger.js";
 import type { ChainRpcClientPool, RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
@@ -48,9 +47,6 @@ type RpcExecutorWithHint = RpcExecutorBaseArgs & {
 };
 
 type RpcExecutorArgs = RpcExecutorWithInvocation | RpcExecutorWithHint;
-
-const rpcLogger = createLogger("core:rpc");
-const passthroughLogger = extendLogger(rpcLogger, "passthrough");
 
 const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: unknown; data?: unknown } => {
   if (!value || typeof value !== "object") return false;
@@ -164,13 +160,6 @@ export const createRpcMethodExecutor = ({
     namespace: Namespace;
     chainRef: ChainRef;
   }) => {
-    const logMeta = {
-      namespace: args.namespace,
-      chainRef: args.chainRef,
-      method: args.request.method,
-      origin: args.origin ?? "unknown://",
-    };
-
     try {
       const client = chainRpcClientPool.getClient(args.namespace, args.chainRef);
       const rpcPayload: RpcTransportRequest = {
@@ -180,19 +169,9 @@ export const createRpcMethodExecutor = ({
       if (args.request.params !== undefined) {
         rpcPayload.params = args.request.params;
       }
-      passthroughLogger("request", { ...logMeta, params: args.request.params ?? [] });
       const result = await client.request(rpcPayload);
-      passthroughLogger("response", { ...logMeta });
       return result;
     } catch (error) {
-      const errorSummary = isJsonRpcErrorLike(error)
-        ? {
-            code: (error as { code?: number | string }).code,
-            message: (error as { message?: string }).message ?? "RPC error",
-          }
-        : { message: (error as Error)?.message ?? String(error) };
-      passthroughLogger("error", { ...logMeta, error: errorSummary });
-
       const sanitized = sanitizeNodeRpcError(error);
       if (sanitized) throw sanitized;
       if (isArxBaseError(error)) throw error;

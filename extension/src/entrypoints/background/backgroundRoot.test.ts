@@ -50,10 +50,6 @@ vi.mock("./uiPort", () => ({
   createBackgroundUiPort: createBackgroundUiPortMock,
 }));
 
-vi.mock("@arx/core/logger", () => ({
-  createLogger: () => vi.fn(),
-}));
-
 vi.mock("webextension-polyfill", () => ({
   default: {
     runtime: {
@@ -111,7 +107,6 @@ describe("backgroundRoot", () => {
     });
 
     createBackgroundRuntimeHostMock.mockReturnValue({
-      applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn(async () => {
         events.push("boot");
       }),
@@ -142,7 +137,6 @@ describe("backgroundRoot", () => {
 
   it("routes UI ports through the shared UI port adapter", async () => {
     createBackgroundRuntimeHostMock.mockReturnValue({
-      applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn(async () => {}),
       getOrInitProvider: vi.fn(),
       getOrInitWalletMethodExecutor: vi.fn(),
@@ -171,7 +165,6 @@ describe("backgroundRoot", () => {
 
   it("detaches browser listeners after a failed boot and allows retry", async () => {
     const runtimeHost = {
-      applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
       getOrInitProvider: vi.fn(),
       getOrInitWalletMethodExecutor: vi.fn(),

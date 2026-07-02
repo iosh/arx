@@ -73,8 +73,8 @@ export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiEn
   };
 
   const notificationActivator = createPopupActivator({ browser, popupPath: entrypoints.NOTIFICATION });
-  const openNotificationPopup = async (ctx?: PopupOpenContext): Promise<PopupOpenResult> => {
-    return await notificationActivator.open(ctx);
+  const openNotificationPopup = async (_ctx?: PopupOpenContext): Promise<PopupOpenResult> => {
+    return await notificationActivator.open();
   };
 
   const trackedWindows = new Map<number, (removedId: number) => void>();

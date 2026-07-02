@@ -199,7 +199,7 @@ export const createInvokeClient = ({
       return;
     }
 
-    if (!message || message.kind === "ready") {
+    if (!message) {
       return;
     }
 

@@ -41,7 +41,7 @@ export type InvokeReady = {
   kind: "ready";
 };
 
-export type InvokeMessage = InvokeResult | InvokeFailure | InvokeEvent | InvokeReady;
+export type InvokeMessage = InvokeResult | InvokeFailure | InvokeEvent;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -91,7 +91,7 @@ export const readInvokeMessage = (value: unknown): InvokeMessage | null => {
   }
 
   if (value.kind === "ready") {
-    return { kind: "ready" };
+    return null;
   }
 
   if (value.kind === "result") {

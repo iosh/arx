@@ -12,7 +12,6 @@ import type {
   Eip155UnsignedTransaction,
   Eip155UnsignedTransactionDraft,
 } from "./unsignedTransaction.js";
-import { pickDefined } from "./utils/helpers.js";
 import { readErrorMessage } from "./utils/validation.js";
 
 type PrepareTransactionDeps = {
@@ -97,11 +96,15 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     if (fieldResult) return fieldResult;
     const fieldPatch = fields.patch;
 
-    const payloadFeeInputs = pickDefined(fieldPatch.payloadValues, [
-      "gasPrice",
-      "maxFeePerGas",
-      "maxPriorityFeePerGas",
-    ] as const);
+    const payloadFeeInputs = {
+      ...(fieldPatch.payloadValues.gasPrice !== undefined ? { gasPrice: fieldPatch.payloadValues.gasPrice } : {}),
+      ...(fieldPatch.payloadValues.maxFeePerGas !== undefined
+        ? { maxFeePerGas: fieldPatch.payloadValues.maxFeePerGas }
+        : {}),
+      ...(fieldPatch.payloadValues.maxPriorityFeePerGas !== undefined
+        ? { maxPriorityFeePerGas: fieldPatch.payloadValues.maxPriorityFeePerGas }
+        : {}),
+    };
 
     let rpc: Eip155RpcClient | null = null;
     try {

@@ -1,7 +1,6 @@
 export type { WalletApi } from "../wallet/index.js";
 export type { ApprovalDetail } from "../wallet/types.js";
 export type {
-  CoreLogger,
   CoreProviderApi,
   CoreRuntime,
   CoreRuntimeBootOptions,

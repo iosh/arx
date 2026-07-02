@@ -1,5 +1,4 @@
 import { getApprovalType } from "@arx/core/approvals";
-import { createLogger, extendLogger } from "@arx/core/logger";
 import type { ApprovalListEntry } from "@arx/core/wallet";
 import type { HostMethods, UiEntryBootstrap, UiEntryLaunchContext } from "@/lib/host";
 import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
@@ -48,13 +47,13 @@ const toOnboardingEntryReason = (reason: string): UiEntryReason => {
   return "onboarding_required";
 };
 
+const LOG_PREFIX = "[arx:bg:ui:entries]";
+
 export const createUiEntryCoordinator = ({
   runtimeHost,
   platform,
   onEntryChanged,
 }: UiEntryCoordinatorDeps): UiEntryCoordinator => {
-  const log = createLogger("bg:ui");
-  const entryLog = extendLogger(log, "entries");
   const subscriptions: Array<() => void> = [];
   const trackedWindowIds = new Set<number>();
   const approvalWindowTracker = createApprovalWindowTracker();
@@ -76,8 +75,8 @@ export const createUiEntryCoordinator = ({
   const publishEntryChange = (entry: UiEntryLaunchContext) => {
     try {
       onEntryChanged?.(entry);
-    } catch (error) {
-      entryLog("failed to publish entry change", { entry, error });
+    } catch {
+      // UI entry broadcasts are opportunistic; attached views will re-read bootstrap state.
     }
   };
 
@@ -147,8 +146,8 @@ export const createUiEntryCoordinator = ({
       approvalIds.map(async (approvalId) => {
         try {
           await uiEntryAccess.dismissApproval({ approvalId });
-        } catch (error) {
-          entryLog("failed to dismiss approval", { approvalId, error });
+        } catch {
+          // Window-close dismissal is best-effort; the approval queue remains the source of truth.
         }
       }),
     );
@@ -176,14 +175,6 @@ export const createUiEntryCoordinator = ({
     uiEntryAccess: BackgroundUiEntryAccess,
     request: BackgroundUnlockAttentionRequestedPayload,
   ) => {
-    entryLog("event:attention:requested", {
-      reason: request.reason,
-      origin: request.origin,
-      method: request.method,
-      chainRef: request.chainRef,
-      namespace: request.namespace,
-    });
-
     setEntry(
       createUiEntryMetadata({
         environment: "notification",
@@ -213,7 +204,7 @@ export const createUiEntryCoordinator = ({
         ensureWindowTracked(uiEntryAccess, result.windowId);
       })
       .catch((error) => {
-        entryLog("failed to open notification window", {
+        console.warn(LOG_PREFIX, "failed to open notification window", {
           error,
           reason: request.reason,
           origin: request.origin,
@@ -262,7 +253,7 @@ export const createUiEntryCoordinator = ({
         approvalWindowTracker.assign({ windowId: result.windowId, approvalId: approval.approvalId });
       })
       .catch((error) => {
-        entryLog("failed to open notification window", {
+        console.warn(LOG_PREFIX, "failed to open notification window", {
           error,
           reason: "approval_created",
           origin: approval.origin,
@@ -275,7 +266,6 @@ export const createUiEntryCoordinator = ({
 
   const syncUnlockAttentionRequests = async (uiEntryAccess: BackgroundUiEntryAccess) => {
     if (!(await hasInitializedVault(uiEntryAccess))) {
-      entryLog("skip unlock attention sync (vault uninitialized)");
       return;
     }
 
@@ -318,13 +308,6 @@ export const createUiEntryCoordinator = ({
 
       seenProviderApprovalIds.add(approval.approvalId);
       if (!(await hasInitializedVault(uiEntryAccess))) {
-        entryLog("skip notification window (vault uninitialized)", {
-          reason: "approval_created",
-          origin: approval.origin,
-          method: getApprovalType(approval.kind),
-          chainRef: approval.chainRef,
-          namespace: approval.namespace,
-        });
         continue;
       }
 
@@ -363,32 +346,25 @@ export const createUiEntryCoordinator = ({
         subscriptions.push(
           uiEntryAccess.subscribeUnlockAttentionInvalidation(() => {
             void syncUnlockAttentionRequests(uiEntryAccess).catch((error) => {
-              entryLog("failed to sync unlock attention requests", error);
+              console.warn(LOG_PREFIX, "failed to sync unlock attention requests", error);
             });
           }),
         );
         subscriptions.push(
           uiEntryAccess.subscribeApprovalInvalidation(() => {
             void syncPendingApprovals(uiEntryAccess).catch((error) => {
-              entryLog("failed to sync pending approvals", error);
+              console.warn(LOG_PREFIX, "failed to sync pending approvals", error);
             });
           }),
         );
 
-        await syncPendingApprovals(uiEntryAccess).catch((error) => {
-          entryLog("failed to load initial pending approvals", error);
-          throw error;
-        });
-        await syncUnlockAttentionRequests(uiEntryAccess).catch((error) => {
-          entryLog("failed to load initial unlock attention requests", error);
-          throw error;
-        });
+        await syncPendingApprovals(uiEntryAccess);
+        await syncUnlockAttentionRequests(uiEntryAccess);
 
         started = true;
       } catch (error) {
         clearSubscriptions();
         clearWindowTracking();
-        entryLog("failed to start ui entry coordinator", error);
         throw error;
       }
     })().finally(() => {

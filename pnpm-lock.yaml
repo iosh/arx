@@ -141,9 +141,6 @@ importers:
       '@scure/bip39':
         specifier: 1.6.0
         version: 1.6.0
-      debug:
-        specifier: 4.4.3
-        version: 4.4.3
       eventemitter3:
         specifier: 'catalog:'
         version: 5.0.1
@@ -157,9 +154,6 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
-      '@types/debug':
-        specifier: 4.1.12
-        version: 4.1.12
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

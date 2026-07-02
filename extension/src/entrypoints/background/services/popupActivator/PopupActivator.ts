@@ -1,4 +1,3 @@
-import { createLogger } from "@arx/core/logger";
 import type browserDefault from "webextension-polyfill";
 import { ARX_UI_INNER_SIZE } from "@/ui/lib/uiWindow";
 
@@ -32,7 +31,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
     return resolvedBrowser;
   };
 
-  const log = createLogger("bg:popup");
   const now = deps.now ?? (() => Date.now());
   const cooldownMs = deps.cooldownMs ?? 500;
   const popupPath = deps.popupPath ?? "popup.html";
@@ -41,7 +39,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
   let cachedWindowId: number | null = null;
   let lastAttemptAt: number | null = null;
   let inFlight: Promise<PopupOpenResult> | null = null;
-  const open = (ctx: PopupOpenContext = {}): Promise<PopupOpenResult> => {
+  const open = (): Promise<PopupOpenResult> => {
     // Coalesce concurrent calls - only one execution in flight.
     if (inFlight) return inFlight;
 
@@ -51,7 +49,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
 
       // Debounce rapid calls within cooldown window.
       if (lastAttemptAt !== null && ts - lastAttemptAt < cooldownMs) {
-        log("open debounced", { cooldownMs, ...ctx });
         return cachedWindowId === null
           ? { activationPath: "debounced", debounced: true }
           : { activationPath: "debounced", windowId: cachedWindowId, debounced: true };
@@ -79,7 +76,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
       };
 
       if (cachedWindowId !== null && (await focusWindow(cachedWindowId))) {
-        log("open focused (cached)", { windowId: cachedWindowId, ...ctx });
         return { activationPath: "focus", windowId: cachedWindowId };
       }
 
@@ -93,7 +89,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
           if (win?.tabs?.some((tab) => isSamePopup(tab?.url)) && win?.id) {
             cachedWindowId = win.id;
             await browser.windows.update(win.id, { focused: true });
-            log("open focused (scanned)", { windowId: win.id, ...ctx });
             return { activationPath: "focus", windowId: win.id };
           }
         }
@@ -108,7 +103,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
       });
 
       cachedWindowId = created?.id ?? null;
-      log("open created", { windowId: created?.id, size, ...ctx });
       return created?.id ? { activationPath: "create", windowId: created.id } : { activationPath: "create" };
     })().finally(() => {
       inFlight = null;

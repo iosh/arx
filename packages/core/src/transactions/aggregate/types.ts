@@ -61,7 +61,7 @@ export type TransactionRecord = {
   origin: string;
   source: TransactionSource;
   requestId: string | null;
-  accountKey: string;
+  accountId: string;
   status: TransactionStatus;
   request: TransactionRequestSnapshot;
   approvedRequest: TransactionApprovedRequest | null;
@@ -111,7 +111,7 @@ export type CreateTransactionInput = {
   origin: string;
   source: TransactionSource;
   requestId?: string | null;
-  accountKey: string;
+  accountId: string;
   request: TransactionRequestSnapshot;
   replacement?: CreateTransactionReplacementInput | null;
 };

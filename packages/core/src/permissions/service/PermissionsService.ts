@@ -12,7 +12,7 @@ import {
   cloneOriginPermissionState,
   clonePermissionsState,
   mergeGrantedPermissionChainStates,
-  parsePermissionAccountKeysForNamespace,
+  parsePermissionAccountIdsForNamespace,
   parsePermissionChainRefForNamespace,
   parsePermissionNamespace,
 } from "./state.js";
@@ -28,7 +28,7 @@ import type {
   PermissionsWriter,
   RevokeChainAuthorizationOptions,
   RevokeNamespaceAuthorizationOptions,
-  SetChainAccountKeysOptions,
+  SetChainAccountIdsOptions,
 } from "./types.js";
 
 const sortStrings = <T extends string>(values: readonly T[]): T[] => {
@@ -82,7 +82,7 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
       origin,
       namespace,
       chainRef,
-      accountKeys: [...chain.accountKeys],
+      accountIds: [...chain.accountIds],
     };
   }
 
@@ -118,7 +118,7 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
     });
   }
 
-  async setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization> {
+  async setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization> {
     await this.#ready;
 
     return await this.#enqueueWrite(async () => {
@@ -134,9 +134,9 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
         throw new PermissionNotConnectedError();
       }
 
-      const accountKeys = parsePermissionAccountKeysForNamespace(namespace, options.accountKeys);
+      const accountIds = parsePermissionAccountIdsForNamespace(namespace, options.accountIds);
       const nextChains = cloneChainStates(currentChains);
-      nextChains[chainRef] = { accountKeys };
+      nextChains[chainRef] = { accountIds };
 
       if (arePermissionChainStatesEqual(currentChains, nextChains)) {
         return buildPermissionAuthorization(origin, namespace, currentChains);

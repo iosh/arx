@@ -1,9 +1,9 @@
 import type { ChainRef } from "../../../chains/ids.js";
-import type { AccountKey } from "../../../storage/records.js";
+import type { AccountId } from "../../../storage/records.js";
 import type { PermissionsSnapshot } from "../../../wallet/types.js";
 
 export type PermittedAccountView = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   canonicalAddress: string;
   displayAddress: string;
 };
@@ -13,7 +13,7 @@ export type AuthorizationSnapshot = {
   chainRef: ChainRef;
   isPermittedChain: boolean;
   permittedChainRefs: ChainRef[];
-  permittedAccountKeys: AccountKey[];
+  permittedAccountIds: AccountId[];
   accounts: PermittedAccountView[];
   isAuthorized: boolean;
 };

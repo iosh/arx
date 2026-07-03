@@ -1,5 +1,9 @@
-import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import {
+  canonicalChainAddressFromAccountId,
+  displayChainAddressFromAccountId,
+  getAccountIdNamespace,
+} from "../../accounts/addressing/accountId.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { parseChainRef } from "../../chains/caip.js";
 import { KeyringAccountNotFoundError } from "../../keyring/errors.js";
 import type { Messenger } from "../../messenger/index.js";
@@ -7,7 +11,7 @@ import { PermissionDeniedError } from "../../permissions/errors.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
-import type { AccountKey } from "../../storage/records.js";
+import type { AccountId } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED } from "./topics.js";
 import type {
@@ -24,7 +28,7 @@ type Options = {
   messenger: Messenger;
   accounts: AccountsService;
   settings: SettingsService;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey" | "toDisplayAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -32,7 +36,7 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #messenger: Messenger;
   #accounts: AccountsService;
   #settings: SettingsService;
-  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey" | "toDisplayAddressFromAccountKey">;
+  #accountAddressing: AccountAddressingByNamespace;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: MultiNamespaceAccountsState = { namespaces: {} };
@@ -41,11 +45,11 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #unsubscribeAccounts: (() => void) | null = null;
   #unsubscribeSettings: (() => void) | null = null;
 
-  constructor({ messenger, accounts, settings, accountCodecs, logger }: Options) {
+  constructor({ messenger, accounts, settings, accountAddressing, logger }: Options) {
     this.#messenger = messenger;
     this.#accounts = accounts;
     this.#settings = settings;
-    this.#accountCodecs = accountCodecs;
+    this.#accountAddressing = accountAddressing;
     this.#logger = logger;
 
     this.#unsubscribeAccounts = this.#accounts.subscribeChanged(() => {
@@ -91,33 +95,33 @@ export class StoreAccountSelectionService implements AccountSelectionService {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const record = this.#state.namespaces[namespace];
     if (!record) return [];
-    return record.accountKeys.map((accountKey) => this.#toOwnedAccountView({ namespace, chainRef, accountKey }));
+    return record.accountIds.map((accountId) => this.#toOwnedAccountView({ namespace, chainRef, accountId }));
   }
 
-  getOwnedAccount(params: NamespaceChainContext & { accountKey: AccountKey }): OwnedAccountView | null {
+  getOwnedAccount(params: NamespaceChainContext & { accountId: AccountId }): OwnedAccountView | null {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const { accountKey } = params;
+    const { accountId } = params;
     const record = this.#state.namespaces[namespace];
-    if (!record?.accountKeys.includes(accountKey)) return null;
-    return this.#toOwnedAccountView({ namespace, chainRef, accountKey });
+    if (!record?.accountIds.includes(accountId)) return null;
+    return this.#toOwnedAccountView({ namespace, chainRef, accountId });
   }
 
-  getAccountKeysForNamespace(namespace: ChainNamespace): AccountKey[] {
+  getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[] {
     const record = this.#state.namespaces[namespace];
-    return record ? [...record.accountKeys] : [];
+    return record ? [...record.accountIds] : [];
   }
 
-  getSelectedAccountKey(namespace: ChainNamespace): AccountKey | null {
+  getSelectedAccountId(namespace: ChainNamespace): AccountId | null {
     const record = this.#state.namespaces[namespace];
-    return record?.selectedAccountKey ?? null;
+    return record?.selectedAccountId ?? null;
   }
 
   getActiveAccountForNamespace(params: NamespaceChainContext): ActiveAccountView | null {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const accountKey = this.getSelectedAccountKey(namespace);
-    if (!accountKey) return null;
+    const accountId = this.getSelectedAccountId(namespace);
+    if (!accountId) return null;
 
-    const owned = this.getOwnedAccount({ namespace, chainRef, accountKey });
+    const owned = this.getOwnedAccount({ namespace, chainRef, accountId });
     if (!owned) return null;
 
     return {
@@ -127,15 +131,15 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   }
 
   async setActiveAccount(
-    params: NamespaceChainContext & { accountKey?: AccountKey | null },
+    params: NamespaceChainContext & { accountId?: AccountId | null },
   ): Promise<ActiveAccountView | null> {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const accountKey = params.accountKey ?? null;
+    const accountId = params.accountId ?? null;
 
-    if (accountKey !== null) {
-      this.#assertAccountKeyNamespace(accountKey, namespace);
+    if (accountId !== null) {
+      this.#assertAccountIdNamespace(accountId, namespace);
 
-      const record = await this.#accounts.get(accountKey);
+      const record = await this.#accounts.get(accountId);
       if (!record) {
         throw new KeyringAccountNotFoundError();
       }
@@ -145,8 +149,8 @@ export class StoreAccountSelectionService implements AccountSelectionService {
     }
 
     await this.#settings.update({
-      selectedAccountKeysByNamespace: {
-        [namespace]: accountKey,
+      selectedAccountIdsByNamespace: {
+        [namespace]: accountId,
       },
     });
 
@@ -170,8 +174,8 @@ export class StoreAccountSelectionService implements AccountSelectionService {
     return params;
   }
 
-  #assertAccountKeyNamespace(accountKey: AccountKey, namespace: ChainNamespace): void {
-    const accountNamespace = getAccountKeyNamespace(accountKey);
+  #assertAccountIdNamespace(accountId: AccountId, namespace: ChainNamespace): void {
+    const accountNamespace = getAccountIdNamespace(accountId);
     if (accountNamespace !== namespace) {
       throw new RpcInvalidParamsError({
         message: `Account does not belong to namespace "${namespace}"`,
@@ -183,15 +187,20 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #toOwnedAccountView(params: {
     namespace: ChainNamespace;
     chainRef: NamespaceChainContext["chainRef"];
-    accountKey: AccountKey;
+    accountId: AccountId;
   }): OwnedAccountView {
     return {
-      accountKey: params.accountKey,
+      accountId: params.accountId,
       namespace: params.namespace,
-      canonicalAddress: this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: params.accountKey }),
-      displayAddress: this.#accountCodecs.toDisplayAddressFromAccountKey({
+      canonicalAddress: canonicalChainAddressFromAccountId({
+        accountAddressing: this.#accountAddressing,
         chainRef: params.chainRef,
-        accountKey: params.accountKey,
+        accountId: params.accountId,
+      }),
+      displayAddress: displayChainAddressFromAccountId({
+        accountAddressing: this.#accountAddressing,
+        chainRef: params.chainRef,
+        accountId: params.accountId,
       }),
     };
   }
@@ -201,17 +210,17 @@ export class StoreAccountSelectionService implements AccountSelectionService {
 
     this.#refreshPromise = (async () => {
       const records = await this.#accounts.list({ includeHidden: false });
-      const byNamespace = new Map<string, AccountKey[]>();
+      const byNamespace = new Map<string, AccountId[]>();
       for (const record of records) {
         const list = byNamespace.get(record.namespace) ?? [];
-        list.push(record.accountKey);
+        list.push(record.accountId);
         byNamespace.set(record.namespace, list);
       }
 
-      let selectedByNamespace: Record<string, AccountKey> = {};
+      let selectedByNamespace: Record<string, AccountId> = {};
       try {
         const settings = await this.#settings.get();
-        selectedByNamespace = { ...(settings?.selectedAccountKeysByNamespace ?? {}) };
+        selectedByNamespace = { ...(settings?.selectedAccountIdsByNamespace ?? {}) };
       } catch (error) {
         this.#logger?.("accounts: failed to load settings", error);
         selectedByNamespace = {};
@@ -219,11 +228,15 @@ export class StoreAccountSelectionService implements AccountSelectionService {
 
       const nextNamespaces: Record<ChainNamespace, NamespaceAccountsState> = {};
       const namespaces = [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-      for (const [ns, accountKeys] of namespaces) {
-        const desired = selectedByNamespace[ns] ?? null;
+      for (const [ns, accountIds] of namespaces) {
+        const [defaultAccountId, ...remainingAccountIds] = accountIds;
+        if (!defaultAccountId) continue;
+
+        const desired = selectedByNamespace[ns];
+        const selectedAccountId = desired && accountIds.includes(desired) ? desired : defaultAccountId;
         nextNamespaces[ns] = {
-          accountKeys: [...accountKeys],
-          selectedAccountKey: desired && accountKeys.includes(desired) ? desired : (accountKeys[0] ?? null),
+          accountIds: [defaultAccountId, ...remainingAccountIds],
+          selectedAccountId,
         };
       }
 

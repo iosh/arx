@@ -1,11 +1,11 @@
 import type { Unsubscribe } from "../../../messenger/index.js";
-import type { AccountKey, AccountRecord } from "../../../storage/records.js";
+import type { AccountId, AccountRecord } from "../../../storage/records.js";
 
 export type AccountsChangedPayload =
-  | { kind: "upsert"; accountKey: AccountKey }
-  | { kind: "remove"; accountKey: AccountKey }
+  | { kind: "upsert"; accountId: AccountId }
+  | { kind: "remove"; accountId: AccountId }
   | { kind: "removeByKeyringId"; keyringId: AccountRecord["keyringId"] }
-  | { kind: "setHidden"; accountKey: AccountKey };
+  | { kind: "setHidden"; accountId: AccountId };
 
 export type ListAccountsParams = {
   includeHidden?: boolean;
@@ -14,10 +14,10 @@ export type ListAccountsParams = {
 export type AccountsService = {
   subscribeChanged(handler: (payload: AccountsChangedPayload) => void): Unsubscribe;
 
-  get(accountKey: AccountKey): Promise<AccountRecord | null>;
+  get(accountId: AccountId): Promise<AccountRecord | null>;
   list(params?: ListAccountsParams): Promise<AccountRecord[]>;
   upsert(record: AccountRecord): Promise<void>;
-  remove(accountKey: AccountKey): Promise<void>;
+  remove(accountId: AccountId): Promise<void>;
   removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
-  setHidden(params: { accountKey: AccountKey; hidden: boolean }): Promise<void>;
+  setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
 };

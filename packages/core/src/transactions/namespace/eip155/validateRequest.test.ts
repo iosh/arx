@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { eip155AddressCodec } from "../../../chains/eip155/addressCodec.js";
-import { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import { buildChainAddressingByNamespace } from "../../../chains/addressing.js";
+import { eip155ChainAddressing } from "../../../chains/eip155/chainAddressing.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
 
-const chains = new ChainAddressCodecRegistry([eip155AddressCodec]);
+const chains = buildChainAddressingByNamespace([eip155ChainAddressing]);
 const validateRequest = createEip155RequestValidator({ chains });
 
 describe("eip155 validateRequest", () => {

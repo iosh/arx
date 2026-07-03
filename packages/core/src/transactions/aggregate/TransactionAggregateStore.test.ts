@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  createDefaultAccountKey,
+  createDefaultAccountId,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -38,7 +38,7 @@ const createApprovedTransactionInput = (
   origin: overrides.origin ?? "https://dapp.example",
   source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
-  accountKey: overrides.accountKey ?? createDefaultAccountKey(),
+  accountId: overrides.accountId ?? createDefaultAccountId(),
   request: {
     payload: structuredClone(
       overrides.request?.payload ?? {
@@ -112,7 +112,7 @@ const createInMemoryTransactionsStoragePort = (
       const filtered = records.filter((record) => {
         if (query.namespace !== undefined && record.namespace !== query.namespace) return false;
         if (query.chainRef !== undefined && record.chainRef !== query.chainRef) return false;
-        if (query.accountKey !== undefined && record.accountKey !== query.accountKey) return false;
+        if (query.accountId !== undefined && record.accountId !== query.accountId) return false;
         if (query.status !== undefined && record.status !== query.status) return false;
         if (
           query.before !== undefined &&

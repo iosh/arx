@@ -4,7 +4,7 @@ import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
-import type { AccountKey } from "../storage/records.js";
+import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import type { Transaction } from "../transactions/TransactionsService.js";
 import type { WalletApiAttentionSnapshot } from "./api.js";
@@ -21,7 +21,7 @@ export type PermissionsSnapshot = {
         chains: Record<
           ChainRef,
           {
-            accountKeys: AccountKey[];
+            accountIds: AccountId[];
           }
         >;
       }
@@ -39,7 +39,7 @@ export type KeyringMeta = {
 };
 
 export type AccountMeta = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   canonicalAddress: string;
   keyringId: string;
   derivationIndex?: number | undefined;
@@ -59,7 +59,7 @@ export type BackupStatus = {
 };
 
 export type ApprovalSelectableAccount = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   canonicalAddress: string;
   displayAddress: string;
 };
@@ -92,12 +92,12 @@ type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
 
 type RequestAccountsRequest = {
   selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountKey: AccountKey | null;
+  recommendedAccountId: AccountId | null;
 };
 
 type RequestPermissionsRequest = {
   selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountKey: AccountKey | null;
+  recommendedAccountId: AccountId | null;
   requestedGrants: Array<{
     grantKind: string;
     chainRef: ChainRef;
@@ -220,7 +220,7 @@ export type WalletApiRequestSendTransactionApprovalResult = {
 };
 
 export type WalletApiOwnedAccountSummary = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   canonicalAddress: string;
   displayAddress: string;
 };
@@ -235,7 +235,7 @@ export type WalletApiAccountsByKeyringResult = AccountMeta[];
 export type WalletApiBackupStatusResult = BackupStatus;
 
 export type WalletApiNativeBalanceResult = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   chainRef: ChainRef;
   amount: string;
   currency: NativeCurrency;

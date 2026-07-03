@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { eip155AddressCodec } from "../../../chains/eip155/addressCodec.js";
-import { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import { buildChainAddressingByNamespace } from "../../../chains/addressing.js";
+import { eip155ChainAddressing } from "../../../chains/eip155/chainAddressing.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./__fixtures__/constants.js";
 import { createEip155Transaction } from "./transaction.js";
@@ -39,7 +39,7 @@ const createAdapter = (overrides?: {
 
   return {
     adapter: createEip155Transaction({
-      chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+      chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
       rpcClientFactory: () => rpc,
       signer,
       broadcaster,
@@ -72,7 +72,7 @@ describe("createEip155Transaction", () => {
       namespace: "eip155",
       chainRef: TEST_CHAINS.MAINNET,
       origin: "https://dapp.example",
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       from: TEST_ADDRESSES.ACCOUNT_AA,
       request: {
         namespace: "eip155",
@@ -103,7 +103,7 @@ describe("createEip155Transaction", () => {
       namespace: "eip155",
       chainRef: TEST_CHAINS.MAINNET,
       origin: "https://dapp.example",
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       from: TEST_ADDRESSES.ACCOUNT_AA,
       request: {
         namespace: "eip155",

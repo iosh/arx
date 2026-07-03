@@ -2,7 +2,7 @@ import type { ApprovalAccountSelectionDecision } from "../approvals/queue/types.
 import type { ChainRef } from "../chains/ids.js";
 import type { SessionLockState } from "../runtime/session/unlock/types.js";
 import type { AttentionReason } from "../services/runtime/attention/types.js";
-import type { AccountKey } from "../storage/records.js";
+import type { AccountId } from "../storage/records.js";
 import type { TransactionStatus } from "../transactions/aggregate/index.js";
 import type {
   Eip155TransactionDraftChange,
@@ -64,12 +64,12 @@ export type RestoreWalletFromPrivateKeyInput = {
 
 export type SwitchActiveAccountInput = {
   chainRef: ChainRef;
-  accountKey?: AccountKey | null;
+  accountId?: AccountId | null;
 };
 export type SelectWalletChainInput = { chainRef: ChainRef };
 export type WalletApiNativeBalanceInput = {
   chainRef: ChainRef;
-  accountKey: AccountKey;
+  accountId: AccountId;
 };
 
 export type WalletApiApprovalDetailInput = { approvalId: string };
@@ -109,13 +109,13 @@ export type ImportPrivateKeyInput = {
 };
 export type DeriveAccountInput = { keyringId: string };
 export type RenameKeyringInput = { keyringId: string; alias: string };
-export type RenameAccountInput = { accountKey: AccountKey; alias: string };
+export type RenameAccountInput = { accountId: AccountId; alias: string };
 export type MarkBackedUpInput = { keyringId: string };
-export type HideHdAccountInput = { accountKey: AccountKey };
-export type UnhideHdAccountInput = { accountKey: AccountKey };
+export type HideHdAccountInput = { accountId: AccountId };
+export type UnhideHdAccountInput = { accountId: AccountId };
 export type RemovePrivateKeyKeyringInput = { keyringId: string };
 export type ExportMnemonicInput = { keyringId: string; password: string };
-export type ExportPrivateKeyInput = { accountKey: AccountKey; password: string };
+export type ExportPrivateKeyInput = { accountId: AccountId; password: string };
 
 export type WalletApiAttentionRequest = {
   reason: AttentionReason;
@@ -138,7 +138,7 @@ export type RequestSendTransactionApprovalInput = {
 export type WalletApiTransactionsInput = {
   namespace?: string;
   chainRef?: ChainRef;
-  accountKey?: AccountKey;
+  accountId?: AccountId;
   status?: TransactionStatus;
   limit?: number;
   before?: {

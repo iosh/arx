@@ -1,4 +1,5 @@
-import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import { canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
+import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import { type TransactionAggregate, TransactionAggregateInvariantError } from "./aggregate/index.js";
 import type {
   BroadcastArtifact,
@@ -6,12 +7,11 @@ import type {
   TransactionBroadcastContext,
 } from "./namespace/types.js";
 
-const readAggregateFromAddress = (
-  aggregate: TransactionAggregate,
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">,
-) => {
-  return accountCodecs.toCanonicalAddressFromAccountKey({
-    accountKey: aggregate.record.accountKey,
+const readAggregateFromAddress = (aggregate: TransactionAggregate, accountAddressing: AccountAddressingByNamespace) => {
+  return canonicalChainAddressFromAccountId({
+    accountAddressing,
+    chainRef: aggregate.record.chainRef,
+    accountId: aggregate.record.accountId,
   });
 };
 
@@ -28,14 +28,14 @@ const requireApprovedPayload = (aggregate: TransactionAggregate) => {
 
 export const buildBroadcastArtifactContext = (
   aggregate: TransactionAggregate,
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">,
+  accountAddressing: AccountAddressingByNamespace,
 ): TransactionBroadcastArtifactContext => ({
   transactionId: aggregate.record.id,
   namespace: aggregate.record.namespace,
   chainRef: aggregate.record.chainRef,
   origin: aggregate.record.origin,
-  accountKey: aggregate.record.accountKey,
-  from: readAggregateFromAddress(aggregate, accountCodecs),
+  accountId: aggregate.record.accountId,
+  from: readAggregateFromAddress(aggregate, accountAddressing),
   request: {
     namespace: aggregate.record.namespace,
     chainRef: aggregate.record.chainRef,
@@ -47,8 +47,8 @@ export const buildBroadcastArtifactContext = (
 export const buildBroadcastContext = (
   aggregate: TransactionAggregate,
   broadcastArtifact: BroadcastArtifact,
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">,
+  accountAddressing: AccountAddressingByNamespace,
 ): TransactionBroadcastContext => ({
-  ...buildBroadcastArtifactContext(aggregate, accountCodecs),
+  ...buildBroadcastArtifactContext(aggregate, accountAddressing),
   broadcastArtifact: structuredClone(broadcastArtifact),
 });

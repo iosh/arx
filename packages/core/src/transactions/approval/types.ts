@@ -57,7 +57,7 @@ export type TransactionApprovalSession = {
   chainRef: ChainRef;
   source: TransactionSource;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: string;
   requestId: string | null;
   replacement: CreateTransactionReplacementInput | null;
@@ -106,7 +106,7 @@ export type OpenTransactionApprovalSessionInput = {
   chainRef: ChainRef;
   source: TransactionSource;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: string;
   requestId?: string | null;
   request: TransactionRequestSnapshot;

@@ -67,7 +67,7 @@ export class TransactionAggregateService {
         origin: input.origin,
         source: input.source,
         requestId: input.requestId ?? null,
-        accountKey: input.accountKey,
+        accountId: input.accountId,
         status: "submitting",
         request: {
           payload: cloneJsonValue(input.request.payload),

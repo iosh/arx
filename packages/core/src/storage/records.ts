@@ -7,14 +7,14 @@ export type AccountNamespace = string;
 
 // External input parser for account keys. Storage records themselves are typed
 // values and are not runtime-validated through zod.
-export const AccountKeySchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
-  error: "accountKey must be <namespace>:<even-length lowercase hex bytes>",
+export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
+  error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
 });
-export type AccountKey = string;
+export type AccountId = string;
 
 export type SettingsRecord = {
   id: "settings";
-  selectedAccountKeysByNamespace?: Record<string, AccountKey> | undefined;
+  selectedAccountIdsByNamespace?: Record<string, AccountId> | undefined;
   updatedAt: number;
 };
 
@@ -56,7 +56,7 @@ export type KeyringMetaRecord = {
 };
 
 export type AccountRecord = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   namespace: AccountNamespace;
   keyringId: string;
   derivationIndex?: number | undefined;
@@ -66,8 +66,8 @@ export type AccountRecord = {
 };
 
 // Empty means the origin is connected to the chain but has no account access on it.
-export type PermissionChainAccountKeys = AccountKey[];
-export type PermissionChainScopes = Record<ChainRef, PermissionChainAccountKeys>;
+export type PermissionChainAccountIds = AccountId[];
+export type PermissionChainScopes = Record<ChainRef, PermissionChainAccountIds>;
 
 export type PermissionRecord = {
   origin: string;

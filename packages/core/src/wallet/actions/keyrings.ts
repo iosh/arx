@@ -1,4 +1,4 @@
-import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
+import { canonicalChainAddressFromAccountId, getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import { PermissionDeniedError } from "../../permissions/errors.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -41,9 +41,13 @@ const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): KeyringMeta => (
 });
 
 const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): AccountMeta => ({
-  accountKey: record.accountKey,
-  canonicalAddress: context.accountCodecs.toCanonicalAddressFromAccountKey({
-    accountKey: record.accountKey,
+  accountId: record.accountId,
+  canonicalAddress: canonicalChainAddressFromAccountId({
+    accountAddressing: context.accountAddressing,
+    chainRef:
+      context.networks.getSelectedChainRef(record.namespace) ??
+      context.networks.getActiveChainViewForNamespace(record.namespace).chainRef,
+    accountId: record.accountId,
   }),
   keyringId: record.keyringId,
   createdAt: record.createdAt,
@@ -142,7 +146,7 @@ export const renameKeyring = async (context: WalletApiContext, input: RenameKeyr
 
 export const renameAccount = async (context: WalletApiContext, input: RenameAccountInput) => {
   assertSessionUnlocked(context);
-  await context.accounts.renameAccount(input.accountKey, input.alias);
+  await context.accounts.renameAccount(input.accountId, input.alias);
   return null;
 };
 
@@ -154,19 +158,19 @@ export const markBackedUp = async (context: WalletApiContext, input: MarkBackedU
 
 export const hideHdAccount = async (context: WalletApiContext, input: HideHdAccountInput) => {
   assertSessionUnlocked(context);
-  const namespace = getAccountKeyNamespace(input.accountKey);
+  const namespace = getAccountIdNamespace(input.accountId);
   const chainRef = getSelectedWalletChainRefForNamespace(context, namespace);
   const activeAccount = context.accounts.getActiveAccountForNamespace({ namespace, chainRef });
-  if (activeAccount?.accountKey === input.accountKey) {
+  if (activeAccount?.accountId === input.accountId) {
     throw new PermissionDeniedError();
   }
-  await context.accounts.hideHdAccount(input.accountKey);
+  await context.accounts.hideHdAccount(input.accountId);
   return null;
 };
 
 export const unhideHdAccount = async (context: WalletApiContext, input: UnhideHdAccountInput) => {
   assertSessionUnlocked(context);
-  await context.accounts.unhideHdAccount(input.accountKey);
+  await context.accounts.unhideHdAccount(input.accountId);
   return null;
 };
 
@@ -181,6 +185,6 @@ export const exportMnemonic = async (context: WalletApiContext, input: ExportMne
 };
 
 export const exportPrivateKey = async (context: WalletApiContext, input: ExportPrivateKeyInput) => {
-  const secret = await context.accounts.exportPrivateKeyByAccountKey(input.accountKey, input.password);
+  const secret = await context.accounts.exportPrivateKeyByAccountId(input.accountId, input.password);
   return { privateKey: privateKeyBytesToHex(secret) };
 };

@@ -1,15 +1,15 @@
 import type { Unsubscribe } from "../../../messenger/index.js";
-import type { AccountKey, SettingsRecord } from "../../../storage/records.js";
+import type { AccountId, SettingsRecord } from "../../../storage/records.js";
 
 export type SettingsChangedPayload = { next: SettingsRecord };
 
 export type UpdateSettingsParams = {
   /**
    * Patch per-namespace selected account keys.
-   * - value: AccountKey => set selection for namespace
+   * - value: AccountId => set selection for namespace
    * - value: null => clear selection for namespace
    */
-  selectedAccountKeysByNamespace?: Record<string, AccountKey | null>;
+  selectedAccountIdsByNamespace?: Record<string, AccountId | null>;
 };
 
 export type SettingsService = {

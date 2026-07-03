@@ -30,7 +30,7 @@ const createApprovedTransactionAggregate = (service: TransactionAggregateService
     origin: "https://dapp.example",
     source: "provider",
     requestId: "rpc-1",
-    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     request: {
       payload: {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -97,7 +97,7 @@ describe("TransactionAggregateService", () => {
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       source: "wallet-ui",
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: {
         kind: "eip155.wallet.speedUp",
         payload: { value: "0x1" },

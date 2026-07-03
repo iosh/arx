@@ -48,13 +48,13 @@ export type Eip155UnsignedTransactionDraft = Partial<Omit<Eip155TransactionCoreF
 /** Builds the durable nonce conflict key for one EIP-155 account on one chain. */
 export const buildEip155TransactionConflictKey = ({
   chainRef,
-  accountKey,
+  accountId,
   nonce,
 }: {
   chainRef: string;
-  accountKey: string;
+  accountId: string;
   nonce: Hex;
 }): TransactionConflictKey => ({
   kind: "eip155.nonce",
-  value: `${chainRef}:${accountKey}:${nonce}`,
+  value: `${chainRef}:${accountId}:${nonce}`,
 });

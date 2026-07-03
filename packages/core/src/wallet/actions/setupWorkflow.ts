@@ -1,4 +1,5 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
@@ -72,7 +73,7 @@ export type WalletSetupWorkflow = Readonly<{
 
 const hasAnyOwnedAccounts = (accounts: Pick<AccountSelectionService, "getState">): boolean => {
   const state = accounts.getState();
-  return Object.values(state.namespaces).some((namespace) => namespace.accountKeys.length > 0);
+  return Object.values(state.namespaces).some((namespace) => namespace.accountIds.length > 0);
 };
 
 const deriveSetupAvailability = (accounts: Pick<AccountSelectionService, "getState">): SetupAvailability => {
@@ -85,12 +86,13 @@ const assertSetupUninitialized = (accounts: Pick<AccountSelectionService, "getSt
   }
 };
 
-const toAccountKey = (input: {
+const toAccountId = (input: {
   chainRef: ChainRef;
   address: string;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
+  accountAddressing: AccountAddressingByNamespace;
 }) => {
-  return input.accountCodecs.toAccountKeyFromAddress({
+  return accountIdFromChainAddress({
+    accountAddressing: input.accountAddressing,
     chainRef: input.chainRef,
     address: input.address,
   });
@@ -99,11 +101,11 @@ const toAccountKey = (input: {
 const rollbackSelectedAccount = async (params: {
   settings: Pick<SettingsService, "update">;
   namespace: string;
-  previousAccountKey: string | null;
+  previousAccountId: string | null;
 }) => {
   await params.settings.update({
-    selectedAccountKeysByNamespace: {
-      [params.namespace]: params.previousAccountKey,
+    selectedAccountIdsByNamespace: {
+      [params.namespace]: params.previousAccountId,
     },
   });
 };
@@ -121,9 +123,9 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
     | "encodeInitialDraftPayload"
     | "removeCommittedInitialKeyring"
   >;
-  accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountKey" | "setActiveAccount" | "whenReady">;
+  accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountId" | "setActiveAccount" | "whenReady">;
   settings: Pick<SettingsService, "update">;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
+  accountAddressing: AccountAddressingByNamespace;
   password: string;
   namespace: string;
   chainRef: ChainRef;
@@ -131,12 +133,12 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
 }): Promise<TResult> => {
   assertSetupUninitialized(params.accounts);
 
-  const previousSelectedAccountKey = params.accounts.getSelectedAccountKey(params.namespace);
+  const previousSelectedAccountId = params.accounts.getSelectedAccountId(params.namespace);
   const draft = params.draftBuilder.buildDraft();
-  const accountKey = toAccountKey({
+  const accountId = toAccountId({
     chainRef: params.chainRef,
     address: draft.defaultAccountAddress,
-    accountCodecs: params.accountCodecs,
+    accountAddressing: params.accountAddressing,
   });
 
   return await params.session.withVaultMetaPersistHold(async () => {
@@ -157,7 +159,7 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
       await params.accounts.setActiveAccount({
         namespace: params.namespace,
         chainRef: params.chainRef,
-        accountKey,
+        accountId,
       });
       await params.session.unlock.unlock({ password: params.password });
 
@@ -167,7 +169,7 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
         await rollbackSelectedAccount({
           settings: params.settings,
           namespace: params.namespace,
-          previousAccountKey: previousSelectedAccountKey,
+          previousAccountId: previousSelectedAccountId,
         });
       }
 
@@ -194,9 +196,9 @@ export const createWalletSetupWorkflow = (deps: {
     | "encodeInitialDraftPayload"
     | "removeCommittedInitialKeyring"
   >;
-  accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountKey" | "setActiveAccount" | "whenReady">;
+  accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountId" | "setActiveAccount" | "whenReady">;
   settings: Pick<SettingsService, "update">;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
+  accountAddressing: AccountAddressingByNamespace;
 }): WalletSetupWorkflow => {
   return {
     getStatus: () => ({ availability: deriveSetupAvailability(deps.accounts) }),

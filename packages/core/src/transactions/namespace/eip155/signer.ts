@@ -5,22 +5,25 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { eip155Codec } from "../../../accounts/addressing/codec.js";
+import { accountIdFromChainAddress } from "../../../accounts/addressing/accountId.js";
+import { eip155AccountAddressing } from "../../../accounts/addressing/addressing.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
+import { EIP155_NAMESPACE } from "../../../rpc/handlers/namespaces/eip155/constants.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
 import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const textEncoder = new TextEncoder();
+const EIP155_ACCOUNT_ADDRESSING = { [EIP155_NAMESPACE]: eip155AccountAddressing };
 
 type SignerDeps = {
-  accountSigning: Pick<AccountSigningService, "assertAccountUnlocked" | "signDigestByAccountKey">;
+  accountSigning: Pick<AccountSigningService, "assertAccountUnlocked" | "signDigestByAccountId">;
 };
 
 export type Eip155Signer = {
   signTransaction: Eip155SignerContract["signTransaction"];
-  signPersonalMessage: (params: { accountKey: string; message: HexType | string }) => Promise<HexType>;
-  signTypedData: (params: { accountKey: string; typedData: string }) => Promise<HexType>;
+  signPersonalMessage: (params: { accountId: string; message: HexType | string }) => Promise<HexType>;
+  signTypedData: (params: { accountId: string; typedData: string }) => Promise<HexType>;
 };
 
 type ParsedSignature = {
@@ -110,9 +113,12 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
   return Hex.from(output);
 };
 
-const toEip155AccountKey = (params: { chainRef: string; address: string }) => {
-  const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-  return eip155Codec.toAccountKey(canonical);
+const toEip155AccountId = (params: { chainRef: string; address: string }) => {
+  return accountIdFromChainAddress({
+    chainRef: params.chainRef,
+    address: params.address,
+    accountAddressing: EIP155_ACCOUNT_ADDRESSING,
+  });
 };
 
 const toPersonalMessageHex = (message: HexType | string): HexType => {
@@ -171,16 +177,16 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
       });
     }
 
-    const fromAccountKey = toEip155AccountKey({ chainRef: context.chainRef, address: context.from });
-    await accountSigning.assertAccountUnlocked(fromAccountKey);
+    const fromAccountId = toEip155AccountId({ chainRef: context.chainRef, address: context.from });
+    await accountSigning.assertAccountUnlocked(fromAccountId);
     throwIfSignAborted(options?.signal);
     const chainId = readChainId(transaction);
     const envelope = buildEnvelope(transaction, chainId);
 
     if (envelope.type === "eip1559") {
       const txSignPayload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
-      const signature = await accountSigning.signDigestByAccountKey({
-        accountKey: fromAccountKey,
+      const signature = await accountSigning.signDigestByAccountId({
+        accountId: fromAccountId,
         digest: Hex.toBytes(txSignPayload),
       });
       const signed = TransactionEnvelopeEip1559.from(envelope.value, {
@@ -191,8 +197,8 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
     }
 
     const txSignPayload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
-    const signature = await accountSigning.signDigestByAccountKey({
-      accountKey: fromAccountKey,
+    const signature = await accountSigning.signDigestByAccountId({
+      accountId: fromAccountId,
       digest: Hex.toBytes(txSignPayload),
     });
     const signed = TransactionEnvelopeLegacy.from(envelope.value, {
@@ -202,28 +208,28 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
     return { raw };
   };
 
-  const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ accountKey, message }) => {
-    await accountSigning.assertAccountUnlocked(accountKey);
+  const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ accountId, message }) => {
+    await accountSigning.assertAccountUnlocked(accountId);
 
     const messageHex = toPersonalMessageHex(message);
     const payload = PersonalMessage.getSignPayload(messageHex);
 
-    const signature = await accountSigning.signDigestByAccountKey({
-      accountKey,
+    const signature = await accountSigning.signDigestByAccountId({
+      accountId,
       digest: Hex.toBytes(payload),
     });
     return composeSignatureHex(signature);
   };
 
-  const signTypedData: Eip155Signer["signTypedData"] = async ({ accountKey, typedData }) => {
-    await accountSigning.assertAccountUnlocked(accountKey);
+  const signTypedData: Eip155Signer["signTypedData"] = async ({ accountId, typedData }) => {
+    await accountSigning.assertAccountUnlocked(accountId);
 
     const definition = parseTypedDataPayload(typedData);
     const encoded = TypedData.encode(definition);
     const digest = Hash.keccak256(encoded);
 
-    const signature = await accountSigning.signDigestByAccountKey({
-      accountKey,
+    const signature = await accountSigning.signDigestByAccountId({
+      accountId,
       digest: Hex.toBytes(digest),
     });
     return composeSignatureHex(signature);

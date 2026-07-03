@@ -17,12 +17,12 @@ const SOLANA_ACCOUNT_ID = "solana:cccc";
 const createRecord = (args: {
   origin?: string;
   namespace?: string;
-  chains: Array<{ chainRef: string; accountKeys: string[] }>;
+  chains: Array<{ chainRef: string; accountIds: string[] }>;
 }) =>
   ({
     origin: args.origin ?? ORIGIN,
     namespace: args.namespace ?? NAMESPACE,
-    chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
+    chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountIds])),
   }) satisfies PermissionRecord;
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
@@ -75,7 +75,7 @@ describe("PermissionsService", () => {
     await service.waitForHydration();
     await service.grantAuthorization(ORIGIN, {
       namespace: NAMESPACE,
-      chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
+      chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
     });
 
     expect(store.size).toBe(1);
@@ -84,7 +84,7 @@ describe("PermissionsService", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountKeys: [ACCOUNT_ID],
+          accountIds: [ACCOUNT_ID],
         },
       },
     });
@@ -95,7 +95,7 @@ describe("PermissionsService", () => {
   it("grantAuthorization() merges granted chains without dropping existing chains", async () => {
     const seed = [
       createRecord({
-        chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
+        chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
       }),
     ];
 
@@ -106,7 +106,7 @@ describe("PermissionsService", () => {
     await service.waitForHydration();
     await service.grantAuthorization(ORIGIN, {
       namespace: NAMESPACE,
-      chains: [{ chainRef: POLYGON, accountKeys: [] }],
+      chains: [{ chainRef: POLYGON, accountIds: [] }],
     });
 
     expect(service.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
@@ -114,21 +114,21 @@ describe("PermissionsService", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountKeys: [ACCOUNT_ID],
+          accountIds: [ACCOUNT_ID],
         },
         [POLYGON]: {
-          accountKeys: [],
+          accountIds: [],
         },
       },
     });
   });
 
-  it("setChainAccountKeys() updates only the targeted chain authorization", async () => {
+  it("setChainAccountIds() updates only the targeted chain authorization", async () => {
     const seed = [
       createRecord({
         chains: [
-          { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
-          { chainRef: POLYGON, accountKeys: [] },
+          { chainRef: MAINNET, accountIds: [ACCOUNT_ID] },
+          { chainRef: POLYGON, accountIds: [] },
         ],
       }),
     ];
@@ -138,10 +138,10 @@ describe("PermissionsService", () => {
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
-    await service.setChainAccountKeys(ORIGIN, {
+    await service.setChainAccountIds(ORIGIN, {
       namespace: NAMESPACE,
       chainRef: MAINNET,
-      accountKeys: [OTHER_ACCOUNT_ID],
+      accountIds: [OTHER_ACCOUNT_ID],
     });
 
     expect(service.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
@@ -149,10 +149,10 @@ describe("PermissionsService", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountKeys: [OTHER_ACCOUNT_ID],
+          accountIds: [OTHER_ACCOUNT_ID],
         },
         [POLYGON]: {
-          accountKeys: [],
+          accountIds: [],
         },
       },
     });
@@ -162,8 +162,8 @@ describe("PermissionsService", () => {
     const seed = [
       createRecord({
         chains: [
-          { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
-          { chainRef: POLYGON, accountKeys: [] },
+          { chainRef: MAINNET, accountIds: [ACCOUNT_ID] },
+          { chainRef: POLYGON, accountIds: [] },
         ],
       }),
     ];
@@ -183,7 +183,7 @@ describe("PermissionsService", () => {
       namespace: NAMESPACE,
       chains: {
         [POLYGON]: {
-          accountKeys: [],
+          accountIds: [],
         },
       },
     });
@@ -201,11 +201,11 @@ describe("PermissionsService", () => {
     const seed = [
       createRecord({
         namespace: NAMESPACE,
-        chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
+        chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
       }),
       createRecord({
         namespace: SOLANA_NAMESPACE,
-        chains: [{ chainRef: SOLANA_DEVNET, accountKeys: [SOLANA_ACCOUNT_ID] }],
+        chains: [{ chainRef: SOLANA_DEVNET, accountIds: [SOLANA_ACCOUNT_ID] }],
       }),
     ];
 
@@ -225,7 +225,7 @@ describe("PermissionsService", () => {
         namespace: SOLANA_NAMESPACE,
         chains: {
           [SOLANA_DEVNET]: {
-            accountKeys: [SOLANA_ACCOUNT_ID],
+            accountIds: [SOLANA_ACCOUNT_ID],
           },
         },
       },
@@ -242,7 +242,7 @@ describe("PermissionsService", () => {
     await expect(
       service.grantAuthorization(ORIGIN, {
         namespace: NAMESPACE,
-        chains: [{ chainRef: SOLANA_DEVNET, accountKeys: [SOLANA_ACCOUNT_ID] }],
+        chains: [{ chainRef: SOLANA_DEVNET, accountIds: [SOLANA_ACCOUNT_ID] }],
       }),
     ).rejects.toThrow(/does not belong to namespace/i);
   });

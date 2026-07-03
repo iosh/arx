@@ -96,7 +96,7 @@ export class TransactionApprovalSessionService {
         chainRef: input.chainRef,
         source: input.source,
         origin: input.origin,
-        accountKey: input.accountKey,
+        accountId: input.accountId,
         from: input.from,
         requestId: input.requestId ?? null,
         replacement: structuredClone(input.replacement),
@@ -248,7 +248,7 @@ export class TransactionApprovalSessionService {
           origin: currentAfterFinalize.origin,
           source: currentAfterFinalize.source,
           requestId: currentAfterFinalize.requestId,
-          accountKey: currentAfterFinalize.accountKey,
+          accountId: currentAfterFinalize.accountId,
           request: {
             payload: cloneJsonValue(currentAfterFinalize.draft.payload),
           },
@@ -287,7 +287,7 @@ export class TransactionApprovalSessionService {
       namespace: session.namespace,
       chainRef: session.chainRef,
       origin: session.origin,
-      accountKey: session.accountKey,
+      accountId: session.accountId,
       from: session.from,
     };
   }
@@ -403,7 +403,7 @@ export class TransactionApprovalSessionService {
             namespace: session.namespace,
             chainRef: session.chainRef,
             origin: session.origin,
-            accountKey: session.accountKey,
+            accountId: session.accountId,
             from: session.from,
             request: this.#buildDraftRequest(session),
             approvedPayload: approvedPayload as Record<string, unknown>,
@@ -418,7 +418,7 @@ export class TransactionApprovalSessionService {
       namespace: session.namespace,
       chainRef: session.chainRef,
       origin: session.origin,
-      accountKey: session.accountKey,
+      accountId: session.accountId,
       from: session.from,
       request: this.#buildDraftRequest(session),
       approvedPayload: cloneJsonValue(session.prepare.approvedPayload as JsonValue) as Record<string, unknown>,
@@ -492,13 +492,13 @@ export class TransactionApprovalSessionService {
       this.#transactions.listTransactionHistory({
         namespace: session.namespace,
         chainRef: session.chainRef,
-        accountKey: session.accountKey,
+        accountId: session.accountId,
         status: "submitting",
       }),
       this.#transactions.listTransactionHistory({
         namespace: session.namespace,
         chainRef: session.chainRef,
-        accountKey: session.accountKey,
+        accountId: session.accountId,
         status: "submitted",
       }),
     ]);

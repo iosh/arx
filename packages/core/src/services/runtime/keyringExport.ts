@@ -4,12 +4,12 @@ import type { SessionStatusService } from "./sessionStatus.js";
 
 export type KeyringExportService = {
   exportMnemonic(keyringId: string, password: string): Promise<string>;
-  exportPrivateKeyByAccountKey(accountKey: string, password: string): Promise<Uint8Array>;
+  exportPrivateKeyByAccountId(accountId: string, password: string): Promise<Uint8Array>;
 };
 
 type CreateKeyringExportServiceDeps = {
   sessionStatus: Pick<SessionStatusService, "isUnlocked">;
-  keyring: Pick<KeyringService, "exportMnemonic" | "exportPrivateKeyByAccountKey">;
+  keyring: Pick<KeyringService, "exportMnemonic" | "exportPrivateKeyByAccountId">;
 };
 
 const assertSessionUnlocked = (sessionStatus: Pick<SessionStatusService, "isUnlocked">) => {
@@ -27,9 +27,9 @@ export const createKeyringExportService = ({
       assertSessionUnlocked(sessionStatus);
       return await keyring.exportMnemonic(keyringId, password);
     },
-    exportPrivateKeyByAccountKey: async (accountKey, password) => {
+    exportPrivateKeyByAccountId: async (accountId, password) => {
       assertSessionUnlocked(sessionStatus);
-      return await keyring.exportPrivateKeyByAccountKey(accountKey, password);
+      return await keyring.exportPrivateKeyByAccountId(accountId, password);
     },
   };
 };

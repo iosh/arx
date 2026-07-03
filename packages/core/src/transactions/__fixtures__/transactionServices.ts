@@ -1,6 +1,6 @@
 import { vi } from "vitest";
-import { toAccountKeyFromAddress } from "../../accounts/addressing/accountKey.js";
-import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
+import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.js";
+import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { buildEip155ApprovalReview } from "../namespace/eip155/approvalReview.js";
 import type { Eip155UnsignedTransaction } from "../namespace/eip155/unsignedTransaction.js";
 import type { NamespaceTransaction, SubmittedTransactionInspection } from "../namespace/types.js";
@@ -33,7 +33,7 @@ export const DEFAULT_UNSIGNED_TRANSACTION: Eip155UnsignedTransaction = {
   gasPrice: "0x3b9aca00",
 };
 
-export const accountCodecs = createAccountCodecRegistry([eip155Codec]);
+export const accountAddressing = buildAccountAddressingByNamespace([eip155AccountAddressing]);
 
 const pendingSubmittedInspection = {
   trackingStatus: "pending",
@@ -109,9 +109,9 @@ export const createNamespaceTransactionStub = (
       }),
 });
 
-export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
-  toAccountKeyFromAddress({
+export const createDefaultAccountId = (params?: { chainRef?: string; from?: string }) =>
+  accountIdFromChainAddress({
     chainRef: params?.chainRef ?? DEFAULT_CHAIN_REF,
     address: params?.from ?? DEFAULT_FROM,
-    accountCodecs,
+    accountAddressing,
   });

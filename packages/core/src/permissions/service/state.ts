@@ -1,9 +1,9 @@
-import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
+import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountKey, PermissionRecord } from "../../storage/records.js";
+import type { AccountId, PermissionRecord } from "../../storage/records.js";
 import type {
   AuthorizationChainInput,
   ChainPermissionState,
@@ -27,7 +27,7 @@ export const cloneChainStates = (
     Object.entries(chains).map(([chainRef, chainState]) => [
       chainRef,
       {
-        accountKeys: [...chainState.accountKeys],
+        accountIds: [...chainState.accountIds],
       },
     ]),
   ) as Record<ChainRef, ChainPermissionState>;
@@ -74,21 +74,21 @@ export const parsePermissionChainRefForNamespace = (namespace: ChainNamespace, c
   return `${parsed.namespace}:${parsed.reference}` as ChainRef;
 };
 
-export const parsePermissionAccountKeysForNamespace = (
+export const parsePermissionAccountIdsForNamespace = (
   namespace: ChainNamespace,
-  accountKeys: readonly AccountKey[],
-): AccountKey[] => {
+  accountIds: readonly AccountId[],
+): AccountId[] => {
   return uniqSorted(
-    accountKeys.map((value) => {
-      const accountKey = String(value) as AccountKey;
-      if (getAccountKeyNamespace(accountKey) !== namespace) {
+    accountIds.map((value) => {
+      const accountId = String(value) as AccountId;
+      if (getAccountIdNamespace(accountId) !== namespace) {
         throw new RpcInvalidRequestError({
           message: `Permission account does not belong to namespace "${namespace}"`,
           details: { namespace },
         });
       }
 
-      return accountKey;
+      return accountId;
     }),
   );
 };
@@ -107,7 +107,7 @@ export const buildValidatedPermissionChainStates = (
   const normalizedEntries: Array<[ChainRef, ChainPermissionState]> = chains.map((chain) => [
     parsePermissionChainRefForNamespace(namespace, chain.chainRef),
     {
-      accountKeys: parsePermissionAccountKeysForNamespace(namespace, chain.accountKeys),
+      accountIds: parsePermissionAccountIdsForNamespace(namespace, chain.accountIds),
     },
   ]);
 
@@ -132,7 +132,7 @@ export const mergeGrantedPermissionChainStates = (
 
   for (const chainRef of sortStrings(Object.keys(granted) as ChainRef[])) {
     nextChains[chainRef] = {
-      accountKeys: [...(granted[chainRef]?.accountKeys ?? [])],
+      accountIds: [...(granted[chainRef]?.accountIds ?? [])],
     };
   }
 
@@ -143,7 +143,7 @@ const stableChainStateValue = (chains: Record<ChainRef, ChainPermissionState>): 
   return JSON.stringify(
     sortStrings(Object.keys(chains) as ChainRef[]).map((chainRef) => ({
       chainRef,
-      accountKeys: uniqSorted(chains[chainRef]?.accountKeys ?? []),
+      accountIds: uniqSorted(chains[chainRef]?.accountIds ?? []),
     })),
   );
 };
@@ -166,7 +166,7 @@ export const buildPermissionRecordFromChainStates = (
     chainScopes: Object.fromEntries(
       sortStrings(Object.keys(chains) as ChainRef[]).map((chainRef) => [
         chainRef,
-        uniqSorted(chains[chainRef]?.accountKeys ?? []),
+        uniqSorted(chains[chainRef]?.accountIds ?? []),
       ]),
     ),
   };
@@ -177,7 +177,7 @@ const buildNamespacePermissionState = (record: PermissionRecord) => ({
     sortStrings(Object.keys(record.chainScopes) as ChainRef[]).map((chainRef) => [
       chainRef,
       {
-        accountKeys: uniqSorted(record.chainScopes[chainRef] ?? []),
+        accountIds: uniqSorted(record.chainScopes[chainRef] ?? []),
       },
     ]),
   ) as Record<ChainRef, ChainPermissionState>,

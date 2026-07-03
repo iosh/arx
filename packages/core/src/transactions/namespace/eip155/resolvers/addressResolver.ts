@@ -1,11 +1,11 @@
 import * as Hex from "ox/Hex";
-import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
+import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../../../../chains/addressing.js";
 import type { TransactionPrepareContext } from "../../types.js";
 import type { AddressResolutionResult, Eip155PrepareStepResult } from "../types.js";
 import { readErrorMessage } from "../utils/validation.js";
 
 type AddressResolverDeps = {
-  chains: ChainAddressCodecRegistry;
+  chains: ChainAddressingByNamespace;
 };
 
 export const createAddressResolver = (deps: AddressResolverDeps) => {
@@ -30,16 +30,16 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
       };
     } else {
       try {
-        const normalized = deps.chains.toCanonicalAddress({ chainRef: context.chainRef, value: resolvedFrom });
+        const normalized = canonicalizeChainAddress(deps.chains, { chainRef: context.chainRef, value: resolvedFrom });
         Hex.assert(normalized.canonical as Hex.Hex, { strict: false });
         prepared.from = normalized.canonical as Hex.Hex;
 
         if (requestFrom && contextFrom) {
-          const requestCanonical = deps.chains.toCanonicalAddress({
+          const requestCanonical = canonicalizeChainAddress(deps.chains, {
             chainRef: context.chainRef,
             value: requestFrom,
           }).canonical;
-          const contextCanonical = deps.chains.toCanonicalAddress({
+          const contextCanonical = canonicalizeChainAddress(deps.chains, {
             chainRef: context.chainRef,
             value: contextFrom,
           }).canonical;
@@ -79,7 +79,7 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
         prepared.to = null;
       } else if (payload.to !== undefined) {
         try {
-          const normalized = deps.chains.toCanonicalAddress({ chainRef: context.chainRef, value: payload.to });
+          const normalized = canonicalizeChainAddress(deps.chains, { chainRef: context.chainRef, value: payload.to });
           Hex.assert(normalized.canonical as Hex.Hex, { strict: false });
           prepared.to = normalized.canonical as Hex.Hex;
         } catch (error) {

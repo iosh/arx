@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   APPROVAL_ID,
-  accountCodecs,
-  createDefaultAccountKey,
+  accountAddressing,
+  createDefaultAccountId,
   createNamespaceTransactionStub,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -42,7 +42,7 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   origin: overrides.origin ?? "https://dapp.example",
   source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
-  accountKey: overrides.accountKey ?? createDefaultAccountKey(),
+  accountId: overrides.accountId ?? createDefaultAccountId(),
   request: {
     payload: structuredClone(
       overrides.request?.payload ?? {
@@ -92,7 +92,7 @@ const createInMemoryTransactionsStoragePort = (seed: TransactionAggregate[] = []
       const filtered = records.filter((record) => {
         if (query.namespace !== undefined && record.namespace !== query.namespace) return false;
         if (query.chainRef !== undefined && record.chainRef !== query.chainRef) return false;
-        if (query.accountKey !== undefined && record.accountKey !== query.accountKey) return false;
+        if (query.accountId !== undefined && record.accountId !== query.accountId) return false;
         if (query.status !== undefined && record.status !== query.status) return false;
         if (
           query.before !== undefined &&
@@ -158,7 +158,7 @@ const createHarness = (params?: {
   const services = createTransactionServices({
     aggregateStore,
     namespaces,
-    accountCodecs,
+    accountAddressing,
     approvalSessionOptions: {
       now: () => 1_000,
       createId: () => {
@@ -202,7 +202,7 @@ describe("TransactionsService", () => {
         source: "provider",
         origin: "https://dapp.example",
         account: {
-          accountKey: createDefaultAccountKey(),
+          accountId: createDefaultAccountId(),
           address: DEFAULT_FROM,
         },
         prepare: expect.objectContaining({
@@ -246,7 +246,7 @@ describe("TransactionsService", () => {
         source: "provider",
         origin: "https://dapp.example",
         account: {
-          accountKey: createDefaultAccountKey(),
+          accountId: createDefaultAccountId(),
           address: DEFAULT_FROM,
         },
         submitted: null,
@@ -351,7 +351,7 @@ describe("TransactionsService", () => {
 
   it("lists public transaction history with filters and cloned JSON summaries", async () => {
     const { services } = createHarness();
-    const secondAccountKey = createDefaultAccountKey({
+    const secondAccountId = createDefaultAccountId({
       from: "0xcccccccccccccccccccccccccccccccccccccccc",
     });
     const first = await services.transactions.requestTransactionApproval({
@@ -367,7 +367,7 @@ describe("TransactionsService", () => {
     const opened = await services.transactions.requestTransactionApproval({
       ...createTransactionInput({
         requestId: "request-2",
-        accountKey: secondAccountKey,
+        accountId: secondAccountId,
       }),
       approvalId: "approval-2",
     });
@@ -379,7 +379,7 @@ describe("TransactionsService", () => {
 
     const submittedHistory = await services.transactions.listTransactions({
       status: "submitted",
-      accountKey: secondAccountKey,
+      accountId: secondAccountId,
     });
 
     expect(submittedHistory).toHaveLength(1);

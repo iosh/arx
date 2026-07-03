@@ -1,3 +1,4 @@
+import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.js";
 import type { WalletApiContext } from "../context.js";
 import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 
@@ -10,7 +11,8 @@ export const selectCreatedAccount = async (
   await context.accounts.setActiveAccount({
     namespace,
     chainRef,
-    accountKey: context.accountCodecs.toAccountKeyFromAddress({
+    accountId: accountIdFromChainAddress({
+      accountAddressing: context.accountAddressing,
       chainRef,
       address: params.address,
     }),

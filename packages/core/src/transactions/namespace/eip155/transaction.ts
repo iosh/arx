@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
@@ -23,7 +23,7 @@ import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
-  chains: ChainAddressCodecRegistry;
+  chains: ChainAddressingByNamespace;
   signer: Pick<Eip155Signer, "signTransaction">;
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
 };
@@ -153,7 +153,7 @@ const finalizeEip155Approval = async (
       approvedPayload,
       conflictKey: buildEip155TransactionConflictKey({
         chainRef: context.chainRef,
-        accountKey: context.accountKey,
+        accountId: context.accountId,
         nonce: approvedPayload.nonce,
       }),
       expiresAt: null,
@@ -196,7 +196,7 @@ const finalizeEip155Approval = async (
     approvedPayload: context.approvedPayload,
     conflictKey: buildEip155TransactionConflictKey({
       chainRef: context.chainRef,
-      accountKey: context.accountKey,
+      accountId: context.accountId,
       nonce: context.approvedPayload.nonce,
     }),
     expiresAt: null,
@@ -225,14 +225,14 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       deriveApprovalResourceKey(context) {
         return {
           kind: "eip155.account_nonce",
-          value: `${context.chainRef}:${context.accountKey}`,
+          value: `${context.chainRef}:${context.accountId}`,
         };
       },
       finalizeApproval: (context: Eip155ApprovalFinalizeContext) => finalizeEip155Approval(context, deps),
       deriveConflictKey(context) {
         return buildEip155TransactionConflictKey({
           chainRef: context.chainRef,
-          accountKey: context.accountKey,
+          accountId: context.accountId,
           nonce: context.approvedPayload.nonce,
         });
       },

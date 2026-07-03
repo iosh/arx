@@ -6,7 +6,7 @@ import type {
   RequestPermissionsApprovalPayload,
   RequestPermissionsApprovalResult,
 } from "../../permissions/service/types.js";
-import type { AccountKey } from "../../storage/records.js";
+import type { AccountId } from "../../storage/records.js";
 import type { ApprovalSource } from "../source.js";
 import {
   type ApprovalKind,
@@ -74,7 +74,7 @@ export type ApprovalRequestByKind = {
 };
 
 export type ApprovalAccountSelectionDecision = {
-  accountKeys: [AccountKey, ...AccountKey[]];
+  accountIds: [AccountId, ...AccountId[]];
 };
 
 export type ApprovalDecisionByKind = {

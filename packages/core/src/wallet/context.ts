@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type {
   WalletAccounts,
   WalletApprovals,
@@ -6,7 +6,7 @@ import type {
   WalletSession,
   WalletSetupServices,
 } from "../engine/types.js";
-import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
+import type { NamespaceRuntimeServices } from "../namespaces/index.js";
 import type { WalletTransactionAccess } from "../transactions/TransactionsService.js";
 import type {
   WalletApiApprovalDetailResult,
@@ -26,12 +26,12 @@ export type WalletApiContext = {
     listPending(): Promise<WalletApiPendingApprovalsResult>;
     getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
   }>;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   createId: () => string;
   caller: {
     origin: string;
   };
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
+  namespaceRuntime: NamespaceRuntimeServices;
   transactions: WalletTransactionAccess;
   setup: WalletSetupServices;
 };

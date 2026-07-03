@@ -29,32 +29,32 @@ export const createSettingsService = ({ messenger, port, now }: CreateSettingsSe
     return await run(async () => {
       const current = await port.get();
 
-      const selectedAccountKeysByNamespace: Record<string, string> = {
-        ...(current?.selectedAccountKeysByNamespace ?? {}),
+      const selectedAccountIdsByNamespace: Record<string, string> = {
+        ...(current?.selectedAccountIdsByNamespace ?? {}),
       };
 
-      if (params.selectedAccountKeysByNamespace) {
-        for (const [namespace, accountKey] of Object.entries(params.selectedAccountKeysByNamespace)) {
+      if (params.selectedAccountIdsByNamespace) {
+        for (const [namespace, accountId] of Object.entries(params.selectedAccountIdsByNamespace)) {
           const ns = namespace.trim();
           if (!ns) continue;
-          if (!accountKey) {
-            delete selectedAccountKeysByNamespace[ns];
+          if (!accountId) {
+            delete selectedAccountIdsByNamespace[ns];
             continue;
           }
-          selectedAccountKeysByNamespace[ns] = accountKey;
+          selectedAccountIdsByNamespace[ns] = accountId;
         }
       }
 
       if (
         current &&
-        areStringRecordsEqual(current.selectedAccountKeysByNamespace ?? {}, selectedAccountKeysByNamespace)
+        areStringRecordsEqual(current.selectedAccountIdsByNamespace ?? {}, selectedAccountIdsByNamespace)
       ) {
         return current;
       }
 
       const next: SettingsRecord = {
         id: "settings",
-        ...(Object.keys(selectedAccountKeysByNamespace).length > 0 ? { selectedAccountKeysByNamespace } : {}),
+        ...(Object.keys(selectedAccountIdsByNamespace).length > 0 ? { selectedAccountIdsByNamespace } : {}),
         updatedAt: clock(),
       };
 

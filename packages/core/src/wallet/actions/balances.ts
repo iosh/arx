@@ -20,23 +20,20 @@ export const getNativeBalance = async (context: WalletApiContext, input: WalletA
   const account = context.accounts.getOwnedAccount({
     namespace,
     chainRef: input.chainRef,
-    accountKey: input.accountKey,
+    accountId: input.accountId,
   });
   if (!account) {
-    throw new AccountNotOwnedError({ accountKey: input.accountKey, chainRef: input.chainRef, namespace });
+    throw new AccountNotOwnedError({ accountId: input.accountId, chainRef: input.chainRef, namespace });
   }
 
-  const uiBindings = context.namespaceBindings.getUi(namespace);
-  if (!uiBindings?.getNativeBalance) {
-    throw new ChainNotSupportedError({
-      message: `Native balance is not supported for namespace "${namespace}" yet.`,
-    });
-  }
-
-  const amount = await uiBindings.getNativeBalance({ chainRef: input.chainRef, address: account.canonicalAddress });
+  const amount = await context.namespaceRuntime.ui.getNativeBalance({
+    namespace,
+    chainRef: input.chainRef,
+    address: account.canonicalAddress,
+  });
 
   return {
-    accountKey: account.accountKey,
+    accountId: account.accountId,
     chainRef: input.chainRef,
     amount: amount.toString(10),
     currency: { ...chain.nativeCurrency },

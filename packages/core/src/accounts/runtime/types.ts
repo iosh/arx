@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountKey } from "../../storage/records.js";
+import type { AccountId } from "../../storage/records.js";
 
 // Chain-canonical address string (eg. EVM lowercased 0x...).
 export type AccountAddress = string;
@@ -12,15 +12,15 @@ export type NamespaceChainContext = {
 };
 
 export type OwnedAccountView = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   namespace: ChainNamespace;
   canonicalAddress: AccountAddress;
   displayAddress: string;
 };
 
 export type NamespaceAccountsState = {
-  accountKeys: AccountKey[];
-  selectedAccountKey: AccountKey | null;
+  accountIds: [AccountId, ...AccountId[]];
+  selectedAccountId: AccountId;
 };
 
 export type ActiveAccountView = OwnedAccountView & {
@@ -41,19 +41,17 @@ export type AccountSelectionService = {
   getState(): MultiNamespaceAccountsState;
 
   listOwnedForNamespace(params: NamespaceChainContext): OwnedAccountView[];
-  getOwnedAccount(params: NamespaceChainContext & { accountKey: AccountKey }): OwnedAccountView | null;
+  getOwnedAccount(params: NamespaceChainContext & { accountId: AccountId }): OwnedAccountView | null;
 
-  getAccountKeysForNamespace(namespace: ChainNamespace): AccountKey[];
-  getSelectedAccountKey(namespace: ChainNamespace): AccountKey | null;
+  getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[];
+  getSelectedAccountId(namespace: ChainNamespace): AccountId | null;
   getActiveAccountForNamespace(params: NamespaceChainContext): ActiveAccountView | null;
 
   /**
    * Selects the active account for a namespace.
-   * - accountKey omitted/null => reset selection to the namespace default (first account)
+   * - accountId omitted/null => reset selection to the namespace default (first account)
    */
-  setActiveAccount(
-    params: NamespaceChainContext & { accountKey?: AccountKey | null },
-  ): Promise<ActiveAccountView | null>;
+  setActiveAccount(params: NamespaceChainContext & { accountId?: AccountId | null }): Promise<ActiveAccountView | null>;
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;
 

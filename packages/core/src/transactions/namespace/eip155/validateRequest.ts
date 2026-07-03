@@ -1,4 +1,4 @@
-import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import { RpcInvalidParamsError } from "../../../rpc/errors.js";
 import type { TransactionValidationContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
@@ -9,7 +9,7 @@ import { Eip155FieldParseError, parseOptionalHexData, parseOptionalHexQuantity }
 const MIN_NETWORK_GAS_LIMIT = 21_000n;
 
 type Deps = {
-  chains: ChainAddressCodecRegistry;
+  chains: ChainAddressingByNamespace;
 };
 
 const runRequestParser = <T>(parse: () => T): T => {

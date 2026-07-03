@@ -10,6 +10,6 @@ export const deriveApprovalResourceKeyFromAggregate = (
 
   return {
     kind: "eip155.account_nonce",
-    value: `${aggregate.record.chainRef}:${aggregate.record.accountKey}`,
+    value: `${aggregate.record.chainRef}:${aggregate.record.accountId}`,
   };
 };

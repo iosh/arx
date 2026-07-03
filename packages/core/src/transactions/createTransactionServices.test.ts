@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAccountCodecRegistry, eip155Codec } from "../accounts/addressing/codec.js";
-import { eip155AddressCodec } from "../chains/eip155/addressCodec.js";
-import { ChainAddressCodecRegistry } from "../chains/registry.js";
+import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../accounts/addressing/addressing.js";
+import { buildChainAddressingByNamespace } from "../chains/addressing.js";
+import { eip155ChainAddressing } from "../chains/eip155/chainAddressing.js";
 import { isArxBaseError } from "../error.js";
 import type { Eip155RpcClient } from "../rpc/namespaceClients/eip155.js";
 import type {
@@ -21,7 +21,7 @@ import { createEip155Transaction } from "./namespace/eip155/transaction.js";
 import { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 import { TransactionAcceptanceCommitError } from "./submission/errors.js";
 
-const accountCodecs = createAccountCodecRegistry([eip155Codec]);
+const accountAddressing = buildAccountAddressingByNamespace([eip155AccountAddressing]);
 
 const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate => structuredClone(aggregate);
 
@@ -91,7 +91,7 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   origin: overrides.origin ?? "https://dapp.example",
   source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
-  accountKey: overrides.accountKey ?? "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  accountId: overrides.accountId ?? "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   request: {
     payload: structuredClone(
       overrides.request?.payload ?? {
@@ -163,7 +163,7 @@ const createInMemoryTransactionsStoragePort = (
       const filtered = records.filter((record) => {
         if (query.namespace !== undefined && record.namespace !== query.namespace) return false;
         if (query.chainRef !== undefined && record.chainRef !== query.chainRef) return false;
-        if (query.accountKey !== undefined && record.accountKey !== query.accountKey) return false;
+        if (query.accountId !== undefined && record.accountId !== query.accountId) return false;
         if (query.status !== undefined && record.status !== query.status) return false;
         return true;
       });
@@ -218,7 +218,7 @@ const createServices = (params?: {
     [
       "eip155",
       createEip155Transaction({
-        chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+        chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
         rpcClientFactory: () => rpc,
         signer: {
           signTransaction: params?.signTransaction ?? vi.fn(async () => ({ raw: "0xdeadbeef" })),
@@ -244,7 +244,7 @@ const createServices = (params?: {
   const services = createTransactionServices({
     aggregateStore,
     namespaces,
-    accountCodecs,
+    accountAddressing,
     approvalSessionOptions: {
       now: () => now,
       createId: () => {
@@ -510,7 +510,7 @@ describe("createTransactionServices", () => {
       [
         "eip155",
         createEip155Transaction({
-          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
           rpcClientFactory: () => rpc,
           signer: {
             signTransaction: vi.fn(async () => ({ raw: "0xdeadbeef" })),
@@ -544,7 +544,7 @@ describe("createTransactionServices", () => {
     const services = createTransactionServices({
       aggregateStore,
       namespaces,
-      accountCodecs,
+      accountAddressing,
       approvalSessionOptions: {
         now: () => now,
         createId: () => {
@@ -614,7 +614,7 @@ describe("createTransactionServices", () => {
       [
         "eip155",
         createEip155Transaction({
-          chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+          chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
           rpcClientFactory: () => rpc,
           signer: {
             signTransaction: vi.fn(async () => ({ raw: "0xdeadbeef" })),
@@ -643,7 +643,7 @@ describe("createTransactionServices", () => {
     const services = createTransactionServices({
       aggregateStore,
       namespaces,
-      accountCodecs,
+      accountAddressing,
       approvalSessionOptions: {
         now: () => now,
         createId: () => {

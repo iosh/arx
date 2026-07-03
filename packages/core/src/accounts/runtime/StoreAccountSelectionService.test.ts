@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
+import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { createMessenger } from "../../messenger/index.js";
 import { MemoryAccountsPort, MemorySettingsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createAccountsService } from "../../services/store/accounts/index.js";
@@ -13,7 +13,7 @@ const keyringId = "11111111-1111-4111-8111-111111111111";
 
 const makeAccount = (payloadHex: string, createdAt: number, extra?: Partial<AccountRecord>): AccountRecord =>
   ({
-    accountKey: `eip155:${payloadHex}`,
+    accountId: `eip155:${payloadHex}`,
     namespace,
     keyringId,
     createdAt,
@@ -32,7 +32,7 @@ const createService = async (params?: { accounts?: AccountRecord[]; settings?: S
     messenger,
     accounts,
     settings,
-    accountCodecs: createAccountCodecRegistry([eip155Codec]),
+    accountAddressing: buildAccountAddressingByNamespace([eip155AccountAddressing]),
   });
 
   await service.refresh();
@@ -58,7 +58,7 @@ describe("StoreAccountSelectionService", () => {
       accounts: [first, second, hidden],
       settings: {
         id: "settings",
-        selectedAccountKeysByNamespace: {
+        selectedAccountIdsByNamespace: {
           eip155: "eip155:ffffffffffffffffffffffffffffffffffffffff",
         },
         updatedAt: 1,
@@ -66,21 +66,21 @@ describe("StoreAccountSelectionService", () => {
     });
     createdServices.push(service);
 
-    expect(service.getAccountKeysForNamespace(namespace)).toEqual([second.accountKey, first.accountKey]);
+    expect(service.getAccountIdsForNamespace(namespace)).toEqual([second.accountId, first.accountId]);
     expect(service.listOwnedForNamespace({ namespace, chainRef })).toMatchObject([
       {
-        accountKey: second.accountKey,
+        accountId: second.accountId,
         canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
       },
       {
-        accountKey: first.accountKey,
+        accountId: first.accountId,
         canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
       },
     ]);
     expect(service.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
       namespace,
       chainRef,
-      accountKey: second.accountKey,
+      accountId: second.accountId,
       canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
   });
@@ -93,7 +93,7 @@ describe("StoreAccountSelectionService", () => {
       accounts: [first, second],
       settings: {
         id: "settings",
-        selectedAccountKeysByNamespace: {
+        selectedAccountIdsByNamespace: {
           other: "other:aa",
         },
         updatedAt: 1,
@@ -105,31 +105,31 @@ describe("StoreAccountSelectionService", () => {
       service.setActiveAccount({
         namespace,
         chainRef,
-        accountKey: second.accountKey,
+        accountId: second.accountId,
       }),
     ).resolves.toMatchObject({
       namespace,
       chainRef,
-      accountKey: second.accountKey,
+      accountId: second.accountId,
       canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
 
     expect(settingsPort.saved.at(-1)).toMatchObject({
-      selectedAccountKeysByNamespace: {
+      selectedAccountIdsByNamespace: {
         other: "other:aa",
-        eip155: second.accountKey,
+        eip155: second.accountId,
       },
     });
-    expect(service.getSelectedAccountKey(namespace)).toBe(second.accountKey);
+    expect(service.getSelectedAccountId(namespace)).toBe(second.accountId);
 
-    await expect(service.setActiveAccount({ namespace, chainRef, accountKey: null })).resolves.toMatchObject({
+    await expect(service.setActiveAccount({ namespace, chainRef, accountId: null })).resolves.toMatchObject({
       namespace,
       chainRef,
-      accountKey: first.accountKey,
+      accountId: first.accountId,
       canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
     });
     expect(service.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
-      accountKey: first.accountKey,
+      accountId: first.accountId,
       canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
     });
   });
@@ -145,7 +145,7 @@ describe("StoreAccountSelectionService", () => {
       service.setActiveAccount({
         namespace,
         chainRef,
-        accountKey: hidden.accountKey,
+        accountId: hidden.accountId,
       }),
     ).rejects.toMatchObject({ code: "global.permission.denied" });
 
@@ -153,7 +153,7 @@ describe("StoreAccountSelectionService", () => {
       service.setActiveAccount({
         namespace,
         chainRef,
-        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
     ).rejects.toMatchObject({ code: "keyring.account_not_found" });
   });
@@ -168,7 +168,7 @@ describe("StoreAccountSelectionService", () => {
       service.setActiveAccount({
         namespace: "solana",
         chainRef,
-        accountKey: "solana:1111111111111111111111111111111111111111",
+        accountId: "solana:1111111111111111111111111111111111111111",
       }),
     ).rejects.toMatchObject({ code: "global.rpc.invalid_request" });
   });

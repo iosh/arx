@@ -3,11 +3,11 @@ import type { SwitchActiveAccountInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
 
 const buildCurrentChainAccountSummary = (account: {
-  accountKey: string;
+  accountId: string;
   canonicalAddress: string;
   displayAddress: string;
 }) => ({
-  accountKey: account.accountKey,
+  accountId: account.accountId,
   canonicalAddress: account.canonicalAddress,
   displayAddress: account.displayAddress,
 });
@@ -33,7 +33,7 @@ export const switchActiveAccount = async (context: WalletApiContext, input: Swit
   const active = await context.accounts.setActiveAccount({
     namespace,
     chainRef: input.chainRef,
-    accountKey: input.accountKey ?? null,
+    accountId: input.accountId ?? null,
   });
 
   return active ? buildCurrentChainAccountSummary(active) : null;

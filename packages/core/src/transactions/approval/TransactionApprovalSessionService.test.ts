@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
-import { ChainAddressCodecRegistry } from "../../chains/registry.js";
+import { canonicalChainAddressFromAccountId } from "../../accounts/addressing/accountId.js";
+import { buildChainAddressingByNamespace } from "../../chains/addressing.js";
+import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import type { Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
 import { createDeferred } from "../../utils/deferred.js";
 import {
-  accountCodecs,
-  createDefaultAccountKey,
+  accountAddressing,
+  createDefaultAccountId,
   createNamespaceTransactionStub,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -101,7 +102,7 @@ const createTransactionInput = (overrides: CreateTransactionInputOverrides = {})
   origin: overrides.origin ?? "https://dapp.example",
   source: overrides.source ?? "provider",
   requestId: overrides.requestId ?? "request-1",
-  accountKey: overrides.accountKey ?? createDefaultAccountKey(),
+  accountId: overrides.accountId ?? createDefaultAccountId(),
   request: {
     payload: structuredClone(
       overrides.request?.payload ?? {
@@ -184,7 +185,7 @@ const createInMemoryTransactionsStoragePort = (
       const filtered = records.filter((record) => {
         if (query.namespace !== undefined && record.namespace !== query.namespace) return false;
         if (query.chainRef !== undefined && record.chainRef !== query.chainRef) return false;
-        if (query.accountKey !== undefined && record.accountKey !== query.accountKey) return false;
+        if (query.accountId !== undefined && record.accountId !== query.accountId) return false;
         if (query.status !== undefined && record.status !== query.status) return false;
         if (
           query.before !== undefined &&
@@ -281,9 +282,11 @@ const openSessionFromRequest = async (params: {
     chainRef: input.chainRef,
     source: input.source,
     origin: input.origin,
-    accountKey: input.accountKey,
-    from: accountCodecs.toCanonicalAddressFromAccountKey({
-      accountKey: input.accountKey,
+    accountId: input.accountId,
+    from: canonicalChainAddressFromAccountId({
+      accountAddressing,
+      chainRef: input.chainRef,
+      accountId: input.accountId,
     }),
     requestId: input.requestId ?? null,
     request: structuredClone(input.request),
@@ -296,7 +299,7 @@ const createEip155Namespaces = (rpc: Eip155RpcClient): NamespaceTransactions =>
     [
       "eip155",
       createEip155Transaction({
-        chains: new ChainAddressCodecRegistry([eip155AddressCodec]),
+        chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
         rpcClientFactory: () => rpc,
         signer: { signTransaction: vi.fn() },
         broadcaster: { broadcast: vi.fn() },
@@ -365,7 +368,7 @@ describe("TransactionApprovalSessionService", () => {
       kind: "eip155.nonce",
       value:
         approved.status === "approved"
-          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountKey}:0x8`
+          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountId}:0x8`
           : "",
     });
     expect(sessions.getSessionByApprovalId("approval-1")).toBeNull();
@@ -401,7 +404,7 @@ describe("TransactionApprovalSessionService", () => {
       namespace: "eip155",
       chainRef: DEFAULT_CHAIN_REF,
       origin: "https://dapp.example",
-      accountKey: createDefaultAccountKey(),
+      accountId: createDefaultAccountId(),
       from: DEFAULT_FROM,
       request: {
         namespace: "eip155",
@@ -447,7 +450,7 @@ describe("TransactionApprovalSessionService", () => {
       kind: "eip155.nonce",
       value:
         approved.status === "approved"
-          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountKey}:0x9`
+          ? `${approved.aggregate.record.chainRef}:${approved.aggregate.record.accountId}:0x9`
           : "",
     });
   });
@@ -502,7 +505,7 @@ describe("TransactionApprovalSessionService", () => {
         approvedRequestPayload: structuredClone(DEFAULT_UNSIGNED_TRANSACTION),
         conflictKey: {
           kind: "eip155.nonce",
-          value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountKey()}:0x7`,
+          value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountId()}:0x7`,
         },
       }),
     );
@@ -545,7 +548,7 @@ describe("TransactionApprovalSessionService", () => {
     const { aggregateStore, sessions } = createServices(createEip155Namespaces(rpc));
     const conflictKey = {
       kind: "eip155.nonce",
-      value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountKey()}:0x7`,
+      value: `${DEFAULT_CHAIN_REF}:${createDefaultAccountId()}:0x7`,
     } as const;
 
     await aggregateStore.createApprovedTransaction(

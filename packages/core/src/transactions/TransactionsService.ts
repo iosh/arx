@@ -1,5 +1,5 @@
-import type { AccountKey } from "../accounts/addressing/accountKey.js";
-import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import { type AccountId, canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
+import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { ChainRef } from "../chains/ids.js";
 import type {
   CreateTransactionInput,
@@ -40,7 +40,7 @@ export type {
 } from "./TransactionInvalidations.js";
 
 export type TransactionAccount = {
-  accountKey: AccountKey;
+  accountId: AccountId;
   address: string;
 };
 
@@ -277,22 +277,24 @@ type TransactionsServiceDeps = {
     | "discardSessionByApprovalId"
   >;
   submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   invalidations: TransactionInvalidations;
 };
 
 const buildTransactionAccount = (
-  accountCodecs: TransactionsServiceDeps["accountCodecs"],
-  record: Pick<TransactionRecord, "accountKey">,
+  accountAddressing: TransactionsServiceDeps["accountAddressing"],
+  record: Pick<TransactionRecord, "accountId" | "chainRef">,
 ): TransactionAccount => ({
-  accountKey: record.accountKey,
-  address: accountCodecs.toCanonicalAddressFromAccountKey({
-    accountKey: record.accountKey,
+  accountId: record.accountId,
+  address: canonicalChainAddressFromAccountId({
+    accountAddressing,
+    chainRef: record.chainRef,
+    accountId: record.accountId,
   }),
 });
 
 const buildTransactionApprovalAccount = (session: TransactionApprovalSession): TransactionAccount => ({
-  accountKey: session.accountKey,
+  accountId: session.accountId,
   address: session.from,
 });
 
@@ -335,7 +337,7 @@ const buildReplacementSummary = (record: TransactionRecord): TransactionReplacem
 
 const buildTransaction = (
   record: TransactionRecord,
-  accountCodecs: TransactionsServiceDeps["accountCodecs"],
+  accountAddressing: TransactionsServiceDeps["accountAddressing"],
 ): Transaction => ({
   id: record.id,
   status: record.status,
@@ -343,7 +345,7 @@ const buildTransaction = (
   chainRef: record.chainRef,
   source: record.source,
   origin: record.origin,
-  account: buildTransactionAccount(accountCodecs, record),
+  account: buildTransactionAccount(accountAddressing, record),
   submitted: cloneNullableSummary(record.submitted),
   receipt: cloneNullableSummary(record.receipt),
   replacement: buildReplacementSummary(record),
@@ -413,7 +415,7 @@ export class TransactionsService {
   #aggregateStore: TransactionsServiceDeps["aggregateStore"];
   #approvalSessions: TransactionsServiceDeps["approvalSessions"];
   #submission: TransactionsServiceDeps["submission"];
-  #accountCodecs: TransactionsServiceDeps["accountCodecs"];
+  #accountAddressing: TransactionsServiceDeps["accountAddressing"];
   #invalidations: TransactionInvalidations;
   #approvalDecisions = new Map<string, TransactionApprovalDecisionSettlement>();
 
@@ -421,7 +423,7 @@ export class TransactionsService {
     this.#aggregateStore = deps.aggregateStore;
     this.#approvalSessions = deps.approvalSessions;
     this.#submission = deps.submission;
-    this.#accountCodecs = deps.accountCodecs;
+    this.#accountAddressing = deps.accountAddressing;
     this.#invalidations = deps.invalidations;
   }
 
@@ -438,9 +440,11 @@ export class TransactionsService {
         chainRef: reviewInput.chainRef,
         source: reviewInput.source,
         origin: reviewInput.origin,
-        accountKey: reviewInput.accountKey,
-        from: this.#accountCodecs.toCanonicalAddressFromAccountKey({
-          accountKey: reviewInput.accountKey,
+        accountId: reviewInput.accountId,
+        from: canonicalChainAddressFromAccountId({
+          accountAddressing: this.#accountAddressing,
+          chainRef: reviewInput.chainRef,
+          accountId: reviewInput.accountId,
         }),
         requestId: reviewInput.requestId ?? null,
         request: structuredClone(reviewInput.request),
@@ -701,7 +705,7 @@ export class TransactionsService {
   }
 
   #buildTransactionRecord(record: TransactionRecord): Transaction {
-    return buildTransaction(record, this.#accountCodecs);
+    return buildTransaction(record, this.#accountAddressing);
   }
 
   #buildTransactionSubmissionOutcome(transaction: Transaction): TransactionSubmissionOutcome | null {

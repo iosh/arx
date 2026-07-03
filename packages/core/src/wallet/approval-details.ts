@@ -88,7 +88,7 @@ const getApprovalRequestChainRef = (record: ApprovalRecord): string | undefined 
 
 const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"]) =>
   accounts.map((account) => ({
-    accountKey: account.accountKey,
+    accountId: account.accountId,
     canonicalAddress: account.canonicalAddress,
     displayAddress: account.displayAddress,
   }));
@@ -99,7 +99,7 @@ const buildSelectionDetail = (
     | ApprovalRecord<typeof ApprovalKinds.RequestPermissions>,
   deps: ApprovalDetailsDeps,
 ): ApprovalDetail => {
-  const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
+  const { selectableAccounts, recommendedAccountId } = getApprovalSelectableAccounts(record, deps, {
     request: record.request,
   });
 
@@ -113,7 +113,7 @@ const buildSelectionDetail = (
       },
       request: {
         selectableAccounts: toSelectableAccounts(selectableAccounts),
-        recommendedAccountKey,
+        recommendedAccountId,
       },
       review: null,
     };
@@ -128,7 +128,7 @@ const buildSelectionDetail = (
     },
     request: {
       selectableAccounts: toSelectableAccounts(selectableAccounts),
-      recommendedAccountKey,
+      recommendedAccountId,
       requestedGrants: record.request.requestedGrants.flatMap((item) =>
         item.chainRefs.map((chainRef) => ({
           grantKind: item.grantKind,

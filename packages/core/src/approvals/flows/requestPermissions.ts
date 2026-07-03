@@ -65,17 +65,17 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       selectableAccounts,
     });
 
-    const grantedAccountKeys = selectedAccounts.map((account) => account.accountKey);
+    const grantedAccountIds = selectedAccounts.map((account) => account.accountId);
     await deps.permissions.grantAuthorization(record.origin, {
       namespace,
       chains: [...requestedChainRefs]
         .sort((left, right) => left.localeCompare(right))
         .map((chainRef) => ({
           chainRef: chainRef as typeof primaryChainRef,
-          accountKeys: grantedAccountKeys,
+          accountIds: grantedAccountIds,
         })) as [
-        { chainRef: typeof primaryChainRef; accountKeys: string[] },
-        ...Array<{ chainRef: typeof primaryChainRef; accountKeys: string[] }>,
+        { chainRef: typeof primaryChainRef; accountIds: string[] },
+        ...Array<{ chainRef: typeof primaryChainRef; accountIds: string[] }>,
       ],
     });
 

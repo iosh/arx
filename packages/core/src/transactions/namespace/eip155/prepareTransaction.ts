@@ -1,4 +1,4 @@
-import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
+import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
@@ -16,7 +16,7 @@ import { readErrorMessage } from "./utils/validation.js";
 
 type PrepareTransactionDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
-  chains: ChainAddressCodecRegistry;
+  chains: ChainAddressingByNamespace;
   feeOracleFactory?: (rpc: Eip155RpcClient) => Eip155FeeOracle;
 };
 

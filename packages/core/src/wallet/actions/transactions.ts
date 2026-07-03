@@ -69,8 +69,8 @@ const buildTransactionHistoryQuery = (input?: WalletApiTransactionsInput): ListT
   if (input.chainRef !== undefined) {
     query.chainRef = input.chainRef;
   }
-  if (input.accountKey !== undefined) {
-    query.accountKey = input.accountKey;
+  if (input.accountId !== undefined) {
+    query.accountId = input.accountId;
   }
   if (input.status !== undefined) {
     query.status = input.status;
@@ -109,7 +109,7 @@ export const requestSendTransactionApproval = async (
     origin: context.caller.origin,
     source: "wallet-ui",
     requestId: context.createId(),
-    accountKey: activeAccount.accountKey,
+    accountId: activeAccount.accountId,
     approvalId: context.createId(),
     request: {
       payload: transactionRequest.payload as JsonValue,

@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { isArxBaseError } from "../../error.js";
 import {
   buildTransactionTerminalReason,
@@ -29,7 +29,7 @@ type SubmittedTransactionTrackerDeps = {
     | "findTransactionRecordsByConflictKey"
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   resourceLock: TransactionResourceLock;
 };
 
@@ -70,13 +70,13 @@ export class SubmittedTransactionTracker {
     | "findTransactionRecordsByConflictKey"
   >;
   #namespaces: Pick<NamespaceTransactions, "require">;
-  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  #accountAddressing: AccountAddressingByNamespace;
   #resourceLock: TransactionResourceLock;
 
   constructor(deps: SubmittedTransactionTrackerDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
-    this.#accountCodecs = deps.accountCodecs;
+    this.#accountAddressing = deps.accountAddressing;
     this.#resourceLock = deps.resourceLock;
   }
 
@@ -99,7 +99,7 @@ export class SubmittedTransactionTracker {
     }
 
     const namespaceTracking = this.#requireNamespaceTracking(aggregate.record.namespace);
-    const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountCodecs);
+    const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountAddressing);
 
     let inspection: SubmittedTransactionInspection;
     try {

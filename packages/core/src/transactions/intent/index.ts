@@ -1,7 +1,7 @@
 import type { TransactionRequest } from "../types.js";
 
 export type TransactionIntentAccount = {
-  accountKey: string;
+  accountId: string;
   accountAddress: string;
   /** Address explicitly requested by the caller, if any. */
   requestedAddress?: string;

@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { isArxBaseError } from "../../error.js";
 import type { JsonValue, TransactionAggregateStore, TransactionRecord } from "../aggregate/index.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
@@ -20,7 +20,7 @@ import type { SubmittedTransactionTracker, SubmittedTransactionTrackerResult } f
 type SubmittedTransactionMonitorDeps = {
   transactions: Pick<TransactionAggregateStore, "loadTransactionAggregate" | "listTransactionHistory">;
   namespaces: Pick<NamespaceTransactions, "require">;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   tracker: Pick<SubmittedTransactionTracker, "inspectSubmittedTransaction">;
 };
 
@@ -69,7 +69,7 @@ const isPendingInspection = (
 export class SubmittedTransactionMonitor {
   #transactions: Pick<TransactionAggregateStore, "loadTransactionAggregate" | "listTransactionHistory">;
   #namespaces: Pick<NamespaceTransactions, "require">;
-  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  #accountAddressing: AccountAddressingByNamespace;
   #tracker: Pick<SubmittedTransactionTracker, "inspectSubmittedTransaction">;
   #entries = new Map<string, WatchEntry>();
   #wakeChangedHandlers = new Set<WakeChangedHandler>();
@@ -81,7 +81,7 @@ export class SubmittedTransactionMonitor {
   constructor(deps: SubmittedTransactionMonitorDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
-    this.#accountCodecs = deps.accountCodecs;
+    this.#accountAddressing = deps.accountAddressing;
     this.#tracker = deps.tracker;
   }
 
@@ -216,7 +216,7 @@ export class SubmittedTransactionMonitor {
       return;
     }
 
-    const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountCodecs);
+    const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountAddressing);
     const nextWakeAt =
       existing?.nextWakeAt ??
       now +

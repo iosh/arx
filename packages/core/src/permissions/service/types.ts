@@ -1,10 +1,10 @@
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountKey } from "../../storage/records.js";
+import type { AccountId } from "../../storage/records.js";
 import type { ConnectionGrantKind } from "../connectionGrantKinds.js";
 
 export type ChainPermissionState = {
-  accountKeys: AccountKey[];
+  accountIds: AccountId[];
 };
 
 export type NamespacePermissionState = {
@@ -38,12 +38,12 @@ export type ChainPermissionAuthorization = {
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  accountKeys: AccountKey[];
+  accountIds: AccountId[];
 };
 
 export type AuthorizationChainInput = {
   chainRef: ChainRef;
-  accountKeys: AccountKey[];
+  accountIds: AccountId[];
 };
 
 export type GrantAuthorizationOptions = {
@@ -51,10 +51,10 @@ export type GrantAuthorizationOptions = {
   chains: [AuthorizationChainInput, ...AuthorizationChainInput[]];
 };
 
-export type SetChainAccountKeysOptions = {
+export type SetChainAccountIdsOptions = {
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  accountKeys: AccountKey[];
+  accountIds: AccountId[];
 };
 
 export type RevokeChainAuthorizationOptions = {
@@ -100,7 +100,7 @@ export type PermissionsReader = {
 
 export type PermissionsWriter = {
   grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
-  setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
+  setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization>;
   revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
   revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
   revokeOriginPermissions(origin: string): Promise<void>;

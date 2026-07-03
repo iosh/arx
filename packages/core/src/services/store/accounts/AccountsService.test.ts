@@ -1,26 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { createMessenger } from "../../../messenger/index.js";
-import type { AccountKey, AccountRecord } from "../../../storage/records.js";
+import type { AccountId, AccountRecord } from "../../../storage/records.js";
 import { createAccountsService } from "./AccountsService.js";
 import type { AccountsPort } from "./port.js";
 
 const createInMemoryPort = (seed: AccountRecord[] = []) => {
-  const store = new Map<AccountKey, AccountRecord>(seed.map((r) => [r.accountKey, r]));
+  const store = new Map<AccountId, AccountRecord>(seed.map((r) => [r.accountId, r]));
   const writes: AccountRecord[] = [];
 
   const port: AccountsPort = {
-    async get(accountKey) {
-      return store.get(accountKey) ?? null;
+    async get(accountId) {
+      return store.get(accountId) ?? null;
     },
     async list() {
       return [...store.values()];
     },
     async upsert(record) {
-      store.set(record.accountKey, record);
+      store.set(record.accountId, record);
       writes.push(record);
     },
-    async remove(accountKey) {
-      store.delete(accountKey);
+    async remove(accountId) {
+      store.delete(accountId);
     },
     async removeByKeyringId(keyringId) {
       for (const [id, record] of Array.from(store.entries())) {
@@ -40,20 +40,20 @@ describe("AccountsService", () => {
   it("list() filters hidden by default and sorts by createdAt asc", async () => {
     const seed: AccountRecord[] = [
       {
-        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 2000,
         hidden: true,
       },
       {
-        accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
       },
       {
-        accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+        accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1500,
@@ -64,13 +64,13 @@ describe("AccountsService", () => {
     const service = createService(port);
 
     const visible = await service.list();
-    expect(visible.map((r) => r.accountKey)).toEqual([
+    expect(visible.map((r) => r.accountId)).toEqual([
       "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "eip155:cccccccccccccccccccccccccccccccccccccccc",
     ]);
 
     const all = await service.list({ includeHidden: true });
-    expect(all.map((r) => r.accountKey)).toEqual([
+    expect(all.map((r) => r.accountId)).toEqual([
       "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "eip155:cccccccccccccccccccccccccccccccccccccccc",
       "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -87,7 +87,7 @@ describe("AccountsService", () => {
     });
 
     await service.setHidden({
-      accountKey: "eip155:dddddddddddddddddddddddddddddddddddddddd",
+      accountId: "eip155:dddddddddddddddddddddddddddddddddddddddd",
       hidden: true,
     });
 
@@ -98,7 +98,7 @@ describe("AccountsService", () => {
   it("setHidden(true) sets hidden=true; setHidden(false) omits hidden field", async () => {
     const seed: AccountRecord[] = [
       {
-        accountKey: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        accountId: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
@@ -114,7 +114,7 @@ describe("AccountsService", () => {
     });
 
     await service.setHidden({
-      accountKey: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      accountId: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       hidden: true,
     });
 
@@ -122,7 +122,7 @@ describe("AccountsService", () => {
     expect(hidden?.hidden).toBe(true);
 
     await service.setHidden({
-      accountKey: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      accountId: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       hidden: false,
     });
 

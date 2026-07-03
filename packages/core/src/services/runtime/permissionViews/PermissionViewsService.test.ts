@@ -19,10 +19,10 @@ describe("createPermissionViewsService", () => {
             namespace: "eip155",
             chains: {
               "eip155:1": {
-                accountKeys: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
+                accountIds: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
               },
               "eip155:10": {
-                accountKeys: [STALE_ACCOUNT_ID],
+                accountIds: [STALE_ACCOUNT_ID],
               },
             },
           };
@@ -33,10 +33,10 @@ describe("createPermissionViewsService", () => {
               eip155: {
                 chains: {
                   "eip155:1": {
-                    accountKeys: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
+                    accountIds: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
                   },
                   "eip155:10": {
-                    accountKeys: [STALE_ACCOUNT_ID],
+                    accountIds: [STALE_ACCOUNT_ID],
                   },
                 },
               },
@@ -45,13 +45,13 @@ describe("createPermissionViewsService", () => {
         }),
       },
       accounts: {
-        getOwnedAccount: ({ accountKey }) => {
-          if (accountKey !== VALID_ACCOUNT_ID) {
+        getOwnedAccount: ({ accountId }) => {
+          if (accountId !== VALID_ACCOUNT_ID) {
             return null;
           }
 
           return {
-            accountKey,
+            accountId,
             namespace: "eip155",
             canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -65,10 +65,10 @@ describe("createPermissionViewsService", () => {
       chainRef: "eip155:1",
       isPermittedChain: true,
       permittedChainRefs: ["eip155:1", "eip155:10"],
-      permittedAccountKeys: [VALID_ACCOUNT_ID],
+      permittedAccountIds: [VALID_ACCOUNT_ID],
       accounts: [
         {
-          accountKey: VALID_ACCOUNT_ID,
+          accountId: VALID_ACCOUNT_ID,
           canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         },
@@ -81,7 +81,7 @@ describe("createPermissionViewsService", () => {
       chainRef: "eip155:10",
       isPermittedChain: true,
       permittedChainRefs: ["eip155:1", "eip155:10"],
-      permittedAccountKeys: [],
+      permittedAccountIds: [],
       accounts: [],
       isAuthorized: false,
     });
@@ -96,10 +96,10 @@ describe("createPermissionViewsService", () => {
           eip155: {
             chains: {
               "eip155:1": {
-                accountKeys: [VALID_ACCOUNT_ID],
+                accountIds: [VALID_ACCOUNT_ID],
               },
               "eip155:10": {
-                accountKeys: [],
+                accountIds: [],
               },
             },
           },

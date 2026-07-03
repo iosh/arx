@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
 import { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
@@ -19,7 +19,7 @@ type CreateApprovalSessionOptions = {
 type CreateTransactionServicesOptions = {
   aggregateStore: TransactionAggregateStore;
   namespaces: NamespaceTransactions;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   approvalSessionOptions?: CreateApprovalSessionOptions;
   resourceLock?: TransactionResourceLock;
 };
@@ -46,27 +46,27 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   const submission = new TransactionSubmissionExecutor({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountCodecs: options.accountCodecs,
+    accountAddressing: options.accountAddressing,
     resourceLock,
   });
   const transactions = new TransactionsService({
     aggregateStore: transactionsStore,
     approvalSessions: approvals,
     submission,
-    accountCodecs: options.accountCodecs,
+    accountAddressing: options.accountAddressing,
     invalidations,
   });
 
   const tracker = new SubmittedTransactionTracker({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountCodecs: options.accountCodecs,
+    accountAddressing: options.accountAddressing,
     resourceLock,
   });
   const monitor = new SubmittedTransactionMonitor({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountCodecs: options.accountCodecs,
+    accountAddressing: options.accountAddressing,
     tracker,
   });
   invalidations.onTransactionsChanged((transactionIds) => {

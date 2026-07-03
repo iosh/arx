@@ -169,7 +169,7 @@ export type TransactionProposalConflictContext<TNamespace extends string = strin
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
   approvedPayload: TransactionPrepared<TNamespace>;
@@ -185,7 +185,7 @@ export type TransactionApprovalResourceContext<TNamespace extends string = strin
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: AccountAddress;
 };
 
@@ -195,7 +195,7 @@ export type TransactionApprovalFinalizeContext<TNamespace extends string = strin
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
   approvedPayload: TransactionPrepared<TNamespace>;
@@ -238,7 +238,7 @@ export type TransactionBroadcastArtifactContext<TNamespace extends string = stri
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  accountKey: string;
+  accountId: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
   approvedPayload: TransactionPrepared<TNamespace>;

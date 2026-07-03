@@ -32,7 +32,7 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
       chains: [
         {
           chainRef,
-          accountKeys: selectedAccounts.map((account) => account.accountKey),
+          accountIds: selectedAccounts.map((account) => account.accountId),
         },
       ],
     });

@@ -1,7 +1,7 @@
 export type { KeyringType, VaultKeyringEntry, VaultKeyringPayload } from "./keyringSchemas.js";
 export { KEYRING_TYPES, KEYRING_VAULT_ENTRY_VERSION } from "./keyringSchemas.js";
 export type {
-  AccountKey,
+  AccountId,
   AccountNamespace,
   AccountRecord,
   ChainRpcDefaultEndpointsRecord,
@@ -12,7 +12,7 @@ export type {
   SettingsRecord,
   WalletChainSelectionRecord,
 } from "./records.js";
-export { AccountKeySchema } from "./records.js";
+export { AccountIdSchema } from "./records.js";
 
 export type { ChainDefinitionEntity, ChainDefinitionSource, VaultMetaSnapshot } from "./schemas.js";
 export {

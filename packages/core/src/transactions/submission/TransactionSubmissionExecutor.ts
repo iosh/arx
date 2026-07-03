@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { isArxBaseError } from "../../error.js";
 import type { JsonValue, TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
@@ -25,7 +25,7 @@ type TransactionSubmissionExecutorDeps = {
     | "failSubmission"
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  accountAddressing: AccountAddressingByNamespace;
   resourceLock: TransactionResourceLock;
 };
 
@@ -44,13 +44,13 @@ export class TransactionSubmissionExecutor {
     | "failSubmission"
   >;
   #namespaces: Pick<NamespaceTransactions, "require">;
-  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
+  #accountAddressing: AccountAddressingByNamespace;
   #resourceLock: TransactionResourceLock;
 
   constructor(deps: TransactionSubmissionExecutorDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
-    this.#accountCodecs = deps.accountCodecs;
+    this.#accountAddressing = deps.accountAddressing;
     this.#resourceLock = deps.resourceLock;
   }
 
@@ -78,7 +78,7 @@ export class TransactionSubmissionExecutor {
     let broadcastArtifact: BroadcastArtifact;
     try {
       broadcastArtifact = await submission.createBroadcastArtifact(
-        buildBroadcastArtifactContext(signing, this.#accountCodecs),
+        buildBroadcastArtifactContext(signing, this.#accountAddressing),
       );
     } catch (error) {
       await this.#failSubmissionWithResourceLock({
@@ -105,7 +105,9 @@ export class TransactionSubmissionExecutor {
         operation: "submission.broadcast",
         value: namespaceTransaction.submission?.broadcast,
       });
-      broadcastResult = await broadcast(buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountCodecs));
+      broadcastResult = await broadcast(
+        buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountAddressing),
+      );
     } catch (error) {
       await this.#failSubmissionWithResourceLock({
         aggregate: current,

@@ -8,7 +8,7 @@ export type ListTransactionHistoryCursor = {
 export type ListTransactionHistoryQuery = {
   namespace?: string;
   chainRef?: string;
-  accountKey?: string;
+  accountId?: string;
   status?: TransactionStatus;
   limit?: number;
   before?: ListTransactionHistoryCursor;

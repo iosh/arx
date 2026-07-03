@@ -1,32 +1,32 @@
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { AccountKey } from "../../runtime/keyring/types.js";
+import type { AccountId } from "../../runtime/keyring/types.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 
-type SignDigestResult = Awaited<ReturnType<KeyringService["signDigestByAccountKey"]>>;
+type SignDigestResult = Awaited<ReturnType<KeyringService["signDigestByAccountId"]>>;
 
 export type AccountSigningService = {
-  assertAccountUnlocked(accountKey: AccountKey): Promise<void>;
-  signDigestByAccountKey(params: { accountKey: AccountKey; digest: Uint8Array }): Promise<SignDigestResult>;
+  assertAccountUnlocked(accountId: AccountId): Promise<void>;
+  signDigestByAccountId(params: { accountId: AccountId; digest: Uint8Array }): Promise<SignDigestResult>;
 };
 
 type CreateAccountSigningServiceDeps = {
-  keyring: Pick<KeyringService, "waitForReady" | "hasAccountKey" | "signDigestByAccountKey">;
+  keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
 };
 
 export const createAccountSigningService = ({ keyring }: CreateAccountSigningServiceDeps): AccountSigningService => {
-  const assertAccountUnlocked: AccountSigningService["assertAccountUnlocked"] = async (accountKey) => {
+  const assertAccountUnlocked: AccountSigningService["assertAccountUnlocked"] = async (accountId) => {
     await keyring.waitForReady();
 
-    if (!keyring.hasAccountKey(accountKey)) {
+    if (!keyring.hasAccountId(accountId)) {
       throw new SessionLockedError();
     }
   };
 
   return {
     assertAccountUnlocked,
-    signDigestByAccountKey: async (params) => {
-      await assertAccountUnlocked(params.accountKey);
-      return await keyring.signDigestByAccountKey(params);
+    signDigestByAccountId: async (params) => {
+      await assertAccountUnlocked(params.accountId);
+      return await keyring.signDigestByAccountId(params);
     },
   };
 };

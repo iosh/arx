@@ -1,5 +1,4 @@
 import { ApprovalKinds } from "../../approvals/queue/types.js";
-import { ChainNotCompatibleError } from "../../chains/errors.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
@@ -10,14 +9,9 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
     const payload = record.request;
     const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: payload });
     const chainRef = reviewChainRef;
-    const approvalBindings = deps.namespaceBindings.getApproval(namespace);
-    if (!approvalBindings?.signMessage) {
-      throw new ChainNotCompatibleError({
-        message: `SignMessage is not supported for namespace "${namespace}".`,
-      });
-    }
 
-    const signature = await approvalBindings.signMessage({
+    const signature = await deps.namespaceRuntime.approvals.signMessage({
+      namespace,
       chainRef,
       address: payload.from,
       message: payload.message,

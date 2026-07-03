@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
-import type { ChainAddressCodec } from "../chains/types.js";
-import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
+import type { NamespaceChainAddressing } from "../chains/types.js";
+import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
+import { listRpcNamespaces } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import {
@@ -48,16 +49,14 @@ const SOLANA_CHAIN: TestChain = {
   defaultRpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
 
-const createTestAccountCodec = (namespace: string): AccountCodec => ({
+const createTestNamespaceAccountAddressing = (namespace: string): NamespaceAccountAddressing => ({
   namespace,
-  toCanonicalAddress: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
-  toCanonicalString: () => `${namespace}:canonical`,
-  toDisplayAddress: () => `${namespace}:display`,
-  toAccountKey: () => `${namespace}:010203`,
-  fromAccountKey: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
+  accountIdPayloadFromAddress: () => "010203",
+  canonicalAddressFromAccountIdPayload: () => `${namespace}:canonical`,
+  displayAddressFromAccountIdPayload: () => `${namespace}:display`,
 });
 
-const createTestChainAddressCodec = (namespace: string): ChainAddressCodec => ({
+const createTestNamespaceChainAddressing = (namespace: string): NamespaceChainAddressing => ({
   namespace,
   address: {
     canonicalize: ({ value }) => ({ canonical: value }),
@@ -82,28 +81,37 @@ const createTestNamespaceTransaction = (): NamespaceTransaction => ({
 
 const solanaNamespaceManifest = (() => {
   const namespace = "solana";
-  const codec = createTestAccountCodec(namespace);
+  const accountAddressing = createTestNamespaceAccountAddressing(namespace);
 
-  return defineNamespaceManifest({
+  return {
     namespace,
     core: {
-      namespace,
       rpc: createTestRpcModule(namespace),
-      chainAddressCodec: createTestChainAddressCodec(namespace),
-      accountCodec: codec,
+      chainAddressing: createTestNamespaceChainAddressing(namespace),
+      accountAddressing,
       keyring: {
         namespace,
         defaultChainRef: SOLANA_CHAIN.chainRef as ChainRef,
-        codec,
+        accountAddressing,
         factories: {},
       },
       chainSeeds: [toChainSeed(SOLANA_CHAIN)],
     },
     runtime: {
+      clientFactory: () => ({
+        request: async () => null,
+      }),
       createSigner: () => ({}),
+      createApprovalBindings: () => ({
+        signMessage: async () => "solana-signature",
+        signTypedData: async () => "solana-signature",
+      }),
+      createUiBindings: () => ({
+        getNativeBalance: async () => 0n,
+      }),
       createTransaction: () => createTestNamespaceTransaction(),
     },
-  } satisfies NamespaceManifest);
+  } satisfies NamespaceManifest;
 })();
 
 describe("createBackgroundRuntime multi-namespace assembly", () => {
@@ -136,7 +144,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
-    expect(runtime.rpc.registry.getRegisteredNamespaces()).toEqual(["eip155", "solana"]);
+    expect(listRpcNamespaces(runtime.rpc.routing)).toEqual(["eip155", "solana"]);
     expect(runtime.services.walletChainSelection.getChainRefByNamespace()).toEqual({
       eip155: MAINNET_CHAIN.chainRef,
       solana: SOLANA_CHAIN.chainRef,
@@ -151,23 +159,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     runtime.lifecycle.start();
 
     expect(runtime.services.chainViews.getActiveChainViewForNamespace("solana").chainRef).toBe(SOLANA_CHAIN.chainRef);
-    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      namespace: "eip155",
-      hasRpcClient: true,
-      hasSigner: true,
-      hasApprovalBindings: true,
-      hasUiBindings: true,
-      hasTransactionReceiptTracking: true,
-    });
-    expect(runtime.services.namespaceRuntimeSupport.get("solana")).toMatchObject({
-      namespace: "solana",
-      hasRpcClient: false,
-      hasSigner: true,
-      hasApprovalBindings: false,
-      hasUiBindings: false,
-      hasTransactionReceiptTracking: false,
-    });
-    expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
+    expect(runtime.services.namespaceRuntime.ui.getNativeBalance).toEqual(expect.any(Function));
     runtime.lifecycle.shutdown();
   });
 });

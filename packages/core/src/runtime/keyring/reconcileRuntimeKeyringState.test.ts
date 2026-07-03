@@ -47,20 +47,20 @@ const buildMetas = (): KeyringMetaRecord[] => [
 
 const buildAccounts = (): AccountRecord[] => [
   {
-    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     namespace: "eip155",
     keyringId: "11111111-1111-4111-8111-111111111111",
     derivationIndex: 0,
     createdAt: NOW,
   },
   {
-    accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     namespace: "eip155",
     keyringId: "22222222-2222-4222-8222-222222222222",
     createdAt: NOW + 1,
   },
   {
-    accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+    accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
     namespace: "eip155",
     keyringId: "33333333-3333-4333-8333-333333333333",
     createdAt: NOW + 2,
@@ -87,7 +87,7 @@ describe("reconcileRuntimeKeyringState", () => {
       "11111111-1111-4111-8111-111111111111",
       "33333333-3333-4333-8333-333333333333",
     ]);
-    expect(result.reconciledAccounts.map((account) => account.accountKey)).toEqual([
+    expect(result.reconciledAccounts.map((account) => account.accountId)).toEqual([
       "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "eip155:cccccccccccccccccccccccccccccccccccccccc",
     ]);

@@ -1,6 +1,5 @@
-import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
-import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manifestInterop.js";
 import type { ArxWallet } from "../engine/types.js";
 import type { Messenger } from "../messenger/index.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
@@ -65,7 +64,7 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
       transactionAggregates: TransactionsStoragePort;
     };
   };
-  supportedChains?: Omit<NonNullable<BackgroundAssemblyOptions["supportedChains"]>, "port">;
+  supportedChains: Omit<BackgroundAssemblyOptions["supportedChains"], "port">;
   settings: {
     port: SettingsPort;
   };
@@ -85,11 +84,10 @@ export type BackgroundRuntime = {
     chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
     permissionViews: ReturnType<typeof createPermissionViewsService>;
-    accountCodecs: AccountCodecRegistry;
+    accountAddressing: AccountAddressingByNamespace;
     walletChainSelection: WalletChainSelectionService;
     providerChainSelection: ProviderChainSelectionService;
-    namespaceBindings: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceBindings"];
-    namespaceRuntimeSupport: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntimeSupport"];
+    namespaceRuntime: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntime"];
     session: BackgroundSessionServices;
     sessionStatus: SessionStatusService;
     accountSigning: AccountSigningService;
@@ -97,7 +95,7 @@ export type BackgroundRuntime = {
     keyring: KeyringService;
   };
   rpc: {
-    registry: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["namespaceIndex"];
+    routing: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["routing"];
     clients: ReturnType<typeof initRpcLayer>;
     resolveHintNamespace: (hint?: RpcInvocationHint) => Namespace | null;
     resolveMethodNamespace: (method: string, hint?: RpcInvocationHint) => Namespace | null;
@@ -124,7 +122,7 @@ const createNoopVaultMetaPort = (): VaultMetaPort => ({
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const chainDefinitionsPort = options.store.ports.chainDefinitions;
   const supportedChains = {
-    ...(options.supportedChains ?? {}),
+    ...options.supportedChains,
     port: chainDefinitionsPort,
   };
 
@@ -134,11 +132,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const chainRpcEndpointOverridesPort = options.chainRpcEndpointOverrides.port;
   const vaultMetaPort = options.storage?.vaultMetaPort ?? createNoopVaultMetaPort();
 
-  const modules = options.namespaces.manifests.map((manifest) => createWalletNamespaceModuleFromManifest(manifest));
   const runtime = assembleArxWalletRuntime({
-    namespaces: {
-      modules,
-    },
+    namespaces: options.namespaces,
     storage: {
       ports: {
         vault: vaultMetaPort,
@@ -181,7 +176,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     transactionMonitor: runtime.transactionMonitor,
     services: runtime.services,
     rpc: {
-      registry: runtime.rpc.namespaceIndex,
+      routing: runtime.rpc.routing,
       clients: runtime.rpc.clients,
       resolveHintNamespace: runtime.rpc.resolveHintNamespace,
       resolveMethodNamespace: runtime.rpc.resolveMethodNamespace,

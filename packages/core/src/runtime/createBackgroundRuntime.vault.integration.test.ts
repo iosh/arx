@@ -491,13 +491,13 @@ describe("createBackgroundRuntime (vault integration)", () => {
         code: "global.session.locked",
       });
       await expect(
-        context.runtime.services.keyring.exportPrivateKeyByAccountKey(account.accountKey, "secret"),
+        context.runtime.services.keyring.exportPrivateKeyByAccountId(account.accountId, "secret"),
       ).rejects.toMatchObject({
         code: "global.session.locked",
       });
       await expect(
-        context.runtime.services.keyring.signDigestByAccountKey({
-          accountKey: account.accountKey,
+        context.runtime.services.keyring.signDigestByAccountId({
+          accountId: account.accountId,
           digest: new Uint8Array(32),
         }),
       ).rejects.toMatchObject({

@@ -1,9 +1,10 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
+import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
+import { buildChainAddressingByNamespace } from "../../chains/addressing.js";
 import { parseChainRef } from "../../chains/caip.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
+import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import type { ChainRef } from "../../chains/ids.js";
 import {
@@ -12,7 +13,6 @@ import {
   deriveChainMetadataFromDefinitionSeed,
   type RpcEndpoint,
 } from "../../chains/metadata.js";
-import { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
@@ -59,8 +59,8 @@ export const TEST_INITIAL_TIME = 5_000;
 export const TEST_RECEIPT_POLL_INTERVAL = 3_000;
 export const TEST_RECEIPT_MAX_DELAY = 30_000;
 export const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
-export const TEST_ACCOUNT_CODECS = createAccountCodecRegistry([eip155Codec]);
-export const TEST_CHAIN_ADDRESS_CODECS = new ChainAddressCodecRegistry([eip155AddressCodec]);
+export const TEST_ACCOUNT_CODECS = buildAccountAddressingByNamespace([eip155AccountAddressing]);
+export const TEST_CHAIN_ADDRESS_CODECS = buildChainAddressingByNamespace([eip155ChainAddressing]);
 
 // Utility types
 export type RpcTimers = {
@@ -162,7 +162,7 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
     let records = Array.from(this.#aggregates.values()).map((aggregate) => clone(aggregate.record));
     if (query.namespace !== undefined) records = records.filter((record) => record.namespace === query.namespace);
     if (query.chainRef !== undefined) records = records.filter((record) => record.chainRef === query.chainRef);
-    if (query.accountKey !== undefined) records = records.filter((record) => record.accountKey === query.accountKey);
+    if (query.accountId !== undefined) records = records.filter((record) => record.accountId === query.accountId);
     if (query.status !== undefined) records = records.filter((record) => record.status === query.status);
     if (query.before !== undefined) {
       const before = query.before;
@@ -200,33 +200,33 @@ export class MemoryAccountsPort implements AccountsPort {
 
   constructor(seed: AccountRecord[] = []) {
     for (const record of seed) {
-      this.#records.set(record.accountKey, clone(record));
+      this.#records.set(record.accountId, clone(record));
     }
   }
 
-  async get(accountKey: string): Promise<AccountRecord | null> {
-    const found = this.#records.get(accountKey);
+  async get(accountId: string): Promise<AccountRecord | null> {
+    const found = this.#records.get(accountId);
     return found ? clone(found) : null;
   }
 
   async list(): Promise<AccountRecord[]> {
     return Array.from(this.#records.values())
       .map((record) => clone(record))
-      .sort((a, b) => a.createdAt - b.createdAt || a.accountKey.localeCompare(b.accountKey));
+      .sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
   }
 
   async upsert(record: AccountRecord): Promise<void> {
-    this.#records.set(record.accountKey, clone(record));
+    this.#records.set(record.accountId, clone(record));
   }
 
-  async remove(accountKey: string): Promise<void> {
-    this.#records.delete(accountKey);
+  async remove(accountId: string): Promise<void> {
+    this.#records.delete(accountId);
   }
 
   async removeByKeyringId(keyringId: string): Promise<void> {
-    for (const [accountKey, record] of Array.from(this.#records.entries())) {
+    for (const [accountId, record] of Array.from(this.#records.entries())) {
       if (record.keyringId === keyringId) {
-        this.#records.delete(accountKey);
+        this.#records.delete(accountId);
       }
     }
   }

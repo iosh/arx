@@ -5,16 +5,11 @@ import type { RpcEndpoint } from "../../chains/metadata.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import { createMessenger, type Messenger } from "../../messenger/index.js";
 import {
-  materializeNamespaceRuntimeSupport,
-  type NamespaceRuntimeBindingsRegistry,
-  type NamespaceRuntimeSupportIndex,
-  type RuntimeBootstrapNamespaceAssembly,
-  type RuntimeNamespaceRuntimeSupportAssembly,
-  type RuntimeSessionNamespaceAssembly,
-  registerRpcModules,
+  materializeNamespaceRuntime,
+  type NamespaceRuntimeServices,
+  type NamespaceStaticAssembly,
 } from "../../namespaces/index.js";
-import type { RpcHandlerDeps } from "../../rpc/handlers/types.js";
-import type { RpcRegistry } from "../../rpc/index.js";
+import { listRpcNamespaces } from "../../rpc/index.js";
 import { type AccountSigningService, createAccountSigningService } from "../../services/runtime/accountSigning.js";
 import { createAttentionService } from "../../services/runtime/attention/index.js";
 import { createChainActivationService } from "../../services/runtime/chainActivation/index.js";
@@ -66,8 +61,7 @@ export type BackgroundAssemblyOptions = BackgroundStateServiceOptions & {
 
 export type BackgroundBootstrapScope = {
   messenger: Messenger;
-  rpcRegistry: RpcRegistry;
-  namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
+  namespaceBootstrap: NamespaceStaticAssembly;
   registeredNamespaces: ReadonlySet<string>;
   admittedChainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
   chainAdmission: RuntimeChainAdmission;
@@ -78,7 +72,6 @@ export type BackgroundBootstrapScope = {
 };
 
 export type BackgroundSessionScope = {
-  namespaceSession: RuntimeSessionNamespaceAssembly;
   stateServices: BackgroundStateServices;
   chainRpcAccessUpdater: ChainRpcAccessUpdater;
   setApprovalExecutor: ReturnType<typeof initBackgroundStateServices>["setApprovalExecutor"];
@@ -102,9 +95,7 @@ export type BackgroundSessionScope = {
 export type BackgroundSupportScope = {
   namespaceTransactions: NamespaceTransactions;
   chainRpcClientPool: ReturnType<typeof initRpcLayer>;
-  signers: RpcHandlerDeps["signers"];
-  namespaceBindings: NamespaceRuntimeBindingsRegistry;
-  namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
+  namespaceRuntime: NamespaceRuntimeServices;
   permissionViews: ReturnType<typeof createPermissionViewsService>;
   chainRpcBootstrap: ReturnType<typeof createChainRpcBootstrap>;
 };
@@ -119,25 +110,21 @@ const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLay
 };
 
 export const createBackgroundBootstrapScope = ({
-  rpcRegistry,
   namespaceBootstrap,
   storageOptions,
   approvalOptions,
   transactionOptions,
   supportedChainsOptions,
 }: {
-  rpcRegistry: RpcRegistry;
-  namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
+  namespaceBootstrap: NamespaceStaticAssembly;
   storageOptions?: StorageOptions;
   approvalOptions?: BackgroundAssemblyOptions["approvals"];
   transactionOptions?: BackgroundAssemblyOptions["transactions"];
   supportedChainsOptions: NonNullable<BackgroundAssemblyOptions["supportedChains"]>;
 }): BackgroundBootstrapScope => {
-  registerRpcModules(rpcRegistry, namespaceBootstrap.rpcModules);
-
   const storageLogger = storageOptions?.logger ?? (() => {});
   const messenger = createMessenger();
-  const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
+  const registeredNamespaces = new Set(listRpcNamespaces(namespaceBootstrap.rpcRouting));
   const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const chainAdmission = buildRuntimeChainAdmission({
     admittedChainSeeds: supportedChainSeed.filter((entry) =>
@@ -156,7 +143,6 @@ export const createBackgroundBootstrapScope = ({
 
   return {
     messenger,
-    rpcRegistry,
     namespaceBootstrap,
     registeredNamespaces,
     admittedChainSeeds: chainAdmission.admittedChainSeeds,
@@ -171,7 +157,6 @@ export const createBackgroundBootstrapScope = ({
 export const createBackgroundSessionScope = ({
   lifecycleLabel,
   bootstrapScope,
-  namespaceSession,
   settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
@@ -183,7 +168,6 @@ export const createBackgroundSessionScope = ({
 }: {
   lifecycleLabel?: string;
   bootstrapScope: BackgroundBootstrapScope;
-  namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
@@ -219,7 +203,7 @@ export const createBackgroundSessionScope = ({
 
   const stateServicesInit = initBackgroundStateServices({
     messenger: bootstrapScope.messenger,
-    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     accountsService: accountsStore,
     settingsService,
     permissionsPort: storePorts.permissions,
@@ -248,7 +232,8 @@ export const createBackgroundSessionScope = ({
   });
 
   const runtimeLifecycle = createRuntimeLifecycle(lifecycleLabel ?? "createBackgroundRuntime");
-  const resolvedKeyringNamespaces = sessionOptions?.keyringNamespaces ?? namespaceSession.keyringNamespaces;
+  const resolvedKeyringNamespaces =
+    sessionOptions?.keyringNamespaces ?? bootstrapScope.namespaceBootstrap.keyringNamespaces;
   const resolvedSessionOptions = extractSessionLayerOptions(sessionOptions);
   const sessionLayer = initSessionLayer({
     messenger: bootstrapScope.messenger,
@@ -276,7 +261,6 @@ export const createBackgroundSessionScope = ({
   });
 
   return {
-    namespaceSession,
     stateServices,
     chainRpcAccessUpdater,
     setApprovalExecutor,
@@ -301,40 +285,32 @@ export const createBackgroundSessionScope = ({
 export const createBackgroundSupportScope = ({
   bootstrapScope,
   sessionScope,
-  namespaceRuntimeSupport,
   rpcClientOptions,
   createApprovalExecutor,
 }: {
   bootstrapScope: BackgroundBootstrapScope;
   sessionScope: BackgroundSessionScope;
-  namespaceRuntimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
   rpcClientOptions?: RpcLayerOptions;
   createApprovalExecutor?: (params: { stateServices: BackgroundStateServices }) => ApprovalExecutor | undefined;
 }): BackgroundSupportScope => {
-  const manifestRpcClientFactories = namespaceRuntimeSupport.namespaces.flatMap((spec) =>
-    spec.clientFactory ? [{ namespace: spec.namespace, factory: spec.clientFactory }] : [],
-  );
+  const manifestRpcClientFactories = bootstrapScope.namespaceBootstrap.rpcClientFactories;
   const overrideRpcClientFactories = rpcClientOptions?.factories ?? [];
-  const rpcClientFactoryNamespaces = new Set(
-    [...manifestRpcClientFactories, ...overrideRpcClientFactories].map((entry) => entry.namespace),
-  );
   const chainRpcClientPool = initRpcLayer({
     stateServices: sessionScope.stateServices,
     ...(rpcClientOptions?.options ? { rpcClientOptions: { options: rpcClientOptions.options } } : {}),
     factories: [...manifestRpcClientFactories, ...overrideRpcClientFactories],
   });
 
-  const materializedRuntimeSupport = materializeNamespaceRuntimeSupport({
-    runtimeSupport: namespaceRuntimeSupport,
+  const materializedNamespaceRuntime = materializeNamespaceRuntime({
+    manifests: bootstrapScope.namespaceBootstrap.manifests,
     rpcClients: chainRpcClientPool,
-    chains: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
+    chains: bootstrapScope.namespaceBootstrap.chainAddressing,
     accountSigning: sessionScope.accountSigning,
-    rpcClientNamespaces: rpcClientFactoryNamespaces,
     ...(bootstrapScope.backgroundAssemblyOptions.transactions?.namespaces
       ? { transactionOverrides: bootstrapScope.backgroundAssemblyOptions.transactions.namespaces }
       : {}),
   });
-  const namespaceTransactions = materializedRuntimeSupport.namespaceTransactions;
+  const namespaceTransactions = materializedNamespaceRuntime.namespaceTransactions;
 
   const approvalExecutor = createApprovalExecutor?.({
     stateServices: sessionScope.stateServices,
@@ -375,9 +351,7 @@ export const createBackgroundSupportScope = ({
   return {
     namespaceTransactions,
     chainRpcClientPool,
-    signers: materializedRuntimeSupport.signers,
-    namespaceBindings: materializedRuntimeSupport.bindings,
-    namespaceRuntimeSupport: materializedRuntimeSupport.runtimeSupport,
+    namespaceRuntime: materializedNamespaceRuntime.services,
     permissionViews,
     chainRpcBootstrap,
   };

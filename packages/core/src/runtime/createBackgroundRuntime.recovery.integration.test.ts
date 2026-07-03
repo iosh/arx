@@ -56,7 +56,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         origin: "https://dapp.example",
         source: "provider",
         requestId: "request-1",
-        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         status: "submitted",
         request: {
           kind: "eip155.transaction",

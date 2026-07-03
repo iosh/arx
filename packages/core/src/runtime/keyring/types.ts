@@ -1,7 +1,7 @@
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { UnlockService } from "../../runtime/session/unlock/types.js";
 import type { VaultKeyringEntry } from "../../storage/keyringSchemas.js";
-import type { AccountKey, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
+import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { VaultService } from "../../vault/types.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 
@@ -18,10 +18,10 @@ export type KeyringServiceOptions = {
     remove(id: KeyringMetaRecord["id"]): Promise<void>;
   };
   accountsStore: {
-    get(accountKey: AccountKey): Promise<AccountRecord | null>;
+    get(accountId: AccountId): Promise<AccountRecord | null>;
     list(params?: { includeHidden?: boolean }): Promise<AccountRecord[]>;
     upsert(record: AccountRecord): Promise<void>;
-    remove(accountKey: AccountKey): Promise<void>;
+    remove(accountId: AccountId): Promise<void>;
     removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
   };
   namespaces: NamespaceConfig[];
@@ -48,7 +48,7 @@ export type KeyringStateListener = () => void;
 export type RuntimeAccountRef = {
   namespace: string;
   keyringId: string;
-  accountKey: AccountKey;
+  accountId: AccountId;
 };
 
 export type InitialKeyringDraftBase = {
@@ -76,10 +76,10 @@ export type InitialPrivateKeyKeyringDraft = InitialKeyringDraftBase & {
 export type KeyringRuntimeState = {
   keyrings: Map<string, RuntimeKeyring>;
   keyringMetas: Map<string, KeyringMetaRecord>;
-  accounts: Map<AccountKey, AccountRecord>;
+  accounts: Map<AccountId, AccountRecord>;
   payload: Payload;
-  addressIndex: Map<AccountKey, RuntimeAccountRef>;
+  addressIndex: Map<AccountId, RuntimeAccountRef>;
   payloadListeners: Set<KeyringPayloadListener>;
 };
 
-export type { AccountKey, AccountRecord, KeyringMetaRecord, VaultKeyringEntry };
+export type { AccountId, AccountRecord, KeyringMetaRecord, VaultKeyringEntry };

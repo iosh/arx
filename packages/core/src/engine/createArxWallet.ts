@@ -1,10 +1,11 @@
-import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
+import { createApprovalExecutor } from "../approvals/index.js";
+import { formatChainAddress } from "../chains/addressing.js";
 import type { MethodExecutor } from "../invoke/methods.js";
+import { assembleNamespaceStatic } from "../namespaces/index.js";
 import {
   createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
-  createRpcRegistry,
   type RpcHandlerDeps,
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
@@ -38,7 +39,6 @@ import {
   type WalletInvalidationEvent,
   type WalletInvalidationTopic,
 } from "../wallet/index.js";
-import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
 import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
@@ -69,13 +69,12 @@ type WalletRuntimeServices = Readonly<
     chainActivation: BackgroundSessionScope["chainActivation"];
     chainViews: BackgroundSessionScope["chainViews"];
     permissionViews: BackgroundSupportScope["permissionViews"];
-    accountCodecs: BackgroundBootstrapScope["namespaceBootstrap"]["accountCodecs"];
+    accountAddressing: BackgroundBootstrapScope["namespaceBootstrap"]["accountAddressing"];
     walletChainSelection: BackgroundSessionScope["walletChainSelection"];
     providerChainSelection: BackgroundSessionScope["providerChainSelection"];
     chainRpcDefaultEndpoints: BackgroundSessionScope["chainRpcDefaultEndpoints"];
     chainRpcEndpointOverrides: BackgroundSessionScope["chainRpcEndpointOverrides"];
-    namespaceBindings: BackgroundSupportScope["namespaceBindings"];
-    namespaceRuntimeSupport: BackgroundSupportScope["namespaceRuntimeSupport"];
+    namespaceRuntime: BackgroundSupportScope["namespaceRuntime"];
     session: BackgroundSessionScope["sessionLayer"]["session"];
     sessionStatus: BackgroundSessionScope["sessionStatus"];
     accountSigning: BackgroundSessionScope["accountSigning"];
@@ -116,7 +115,7 @@ type ArxWalletRuntime = Readonly<{
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
-    namespaceIndex: BackgroundBootstrapScope["rpcRegistry"];
+    routing: BackgroundBootstrapScope["namespaceBootstrap"]["rpcRouting"];
     clients: BackgroundSupportScope["chainRpcClientPool"];
     resolveHintNamespace: ReturnType<typeof createRpcHintNamespaceResolver>;
     resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
@@ -176,12 +175,12 @@ const createWalletApiContext = (
       listPending: () => approvalDetails.listPending(),
       getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
     },
-    accountCodecs: runtime.services.accountCodecs,
+    accountAddressing: runtime.services.accountAddressing,
     createId: options.createId,
     caller: {
       origin: options.origin,
     },
-    namespaceBindings: runtime.services.namespaceBindings,
+    namespaceRuntime: runtime.services.namespaceRuntime,
     transactions: runtime.transactions,
     setup: runtime.setup,
   };
@@ -259,14 +258,13 @@ const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore) => {
 };
 
 export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): ArxWalletRuntime => {
-  const modules = input.namespaces.modules;
-  if (modules.length === 0) {
-    throw new Error("createArxWallet requires at least one wallet namespace module");
+  const manifests = input.namespaces.manifests;
+  if (manifests.length === 0) {
+    throw new Error("createArxWallet requires at least one namespace manifest");
   }
 
-  const rpcRegistry = createRpcRegistry();
-  const namespaces = createWalletNamespaces({ modules });
-  const namespaceStages = assembleRuntimeNamespaceStagesFromWalletModules(namespaces.listModules());
+  const namespaces = createWalletNamespaces({ manifests });
+  const namespaceBootstrap = assembleNamespaceStatic(namespaces.listManifests());
   const storageOptions = buildStorageOptions(input);
   let sessionScope: BackgroundSessionScope | null = null;
   let backgroundSupportScope: BackgroundSupportScope | null = null;
@@ -288,11 +286,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const assemblyOptions = input.runtime?.assemblyOptions;
   const runtimeSessionOptions = buildRuntimeSessionOptions(input);
   const runtimeRpcAccessPolicy = input.runtime?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY;
-  const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const bootstrapScope: BackgroundBootstrapScope = createBackgroundBootstrapScope({
-    rpcRegistry,
-    namespaceBootstrap: namespaceStages.bootstrap,
+    namespaceBootstrap,
     ...(storageOptions ? { storageOptions } : {}),
     ...(assemblyOptions?.approvals ? { approvalOptions: assemblyOptions.approvals } : {}),
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
@@ -305,7 +301,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   sessionScope = createBackgroundSessionScope({
     lifecycleLabel: input.runtime?.lifecycleLabel ?? "createArxWallet",
     bootstrapScope,
-    namespaceSession: namespaceStages.session,
     settingsPort: input.storage.ports.settings,
     walletChainSelectionPort: input.storage.ports.chains.walletChainSelection,
     providerChainSelectionPort: input.storage.ports.chains.providerChainSelection,
@@ -323,10 +318,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   backgroundSupportScope = createBackgroundSupportScope({
     bootstrapScope,
     sessionScope,
-    namespaceRuntimeSupport: namespaceStages.runtimeSupport,
     createApprovalExecutor: ({ stateServices }) =>
       createApprovalExecutor({
-        registry: approvalFlowRegistry,
         getDeps: () => {
           const activeSessionScope = requireSessionScope();
           const activeBackgroundSupportScope = requireBackgroundSupportScope();
@@ -337,7 +330,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
             chainActivation: activeSessionScope.chainActivation,
             supportedChains: stateServices.supportedChains,
             chainRpcDefaultEndpoints: activeSessionScope.chainRpcDefaultEndpoints,
-            namespaceBindings: activeBackgroundSupportScope.namespaceBindings,
+            namespaceRuntime: activeBackgroundSupportScope.namespaceRuntime,
           };
         },
       }),
@@ -351,7 +344,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const transactionServices = createTransactionServices({
     aggregateStore: transactionAggregateStore,
     namespaces: backgroundSupportScope.namespaceTransactions,
-    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     approvalSessionOptions: {
       now: bootstrapScope.storageNow,
       ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
@@ -376,26 +369,21 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...stateServices,
     walletChainSelection: sessionScope.walletChainSelection,
     chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
-    chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
-    clock: {
-      now: bootstrapScope.storageNow,
-    },
-    signers: backgroundSupportScope.signers,
+    chainAddressing: bootstrapScope.namespaceBootstrap.chainAddressing,
+    permissionViews: backgroundSupportScope.permissionViews,
+    transactions: transactionServices.transactions,
   };
-  const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
-  const resolveHintNamespace = createRpcHintNamespaceResolver(rpcRegistry);
+  const rpcRouting = bootstrapScope.namespaceBootstrap.rpcRouting;
+  const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRouting);
+  const resolveHintNamespace = createRpcHintNamespaceResolver(rpcRouting);
   const resolveInvocation = (method: string, hint?: Parameters<typeof resolveRpcInvocation>[3]) =>
-    resolveRpcInvocation(rpcRegistry, rpcHandlerDeps, method, hint);
+    resolveRpcInvocation(rpcRouting, rpcHandlerDeps, method, hint);
   const resolveInvocationDetails = (method: string, hint?: Parameters<typeof resolveRpcInvocationDetails>[3]) =>
-    resolveRpcInvocationDetails(rpcRegistry, rpcHandlerDeps, method, hint);
+    resolveRpcInvocationDetails(rpcRouting, rpcHandlerDeps, method, hint);
   const executeRequest = createRpcMethodExecutor({
-    registry: rpcRegistry,
+    routing: rpcRouting,
     deps: rpcHandlerDeps,
     chainRpcClientPool: backgroundSupportScope.chainRpcClientPool,
-    services: {
-      permissionViews: backgroundSupportScope.permissionViews,
-      transactions: transactionServices.transactions,
-    },
   });
   const resolveProviderChain = (input: { origin: string; namespace: string }) =>
     resolveProviderChainForConnection(
@@ -456,7 +444,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     initializeProviderChainSelection,
     listPermittedAccountsView: (origin, options) =>
       backgroundSupportScope.permissionViews.listPermittedAccounts(origin, options),
-    formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
+    formatAddress: (input) => formatChainAddress(bootstrapScope.namespaceBootstrap.chainAddressing, input),
     resolveInvocationDetails,
     executeRequest,
     isInternalOrigin: runtimeRpcAccessPolicy.isInternalOrigin,
@@ -540,13 +528,12 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainActivation: sessionScope.chainActivation,
     chainViews: sessionScope.chainViews,
     permissionViews: backgroundSupportScope.permissionViews,
-    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     walletChainSelection: sessionScope.walletChainSelection,
     providerChainSelection: sessionScope.providerChainSelection,
     chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
-    namespaceBindings: backgroundSupportScope.namespaceBindings,
-    namespaceRuntimeSupport: backgroundSupportScope.namespaceRuntimeSupport,
+    namespaceRuntime: backgroundSupportScope.namespaceRuntime,
     session: sessionScope.sessionLayer.session,
     sessionStatus: sessionScope.sessionStatus,
     accountSigning: sessionScope.accountSigning,
@@ -559,7 +546,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       keyring: sessionScope.keyringService,
       accounts: stateServices.accounts,
       settings: sessionScope.settingsService,
-      accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+      accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     }),
   };
   const runtimeCore: ArxWalletRuntimeCore = {
@@ -623,7 +610,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     services,
     lifecycle,
     rpc: {
-      namespaceIndex: rpcRegistry,
+      routing: rpcRouting,
       clients: backgroundSupportScope.chainRpcClientPool,
       resolveHintNamespace,
       resolveMethodNamespace,

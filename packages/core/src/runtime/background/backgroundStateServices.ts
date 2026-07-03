@@ -1,4 +1,4 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { StoreAccountSelectionService } from "../../accounts/runtime/StoreAccountSelectionService.js";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import { InMemoryApprovalQueueService } from "../../approvals/queue/InMemoryApprovalQueueService.js";
@@ -26,7 +26,7 @@ export type BackgroundStateServiceOptions = {
     ttlMs?: number;
     logger?: (message: string, error?: unknown) => void;
   };
-  supportedChains?: {
+  supportedChains: {
     port: ChainDefinitionsPort;
     seed?: ChainDefinitionSeed<RpcEndpoint>[];
     now?: () => number;
@@ -55,24 +55,20 @@ export type BackgroundStateServicesInitResult = {
 
 export const initBackgroundStateServices = ({
   messenger,
-  accountCodecs,
+  accountAddressing,
   accountsService,
   settingsService,
   permissionsPort,
   options,
 }: {
   messenger: Messenger;
-  accountCodecs: AccountCodecRegistry;
+  accountAddressing: AccountAddressingByNamespace;
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsPort: PermissionsPort;
   options: BackgroundStateServiceOptions;
 }): BackgroundStateServicesInitResult => {
   const { approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
-
-  if (!supportedChainsOptions?.port) {
-    throw new Error("createBackgroundRuntime requires chainDefinitions port");
-  }
 
   const supportedChainSeed = (supportedChainsOptions.seed ?? []).map((seed) => seed.definition);
 
@@ -85,7 +81,7 @@ export const initBackgroundStateServices = ({
     messenger,
     accounts: accountsService,
     settings: settingsService,
-    accountCodecs,
+    accountAddressing,
   });
 
   let approvalExecutor: ApprovalExecutor | undefined;

@@ -1,3 +1,4 @@
+import type { NamespaceManifest } from "../namespaces/index.js";
 import type {
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
@@ -9,7 +10,7 @@ import type {
 } from "../runtime/provider/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
 import type { WalletApi } from "../wallet/api.js";
-import type { CoreStoragePorts, WalletNamespaceModule, WalletProviderConnectionState } from "./types.js";
+import type { CoreStoragePorts, WalletProviderConnectionState } from "./types.js";
 
 export type CoreUnsubscribe = () => void;
 
@@ -28,7 +29,7 @@ export type CoreStorageInput = CoreStoragePorts;
 
 export type CreateCoreRuntimeInput = Readonly<{
   namespaces: Readonly<{
-    modules: readonly WalletNamespaceModule[];
+    manifests: readonly NamespaceManifest[];
   }>;
   storage: CoreStorageInput;
   environment?: CoreRuntimeEnvironment;

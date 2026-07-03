@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
+import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
+import { eip155NamespaceManifest } from "../namespaces/index.js";
 import {
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -20,7 +21,6 @@ import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionAggregate } from "../transactions/storage/index.js";
 import type { CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { createCoreRuntime } from "./createCoreRuntime.js";
-import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
@@ -28,10 +28,10 @@ const EIP155_NAMESPACE = "eip155";
 const EIP155_CHAIN_REF = "eip155:1" as const;
 const ACCOUNT_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 const PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
-const ACCOUNT_KEY = toAccountKeyFromAddress({
+const ACCOUNT_KEY = accountIdFromChainAddress({
   chainRef: EIP155_CHAIN_REF,
   address: ACCOUNT_ADDRESS,
-  accountCodecs: TEST_ACCOUNT_CODECS,
+  accountAddressing: TEST_ACCOUNT_CODECS,
 });
 const HYDRATE_FAILURE = new Error("hydrate storage unavailable");
 type TestCoreStoragePorts = CreateCoreRuntimeInput["storage"];
@@ -49,7 +49,7 @@ const createCoreRuntimeInput = (params?: {
   boot?: CreateCoreRuntimeInput["boot"];
 }): CreateCoreRuntimeInput => ({
   namespaces: {
-    modules: [createEip155WalletNamespaceModule()],
+    manifests: [eip155NamespaceManifest],
   },
   storage: {
     vault: params?.vaultMetaPort ?? new MemoryVaultMetaPort(),
@@ -102,7 +102,7 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
     origin: ORIGIN,
     source: "provider",
     requestId: "request-1",
-    accountKey: ACCOUNT_KEY,
+    accountId: ACCOUNT_KEY,
     status,
     request: {
       payload: {
@@ -204,10 +204,10 @@ describe("createCoreRuntime", () => {
     });
     await expect(
       core.wallet.keyrings.exportPrivateKey({
-        accountKey: toAccountKeyFromAddress({
+        accountId: accountIdFromChainAddress({
           chainRef: EIP155_CHAIN_REF,
           address: privateKeyImport.account.address,
-          accountCodecs: TEST_ACCOUNT_CODECS,
+          accountAddressing: TEST_ACCOUNT_CODECS,
         }),
         password: PASSWORD,
       }),
@@ -216,13 +216,13 @@ describe("createCoreRuntime", () => {
       chainRef: EIP155_CHAIN_REF,
       namespace: EIP155_NAMESPACE,
     });
-    const accountKey = toAccountKeyFromAddress({
+    const accountId = accountIdFromChainAddress({
       chainRef: EIP155_CHAIN_REF,
       address: created.address,
-      accountCodecs: TEST_ACCOUNT_CODECS,
+      accountAddressing: TEST_ACCOUNT_CODECS,
     });
-    await expect(core.wallet.accounts.switchActive({ chainRef: EIP155_CHAIN_REF, accountKey })).resolves.toMatchObject({
-      accountKey,
+    await expect(core.wallet.accounts.switchActive({ chainRef: EIP155_CHAIN_REF, accountId })).resolves.toMatchObject({
+      accountId,
       canonicalAddress: created.address,
     });
     await expect(core.wallet.session.getStatus()).resolves.toMatchObject({ vaultInitialized: true });

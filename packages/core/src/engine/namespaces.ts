@@ -1,36 +1,32 @@
-import type { WalletNamespaceModule, WalletNamespaces } from "./types.js";
-import { assertValidWalletNamespaceModule } from "./validation.js";
+import type { NamespaceManifest } from "../namespaces/index.js";
+import { DuplicateWalletNamespaceManifestError, WalletNamespaceManifestNotFoundError } from "./errors.js";
+import type { WalletNamespaces } from "./types.js";
 
-export const createWalletNamespaces = (params: { modules: readonly WalletNamespaceModule[] }): WalletNamespaces => {
-  const { modules } = params;
+export const createWalletNamespaces = (params: { manifests: readonly NamespaceManifest[] }): WalletNamespaces => {
+  const { manifests } = params;
 
-  const moduleByNamespace = new Map<string, WalletNamespaceModule>();
-  for (const module of modules) {
-    assertValidWalletNamespaceModule(module);
-
-    if (moduleByNamespace.has(module.namespace)) {
-      throw new Error(`Duplicate wallet namespace module "${module.namespace}"`);
+  const manifestByNamespace = new Map<string, NamespaceManifest>();
+  for (const manifest of manifests) {
+    if (manifestByNamespace.has(manifest.namespace)) {
+      throw new DuplicateWalletNamespaceManifestError({ namespace: manifest.namespace });
     }
-
-    moduleByNamespace.set(module.namespace, module);
+    manifestByNamespace.set(manifest.namespace, manifest);
   }
 
-  const modulesSnapshot = [...moduleByNamespace.values()];
+  const manifestsSnapshot = [...manifestByNamespace.values()];
 
-  const findModule = (namespace: string): WalletNamespaceModule | undefined => moduleByNamespace.get(namespace);
+  const findManifest = (namespace: string): NamespaceManifest | undefined => manifestByNamespace.get(namespace);
 
-  const requireModule = (namespace: string): WalletNamespaceModule => {
-    const module = findModule(namespace);
-    if (!module) {
-      throw new Error(`Missing wallet namespace module "${namespace}"`);
-    }
-    return module;
+  const requireManifest = (namespace: string): NamespaceManifest => {
+    const manifest = manifestByNamespace.get(namespace);
+    if (manifest) return manifest;
+    throw new WalletNamespaceManifestNotFoundError({ namespace });
   };
 
   return {
-    findModule,
-    requireModule,
-    listModules: () => [...modulesSnapshot],
-    listNamespaces: () => modulesSnapshot.map((module) => module.namespace),
+    findManifest,
+    requireManifest,
+    listManifests: () => [...manifestsSnapshot],
+    listNamespaces: () => manifestsSnapshot.map((manifest) => manifest.namespace),
   };
 };

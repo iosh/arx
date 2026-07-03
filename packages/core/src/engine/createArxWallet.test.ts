@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
+import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
+import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -18,25 +19,24 @@ import {
   TEST_MNEMONIC,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
-import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
-import type { CreateArxWalletInput, WalletNamespaceModule } from "./types.js";
+import type { CreateArxWalletInput } from "./types.js";
 
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
 const EIP155_NAMESPACE = "eip155";
 const EIP155_CHAIN_REF = "eip155:1" as const;
 const ACCOUNT_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
-const ACCOUNT_KEY = toAccountKeyFromAddress({
+const ACCOUNT_KEY = accountIdFromChainAddress({
   chainRef: EIP155_CHAIN_REF,
   address: ACCOUNT_ADDRESS,
-  accountCodecs: TEST_ACCOUNT_CODECS,
+  accountAddressing: TEST_ACCOUNT_CODECS,
 });
 const KEYRING_ID = "11111111-1111-4111-8111-111111111111";
 const PROVIDER_PORT_ID = "provider-port";
 const PROVIDER_SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
 const createWalletInput = (params?: {
-  modules?: readonly WalletNamespaceModule[];
+  manifests?: readonly NamespaceManifest[];
   walletChainSelectionPort?: MemoryWalletChainSelectionPort;
   chainDefinitionsPort?: MemoryChainDefinitionsPort;
   chainRpcDefaultEndpointsPort?: MemoryChainRpcDefaultEndpointsPort;
@@ -48,11 +48,11 @@ const createWalletInput = (params?: {
   keyringMetasPort?: MemoryKeyringMetasPort;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
 }): CreateArxWalletInput => {
-  const modules = params?.modules ?? [createEip155WalletNamespaceModule()];
+  const manifests = params?.manifests ?? [eip155NamespaceManifest];
 
   return {
     namespaces: {
-      modules,
+      manifests,
     },
     storage: {
       ports: {
@@ -77,7 +77,7 @@ const createWalletInput = (params?: {
 const createSeededAccountsPort = () =>
   new MemoryAccountsPort([
     {
-      accountKey: ACCOUNT_KEY,
+      accountId: ACCOUNT_KEY,
       namespace: EIP155_NAMESPACE,
       keyringId: KEYRING_ID,
       createdAt: 1,
@@ -117,12 +117,12 @@ describe("createArxWallet", () => {
     try {
       const { wallet } = runtime;
       await flushAsync();
-      const eip155Module = wallet.namespaces.requireModule("eip155");
+      const eip155Manifest = wallet.namespaces.requireManifest("eip155");
 
       expect(wallet.namespaces.listNamespaces()).toEqual(["eip155"]);
-      expect(eip155Module.namespace).toBe("eip155");
-      expect(eip155Module.engine.facts.chainSeeds?.length).toBeGreaterThan(0);
-      expect(eip155Module.engine.factories?.createSigner).toBeTypeOf("function");
+      expect(eip155Manifest.namespace).toBe("eip155");
+      expect(eip155Manifest.core.chainSeeds?.length).toBeGreaterThan(0);
+      expect(eip155Manifest.runtime.createSigner).toBeTypeOf("function");
       expect(wallet.session.getStatus().status).toBe("uninitialized");
       expect(wallet.accounts.getWalletSetupState()).toEqual({
         totalAccountCount: 0,
@@ -183,7 +183,7 @@ describe("createArxWallet", () => {
           }),
         ]),
       );
-      expect(wallet.accounts.getAccountsByKeyring(created.keyringId).map((account) => account.accountKey)).toHaveLength(
+      expect(wallet.accounts.getAccountsByKeyring(created.keyringId).map((account) => account.accountId)).toHaveLength(
         2,
       );
 
@@ -301,18 +301,16 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("rejects empty namespace modules", async () => {
-    await expect(createArxWallet(createWalletInput({ modules: [] }))).rejects.toThrow(
-      /requires at least one wallet namespace module/,
+  it("rejects empty namespace manifests", async () => {
+    await expect(createArxWallet(createWalletInput({ manifests: [] }))).rejects.toThrow(
+      /requires at least one namespace manifest/,
     );
   });
 
-  it("rejects duplicate namespace modules", async () => {
-    const module = createEip155WalletNamespaceModule();
-
-    await expect(createArxWallet(createWalletInput({ modules: [module, module] }))).rejects.toThrow(
-      /Duplicate wallet namespace module "eip155"/,
-    );
+  it("rejects duplicate namespace manifests", async () => {
+    await expect(
+      createArxWallet(createWalletInput({ manifests: [eip155NamespaceManifest, eip155NamespaceManifest] })),
+    ).rejects.toThrow(/Duplicate wallet namespace manifest "eip155"/);
   });
 
   it("keeps permissions and dappConnections separated while active provider scopes stay connected", async () => {
@@ -384,7 +382,7 @@ describe("createArxWallet", () => {
 
       await wallet.permissions.grantAuthorization(ORIGIN, {
         namespace: EIP155_NAMESPACE,
-        chains: [{ chainRef: EIP155_CHAIN_REF, accountKeys: [ACCOUNT_KEY] }],
+        chains: [{ chainRef: EIP155_CHAIN_REF, accountIds: [ACCOUNT_KEY] }],
       });
       await flushAsync();
       await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
@@ -481,7 +479,7 @@ describe("createArxWallet", () => {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
         }),
-      ).toMatchObject({ accountKey: ACCOUNT_KEY });
+      ).toMatchObject({ accountId: ACCOUNT_KEY });
       expect(wallet.networks.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
       expect(wallet.networks.getSelectedChainView().chainRef).toBe(EIP155_CHAIN_REF);
 
@@ -558,9 +556,9 @@ describe("createArxWallet", () => {
       await expect(walletApi.accounts.listCurrentChain()).resolves.toMatchObject({
         totalCount: 1,
         active: {
-          accountKey: ACCOUNT_KEY,
+          accountId: ACCOUNT_KEY,
         },
-        list: [expect.objectContaining({ accountKey: ACCOUNT_KEY })],
+        list: [expect.objectContaining({ accountId: ACCOUNT_KEY })],
       });
       await expect(
         provider.request({

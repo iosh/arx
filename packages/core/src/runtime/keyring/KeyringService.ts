@@ -2,6 +2,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
+import { parseAccountId } from "../../accounts/addressing/accountId.js";
 import { isArxBaseError } from "../../error.js";
 import {
   KeyringAccountNotFoundError,
@@ -13,14 +14,14 @@ import {
 } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
-import { AccountKeySchema, type AccountRecord } from "../../storage/records.js";
+import { AccountIdSchema, type AccountRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
 import { SessionLockedError } from "../session/errors.js";
 import { encodePayload } from "./keyring-utils.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 import { RuntimeKeyringState } from "./RuntimeKeyringState.js";
 import type {
-  AccountKey,
+  AccountId,
   InitialHdKeyringDraft,
   InitialPrivateKeyKeyringDraft,
   KeyringMetaRecord,
@@ -193,8 +194,8 @@ export class KeyringService {
     const derived = instance.deriveAccount(index);
 
     const canonical = this.#toCanonicalString(runtime.namespace, derived.address);
-    const accountKey = this.#toAccountKey(runtime.namespace, canonical);
-    this.#assertNoDuplicate(accountKey);
+    const accountId = this.#toAccountId(runtime.namespace, canonical);
+    this.#assertNoDuplicate(accountId);
 
     const now = this.#options.now();
     const record = this.#buildAccountRecord({
@@ -220,12 +221,12 @@ export class KeyringService {
     return { ...derived, address: canonical };
   }
 
-  async hideHdAccount(accountKey: AccountKey): Promise<void> {
-    await this.#setAccountHidden(accountKey, true);
+  async hideHdAccount(accountId: AccountId): Promise<void> {
+    await this.#setAccountHidden(accountId, true);
   }
 
-  async unhideHdAccount(accountKey: AccountKey): Promise<void> {
-    await this.#setAccountHidden(accountKey, false);
+  async unhideHdAccount(accountId: AccountId): Promise<void> {
+    await this.#setAccountHidden(accountId, false);
   }
 
   async renameKeyring(keyringId: string, alias: string): Promise<void> {
@@ -237,8 +238,8 @@ export class KeyringService {
     this.#runtimeKeyringState.replaceKeyringMeta(next);
   }
 
-  async renameAccount(accountKey: AccountKey, alias: string): Promise<void> {
-    const record = this.#runtimeKeyringState.getAccount(accountKey);
+  async renameAccount(accountId: AccountId, alias: string): Promise<void> {
+    const record = this.#runtimeKeyringState.getAccount(accountId);
     if (!record) return;
 
     const next: AccountRecord = { ...record, alias };
@@ -274,15 +275,15 @@ export class KeyringService {
     await this.#waitForHydration();
 
     const canonical = this.#toCanonicalString(namespace, address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    const accountId = this.#toAccountId(namespace, canonical);
+    const record = this.#runtimeKeyringState.getAccount(accountId);
     if (!record) throw new KeyringAccountNotFoundError();
 
     const meta = this.#runtimeKeyringState.getKeyringMeta(record.keyringId);
     if (!meta) {
       // Orphaned account metadata; drop it.
-      await this.#options.accountsStore.remove(record.accountKey);
-      this.#runtimeKeyringState.dropAccountRecord(record.accountKey, false);
+      await this.#options.accountsStore.remove(record.accountId);
+      this.#runtimeKeyringState.dropAccountRecord(record.accountId, false);
       return;
     }
 
@@ -291,8 +292,8 @@ export class KeyringService {
       return;
     }
 
-    await this.#options.accountsStore.remove(record.accountKey);
-    this.#runtimeKeyringState.dropAccountRecord(record.accountKey, false);
+    await this.#options.accountsStore.remove(record.accountId);
+    this.#runtimeKeyringState.dropAccountRecord(record.accountId, false);
   }
 
   async exportMnemonic(keyringId: string, password: string): Promise<string> {
@@ -314,34 +315,34 @@ export class KeyringService {
 
   hasAccount(namespace: string, address: string): boolean {
     const canonical = this.#toCanonicalString(namespace, address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    return this.hasAccountKey(accountKey);
+    const accountId = this.#toAccountId(namespace, canonical);
+    return this.hasAccountId(accountId);
   }
 
-  hasAccountKey(accountKey: AccountKey): boolean {
-    return this.#runtimeKeyringState.hasAccountKey(accountKey);
+  hasAccountId(accountId: AccountId): boolean {
+    return this.#runtimeKeyringState.hasAccountId(accountId);
   }
 
-  async exportPrivateKeyByAccountKey(accountKey: AccountKey, password: string): Promise<Uint8Array> {
+  async exportPrivateKeyByAccountId(accountId: AccountId, password: string): Promise<Uint8Array> {
     await this.#waitForUnlockedRuntimeKeyrings();
     await this.#verifyPassword(password);
-    return this.#exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey);
+    return this.#exportPrivateKeyByAccountIdFromUnlockedRuntime(accountId);
   }
 
-  async signDigestByAccountKey(params: { accountKey: AccountKey; digest: Uint8Array }): Promise<{
+  async signDigestByAccountId(params: { accountId: AccountId; digest: Uint8Array }): Promise<{
     r: bigint;
     s: bigint;
     yParity: number;
     bytes: Uint8Array;
   }> {
-    const { accountKey, digest } = params;
+    const { accountId, digest } = params;
     await this.#waitForUnlockedRuntimeKeyrings();
 
     if (digest.length !== 32) {
-      throw new Error(`signDigestByAccountKey expects a 32-byte digest, got ${digest.length}`);
+      throw new Error(`signDigestByAccountId expects a 32-byte digest, got ${digest.length}`);
     }
 
-    const secret = this.#exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey);
+    const secret = this.#exportPrivateKeyByAccountIdFromUnlockedRuntime(accountId);
     try {
       const signature = secp256k1.sign(digest, secret, { lowS: true });
       return {
@@ -429,8 +430,8 @@ export class KeyringService {
     const first = instance.deriveNextAccount();
 
     const canonical = this.#toCanonicalString(namespace, first.address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    this.#assertNoDuplicate(accountKey);
+    const accountId = this.#toAccountId(namespace, canonical);
+    this.#assertNoDuplicate(accountId);
 
     const now = this.#options.now();
     const keyringId = this.#options.uuid();
@@ -482,8 +483,8 @@ export class KeyringService {
     if (!account) throw new KeyringSecretUnavailableError();
 
     const canonical = this.#toCanonicalString(namespace, account.address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    this.#assertNoDuplicate(accountKey);
+    const accountId = this.#toAccountId(namespace, canonical);
+    this.#assertNoDuplicate(accountId);
 
     const now = this.#options.now();
     const keyringId = this.#options.uuid();
@@ -554,11 +555,11 @@ export class KeyringService {
     this.#requireUnlockedSession();
 
     const canonical = this.#toCanonicalString(namespace, address);
-    const accountKey = this.#toAccountKey(namespace, canonical);
-    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    const accountId = this.#toAccountId(namespace, canonical);
+    const record = this.#runtimeKeyringState.getAccount(accountId);
     if (!record) throw new KeyringAccountNotFoundError();
 
-    const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
+    const indexed = this.#runtimeKeyringState.getAccountRef(accountId);
     if (!indexed) throw new KeyringSecretUnavailableError();
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
@@ -567,28 +568,31 @@ export class KeyringService {
     return runtime.instance.exportPrivateKey(canonical);
   }
 
-  #exportPrivateKeyByAccountKeyFromUnlockedRuntime(accountKey: AccountKey): Uint8Array {
+  #exportPrivateKeyByAccountIdFromUnlockedRuntime(accountId: AccountId): Uint8Array {
     this.#requireUnlockedSession();
 
-    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    const record = this.#runtimeKeyringState.getAccount(accountId);
     if (!record) throw new KeyringAccountNotFoundError();
 
-    const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
+    const indexed = this.#runtimeKeyringState.getAccountRef(accountId);
     if (!indexed) throw new KeyringSecretUnavailableError();
 
     const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
     if (!runtime) throw new KeyringSecretUnavailableError();
 
     const config = this.#getConfig(indexed.namespace);
-    const canonical = config.codec.fromAccountKey(accountKey);
-    const canonicalString = config.codec.toCanonicalString({ canonical });
+    const { payloadHex } = parseAccountId(accountId);
+    const canonicalString = config.accountAddressing.canonicalAddressFromAccountIdPayload({
+      chainRef: config.defaultChainRef,
+      payloadHex,
+    });
     return runtime.instance.exportPrivateKey(canonicalString);
   }
 
-  async #setAccountHidden(accountKey: AccountKey, hidden: boolean): Promise<void> {
+  async #setAccountHidden(accountId: AccountId, hidden: boolean): Promise<void> {
     await this.#waitForHydration();
 
-    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    const record = this.#runtimeKeyringState.getAccount(accountId);
     if (!record) return;
     if (record.derivationIndex === undefined) {
       // Imported accounts (private-key) are not hideable in this UX.
@@ -612,8 +616,8 @@ export class KeyringService {
     return Math.max(current, expected);
   }
 
-  #assertNoDuplicate(accountKey: AccountKey): void {
-    if (this.#runtimeKeyringState.getAccount(accountKey)) {
+  #assertNoDuplicate(accountId: AccountId): void {
+    if (this.#runtimeKeyringState.getAccount(accountId)) {
       throw new KeyringDuplicateAccountError();
     }
   }
@@ -626,12 +630,11 @@ export class KeyringService {
     alias?: string | undefined;
     derivationIndex?: number;
   }): AccountRecord {
-    const config = this.#getConfig(params.namespace);
-    const canonical = this.#toCanonicalAddress(params.namespace, params.address);
-    const accountKey = AccountKeySchema.parse(config.codec.toAccountKey(canonical));
+    const payloadHex = this.#accountIdPayloadFromAddress(params.namespace, params.address);
+    const accountId = AccountIdSchema.parse(`${params.namespace}:${payloadHex}`);
 
     return {
-      accountKey,
+      accountId,
       namespace: params.namespace,
       keyringId: params.keyringId,
       derivationIndex: params.derivationIndex,
@@ -640,10 +643,10 @@ export class KeyringService {
     };
   }
 
-  #toCanonicalAddress(namespace: string, address: string) {
+  #accountIdPayloadFromAddress(namespace: string, address: string): string {
     const config = this.#getConfig(namespace);
     try {
-      return config.codec.toCanonicalAddress({ chainRef: config.defaultChainRef, value: address });
+      return config.accountAddressing.accountIdPayloadFromAddress({ chainRef: config.defaultChainRef, address });
     } catch {
       throw new KeyringInvalidAddressError();
     }
@@ -651,14 +654,16 @@ export class KeyringService {
 
   #toCanonicalString(namespace: string, address: string): string {
     const config = this.#getConfig(namespace);
-    const canonical = this.#toCanonicalAddress(namespace, address);
-    return config.codec.toCanonicalString({ canonical });
+    const payloadHex = this.#accountIdPayloadFromAddress(namespace, address);
+    return config.accountAddressing.canonicalAddressFromAccountIdPayload({
+      chainRef: config.defaultChainRef,
+      payloadHex,
+    });
   }
 
-  #toAccountKey(namespace: string, address: string): AccountKey {
-    const canonical = this.#toCanonicalAddress(namespace, address);
-    const config = this.#getConfig(namespace);
-    return AccountKeySchema.parse(config.codec.toAccountKey(canonical));
+  #toAccountId(namespace: string, address: string): AccountId {
+    const payloadHex = this.#accountIdPayloadFromAddress(namespace, address);
+    return AccountIdSchema.parse(`${namespace}:${payloadHex}`);
   }
 
   #defaultNamespace(): string {

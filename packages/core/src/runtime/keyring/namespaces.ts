@@ -1,4 +1,4 @@
-import type { AccountCodec } from "../../accounts/addressing/codec.js";
+import type { NamespaceAccountAddressing } from "../../accounts/addressing/addressing.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 
@@ -12,6 +12,6 @@ export type NamespaceKeyringFactories = {
 export type NamespaceConfig = {
   namespace: string; // e.g., "eip155", "conflux"
   defaultChainRef: ChainRef;
-  codec: AccountCodec;
+  accountAddressing: NamespaceAccountAddressing;
   factories: NamespaceKeyringFactories;
 };

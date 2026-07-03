@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
+import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { ChainNotCompatibleError } from "../chains/errors.js";
 import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import {
   createWalletAccounts,
@@ -98,7 +99,7 @@ const createTestRuntime = (params?: {
   rpcAccessPolicy?: Parameters<typeof createBackgroundRuntime>[0]["rpcAccessPolicy"];
   settingsPort?: MemorySettingsPort;
   storePorts?: Partial<Parameters<typeof createBackgroundRuntime>[0]["store"]["ports"]>;
-  supportedChains?: Omit<NonNullable<Parameters<typeof createBackgroundRuntime>[0]["supportedChains"]>, "port">;
+  supportedChains?: Parameters<typeof createBackgroundRuntime>[0]["supportedChains"];
   storage?: Parameters<typeof createBackgroundRuntime>[0]["storage"];
   session?: Parameters<typeof createBackgroundRuntime>[0]["session"];
   transactions?: Parameters<typeof createBackgroundRuntime>[0]["transactions"];
@@ -161,10 +162,10 @@ const createActiveAccount = async (
   await runtime.services.accounts.setActiveAccount({
     namespace: MAINNET_CHAIN.namespace,
     chainRef,
-    accountKey: toAccountKeyFromAddress({
+    accountId: accountIdFromChainAddress({
       chainRef,
       address,
-      accountCodecs: runtime.services.accountCodecs,
+      accountAddressing: runtime.services.accountAddressing,
     }),
   });
   return address;
@@ -206,12 +207,12 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
       listPending: () => approvalDetails.listPending(),
       getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
     },
-    accountCodecs: runtime.services.accountCodecs,
+    accountAddressing: runtime.services.accountAddressing,
     createId: () => crypto.randomUUID(),
     caller: {
       origin: "chrome-extension://arx",
     },
-    namespaceBindings: runtime.services.namespaceBindings,
+    namespaceRuntime: runtime.services.namespaceRuntime,
     transactions: runtime.transactions,
   });
 };
@@ -401,11 +402,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
-          accountKeys: [
-            toAccountKeyFromAddress({
+          accountIds: [
+            accountIdFromChainAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              accountCodecs: runtime.services.accountCodecs,
+              accountAddressing: runtime.services.accountAddressing,
             }),
           ],
         },
@@ -436,11 +437,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
-          accountKeys: [
-            toAccountKeyFromAddress({
+          accountIds: [
+            accountIdFromChainAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              accountCodecs: runtime.services.accountCodecs,
+              accountAddressing: runtime.services.accountAddressing,
             }),
           ],
         },
@@ -501,15 +502,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime, MAINNET_CHAIN.chainRef);
 
-    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      namespace: "eip155",
-      hasRpcClient: true,
-      hasSigner: true,
-      hasApprovalBindings: true,
-      hasUiBindings: true,
-      hasTransactionReceiptTracking: true,
-    });
-
     const wallet = createWalletApiForRuntime(runtime);
 
     const activeAccount = runtime.services.accounts.getActiveAccountForNamespace({
@@ -523,10 +515,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(
       wallet.balances.getNative({
         chainRef: MAINNET_CHAIN.chainRef,
-        accountKey: activeAccount.accountKey,
+        accountId: activeAccount.accountId,
       }),
     ).resolves.toEqual({
-      accountKey: activeAccount.accountKey,
+      accountId: activeAccount.accountId,
       chainRef: MAINNET_CHAIN.chainRef,
       amount: "1000000000000000000",
       currency: MAINNET_CHAIN.nativeCurrency,
@@ -548,7 +540,18 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             ...eip155NamespaceManifest,
             runtime: {
               ...eip155NamespaceManifest.runtime,
-              createApprovalBindings: undefined,
+              createApprovalBindings: () => ({
+                signMessage: async () => {
+                  throw new ChainNotCompatibleError({
+                    message: `SignMessage is not supported for namespace "eip155".`,
+                  });
+                },
+                signTypedData: async () => {
+                  throw new ChainNotCompatibleError({
+                    message: `SignTypedData is not supported for namespace "eip155".`,
+                  });
+                },
+              }),
             },
           },
         ],
@@ -588,40 +591,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       code: "chain.not_compatible",
     });
     expect(runtime.services.approvals.getState().pending).toEqual([]);
-
-    runtime.lifecycle.shutdown();
-  });
-
-  it("tracks rpc client support separately from other runtime support", async () => {
-    const runtime = createTestRuntime({
-      chainSeed: [MAINNET_CHAIN],
-      namespaces: {
-        manifests: [
-          {
-            ...eip155NamespaceManifest,
-            runtime: {
-              ...eip155NamespaceManifest.runtime,
-              clientFactory: undefined,
-              createUiBindings: () => ({
-                getNativeBalance: async () => 0n,
-              }),
-            },
-          },
-        ],
-      },
-    });
-
-    await runtime.lifecycle.initialize();
-    runtime.lifecycle.start();
-
-    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      namespace: "eip155",
-      hasRpcClient: false,
-      hasSigner: true,
-      hasApprovalBindings: true,
-      hasUiBindings: true,
-      hasTransactionReceiptTracking: true,
-    });
 
     runtime.lifecycle.shutdown();
   });
@@ -697,12 +666,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      hasUiBindings: true,
-      hasTransactionReceiptTracking: false,
-    });
-    expect(runtime.services.namespaceBindings.getUi("eip155")).toBeDefined();
-    expect(runtime.services.namespaceBindings.hasTransactionReceiptTracking("eip155")).toBe(false);
+    expect(runtime.services.namespaceRuntime.ui.getNativeBalance).toEqual(expect.any(Function));
 
     runtime.lifecycle.shutdown();
   });
@@ -734,9 +698,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     expect(createTransaction).not.toHaveBeenCalled();
-    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
-      hasTransactionReceiptTracking: false,
-    });
 
     runtime.lifecycle.shutdown();
   });

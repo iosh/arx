@@ -25,7 +25,7 @@ const deriveBackupStatus = (keyrings: Pick<KeyringService, "getKeyrings">): Wall
 const deriveWalletSetupState = (accounts: Pick<AccountSelectionService, "getState">): WalletSetupState => {
   const state = accounts.getState();
   const totalAccountCount = Object.values(state.namespaces).reduce((sum, namespaceState) => {
-    return sum + namespaceState.accountKeys.length;
+    return sum + namespaceState.accountIds.length;
   }, 0);
 
   return {
@@ -45,8 +45,8 @@ export const createWalletAccounts = (deps: {
     getState: () => accounts.getState(),
     listOwnedForNamespace: (params) => accounts.listOwnedForNamespace(params),
     getOwnedAccount: (params) => accounts.getOwnedAccount(params),
-    getAccountKeysForNamespace: (namespace) => accounts.getAccountKeysForNamespace(namespace),
-    getSelectedAccountKey: (namespace) => accounts.getSelectedAccountKey(namespace),
+    getAccountIdsForNamespace: (namespace) => accounts.getAccountIdsForNamespace(namespace),
+    getSelectedAccountId: (namespace) => accounts.getSelectedAccountId(namespace),
     getActiveAccountForNamespace: (params) => accounts.getActiveAccountForNamespace(params),
     setActiveAccount: (params) => accounts.setActiveAccount(params),
     generateMnemonic: (wordCount) => keyring.generateMnemonic(wordCount),
@@ -55,12 +55,12 @@ export const createWalletAccounts = (deps: {
     importPrivateKey: (params) => keyring.importPrivateKey(params),
     deriveAccount: (keyringId) => keyring.deriveAccount(keyringId),
     exportMnemonic: (keyringId, password) => keyringExport.exportMnemonic(keyringId, password),
-    exportPrivateKeyByAccountKey: (accountKey, password) =>
-      keyringExport.exportPrivateKeyByAccountKey(accountKey, password),
-    hideHdAccount: (accountKey) => keyring.hideHdAccount(accountKey),
-    unhideHdAccount: (accountKey) => keyring.unhideHdAccount(accountKey),
+    exportPrivateKeyByAccountId: (accountId, password) =>
+      keyringExport.exportPrivateKeyByAccountId(accountId, password),
+    hideHdAccount: (accountId) => keyring.hideHdAccount(accountId),
+    unhideHdAccount: (accountId) => keyring.unhideHdAccount(accountId),
     renameKeyring: (keyringId, alias) => keyring.renameKeyring(keyringId, alias),
-    renameAccount: (accountKey, alias) => keyring.renameAccount(accountKey, alias),
+    renameAccount: (accountId, alias) => keyring.renameAccount(accountId, alias),
     markBackedUp: (keyringId) => keyring.markBackedUp(keyringId),
     removePrivateKeyKeyring: (keyringId) => keyring.removePrivateKeyKeyring(keyringId),
     getKeyrings: () => keyring.getKeyrings(),

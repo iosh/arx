@@ -10,7 +10,7 @@ import {
   reconcileRuntimeKeyringState,
 } from "./reconcileRuntimeKeyringState.js";
 import type {
-  AccountKey,
+  AccountId,
   KeyringPayloadListener,
   KeyringServiceOptions,
   KeyringStateListener,
@@ -43,11 +43,11 @@ export class RuntimeKeyringState {
 
   #keyrings = new Map<string, RuntimeKeyring>();
   #keyringMetas = new Map<string, KeyringMetaRecord>();
-  #accounts = new Map<AccountKey, AccountRecord>();
+  #accounts = new Map<AccountId, AccountRecord>();
   #payload: Payload = { keyrings: [] };
   #payloadListeners = new Set<KeyringPayloadListener>();
   #stateListeners = new Set<KeyringStateListener>();
-  #addressIndex = new Map<AccountKey, RuntimeAccountRef>();
+  #addressIndex = new Map<AccountId, RuntimeAccountRef>();
 
   #subscriptions: Array<() => void> = [];
   #hydrationPromise: Promise<void> | null = null;
@@ -129,13 +129,13 @@ export class RuntimeKeyringState {
     return meta ? cloneKeyringMeta(meta) : null;
   }
 
-  getAccount(accountKey: AccountKey): AccountRecord | null {
-    const account = this.#accounts.get(accountKey);
+  getAccount(accountId: AccountId): AccountRecord | null {
+    const account = this.#accounts.get(accountId);
     return account ? cloneAccountRecord(account) : null;
   }
 
-  getAccountRef(accountKey: AccountKey): RuntimeAccountRef | null {
-    const ref = this.#addressIndex.get(accountKey);
+  getAccountRef(accountId: AccountId): RuntimeAccountRef | null {
+    const ref = this.#addressIndex.get(accountId);
     return ref ? cloneAccountRef(ref) : null;
   }
 
@@ -165,8 +165,8 @@ export class RuntimeKeyringState {
     return this.getAccounts(includeHidden).filter((account) => account.keyringId === keyringId);
   }
 
-  hasAccountKey(accountKey: AccountKey): boolean {
-    return this.#addressIndex.has(accountKey);
+  hasAccountId(accountId: AccountId): boolean {
+    return this.#addressIndex.has(accountId);
   }
 
   async commitPersistedKeyring(params: {
@@ -187,7 +187,7 @@ export class RuntimeKeyringState {
     this.#keyringMetas.set(params.keyringId, cloneKeyringMeta(params.meta));
 
     for (const record of params.accounts) {
-      this.#accounts.set(record.accountKey, cloneAccountRecord(record));
+      this.#accounts.set(record.accountId, cloneAccountRecord(record));
     }
 
     this.#payload = {
@@ -208,13 +208,13 @@ export class RuntimeKeyringState {
   }
 
   replaceAccountRecord(record: AccountRecord, strictIndex = true): void {
-    this.#accounts.set(record.accountKey, cloneAccountRecord(record));
+    this.#accounts.set(record.accountId, cloneAccountRecord(record));
     this.#reindexHydratedAccounts(strictIndex);
     this.#notifyStateChanged();
   }
 
-  dropAccountRecord(accountKey: AccountKey, strictIndex = false): void {
-    this.#accounts.delete(accountKey);
+  dropAccountRecord(accountId: AccountId, strictIndex = false): void {
+    this.#accounts.delete(accountId);
     this.#reindexHydratedAccounts(strictIndex);
     this.#notifyStateChanged();
   }
@@ -236,9 +236,9 @@ export class RuntimeKeyringState {
     this.#keyrings.delete(keyringId);
     this.#keyringMetas.delete(keyringId);
 
-    for (const [accountKey, account] of Array.from(this.#accounts.entries())) {
+    for (const [accountId, account] of Array.from(this.#accounts.entries())) {
       if (account.keyringId === keyringId) {
-        this.#accounts.delete(accountKey);
+        this.#accounts.delete(accountId);
       }
     }
 
@@ -355,7 +355,7 @@ export class RuntimeKeyringState {
     }
 
     for (const account of snapshot.reconciliation.reconciledAccounts) {
-      this.#accounts.set(account.accountKey, cloneAccountRecord(account));
+      this.#accounts.set(account.accountId, cloneAccountRecord(account));
     }
 
     const defaultNamespace = this.#getDefaultNamespace();
@@ -480,14 +480,14 @@ export class RuntimeKeyringState {
 
     for (const account of derivedAccounts) {
       const derived = instance.deriveAccount(account.derivationIndex ?? 0);
-      const canonical = config.codec.toCanonicalAddress({
+      const payloadHex = config.accountAddressing.accountIdPayloadFromAddress({
         chainRef: config.defaultChainRef,
-        value: derived.address,
+        address: derived.address,
       });
-      const expectedAccountKey = config.codec.toAccountKey(canonical);
-      if (expectedAccountKey !== account.accountKey) {
+      const expectedAccountId = `${config.namespace}:${payloadHex}`;
+      if (expectedAccountId !== account.accountId) {
         throw new Error(
-          `keyring: persisted account "${account.accountKey}" does not match derived account for keyring "${entry.keyringId}"`,
+          `keyring: persisted account "${account.accountId}" does not match derived account for keyring "${entry.keyringId}"`,
         );
       }
     }
@@ -523,14 +523,14 @@ export class RuntimeKeyringState {
       throw new KeyringSecretUnavailableError();
     }
 
-    const canonical = config.codec.toCanonicalAddress({
+    const payloadHex = config.accountAddressing.accountIdPayloadFromAddress({
       chainRef: config.defaultChainRef,
-      value: runtimeAccount.address,
+      address: runtimeAccount.address,
     });
-    const expectedAccountKey = config.codec.toAccountKey(canonical);
-    if (persistedAccount.accountKey !== expectedAccountKey) {
+    const expectedAccountId = `${config.namespace}:${payloadHex}`;
+    if (persistedAccount.accountId !== expectedAccountId) {
       throw new Error(
-        `keyring: persisted account "${persistedAccount.accountKey}" does not match private-key account for keyring "${entry.keyringId}"`,
+        `keyring: persisted account "${persistedAccount.accountId}" does not match private-key account for keyring "${entry.keyringId}"`,
       );
     }
   }
@@ -604,18 +604,18 @@ export class RuntimeKeyringState {
         continue;
       }
 
-      if (this.#addressIndex.has(account.accountKey)) {
+      if (this.#addressIndex.has(account.accountId)) {
         if (strict) {
           throw new KeyringDuplicateAccountError();
         }
-        this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${account.accountKey}`);
+        this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${account.accountId}`);
         continue;
       }
 
-      this.#addressIndex.set(account.accountKey, {
+      this.#addressIndex.set(account.accountId, {
         namespace: account.namespace,
         keyringId: account.keyringId,
-        accountKey: account.accountKey,
+        accountId: account.accountId,
       });
     }
   }

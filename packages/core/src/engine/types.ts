@@ -1,4 +1,3 @@
-import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/runtime/types.js";
 import type {
   ApprovalCreatedEvent,
@@ -13,7 +12,7 @@ import type {
   ApprovalResolveResult,
   ApprovalState,
 } from "../approvals/queue/types.js";
-import type { ChainDefinition, ChainDefinitionSeed } from "../chains/definition.js";
+import type { ChainDefinition } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
@@ -23,8 +22,7 @@ import type {
   SupportedChainEntity,
   SupportedChainsUpdate,
 } from "../chains/runtime/supportedChains/types.js";
-import type { ChainAddressCodec } from "../chains/types.js";
-import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
+import type { NamespaceManifest } from "../namespaces/types.js";
 import type {
   PermissionAuthorization,
   PermissionsEvents,
@@ -32,14 +30,12 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
-import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,
   ImportPrivateKeyParams,
   KeyringService,
 } from "../runtime/keyring/KeyringService.js";
-import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
@@ -79,61 +75,10 @@ import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 import type { WalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 
-// Static namespace description that can be indexed and validated before boot.
-export type NamespaceEngineFacts = Readonly<{
-  /** Namespace id. */
-  namespace: string;
-  /** RPC module. */
-  rpc: RpcNamespaceModule;
-  /** Chain-address codec. */
-  chainAddressCodec: ChainAddressCodec;
-  /** Account codec. */
-  accountCodec: AccountCodec;
-  /** Keyring config. */
-  keyring: NamespaceConfig;
-  /** Seed chains. */
-  chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
-}>;
-
-// Runtime factories contributed by a namespace module to the wallet engine.
-export type NamespaceEngineFactories = Readonly<{
-  /** RPC client factory. */
-  clientFactory?: NonNullable<NamespaceRuntimeManifest["clientFactory"]>;
-  /** Signer factory. */
-  createSigner?: NonNullable<NamespaceRuntimeManifest["createSigner"]>;
-  /** Approval bindings factory. */
-  createApprovalBindings?: NonNullable<NamespaceRuntimeManifest["createApprovalBindings"]>;
-  /** UI bindings factory. */
-  createUiBindings?: NonNullable<NamespaceRuntimeManifest["createUiBindings"]>;
-  /** Namespace transaction factory. */
-  createTransaction?: NonNullable<NamespaceRuntimeManifest["createTransaction"]>;
-}>;
-
-// Engine-facing namespace definition split into static facts and executable factories.
-export type NamespaceEngineDefinition = Readonly<{
-  /** Static namespace facts. */
-  facts: NamespaceEngineFacts;
-  /** Runtime factories. */
-  factories?: NamespaceEngineFactories;
-}>;
-
-// Single installed engine namespace module.
-export type WalletNamespaceModule = Readonly<{
-  /** Namespace id. */
-  namespace: string;
-  /** Engine definition. */
-  engine: NamespaceEngineDefinition;
-}>;
-
-// Read-only installed namespace collection available while the wallet is alive.
 export type WalletNamespaces = Readonly<{
-  /** Get a module by namespace. */
-  findModule(namespace: string): WalletNamespaceModule | undefined;
-  /** Get a module or throw. */
-  requireModule(namespace: string): WalletNamespaceModule;
-  /** List installed modules. */
-  listModules(): WalletNamespaceModule[];
-  /** List installed namespace ids. */
+  findManifest(namespace: string): NamespaceManifest | undefined;
+  requireManifest(namespace: string): NamespaceManifest;
+  listManifests(): NamespaceManifest[];
   listNamespaces(): string[];
 }>;
 
@@ -160,8 +105,8 @@ export type CoreStoragePorts = Readonly<{
 /** Arguments for `createArxWallet()`. */
 export type CreateArxWalletInput = Readonly<{
   namespaces: Readonly<{
-    /** Modules to install. */
-    modules: readonly WalletNamespaceModule[];
+    /** Namespace manifests to install. */
+    manifests: readonly NamespaceManifest[];
   }>;
   storage: Readonly<{
     /** Required storage ports. */
@@ -223,8 +168,8 @@ export type WalletAccounts = Readonly<{
   getState(): MultiNamespaceAccountsState;
   listOwnedForNamespace: AccountSelectionService["listOwnedForNamespace"];
   getOwnedAccount: AccountSelectionService["getOwnedAccount"];
-  getAccountKeysForNamespace: AccountSelectionService["getAccountKeysForNamespace"];
-  getSelectedAccountKey: AccountSelectionService["getSelectedAccountKey"];
+  getAccountIdsForNamespace: AccountSelectionService["getAccountIdsForNamespace"];
+  getSelectedAccountId: AccountSelectionService["getSelectedAccountId"];
   getActiveAccountForNamespace: AccountSelectionService["getActiveAccountForNamespace"];
   setActiveAccount: AccountSelectionService["setActiveAccount"];
   generateMnemonic: KeyringService["generateMnemonic"];
@@ -233,7 +178,7 @@ export type WalletAccounts = Readonly<{
   importPrivateKey: (params: ImportPrivateKeyParams) => ReturnType<KeyringService["importPrivateKey"]>;
   deriveAccount: KeyringService["deriveAccount"];
   exportMnemonic: KeyringExportService["exportMnemonic"];
-  exportPrivateKeyByAccountKey: KeyringExportService["exportPrivateKeyByAccountKey"];
+  exportPrivateKeyByAccountId: KeyringExportService["exportPrivateKeyByAccountId"];
   hideHdAccount: KeyringService["hideHdAccount"];
   unhideHdAccount: KeyringService["unhideHdAccount"];
   renameKeyring: KeyringService["renameKeyring"];
@@ -269,7 +214,7 @@ export type WalletPermissions = Readonly<{
   getChainAuthorization: PermissionsReader["getChainAuthorization"];
   listOriginPermissions(origin: string): PermissionAuthorization[];
   grantAuthorization: PermissionsWriter["grantAuthorization"];
-  setChainAccountKeys: PermissionsWriter["setChainAccountKeys"];
+  setChainAccountIds: PermissionsWriter["setChainAccountIds"];
   revokeChainAuthorization: PermissionsWriter["revokeChainAuthorization"];
   revokeNamespaceAuthorization: PermissionsWriter["revokeNamespaceAuthorization"];
   revokeOriginPermissions: PermissionsWriter["revokeOriginPermissions"];
@@ -372,7 +317,7 @@ export type WalletDappConnections = Readonly<{
 }>;
 
 export type ArxWallet = Readonly<{
-  /** Installed namespace modules. */
+  /** Installed namespace manifests. */
   namespaces: WalletNamespaces;
   /** Wallet session methods. */
   session: WalletSession;

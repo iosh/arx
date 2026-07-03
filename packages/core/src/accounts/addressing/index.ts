@@ -1,14 +1,14 @@
-export type { AccountKey } from "./accountKey.js";
+export type { AccountId } from "./accountId.js";
 export {
-  getAccountKeyNamespace,
-  parseAccountKey,
-  toAccountKeyFromAddress,
-  toCanonicalAddressFromAccountKey,
-  toDisplayAddressFromAccountKey,
-} from "./accountKey.js";
-export type { AccountCodec, CanonicalAddress } from "./codec.js";
+  accountIdFromChainAddress,
+  canonicalChainAddressFromAccountId,
+  displayChainAddressFromAccountId,
+  getAccountIdNamespace,
+  parseAccountId,
+} from "./accountId.js";
+export type { AccountAddressingByNamespace, NamespaceAccountAddressing } from "./addressing.js";
 export {
-  AccountCodecRegistry,
-  createAccountCodecRegistry,
-  eip155Codec,
-} from "./codec.js";
+  accountAddressingForNamespace,
+  buildAccountAddressingByNamespace,
+  eip155AccountAddressing,
+} from "./addressing.js";

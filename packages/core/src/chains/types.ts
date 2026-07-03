@@ -16,13 +16,13 @@ export type FormatAddressParams<TMetadata = Record<string, unknown>> = {
   metadata?: TMetadata;
 };
 
-export type ChainAddressModule<TMetadata = Record<string, unknown>> = {
+export type ChainAddressFormat<TMetadata = Record<string, unknown>> = {
   canonicalize(params: CanonicalizeAddressParams): CanonicalizedAddressResult<TMetadata>;
   format(params: FormatAddressParams<TMetadata>): string;
   validate?(params: FormatAddressParams<TMetadata>): void;
 };
 
-export type ChainAddressCodec<TMetadata = Record<string, unknown>> = {
+export type NamespaceChainAddressing<TMetadata = Record<string, unknown>> = {
   namespace: string;
-  address: ChainAddressModule<TMetadata>;
+  address: ChainAddressFormat<TMetadata>;
 };

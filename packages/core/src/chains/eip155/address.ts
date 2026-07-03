@@ -4,7 +4,7 @@ import { ChainInvalidAddressError } from "../errors.js";
 import type {
   CanonicalizeAddressParams,
   CanonicalizedAddressResult,
-  ChainAddressModule,
+  ChainAddressFormat,
   FormatAddressParams,
 } from "../types.js";
 
@@ -33,7 +33,7 @@ const validateCanonical = (canonical: Hex): void => {
   }
 };
 
-export const createEip155AddressModule = (): ChainAddressModule => ({
+export const createEip155AddressFormat = (): ChainAddressFormat => ({
   canonicalize({ chainRef, value }: CanonicalizeAddressParams): CanonicalizedAddressResult {
     assertNamespace(chainRef, "eip155");
     assertValidInput(value);

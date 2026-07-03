@@ -7,7 +7,7 @@ import type {
   ApprovalTerminalReason,
 } from "../approvals/queue/types.js";
 import type { SupportedChainsService } from "../chains/runtime/supportedChains/types.js";
-import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
+import type { NamespaceRuntimeServices } from "../namespaces/index.js";
 import type { PermissionsWriter } from "../permissions/service/types.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
 import type { ChainRpcDefaultEndpointsService } from "../services/store/chainRpcDefaultEndpoints/types.js";
@@ -18,7 +18,7 @@ export type ApprovalFlowDeps = {
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain" | "selectProviderChain">;
   supportedChains: Pick<SupportedChainsService, "getChain" | "addChain">;
   chainRpcDefaultEndpoints: Pick<ChainRpcDefaultEndpointsService, "setDefaultEndpoints">;
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
+  namespaceRuntime: NamespaceRuntimeServices;
 };
 
 export type ApprovalRejectInput = {
@@ -37,10 +37,6 @@ export type ApprovalFlow<K extends ApprovalQueueKind = ApprovalQueueKind> = {
     error: Error,
     deps: ApprovalFlowDeps,
   ): Promise<void>;
-};
-
-export type ApprovalFlowRegistry = {
-  get<K extends ApprovalQueueKind>(kind: K): ApprovalFlow<K> | undefined;
 };
 
 export type ApprovalExecutor = {

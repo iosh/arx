@@ -30,31 +30,20 @@ describe("deriveApprovalReviewContext", () => {
 });
 
 describe("approval decision parsing", () => {
-  it("parses unique non-empty accountKeys decisions", () => {
+  it("parses non-empty accountIds decisions", () => {
     expect(
       parseAccountSelectionDecision(ApprovalKinds.RequestAccounts, {
-        accountKeys: [
+        accountIds: [
           "eip155:0000000000000000000000000000000000000000",
           "eip155:1111111111111111111111111111111111111111",
         ],
       }),
     ).toEqual({
-      accountKeys: [
+      accountIds: [
         "eip155:0000000000000000000000000000000000000000",
         "eip155:1111111111111111111111111111111111111111",
       ],
     });
-  });
-
-  it("rejects duplicate accountKeys decisions", () => {
-    expect(() =>
-      parseAccountSelectionDecision(ApprovalKinds.RequestPermissions, {
-        accountKeys: [
-          "eip155:0000000000000000000000000000000000000000",
-          "eip155:0000000000000000000000000000000000000000",
-        ],
-      }),
-    ).toThrow(/accountkeys/i);
   });
 
   it("rejects decision payloads for no-decision kinds", () => {

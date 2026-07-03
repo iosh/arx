@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createEip155AddressModule } from "./address.js";
+import { createEip155AddressFormat } from "./address.js";
 
-const module = createEip155AddressModule();
+const module = createEip155AddressFormat();
 const chainRef = "eip155:1";
 
 describe("eip155 address module", () => {

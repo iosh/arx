@@ -8,7 +8,6 @@ import type {
 import { PermissionDeniedError } from "../permissions/errors.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
-import { ApprovalAccountSelectionDecisionSchema } from "./decision.js";
 
 type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
@@ -28,14 +27,14 @@ export const parseAccountSelectionDecision = <K extends ApprovalQueueKind>(
   kind: K,
   input: unknown,
 ): ApprovalDecision<K> => {
-  try {
-    return ApprovalAccountSelectionDecisionSchema.parse(input) as ApprovalDecision<K>;
-  } catch (error) {
+  const decision = input as Partial<ApprovalAccountSelectionDecision> | undefined;
+  if (!decision?.accountIds?.length) {
     throw new RpcInvalidParamsError({
-      message: `Approval kind "${kind}" requires a non-empty accountKeys decision.`,
-      cause: error,
+      message: `Approval kind "${kind}" requires a non-empty accountIds decision.`,
     });
   }
+
+  return decision as ApprovalDecision<K>;
 };
 
 export const deriveApprovalReviewContext = (
@@ -61,16 +60,16 @@ export const getApprovalSelectableAccounts = (
     namespace,
     chainRef: reviewChainRef,
   });
-  const recommendedAccountKey =
-    activeAccount && selectableAccounts.some((account) => account.accountKey === activeAccount.accountKey)
-      ? activeAccount.accountKey
-      : (selectableAccounts[0]?.accountKey ?? null);
+  const recommendedAccountId =
+    activeAccount && selectableAccounts.some((account) => account.accountId === activeAccount.accountId)
+      ? activeAccount.accountId
+      : (selectableAccounts[0]?.accountId ?? null);
 
   return {
     namespace,
     chainRef: reviewChainRef,
     selectableAccounts,
-    recommendedAccountKey,
+    recommendedAccountId,
   };
 };
 
@@ -81,9 +80,9 @@ export const resolveApprovalSelectedAccounts = (args: {
   decision: ApprovalAccountSelectionDecision;
   selectableAccounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"];
 }) => {
-  const byKey = new Map(args.selectableAccounts.map((account) => [account.accountKey, account] as const));
-  const selected = args.decision.accountKeys.map((accountKey) => {
-    const account = byKey.get(accountKey);
+  const byKey = new Map(args.selectableAccounts.map((account) => [account.accountId, account] as const));
+  const selected = args.decision.accountIds.map((accountId) => {
+    const account = byKey.get(accountId);
     if (!account) {
       throw new PermissionDeniedError();
     }

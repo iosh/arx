@@ -87,7 +87,7 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       throw error;
     }
   },
-  handler: async ({ origin, params, deps, services, executionContext, invocation }) => {
+  handler: async ({ origin, params, deps, executionContext, invocation }) => {
     const chainRef = invocation.chainRef;
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
@@ -110,7 +110,7 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
 
     return buildEip2255PermissionsFromAuthorizationSnapshot({
       origin,
-      snapshot: services.permissionViews.getAuthorizationSnapshot(origin, { chainRef }),
+      snapshot: deps.permissionViews.getAuthorizationSnapshot(origin, { chainRef }),
     });
   },
 });

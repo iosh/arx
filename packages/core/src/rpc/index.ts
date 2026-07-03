@@ -1,5 +1,3 @@
-import { RpcRegistry } from "./RpcRegistry.js";
-
 export type {
   Json,
   JsonRpcError,
@@ -28,7 +26,6 @@ export {
   EIP155_PASSTHROUGH_READONLY_METHODS,
 } from "./handlers/namespaces/index.js";
 export {
-  type HandlerRuntimeServices,
   type MethodDefinition,
   type Namespace,
   NO_RPC_EXECUTION_CONTEXT,
@@ -50,13 +47,22 @@ export {
 } from "./invocation.js";
 export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
 export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
-export { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
 export type { RpcNamespaceModule } from "./namespaces/types.js";
 export * from "./permissions.js";
-export type { RpcPassthroughPolicy } from "./RpcRegistry.js";
-export { RpcRegistry } from "./RpcRegistry.js";
 export type { RequestContext } from "./requestContext.js";
 export type { RpcRequestKind } from "./requestKind.js";
 export { RpcRequestKinds } from "./requestKind.js";
-
-export const createRpcRegistry = (): RpcRegistry => new RpcRegistry();
+export type {
+  RpcMethodPrefixRoute,
+  RpcNamespaceRoute,
+  RpcPassthroughPolicy,
+  RpcRouting,
+} from "./routing.js";
+export {
+  buildRpcRouting,
+  findRpcMethodDefinition,
+  hasRpcNamespace,
+  listRpcNamespaces,
+  resolveRpcNamespaceFromMethod,
+  rpcPassthroughPolicyForNamespace,
+} from "./routing.js";

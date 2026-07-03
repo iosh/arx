@@ -1,3 +1,4 @@
+import { formatChainAddress } from "../../../../chains/addressing.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedResponse } from "../../locked.js";
 import {
@@ -13,10 +14,10 @@ export const ethAccountsDefinition = defineNoParamsMethod({
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedResponse([]),
-  handler: ({ origin, deps, services, invocation }) => {
+  handler: ({ origin, deps, invocation }) => {
     const chainRef = invocation.chainRef;
-    return services.permissionViews
+    return deps.permissionViews
       .listPermittedAccounts(origin, { chainRef })
-      .map((account) => deps.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }));
+      .map((account) => formatChainAddress(deps.chainAddressing, { chainRef, canonical: account.canonicalAddress }));
   },
 });

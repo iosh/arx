@@ -1,32 +1,25 @@
 export type {
-  RuntimeBootstrapNamespaceAssembly,
-  RuntimeNamespaceRuntimeSupportAssembly,
-  RuntimeNamespaceStageAssembly,
-  RuntimeSessionNamespaceAssembly,
+  NamespaceRpcClientFactory,
+  NamespaceRuntimeAssembly,
+  NamespaceStaticAssembly,
 } from "./assembly.js";
 export {
-  assembleRuntimeNamespaceStages,
+  assembleNamespaceStatic,
+  buildAccountAddressingByNamespaceFromManifests,
+  buildChainAddressingByNamespaceFromManifests,
   collectChainSeedsFromManifests,
-  createAccountCodecRegistryFromManifests,
-  createChainAddressCodecRegistryFromManifests,
   createKeyringNamespacesFromManifests,
-  materializeNamespaceRuntimeSupport,
-  registerRpcModules,
-  registerRpcModulesFromManifests,
+  materializeNamespaceRuntime,
 } from "./assembly.js";
 export { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
 export { eip155NamespaceManifest } from "./eip155/manifest.js";
-export { NamespaceTransactionModuleMissingError, NamespaceTransactionSignerMissingError } from "./errors.js";
 export type {
   NamespaceApprovalBindings,
+  NamespaceApprovalService,
   NamespaceCoreManifest,
   NamespaceManifest,
-  NamespaceRuntimeBindingsRegistry,
   NamespaceRuntimeManifest,
-  NamespaceRuntimeSupport,
-  NamespaceRuntimeSupportIndex,
-  NamespaceRuntimeSupportSpec,
-  NamespaceSignerRegistry,
+  NamespaceRuntimeServices,
   NamespaceUiBindings,
+  NamespaceUiService,
 } from "./types.js";
-export { assertValidNamespaceManifest, defineNamespaceManifest } from "./validation.js";

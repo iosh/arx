@@ -36,18 +36,18 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       prepared: txRequest,
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, services, executionContext }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, deps, executionContext }) => {
     const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
     const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
 
     const { decision } = await providerRequestHandle.attachBlockingApproval(({ approvalId }) =>
-      services.transactions.requestTransactionApproval({
+      deps.transactions.requestTransactionApproval({
         namespace: "eip155",
         chainRef: prepared.chainRef,
         origin,
         source: "provider",
         requestId: requestContext.requestId,
-        accountKey: account.accountKey,
+        accountId: account.accountId,
         approvalId,
         cancellation: {
           signal: providerRequestHandle.signal,
@@ -81,7 +81,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       });
     }
 
-    const outcome = await services.transactions.waitForTransactionSubmissionOutcome({
+    const outcome = await deps.transactions.waitForTransactionSubmissionOutcome({
       transactionId: approvalDecision.transaction.id,
       signal: providerRequestHandle.signal,
     });

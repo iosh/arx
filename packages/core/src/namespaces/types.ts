@@ -1,9 +1,9 @@
-import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
+import type { ChainAddressingByNamespace } from "../chains/addressing.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { RpcEndpoint } from "../chains/metadata.js";
-import type { ChainAddressCodecRegistry } from "../chains/registry.js";
-import type { ChainAddressCodec } from "../chains/types.js";
+import type { NamespaceChainAddressing } from "../chains/types.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
@@ -11,73 +11,68 @@ import type { AccountSigningService } from "../services/runtime/accountSigning.j
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
 
 export type NamespaceCoreManifest = {
-  namespace: string;
   rpc: RpcNamespaceModule;
-  chainAddressCodec: ChainAddressCodec;
-  accountCodec: AccountCodec;
+  chainAddressing: NamespaceChainAddressing;
+  accountAddressing: NamespaceAccountAddressing;
   keyring: NamespaceConfig;
   chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
 };
 
+export type NamespaceSignMessageInput = {
+  namespace: string;
+  chainRef: ChainRef;
+  address: string;
+  message: string;
+};
+
+export type NamespaceSignTypedDataInput = {
+  namespace: string;
+  chainRef: ChainRef;
+  address: string;
+  typedData: string;
+};
+
+export type NamespaceNativeBalanceInput = {
+  namespace: string;
+  chainRef: ChainRef;
+  address: string;
+};
+
 export type NamespaceApprovalBindings = {
-  signMessage?: (params: { chainRef: ChainRef; address: string; message: string }) => Promise<string>;
-  signTypedData?: (params: { chainRef: ChainRef; address: string; typedData: string }) => Promise<string>;
+  signMessage(params: NamespaceSignMessageInput): Promise<string>;
+  signTypedData(params: NamespaceSignTypedDataInput): Promise<string>;
 };
 
 export type NamespaceUiBindings = {
-  getNativeBalance?: (params: { chainRef: ChainRef; address: string }) => Promise<bigint>;
+  getNativeBalance(params: NamespaceNativeBalanceInput): Promise<bigint>;
 };
 
-export type NamespaceRuntimeBindingsRegistry = {
-  getApproval(namespace: string): NamespaceApprovalBindings | undefined;
-  getUi(namespace: string): NamespaceUiBindings | undefined;
-  hasTransactionReceiptTracking(namespace: string): boolean;
-};
+export type NamespaceApprovalService = NamespaceApprovalBindings;
 
-export type NamespaceRuntimeSupport = Readonly<{
-  namespace: string;
-  hasRpcClient: boolean;
-  hasSigner: boolean;
-  hasApprovalBindings: boolean;
-  hasUiBindings: boolean;
-  hasTransactionReceiptTracking: boolean;
+export type NamespaceUiService = NamespaceUiBindings;
+
+export type NamespaceRuntimeServices = Readonly<{
+  approvals: NamespaceApprovalService;
+  ui: NamespaceUiService;
 }>;
 
-export type NamespaceRuntimeSupportIndex = {
-  get(namespace: string): NamespaceRuntimeSupport | undefined;
-  require(namespace: string): NamespaceRuntimeSupport;
-  list(): NamespaceRuntimeSupport[];
-};
-
-export type NamespaceSignerRegistry = {
-  get<TSigner = unknown>(namespace: string): TSigner | undefined;
-  require<TSigner = unknown>(namespace: string): TSigner;
-  listNamespaces(): string[];
-};
-
 export type NamespaceRuntimeManifest = {
-  clientFactory?: RpcClientFactory;
-  createSigner?: (params: { accountSigning: AccountSigningService }) => unknown;
-  createApprovalBindings?: (params: { signer: unknown }) => NamespaceApprovalBindings;
-  createUiBindings?: (params: {
+  clientFactory: RpcClientFactory;
+  createSigner(params: { accountSigning: AccountSigningService }): unknown;
+  createApprovalBindings(params: { signer: unknown }): NamespaceApprovalBindings;
+  createUiBindings(params: {
     rpcClients: Pick<ChainRpcClientPool, "getClient">;
-    chains: ChainAddressCodecRegistry;
-  }) => NamespaceUiBindings;
-  createTransaction?: (params: {
+    chains: ChainAddressingByNamespace;
+  }): NamespaceUiBindings;
+  createTransaction(params: {
     rpcClients: Pick<ChainRpcClientPool, "getClient">;
-    chains: ChainAddressCodecRegistry;
+    chains: ChainAddressingByNamespace;
     signer: unknown;
-  }) => NamespaceTransaction;
+  }): NamespaceTransaction;
 };
-
-export type NamespaceRuntimeSupportSpec = Readonly<
-  {
-    namespace: string;
-  } & NamespaceRuntimeManifest
->;
 
 export type NamespaceManifest = {
   namespace: string;
   core: NamespaceCoreManifest;
-  runtime?: NamespaceRuntimeManifest;
+  runtime: NamespaceRuntimeManifest;
 };

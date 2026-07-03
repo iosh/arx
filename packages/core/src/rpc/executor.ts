@@ -4,7 +4,6 @@ import { isArxBaseError } from "../error.js";
 import type { ChainRpcClientPool, RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
-  HandlerRuntimeServices,
   MethodDefinition,
   Namespace,
   RpcExecutionContext,
@@ -14,20 +13,13 @@ import type {
 } from "./handlers/types.js";
 import type { ResolvedRpcInvocationDetails } from "./invocation.js";
 import { resolveRpcInvocationDetails } from "./invocation.js";
-import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
-
-type RpcExecutorCatalog = {
-  hasNamespace(namespace: Namespace): boolean;
-  getMethodDefinition(namespace: Namespace, method: string): MethodDefinition | undefined;
-  resolveNamespaceFromMethodPrefix(method: string): Namespace | null;
-  getPassthroughPolicy(namespace: Namespace): RpcPassthroughPolicy | null;
-};
+import { isJsonRpcErrorLike, type JsonRpcErrorLike } from "./jsonRpcError.js";
+import { type RpcRouting, rpcPassthroughPolicyForNamespace } from "./routing.js";
 
 type CreateRpcMethodExecutorOptions = {
-  registry: RpcExecutorCatalog;
+  routing: RpcRouting;
   deps: RpcHandlerDeps;
   chainRpcClientPool: ChainRpcClientPool;
-  services: HandlerRuntimeServices;
 };
 
 type RpcExecutorBaseArgs = {
@@ -48,18 +40,7 @@ type RpcExecutorWithHint = RpcExecutorBaseArgs & {
 
 type RpcExecutorArgs = RpcExecutorWithInvocation | RpcExecutorWithHint;
 
-const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: unknown; data?: unknown } => {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.code === "number";
-};
-
-export const createRpcMethodExecutor = ({
-  registry,
-  deps,
-  chainRpcClientPool,
-  services,
-}: CreateRpcMethodExecutorOptions) => {
+export const createRpcMethodExecutor = ({ routing, deps, chainRpcClientPool }: CreateRpcMethodExecutorOptions) => {
   const parseDefinitionParams = (
     definition: MethodDefinition,
     args: {
@@ -69,16 +50,15 @@ export const createRpcMethodExecutor = ({
       params: RpcRequest["params"];
     },
   ): unknown => {
-    if (!definition.parseParams && !definition.paramsSchema) return args.params;
-
     try {
       if (definition.parseParams) {
         return definition.parseParams(args.params, { namespace: args.namespace, chainRef: args.chainRef });
       }
-      if (!definition.paramsSchema) {
-        return args.params;
-      }
-      return definition.paramsSchema.parse(args.params);
+
+      const paramsSchema = definition.paramsSchema;
+      if (!paramsSchema) return args.params;
+
+      return paramsSchema.parse(args.params);
     } catch (error) {
       if (isArxBaseError(error)) throw error;
 
@@ -116,7 +96,6 @@ export const createRpcMethodExecutor = ({
       request: args.request,
       params,
       deps,
-      services,
       invocation: { namespace: args.namespace, chainRef: args.chainRef },
       executionContext: args.executionContext,
     };
@@ -125,7 +104,7 @@ export const createRpcMethodExecutor = ({
   };
 
   const assertPassthroughAllowed = (namespace: Namespace, method: string): void => {
-    const passthrough = registry.getPassthroughPolicy(namespace);
+    const passthrough = rpcPassthroughPolicyForNamespace(routing, namespace);
     if (!passthrough?.allowedMethods.has(method)) {
       throw new RpcUnsupportedMethodError({
         message: `Method "${method}" is not supported`,
@@ -135,7 +114,7 @@ export const createRpcMethodExecutor = ({
 
   const sanitizeNodeRpcError = (error: unknown) => {
     if (!isJsonRpcErrorLike(error)) return null;
-    const rpcError = error as { code: number; message?: unknown; data?: unknown };
+    const rpcError: JsonRpcErrorLike = error;
 
     const message =
       typeof rpcError.message === "string" && rpcError.message.length > 0 ? rpcError.message : "Unknown error";
@@ -154,12 +133,7 @@ export const createRpcMethodExecutor = ({
     return { code: rpcError.code, message, data: sanitized };
   };
 
-  const executePassthrough = async (args: {
-    origin: string;
-    request: RpcRequest;
-    namespace: Namespace;
-    chainRef: ChainRef;
-  }) => {
+  const executePassthrough = async (args: { request: RpcRequest; namespace: Namespace; chainRef: ChainRef }) => {
     try {
       const client = chainRpcClientPool.getClient(args.namespace, args.chainRef);
       const rpcPayload: RpcTransportRequest = {
@@ -185,7 +159,7 @@ export const createRpcMethodExecutor = ({
 
   return async (args: RpcExecutorArgs) => {
     const { namespace, chainRef, definition } =
-      args.invocation ?? resolveRpcInvocationDetails(registry, deps, args.request.method, args.hint);
+      args.invocation ?? resolveRpcInvocationDetails(routing, deps, args.request.method, args.hint);
 
     if (definition) {
       return executeLocal({
@@ -201,7 +175,6 @@ export const createRpcMethodExecutor = ({
     assertPassthroughAllowed(namespace, args.request.method);
 
     return executePassthrough({
-      origin: args.origin,
       request: args.request,
       namespace,
       chainRef,

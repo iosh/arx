@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getChainRefNamespace } from "../chains/caip.js";
-import { BUILTIN_RPC_NAMESPACE_MODULES } from "../rpc/namespaces/builtin.js";
-import { createAccountCodecRegistryFromManifests } from "./assembly.js";
+import { buildAccountAddressingByNamespaceFromManifests } from "./assembly.js";
 import { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
 
 describe("builtin namespace manifests", () => {
@@ -10,8 +9,8 @@ describe("builtin namespace manifests", () => {
 
     const [manifest] = BUILTIN_NAMESPACE_MANIFESTS;
     expect(manifest?.core.rpc.namespace).toBe("eip155");
-    expect(manifest?.core.chainAddressCodec.namespace).toBe("eip155");
-    expect(manifest?.core.accountCodec.namespace).toBe("eip155");
+    expect(manifest?.core.chainAddressing.namespace).toBe("eip155");
+    expect(manifest?.core.accountAddressing.namespace).toBe("eip155");
     expect(manifest?.core.keyring.namespace).toBe("eip155");
     expect(
       manifest?.core.chainSeeds?.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),
@@ -19,16 +18,14 @@ describe("builtin namespace manifests", () => {
   });
 
   it("drives rpc builtins and default keyring namespaces from the same source", () => {
-    expect(BUILTIN_RPC_NAMESPACE_MODULES).toEqual(BUILTIN_NAMESPACE_MANIFESTS.map((manifest) => manifest.core.rpc));
-
     const namespaces = createBuiltinKeyringNamespaces();
     expect(namespaces.map((entry) => entry.namespace)).toEqual(["eip155"]);
-    expect(namespaces[0]).not.toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.keyring);
+    expect(namespaces[0]).toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.keyring);
   });
 
-  it("can derive account codec registry entries from builtin manifests", () => {
-    const registry = createAccountCodecRegistryFromManifests(BUILTIN_NAMESPACE_MANIFESTS);
-    expect(registry.list().map((codec) => codec.namespace)).toEqual(["eip155"]);
-    expect(registry.require("eip155")).toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.accountCodec);
+  it("can derive account addressing from builtin manifests", () => {
+    const accountAddressing = buildAccountAddressingByNamespaceFromManifests(BUILTIN_NAMESPACE_MANIFESTS);
+    expect(Object.keys(accountAddressing)).toEqual(["eip155"]);
+    expect(accountAddressing.eip155).toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.accountAddressing);
   });
 });

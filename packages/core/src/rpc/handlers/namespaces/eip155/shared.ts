@@ -1,7 +1,7 @@
 import { requestApproval } from "../../../../approvals/creation.js";
 import type { ApprovalQueueKind, ApprovalRequest, ApprovalRequester } from "../../../../approvals/queue/types.js";
+import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../../../../chains/addressing.js";
 import type { ChainRef } from "../../../../chains/ids.js";
-import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type {
   PermissionViewsService,
@@ -51,9 +51,6 @@ export const requestProviderApproval = <K extends ApprovalQueueKind>(args: {
     approvals: {
       create: Parameters<typeof requestApproval>[0]["approvals"]["create"];
     };
-    clock: {
-      now: () => number;
-    };
   };
   executionContext: RpcExecutionContext;
   method: string;
@@ -67,7 +64,7 @@ export const requestProviderApproval = <K extends ApprovalQueueKind>(args: {
     requestApproval(
       {
         approvals: args.deps.approvals,
-        now: args.deps.clock.now,
+        now: Date.now,
       },
       {
         kind: args.kind,
@@ -82,7 +79,7 @@ export const requestProviderApproval = <K extends ApprovalQueueKind>(args: {
 
 type PermittedAccountDeps = {
   permissionViews: Pick<PermissionViewsService, "listPermittedAccounts">;
-  chainAddressCodecs: Pick<ChainAddressCodecRegistry, "toCanonicalAddress">;
+  chainAddressing: ChainAddressingByNamespace;
 };
 
 export const assertPermittedEip155Account = (args: {
@@ -94,7 +91,7 @@ export const assertPermittedEip155Account = (args: {
 }) => {
   const { origin, chainRef, address, deps } = args;
 
-  const canonical = deps.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
+  const canonical = canonicalizeChainAddress(deps.chainAddressing, { chainRef, value: address }).canonical;
   const permittedAccounts = deps.permissionViews.listPermittedAccounts(origin, { chainRef });
 
   if (permittedAccounts.length === 0) {
@@ -126,7 +123,7 @@ export const buildEip155TransactionIntent = (args: {
     namespace: "eip155" as const,
     chainRef: args.chainRef,
     account: {
-      accountKey: args.account.accountKey,
+      accountId: args.account.accountId,
       accountAddress: args.account.canonicalAddress,
       ...(requestedAddress ? { requestedAddress } : {}),
     },
@@ -206,8 +203,8 @@ export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
         chainRef,
         address,
         deps: {
-          permissionViews: context.services.permissionViews,
-          chainAddressCodecs: context.deps.chainAddressCodecs,
+          permissionViews: context.deps.permissionViews,
+          chainAddressing: context.deps.chainAddressing,
         },
       });
 

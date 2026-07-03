@@ -1,44 +1,44 @@
 import * as Hex from "ox/Hex";
-import { eip155Codec } from "../../accounts/addressing/codec.js";
+import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.js";
+import { eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { EIP155_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
-import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
+import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
-import type { Eip155RpcCapabilities, Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
+import {
+  createEip155RpcClientFactory,
+  type Eip155RpcCapabilities,
+  type Eip155RpcClient,
+} from "../../rpc/namespaceClients/eip155.js";
 import { eip155Module } from "../../rpc/namespaces/eip155/module.js";
 import { createEip155Broadcaster } from "../../transactions/namespace/eip155/broadcaster.js";
 import { createEip155Signer, type Eip155Signer } from "../../transactions/namespace/eip155/signer.js";
 import { createEip155Transaction } from "../../transactions/namespace/eip155/transaction.js";
 import type { NamespaceManifest } from "../types.js";
-import { defineNamespaceManifest } from "../validation.js";
 
-const DEFAULT_EIP155_CHAIN_REF = EIP155_CHAIN_DEFINITION_SEEDS[0]?.definition.chainRef;
-const EIP155_CLIENT_FACTORY = eip155Module.clientFactory;
+const DEFAULT_EIP155_CHAIN_SEED = EIP155_CHAIN_DEFINITION_SEEDS[0] as (typeof EIP155_CHAIN_DEFINITION_SEEDS)[number];
+const DEFAULT_EIP155_CHAIN_REF = DEFAULT_EIP155_CHAIN_SEED.definition.chainRef;
+const EIP155_CLIENT_FACTORY = createEip155RpcClientFactory();
+const EIP155_ACCOUNT_ADDRESSING = { [EIP155_NAMESPACE]: eip155AccountAddressing };
 
-if (!DEFAULT_EIP155_CHAIN_REF) {
-  throw new Error("EIP155_CHAIN_DEFINITION_SEEDS must include at least one chain");
-}
-
-if (!EIP155_CLIENT_FACTORY) {
-  throw new Error("eip155Module must provide a clientFactory");
-}
-
-const toEip155AccountKey = (params: { chainRef: string; address: string }) => {
-  const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-  return eip155Codec.toAccountKey(canonical);
+const toEip155AccountId = (params: { chainRef: string; address: string }) => {
+  return accountIdFromChainAddress({
+    chainRef: params.chainRef,
+    address: params.address,
+    accountAddressing: EIP155_ACCOUNT_ADDRESSING,
+  });
 };
 
-export const eip155NamespaceManifest = defineNamespaceManifest({
+export const eip155NamespaceManifest = {
   namespace: EIP155_NAMESPACE,
   core: {
-    namespace: EIP155_NAMESPACE,
     rpc: eip155Module,
-    chainAddressCodec: eip155AddressCodec,
-    accountCodec: eip155Codec,
+    chainAddressing: eip155ChainAddressing,
+    accountAddressing: eip155AccountAddressing,
     keyring: {
       namespace: EIP155_NAMESPACE,
       defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
-      codec: eip155Codec,
+      accountAddressing: eip155AccountAddressing,
       factories: {
         hd: () => new EvmHdKeyring(),
         "private-key": () => new EvmPrivateKeyKeyring(),
@@ -54,12 +54,12 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
       return {
         signMessage: async ({ chainRef, address, message }) =>
           await typedSigner.signPersonalMessage({
-            accountKey: toEip155AccountKey({ chainRef, address }),
+            accountId: toEip155AccountId({ chainRef, address }),
             message,
           }),
         signTypedData: async ({ chainRef, address, typedData }) =>
           await typedSigner.signTypedData({
-            accountKey: toEip155AccountKey({ chainRef, address }),
+            accountId: toEip155AccountId({ chainRef, address }),
             typedData,
           }),
       };
@@ -86,4 +86,4 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
       });
     },
   },
-} satisfies NamespaceManifest);
+} satisfies NamespaceManifest;

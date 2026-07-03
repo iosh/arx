@@ -14,10 +14,10 @@ export const walletGetPermissionsDefinition = defineNoParamsMethod({
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedAllow(),
-  handler: ({ origin, services, invocation }) => {
+  handler: ({ origin, deps, invocation }) => {
     return buildEip2255PermissionsFromAuthorizationSnapshot({
       origin,
-      snapshot: services.permissionViews.getAuthorizationSnapshot(origin, {
+      snapshot: deps.permissionViews.getAuthorizationSnapshot(origin, {
         chainRef: invocation.chainRef,
       }),
     });

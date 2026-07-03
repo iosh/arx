@@ -1,400 +1,188 @@
-import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accounts/addressing/codec.js";
-import { type ChainDefinitionSeed, cloneChainDefinition } from "../chains/definition.js";
+import {
+  type AccountAddressingByNamespace,
+  buildAccountAddressingByNamespace,
+} from "../accounts/addressing/addressing.js";
+import { buildChainAddressingByNamespace, type ChainAddressingByNamespace } from "../chains/addressing.js";
+import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { ChainNotCompatibleError } from "../chains/errors.js";
 import type { RpcEndpoint } from "../chains/metadata.js";
-import { ChainAddressCodecRegistry } from "../chains/registry.js";
-import type { ChainRpcClientPool } from "../rpc/ChainRpcClientPool.js";
-import type { RpcHandlerDeps } from "../rpc/handlers/types.js";
+import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import type { RpcRegistry } from "../rpc/RpcRegistry.js";
+import { buildRpcRouting, type RpcRouting } from "../rpc/routing.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { AnyNamespaceTransaction } from "../transactions/namespace/types.js";
-import { NamespaceTransactionModuleMissingError, NamespaceTransactionSignerMissingError } from "./errors.js";
 import type {
   NamespaceApprovalBindings,
   NamespaceManifest,
-  NamespaceRuntimeBindingsRegistry,
-  NamespaceRuntimeSupport,
-  NamespaceRuntimeSupportIndex,
-  NamespaceRuntimeSupportSpec,
-  NamespaceSignerRegistry,
+  NamespaceRuntimeServices,
   NamespaceUiBindings,
 } from "./types.js";
-import { assertValidNamespaceManifest } from "./validation.js";
 
-export type RuntimeBootstrapNamespaceAssembly = Readonly<{
-  rpcModules: readonly RpcNamespaceModule[];
-  accountCodecs: AccountCodecRegistry;
-  chainAddressCodecs: ChainAddressCodecRegistry;
-  chainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
+export type NamespaceRpcClientFactory = Readonly<{
+  namespace: string;
+  factory: RpcClientFactory;
 }>;
 
-export type RuntimeSessionNamespaceAssembly = Readonly<{
+export type NamespaceStaticAssembly = Readonly<{
+  manifests: readonly NamespaceManifest[];
+  rpcModules: readonly RpcNamespaceModule[];
+  rpcRouting: RpcRouting;
+  rpcClientFactories: readonly NamespaceRpcClientFactory[];
+  accountAddressing: AccountAddressingByNamespace;
+  chainAddressing: ChainAddressingByNamespace;
+  chainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
   keyringNamespaces: readonly NamespaceConfig[];
 }>;
 
-export type RuntimeNamespaceRuntimeSupportAssembly = Readonly<{
-  namespaces: readonly NamespaceRuntimeSupportSpec[];
+export type NamespaceRuntimeAssembly = Readonly<{
+  namespaceTransactions: NamespaceTransactions;
+  services: NamespaceRuntimeServices;
 }>;
 
-export type RuntimeNamespaceStageAssembly = Readonly<{
-  bootstrap: RuntimeBootstrapNamespaceAssembly;
-  session: RuntimeSessionNamespaceAssembly;
-  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-}>;
-
-const assertValidRuntimeSupportDependencies = (manifest: NamespaceManifest): void => {
-  const runtime = manifest.runtime;
-  if (!runtime) {
-    return;
-  }
-
-  if (runtime.createApprovalBindings && !runtime.createSigner) {
-    throw new Error(
-      `Namespace manifest "${manifest.namespace}" runtime.createApprovalBindings requires runtime.createSigner`,
-    );
-  }
-
-  if (runtime.createTransaction && !runtime.createSigner) {
-    throw new Error(
-      `Namespace manifest "${manifest.namespace}" runtime.createTransaction requires runtime.createSigner`,
-    );
-  }
+type MaterializedNamespaceRuntime = {
+  namespace: string;
+  approvals: NamespaceApprovalBindings;
+  ui: NamespaceUiBindings;
 };
 
-const assertValidUniqueNamespaceManifests = (manifests: readonly NamespaceManifest[]): void => {
-  const seen = new Set<string>();
-  for (const manifest of manifests) {
-    assertValidNamespaceManifest(manifest);
-    assertValidRuntimeSupportDependencies(manifest);
-    if (seen.has(manifest.namespace)) {
-      throw new Error(`Duplicate namespace manifest "${manifest.namespace}"`);
-    }
-    seen.add(manifest.namespace);
-  }
-};
-
-const getValidatedUniqueNamespaceManifests = (
-  manifests: readonly NamespaceManifest[],
-): readonly NamespaceManifest[] => {
-  assertValidUniqueNamespaceManifests(manifests);
-  return manifests;
-};
-
-const collectRpcModulesFromValidatedManifests = (
-  manifests: readonly NamespaceManifest[],
-): readonly RpcNamespaceModule[] => {
-  return manifests.map((manifest) => manifest.core.rpc);
-};
-
-const cloneChainDefinitionSeed = (seed: ChainDefinitionSeed<RpcEndpoint>): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: cloneChainDefinition(seed.definition),
-  ...(seed.defaultRpcEndpoints ? { defaultRpcEndpoints: structuredClone(seed.defaultRpcEndpoints) } : {}),
-});
-
-const collectChainSeedsFromValidatedManifests = (
-  manifests: readonly NamespaceManifest[],
-): ChainDefinitionSeed<RpcEndpoint>[] => {
-  return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map(cloneChainDefinitionSeed) ?? []);
-};
-
-const createChainAddressCodecRegistryFromValidatedManifests = (
-  manifests: readonly NamespaceManifest[],
-): ChainAddressCodecRegistry => {
-  return new ChainAddressCodecRegistry(manifests.map((manifest) => manifest.core.chainAddressCodec));
-};
-
-const createAccountCodecRegistryFromValidatedManifests = (
-  manifests: readonly NamespaceManifest[],
-): AccountCodecRegistry => {
-  return createAccountCodecRegistry(manifests.map((manifest) => manifest.core.accountCodec));
-};
-
-const createKeyringNamespacesFromValidatedManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
-  return manifests.map((manifest) => ({
-    ...manifest.core.keyring,
-    factories: { ...manifest.core.keyring.factories },
-  }));
-};
-
-const createRuntimeSupportSpecsFromValidatedManifests = (
-  manifests: readonly NamespaceManifest[],
-): NamespaceRuntimeSupportSpec[] => {
-  return manifests.map((manifest) => ({
-    namespace: manifest.namespace,
-    ...(manifest.runtime?.clientFactory ? { clientFactory: manifest.runtime.clientFactory } : {}),
-    ...(manifest.runtime?.createSigner ? { createSigner: manifest.runtime.createSigner } : {}),
-    ...(manifest.runtime?.createApprovalBindings
-      ? { createApprovalBindings: manifest.runtime.createApprovalBindings }
-      : {}),
-    ...(manifest.runtime?.createUiBindings ? { createUiBindings: manifest.runtime.createUiBindings } : {}),
-    ...(manifest.runtime?.createTransaction ? { createTransaction: manifest.runtime.createTransaction } : {}),
-  }));
-};
-
-const createNamespaceRuntimeBindingsRegistry = (params: {
-  approvalByNamespace: ReadonlyMap<string, NamespaceApprovalBindings>;
-  uiByNamespace: ReadonlyMap<string, NamespaceUiBindings>;
-  receiptTrackingNamespaces: ReadonlySet<string>;
-}): NamespaceRuntimeBindingsRegistry => {
-  const { approvalByNamespace, uiByNamespace, receiptTrackingNamespaces } = params;
-
-  return {
-    getApproval: (namespace) => approvalByNamespace.get(namespace),
-    getUi: (namespace) => uiByNamespace.get(namespace),
-    hasTransactionReceiptTracking: (namespace) => receiptTrackingNamespaces.has(namespace),
-  };
-};
-
-const createNamespaceRuntimeSupportIndex = (
-  supportByNamespace: ReadonlyMap<string, NamespaceRuntimeSupport>,
-): NamespaceRuntimeSupportIndex => {
-  return {
-    get: (namespace) => supportByNamespace.get(namespace),
-    require: (namespace) => {
-      const support = supportByNamespace.get(namespace);
-      if (!support) {
-        throw new Error(`Missing runtime support for namespace "${namespace}"`);
-      }
-      return support;
-    },
-    list: () => [...supportByNamespace.values()],
-  };
-};
-
-export const assembleRuntimeNamespaceStages = (
-  manifests: readonly NamespaceManifest[],
-): RuntimeNamespaceStageAssembly => {
-  const validatedManifests = getValidatedUniqueNamespaceManifests(manifests);
-
-  return {
-    bootstrap: {
-      rpcModules: collectRpcModulesFromValidatedManifests(validatedManifests),
-      accountCodecs: createAccountCodecRegistryFromValidatedManifests(validatedManifests),
-      chainAddressCodecs: createChainAddressCodecRegistryFromValidatedManifests(validatedManifests),
-      chainSeeds: collectChainSeedsFromValidatedManifests(validatedManifests),
-    },
-    session: {
-      keyringNamespaces: createKeyringNamespacesFromValidatedManifests(validatedManifests),
-    },
-    runtimeSupport: {
-      namespaces: createRuntimeSupportSpecsFromValidatedManifests(validatedManifests),
-    },
-  };
-};
+const collectRpcModulesFromManifests = (manifests: readonly NamespaceManifest[]): readonly RpcNamespaceModule[] =>
+  manifests.map((manifest) => manifest.core.rpc);
 
 export const collectChainSeedsFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): ChainDefinitionSeed<RpcEndpoint>[] => {
-  return collectChainSeedsFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
+  return manifests.flatMap((manifest) => manifest.core.chainSeeds ?? []);
 };
 
-export const createChainAddressCodecRegistryFromManifests = (
+export const buildChainAddressingByNamespaceFromManifests = (
   manifests: readonly NamespaceManifest[],
-): ChainAddressCodecRegistry => {
-  return createChainAddressCodecRegistryFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
+): ChainAddressingByNamespace => {
+  return buildChainAddressingByNamespace(manifests.map((manifest) => manifest.core.chainAddressing));
 };
 
-export const createAccountCodecRegistryFromManifests = (
+export const buildAccountAddressingByNamespaceFromManifests = (
   manifests: readonly NamespaceManifest[],
-): AccountCodecRegistry => {
-  return createAccountCodecRegistryFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
+): AccountAddressingByNamespace => {
+  return buildAccountAddressingByNamespace(manifests.map((manifest) => manifest.core.accountAddressing));
 };
 
 export const createKeyringNamespacesFromManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
-  return createKeyringNamespacesFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
+  return manifests.map((manifest) => manifest.core.keyring);
 };
 
-export const registerRpcModules = (registry: RpcRegistry, modules: readonly RpcNamespaceModule[]): void => {
-  const seen = new Set<string>();
-  for (const module of modules) {
-    if (seen.has(module.namespace)) {
-      throw new Error(`Duplicate RPC namespace module "${module.namespace}"`);
-    }
-    seen.add(module.namespace);
-  }
-
-  const registered = new Set(registry.getRegisteredNamespaceAdapters().map((entry) => entry.namespace));
-  for (const module of modules) {
-    if (!registered.has(module.namespace)) {
-      registry.registerNamespaceAdapter(module.adapter);
-      registered.add(module.namespace);
-    }
-  }
-};
-
-export const registerRpcModulesFromManifests = (
-  registry: RpcRegistry,
+const createRpcClientFactoriesFromManifests = (
   manifests: readonly NamespaceManifest[],
-): void => {
-  registerRpcModules(
-    registry,
-    collectRpcModulesFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests)),
-  );
+): NamespaceRpcClientFactory[] => {
+  return manifests.map((manifest) => ({
+    namespace: manifest.namespace,
+    factory: manifest.runtime.clientFactory,
+  }));
 };
 
-const createNamespaceSignerRegistry = (signerByNamespace: ReadonlyMap<string, unknown>): NamespaceSignerRegistry => {
+export const assembleNamespaceStatic = (manifests: readonly NamespaceManifest[]): NamespaceStaticAssembly => {
+  const rpcModules = collectRpcModulesFromManifests(manifests);
+
   return {
-    get: <TSigner = unknown>(namespace: string) => signerByNamespace.get(namespace) as TSigner | undefined,
-    require: <TSigner = unknown>(namespace: string) => {
-      const signer = signerByNamespace.get(namespace);
-      if (!signer) {
-        throw new Error(`Missing signer binding for namespace "${namespace}"`);
-      }
-      return signer as TSigner;
-    },
-    listNamespaces: () => [...signerByNamespace.keys()],
+    manifests,
+    rpcModules,
+    rpcRouting: buildRpcRouting(rpcModules.map((module) => module.adapter)),
+    rpcClientFactories: createRpcClientFactoriesFromManifests(manifests),
+    accountAddressing: buildAccountAddressingByNamespaceFromManifests(manifests),
+    chainAddressing: buildChainAddressingByNamespaceFromManifests(manifests),
+    chainSeeds: collectChainSeedsFromManifests(manifests),
+    keyringNamespaces: createKeyringNamespacesFromManifests(manifests),
   };
 };
 
-const assertTransactionOverridesMatchInstalledNamespaces = (params: {
-  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  transactionOverrides?: NamespaceTransactions;
-}): void => {
-  const overrides = params.transactionOverrides;
-  if (!overrides) {
-    return;
-  }
-
-  const installedNamespaces = new Set(params.runtimeSupport.namespaces.map((spec) => spec.namespace));
-  const unknownNamespaces = overrides
-    .listNamespaces()
-    .filter((namespace) => !installedNamespaces.has(namespace))
-    .sort();
-
-  if (unknownNamespaces.length === 0) {
-    return;
-  }
-
-  throw new Error(
-    `Transaction overrides must target installed namespaces; received unknown namespace overrides: ${unknownNamespaces.join(", ")}`,
-  );
-};
-
 const materializeNamespaceTransactions = (params: {
-  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
+  manifests: readonly NamespaceManifest[];
   rpcClients: Pick<ChainRpcClientPool, "getClient">;
-  chains: ChainAddressCodecRegistry;
+  chains: ChainAddressingByNamespace;
   signerByNamespace: ReadonlyMap<string, unknown>;
   transactionOverrides?: NamespaceTransactions;
 }): NamespaceTransactions => {
-  assertTransactionOverridesMatchInstalledNamespaces(params);
-
   const transactionEntries: Array<[string, AnyNamespaceTransaction]> = [];
   const overrideByNamespace = new Map(params.transactionOverrides?.entries() ?? []);
 
-  for (const spec of params.runtimeSupport.namespaces) {
-    const overriddenTransaction = overrideByNamespace.get(spec.namespace);
+  for (const manifest of params.manifests) {
+    const overriddenTransaction = overrideByNamespace.get(manifest.namespace);
     if (overriddenTransaction) {
-      transactionEntries.push([spec.namespace, overriddenTransaction]);
-      overrideByNamespace.delete(spec.namespace);
+      transactionEntries.push([manifest.namespace, overriddenTransaction]);
+      overrideByNamespace.delete(manifest.namespace);
       continue;
     }
 
-    const createTransaction = spec.createTransaction;
-    if (!createTransaction) {
-      throw new NamespaceTransactionModuleMissingError({ namespace: spec.namespace });
-    }
+    const signer = params.signerByNamespace.get(manifest.namespace);
 
-    const signer = params.signerByNamespace.get(spec.namespace);
-    if (!signer) {
-      throw new NamespaceTransactionSignerMissingError({ namespace: spec.namespace });
-    }
-
-    const transaction = createTransaction({
+    const transaction = manifest.runtime.createTransaction({
       rpcClients: params.rpcClients,
       chains: params.chains,
       signer,
     });
-    transactionEntries.push([spec.namespace, transaction]);
+    transactionEntries.push([manifest.namespace, transaction]);
   }
 
   return new NamespaceTransactions(transactionEntries);
 };
 
-export const materializeNamespaceRuntimeSupport = (params: {
-  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  rpcClients: Pick<ChainRpcClientPool, "getClient">;
-  chains: ChainAddressCodecRegistry;
-  accountSigning: AccountSigningService;
-  rpcClientNamespaces: ReadonlySet<string>;
-  transactionOverrides?: NamespaceTransactions;
-}): {
-  namespaceTransactions: NamespaceTransactions;
-  signers: RpcHandlerDeps["signers"];
-  bindings: NamespaceRuntimeBindingsRegistry;
-  runtimeSupport: NamespaceRuntimeSupportIndex;
-} => {
-  const { runtimeSupport, rpcClients, chains, accountSigning, rpcClientNamespaces, transactionOverrides } = params;
-  const signerByNamespace = new Map<string, unknown>();
-  const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();
-  const uiByNamespace = new Map<string, NamespaceUiBindings>();
-  const supportByNamespace = new Map<string, NamespaceRuntimeSupport>();
+const namespaceRuntimeFor = (
+  runtimes: ReadonlyMap<string, MaterializedNamespaceRuntime>,
+  namespace: string,
+): MaterializedNamespaceRuntime => {
+  const runtime = runtimes.get(namespace);
+  if (runtime) return runtime;
 
-  for (const spec of runtimeSupport.namespaces) {
-    const createSigner = spec.createSigner;
-    if (!createSigner) continue;
-    signerByNamespace.set(spec.namespace, createSigner({ accountSigning }));
-  }
-
-  for (const spec of runtimeSupport.namespaces) {
-    const createApprovalBindings = spec.createApprovalBindings;
-    if (createApprovalBindings) {
-      const signer = signerByNamespace.get(spec.namespace);
-      if (!signer) {
-        throw new Error(`Approval bindings for namespace "${spec.namespace}" require a signer binding`);
-      }
-      approvalByNamespace.set(spec.namespace, createApprovalBindings({ signer }));
-    }
-
-    const createUiBindings = spec.createUiBindings;
-    if (createUiBindings) {
-      uiByNamespace.set(
-        spec.namespace,
-        createUiBindings({
-          rpcClients,
-          chains,
-        }),
-      );
-    }
-  }
-
-  const namespaceTransactions = materializeNamespaceTransactions({
-    runtimeSupport,
-    rpcClients,
-    chains,
-    signerByNamespace,
-    ...(transactionOverrides ? { transactionOverrides } : {}),
+  throw new ChainNotCompatibleError({
+    message: `Namespace runtime is not available for "${namespace}".`,
   });
-  const receiptTrackingNamespaces = new Set<string>();
-  for (const spec of runtimeSupport.namespaces) {
-    const approvalBindings = approvalByNamespace.get(spec.namespace);
-    const uiBindings = uiByNamespace.get(spec.namespace);
-    const namespaceTransaction = namespaceTransactions.find(spec.namespace);
-    const tracking = namespaceTransaction?.tracking;
-    if (tracking?.inspectSubmittedTransaction) {
-      receiptTrackingNamespaces.add(spec.namespace);
-    }
+};
 
-    supportByNamespace.set(spec.namespace, {
-      namespace: spec.namespace,
-      hasRpcClient: rpcClientNamespaces.has(spec.namespace),
-      hasSigner: signerByNamespace.has(spec.namespace),
-      hasApprovalBindings: Boolean(approvalBindings?.signMessage || approvalBindings?.signTypedData),
-      hasUiBindings: Boolean(uiBindings?.getNativeBalance),
-      hasTransactionReceiptTracking: Boolean(tracking?.inspectSubmittedTransaction),
+export const materializeNamespaceRuntime = (params: {
+  manifests: readonly NamespaceManifest[];
+  rpcClients: Pick<ChainRpcClientPool, "getClient">;
+  chains: ChainAddressingByNamespace;
+  accountSigning: AccountSigningService;
+  transactionOverrides?: NamespaceTransactions;
+}): NamespaceRuntimeAssembly => {
+  const { manifests, rpcClients, chains, accountSigning, transactionOverrides } = params;
+  const signerByNamespace = new Map<string, unknown>();
+  const namespaceRuntimeByNamespace = new Map<string, MaterializedNamespaceRuntime>();
+
+  for (const manifest of manifests) {
+    signerByNamespace.set(manifest.namespace, manifest.runtime.createSigner({ accountSigning }));
+  }
+
+  for (const manifest of manifests) {
+    const signer = signerByNamespace.get(manifest.namespace);
+
+    namespaceRuntimeByNamespace.set(manifest.namespace, {
+      namespace: manifest.namespace,
+      approvals: manifest.runtime.createApprovalBindings({ signer }),
+      ui: manifest.runtime.createUiBindings({ rpcClients, chains }),
     });
   }
 
   return {
-    namespaceTransactions,
-    signers: createNamespaceSignerRegistry(signerByNamespace),
-    bindings: createNamespaceRuntimeBindingsRegistry({
-      approvalByNamespace,
-      uiByNamespace,
-      receiptTrackingNamespaces,
+    namespaceTransactions: materializeNamespaceTransactions({
+      manifests,
+      rpcClients,
+      chains,
+      signerByNamespace,
+      ...(transactionOverrides ? { transactionOverrides } : {}),
     }),
-    runtimeSupport: createNamespaceRuntimeSupportIndex(supportByNamespace),
+    services: {
+      approvals: {
+        signMessage: (input) =>
+          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).approvals.signMessage(input),
+        signTypedData: (input) =>
+          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).approvals.signTypedData(input),
+      },
+      ui: {
+        getNativeBalance: (input) =>
+          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).ui.getNativeBalance(input),
+      },
+    },
   };
 };

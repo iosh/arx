@@ -2,7 +2,14 @@ import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chain
 import type { ChainRef } from "../chains/ids.js";
 import { RpcInvalidRequestError } from "./errors.js";
 import type { MethodDefinition, Namespace, RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
-import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
+import {
+  findRpcMethodDefinition,
+  hasRpcNamespace,
+  type RpcPassthroughPolicy,
+  type RpcRouting,
+  resolveRpcNamespaceFromMethod,
+  rpcPassthroughPolicyForNamespace,
+} from "./routing.js";
 
 export type RpcPassthroughAllowance = {
   isPassthrough: boolean;
@@ -19,41 +26,35 @@ export type ResolvedRpcInvocationDetails = ResolvedRpcInvocation & {
   passthrough: RpcPassthroughAllowance;
 };
 
-type RpcInvocationCatalog = {
-  hasNamespace(namespace: Namespace): boolean;
-  getMethodDefinition(namespace: Namespace, method: string): MethodDefinition | undefined;
-  resolveNamespaceFromMethodPrefix(method: string): Namespace | null;
-  getPassthroughPolicy(namespace: Namespace): RpcPassthroughPolicy | null;
+const namespaceFromChainRefHint = (chainRef: ChainRef | undefined): Namespace | null => {
+  if (chainRef === undefined) return null;
+  try {
+    return getChainRefNamespace(chainRef);
+  } catch {
+    return null;
+  }
 };
 
-const deriveInvocationNamespace = (
-  catalog: RpcInvocationCatalog,
-  method: string,
-  hint?: RpcInvocationHint,
-): Namespace | null => {
+const deriveInvocationNamespace = (routing: RpcRouting, method: string, hint?: RpcInvocationHint): Namespace | null => {
   if (hint?.namespace !== undefined) {
-    return catalog.hasNamespace(hint.namespace) ? hint.namespace : null;
+    return hasRpcNamespace(routing, hint.namespace) ? hint.namespace : null;
   }
 
-  const fromChain = hint?.chainRef !== undefined ? getChainRefNamespace(hint.chainRef) : null;
-  if (fromChain && catalog.hasNamespace(fromChain)) {
+  const fromChain = namespaceFromChainRefHint(hint?.chainRef);
+  if (fromChain && hasRpcNamespace(routing, fromChain)) {
     return fromChain;
   }
 
-  const fromMethod = catalog.resolveNamespaceFromMethodPrefix(method);
-  if (fromMethod && catalog.hasNamespace(fromMethod)) {
+  const fromMethod = resolveRpcNamespaceFromMethod(routing, method);
+  if (fromMethod && hasRpcNamespace(routing, fromMethod)) {
     return fromMethod;
   }
 
   return null;
 };
 
-const resolveInvocationNamespace = (
-  catalog: RpcInvocationCatalog,
-  method: string,
-  hint?: RpcInvocationHint,
-): Namespace => {
-  const namespace = deriveInvocationNamespace(catalog, method, hint);
+const resolveInvocationNamespace = (routing: RpcRouting, method: string, hint?: RpcInvocationHint): Namespace => {
+  const namespace = deriveInvocationNamespace(routing, method, hint);
   if (namespace) {
     return namespace;
   }
@@ -158,14 +159,14 @@ const toPassthroughAllowance = (policy: RpcPassthroughPolicy | null, method: str
 };
 
 export const resolveRpcInvocation = (
-  catalog: RpcInvocationCatalog,
+  routing: RpcRouting,
   handlerDeps: RpcHandlerDeps,
   method: string,
   hint?: RpcInvocationHint,
 ): ResolvedRpcInvocation => {
   assertInvocationHintConsistency(hint);
 
-  const namespace = resolveInvocationNamespace(catalog, method, hint);
+  const namespace = resolveInvocationNamespace(routing, method, hint);
   const namespaceActiveChainRef = handlerDeps.walletChainSelection.getSelectedChainRef(namespace);
   const chainRef = resolveInvocationChainRef({
     method,
@@ -179,29 +180,29 @@ export const resolveRpcInvocation = (
 };
 
 export const resolveRpcInvocationDetails = (
-  catalog: RpcInvocationCatalog,
+  routing: RpcRouting,
   handlerDeps: RpcHandlerDeps,
   method: string,
   hint?: RpcInvocationHint,
 ): ResolvedRpcInvocationDetails => {
-  const { namespace, chainRef } = resolveRpcInvocation(catalog, handlerDeps, method, hint);
+  const { namespace, chainRef } = resolveRpcInvocation(routing, handlerDeps, method, hint);
 
   return {
     namespace,
     chainRef,
-    definition: catalog.getMethodDefinition(namespace, method),
-    passthrough: toPassthroughAllowance(catalog.getPassthroughPolicy(namespace), method),
+    definition: findRpcMethodDefinition(routing, namespace, method),
+    passthrough: toPassthroughAllowance(rpcPassthroughPolicyForNamespace(routing, namespace), method),
   };
 };
 
-export const createRpcMethodNamespaceResolver = (catalog: RpcInvocationCatalog) => {
+export const createRpcMethodNamespaceResolver = (routing: RpcRouting) => {
   return (method: string, hint?: RpcInvocationHint): Namespace | null => {
-    return deriveInvocationNamespace(catalog, method, hint);
+    return deriveInvocationNamespace(routing, method, hint);
   };
 };
 
-export const createRpcHintNamespaceResolver = (catalog: RpcInvocationCatalog) => {
+export const createRpcHintNamespaceResolver = (routing: RpcRouting) => {
   return (hint?: RpcInvocationHint): Namespace | null => {
-    return deriveInvocationNamespace(catalog, "", hint);
+    return deriveInvocationNamespace(routing, "", hint);
   };
 };

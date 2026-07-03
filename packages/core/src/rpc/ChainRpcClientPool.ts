@@ -4,6 +4,7 @@ import type { ChainRef } from "../chains/ids.js";
 import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcReader } from "../chains/rpc/types.js";
 import { RpcInternalError } from "./errors.js";
+import { isJsonRpcErrorLike, JsonRpcResponseError } from "./jsonRpcError.js";
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 type AbortFactory = () => AbortController;
@@ -55,8 +56,6 @@ type TransportErrorInfo = {
   code?: number | string | undefined;
   data?: unknown | undefined;
 };
-
-type JsonRpcErrorLike = { code: number; message: string; data?: unknown };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_BACKOFF_MS = 300;
@@ -118,15 +117,6 @@ class RpcTransportFailure extends Error {
   }
 }
 
-const isJsonRpcErrorLike = (value: unknown): value is JsonRpcErrorLike => {
-  if (!value || typeof value !== "object") return false;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return false;
-
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.code === "number" && typeof candidate.message === "string";
-};
-
 const buildJsonRpcPayload = (request: RpcTransportRequest, allocateRpcId: () => number): Record<string, unknown> => ({
   jsonrpc: "2.0",
   id: request.id ?? allocateRpcId(),
@@ -164,11 +154,11 @@ const parseJsonRpcResponse = async <T>(response: Response, endpoint: RpcEndpoint
     const envelope = json as { result?: T; error?: unknown };
     if (envelope.error !== undefined) {
       const info = readTransportErrorInfo(envelope.error, "RPC node returned an error");
-      throw {
+      throw new JsonRpcResponseError({
         code: typeof info.code === "number" ? info.code : -32603,
         message: info.message,
         ...(info.data !== undefined ? { data: info.data } : {}),
-      } satisfies JsonRpcErrorLike;
+      });
     }
     if (envelope.result !== undefined) {
       return envelope.result;
@@ -351,26 +341,24 @@ export class ChainRpcClientPool {
       this.#clients.set(namespace, perNamespace);
     }
 
-    if (!perNamespace.has(normalizedChainRef)) {
-      const factory = this.#factories.get(namespace) as RpcClientFactory<TCapabilities> | undefined;
-      if (!factory) {
-        throw new Error(`No RPC client factory registered for namespace "${namespace}"`);
-      }
-      const transport = createJsonRpcTransport(namespace, normalizedChainRef, this.#chainRpc, this.#config);
-      const client = factory({
-        namespace,
-        chainRef: normalizedChainRef,
-        chainRpc: this.#chainRpc,
-        transport,
-      }) as RpcClient<RpcClientCapabilities>;
-      perNamespace.set(normalizedChainRef, client);
+    const existing = perNamespace.get(normalizedChainRef);
+    if (existing) {
+      return existing as RpcClient<TCapabilities>;
     }
 
-    const cached = perNamespace.get(normalizedChainRef);
-    if (!cached) {
-      throw new Error(`Failed to create RPC client for ${namespace} ${normalizedChainRef}`);
+    const factory = this.#factories.get(namespace) as RpcClientFactory<TCapabilities> | undefined;
+    if (!factory) {
+      throw new Error(`No RPC client factory registered for namespace "${namespace}"`);
     }
-    return cached as RpcClient<TCapabilities>;
+    const transport = createJsonRpcTransport(namespace, normalizedChainRef, this.#chainRpc, this.#config);
+    const client = factory({
+      namespace,
+      chainRef: normalizedChainRef,
+      chainRpc: this.#chainRpc,
+      transport,
+    }) as RpcClient<RpcClientCapabilities>;
+    perNamespace.set(normalizedChainRef, client);
+    return client as RpcClient<TCapabilities>;
   }
 
   unregisterClient(namespace: string, chainRef: string): void {

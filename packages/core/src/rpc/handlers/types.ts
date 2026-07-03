@@ -2,11 +2,10 @@ import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
+import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
-import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
@@ -35,16 +34,9 @@ export type RpcHandlerDeps = {
   accounts: AccountSelectionService;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  supportedChains?: SupportedChainsService;
+  supportedChains: SupportedChainsService;
   chainRpcDefaultEndpoints?: Pick<ChainRpcDefaultEndpointsService, "readDefaultEndpoints">;
-  chainAddressCodecs: ChainAddressCodecRegistry;
-  clock: {
-    now: () => number;
-  };
-  signers: NamespaceSignerRegistry;
-};
-
-export type HandlerRuntimeServices = {
+  chainAddressing: ChainAddressingByNamespace;
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
   transactions: Pick<TransactionsService, "requestTransactionApproval" | "waitForTransactionSubmissionOutcome">;
 };
@@ -64,7 +56,6 @@ type MethodHandlerContext<P> = {
   request: RpcRequest;
   params: P;
   deps: RpcHandlerDeps;
-  services: HandlerRuntimeServices;
   invocation: { namespace: Namespace; chainRef: ChainRef };
   executionContext: RpcExecutionContext;
 };
@@ -85,12 +76,6 @@ export const AuthorizationRequirements = {
 } as const;
 export type AuthorizationRequirement = (typeof AuthorizationRequirements)[keyof typeof AuthorizationRequirements];
 
-export const deriveAuthorizationRequirement = (definition: {
-  authorizationRequirement: AuthorizationRequirement;
-}): AuthorizationRequirement => {
-  return definition.authorizationRequirement;
-};
-
 export type LockedPolicy =
   | { type: "allow" }
   | { type: "deny" }
@@ -103,23 +88,11 @@ export const ApprovalRequirements = {
 } as const;
 export type ApprovalRequirement = (typeof ApprovalRequirements)[keyof typeof ApprovalRequirements];
 
-export const deriveApprovalRequirement = (definition: {
-  approvalRequirement: ApprovalRequirement;
-}): ApprovalRequirement => {
-  return definition.approvalRequirement;
-};
-
 export const AuthorizedScopeChecks = {
   None: "none",
   NamespaceSpecific: "namespace_specific",
 } as const;
 export type AuthorizedScopeCheck = (typeof AuthorizedScopeChecks)[keyof typeof AuthorizedScopeChecks];
-
-export const deriveAuthorizedScopeCheck = (definition: {
-  authorizedScopeCheck: AuthorizedScopeCheck;
-}): AuthorizedScopeCheck => {
-  return definition.authorizedScopeCheck;
-};
 
 export type MethodDefinition<P = unknown> = {
   /**

@@ -37,7 +37,7 @@ const createSubmittedAggregateRecord = (
     origin: "https://dapp.example",
     source: "provider",
     requestId: "rpc-1",
-    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitted",
     request: {
       payload: {
@@ -87,7 +87,7 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
     origin: "https://dapp.example",
     source: "provider",
     requestId: "rpc-1",
-    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitting",
     request: {
       payload: {

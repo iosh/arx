@@ -19,7 +19,7 @@ import type { VaultMetaEntity } from "./types.js";
 export const DB_SCHEMA_VERSION = 1;
 
 const TRANSACTION_RECORDS_SCHEMA =
-  "&id, namespace, chainRef, accountKey, status, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt+id], [accountKey+createdAt+id], [status+createdAt+id], [namespace+chainRef+accountKey+createdAt+id], [conflictKey.kind+conflictKey.value]";
+  "&id, namespace, chainRef, accountId, status, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt+id], [accountId+createdAt+id], [status+createdAt+id], [namespace+chainRef+accountId+createdAt+id], [conflictKey.kind+conflictKey.value]";
 const TRANSACTION_SUBMISSIONS_SCHEMA =
   "&id, transactionId, status, createdAt, updatedAt, [transactionId+id], [transactionId+createdAt], [transactionId+status], [status+updatedAt]";
 
@@ -53,7 +53,7 @@ export class ArxStorageDatabase extends Dexie {
       chainRpcEndpointOverrides: "&chainRef, updatedAt",
       walletChainSelection: "&id",
       providerChainSelection: "[origin+namespace]",
-      accounts: "&accountKey, namespace, keyringId",
+      accounts: "&accountId, namespace, keyringId",
       permissions: "[origin+namespace], origin",
       transactionRecords: TRANSACTION_RECORDS_SCHEMA,
       transactionSubmissions: TRANSACTION_SUBMISSIONS_SCHEMA,

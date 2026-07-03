@@ -9,21 +9,17 @@ const POLL_INTERVAL_MS = 30_000;
 type NativeBalanceResult = WalletApiNativeBalanceResult;
 export const nativeBalanceQueryKey = createUiNativeBalanceQueryKey;
 
-export function useNativeBalanceQuery(params: {
-  chainRef: string | null;
-  accountKey: string | null;
-  enabled: boolean;
-}) {
-  const { chainRef, accountKey } = params;
-  const enabled = Boolean(params.enabled && chainRef && accountKey);
+export function useNativeBalanceQuery(params: { chainRef: string | null; accountId: string | null; enabled: boolean }) {
+  const { chainRef, accountId } = params;
+  const enabled = Boolean(params.enabled && chainRef && accountId);
 
   const query = useQuery({
-    queryKey: nativeBalanceQueryKey({ chainRef, accountKey }),
+    queryKey: nativeBalanceQueryKey({ chainRef, accountId }),
     enabled,
     queryFn: async () => {
       // enabled implies both are non-null, but keep a clear error if wiring changes.
-      if (!chainRef || !accountKey) throw new Error("Missing chainRef/accountKey for native balance query");
-      return await app.wallet.balances.getNative({ chainRef, accountKey });
+      if (!chainRef || !accountId) throw new Error("Missing chainRef/accountId for native balance query");
+      return await app.wallet.balances.getNative({ chainRef, accountId });
     },
     staleTime: STALE_TIME_MS,
     refetchInterval: enabled ? POLL_INTERVAL_MS : false,
@@ -34,7 +30,7 @@ export function useNativeBalanceQuery(params: {
 
   const data = query.data;
   const balance: NativeBalanceResult | null =
-    data && data.chainRef === chainRef && data.accountKey === accountKey ? data : null;
+    data && data.chainRef === chainRef && data.accountId === accountId ? data : null;
 
   return {
     balance,

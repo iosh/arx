@@ -1,7 +1,6 @@
 import { EIP155_NAMESPACE } from "../../handlers/namespaces/eip155/constants.js";
 import { buildEip155Definitions } from "../../handlers/namespaces/eip155/definitions.js";
 import { PASSTHROUGH_CONFIG } from "../../handlers/namespaces/eip155/passthrough.js";
-import { createEip155RpcClientFactory } from "../../namespaceClients/eip155.js";
 import type { RpcNamespaceModule } from "../types.js";
 
 const eip155Adapter: RpcNamespaceModule["adapter"] = {
@@ -14,5 +13,4 @@ const eip155Adapter: RpcNamespaceModule["adapter"] = {
 export const eip155Module: RpcNamespaceModule = {
   namespace: EIP155_NAMESPACE,
   adapter: eip155Adapter,
-  clientFactory: createEip155RpcClientFactory(),
 };

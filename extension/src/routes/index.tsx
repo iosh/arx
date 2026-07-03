@@ -52,7 +52,7 @@ function HomePage() {
   const homeStatus = accountsQuery.data;
   const nativeBalance = useNativeBalanceQuery({
     chainRef: homeStatus?.chain.chainRef ?? null,
-    accountKey: homeStatus?.accounts.active?.accountKey ?? null,
+    accountId: homeStatus?.accounts.active?.accountId ?? null,
     enabled: homeStatus?.session.isUnlocked ?? false,
   });
 

@@ -1,5 +1,5 @@
 import type { AccountsPort } from "@arx/core/services";
-import type { AccountKey, AccountRecord } from "@arx/core/storage";
+import type { AccountId, AccountRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 
 export class DexieAccountsPort implements AccountsPort {
@@ -9,9 +9,9 @@ export class DexieAccountsPort implements AccountsPort {
     return this.ctx.db.accounts;
   }
 
-  async get(accountKey: AccountKey): Promise<AccountRecord | null> {
+  async get(accountId: AccountId): Promise<AccountRecord | null> {
     await this.ctx.ready;
-    const row = await this.table.get(accountKey);
+    const row = await this.table.get(accountId);
     return row ?? null;
   }
 
@@ -25,9 +25,9 @@ export class DexieAccountsPort implements AccountsPort {
     await this.table.put(record);
   }
 
-  async remove(accountKey: AccountKey): Promise<void> {
+  async remove(accountId: AccountId): Promise<void> {
     await this.ctx.ready;
-    await this.table.delete(accountKey);
+    await this.table.delete(accountId);
   }
 
   async removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void> {

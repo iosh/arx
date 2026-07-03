@@ -39,8 +39,8 @@ function AccountsPage() {
   const refreshCurrentChainAccounts = useRefreshUiCurrentChainAccounts();
   const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const switchAccountMutation = useMutation({
-    mutationFn: ({ chainRef, accountKey }: { chainRef: string; accountKey?: string | null }) =>
-      app.wallet.accounts.switchActive({ chainRef, accountKey }),
+    mutationFn: ({ chainRef, accountId }: { chainRef: string; accountId?: string | null }) =>
+      app.wallet.accounts.switchActive({ chainRef, accountId }),
     onSuccess: async () => {
       await refreshCurrentChainAccounts();
     },
@@ -58,7 +58,7 @@ function AccountsPage() {
       await refreshCurrentChainAccounts();
     },
   });
-  const [pendingAccountKey, setPendingAccountKey] = useState<string | null>(null);
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
   const [accountErrorMessage, setAccountErrorMessage] = useState<string | null>(null);
   const [markingKeyringId, setMarkingKeyringId] = useState<string | null>(null);
   const [backupErrorMessage, setBackupErrorMessage] = useState<string | null>(null);
@@ -133,19 +133,19 @@ function AccountsPage() {
 
   const { session, chain, accounts } = accountsQuery.data;
 
-  const handleAccountSwitch = async (accountKey: string | null) => {
-    if (pendingAccountKey) return;
+  const handleAccountSwitch = async (accountId: string | null) => {
+    if (pendingAccountId) return;
 
     setAccountErrorMessage(null);
-    setPendingAccountKey(accountKey);
+    setPendingAccountId(accountId);
 
     try {
-      await switchAccountMutation.mutateAsync({ chainRef: chain.chainRef, accountKey });
+      await switchAccountMutation.mutateAsync({ chainRef: chain.chainRef, accountId });
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
       setAccountErrorMessage(getErrorMessage(error));
     } finally {
-      setPendingAccountKey(null);
+      setPendingAccountId(null);
     }
   };
 
@@ -273,11 +273,11 @@ function AccountsPage() {
           <Paragraph color="$color10">No accounts available yet.</Paragraph>
         ) : (
           accounts.list.map((account) => {
-            const isActive = accounts.active?.accountKey === account.accountKey;
-            const loading = pendingAccountKey === account.accountKey;
+            const isActive = accounts.active?.accountId === account.accountId;
+            const loading = pendingAccountId === account.accountId;
 
             return (
-              <Card key={account.accountKey} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
+              <Card key={account.accountId} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay address={account.canonicalAddress} displayAddress={account.displayAddress} />
                 <XStack alignItems="center" justifyContent="space-between">
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
@@ -286,7 +286,7 @@ function AccountsPage() {
                   <Button
                     size="$3"
                     disabled={isActive || loading}
-                    onPress={() => void handleAccountSwitch(account.accountKey)}
+                    onPress={() => void handleAccountSwitch(account.accountId)}
                   >
                     {loading ? "Switching..." : isActive ? "Current" : "Switch"}
                   </Button>

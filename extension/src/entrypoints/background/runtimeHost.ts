@@ -65,7 +65,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     runtimeCachePromise = (async () => {
       const storage = getExtensionStorage();
       const runtime = await createArxWalletRuntime({
-        namespaces: INSTALLED_NAMESPACES.engine,
+        namespaces: INSTALLED_NAMESPACES.core,
         storage: {
           ports: storage.ports,
         },

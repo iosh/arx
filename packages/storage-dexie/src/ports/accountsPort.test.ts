@@ -25,7 +25,7 @@ describe("DexieAccountsPort", () => {
     const port = storage.ports.accounts;
 
     const record = {
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
@@ -33,7 +33,7 @@ describe("DexieAccountsPort", () => {
     } satisfies AccountRecord;
 
     await port.upsert(record);
-    const loaded = await port.get(record.accountKey);
+    const loaded = await port.get(record.accountId);
     expect(loaded).toEqual(record);
   });
 
@@ -42,14 +42,14 @@ describe("DexieAccountsPort", () => {
     const port = storage.ports.accounts;
 
     const a = {
-      accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
     } satisfies AccountRecord;
 
     const b = {
-      accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+      accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 2000,
@@ -60,10 +60,10 @@ describe("DexieAccountsPort", () => {
     await port.upsert(b);
 
     const list = await port.list();
-    expect(list.map((r) => r.accountKey).sort()).toEqual([a.accountKey, b.accountKey].sort());
+    expect(list.map((r) => r.accountId).sort()).toEqual([a.accountId, b.accountId].sort());
   });
 
-  it("remove() deletes by accountKey; removeByKeyringId() deletes all accounts for a keyring", async () => {
+  it("remove() deletes by accountId; removeByKeyringId() deletes all accounts for a keyring", async () => {
     const storage = createTestStorage();
     const port = storage.ports.accounts;
 
@@ -71,19 +71,19 @@ describe("DexieAccountsPort", () => {
     const keyringB = "22222222-2222-4222-8222-222222222222";
 
     const a1 = {
-      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 1000,
     } satisfies AccountRecord;
     const a2 = {
-      accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 2000,
     } satisfies AccountRecord;
     const b1 = {
-      accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+      accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: keyringB,
       createdAt: 3000,
@@ -93,11 +93,11 @@ describe("DexieAccountsPort", () => {
     await port.upsert(a2);
     await port.upsert(b1);
 
-    await port.remove(a1.accountKey);
-    expect(await port.get(a1.accountKey)).toBeNull();
+    await port.remove(a1.accountId);
+    expect(await port.get(a1.accountId)).toBeNull();
 
     await port.removeByKeyringId(keyringA);
-    expect(await port.get(a2.accountKey)).toBeNull();
-    expect(await port.get(b1.accountKey)).toEqual(b1);
+    expect(await port.get(a2.accountId)).toBeNull();
+    expect(await port.get(b1.accountId)).toEqual(b1);
   });
 });

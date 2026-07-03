@@ -76,7 +76,7 @@ const createApprovalDetail = (overrides?: Partial<RequestAccountsApprovalDetail>
   },
   request: overrides?.request ?? {
     selectableAccounts: [],
-    recommendedAccountKey: null,
+    recommendedAccountId: null,
   },
   review: null,
 });

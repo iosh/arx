@@ -10,13 +10,13 @@ type SimpleApprovalKind = Exclude<ApprovalDetail["kind"], "requestAccounts" | "r
 type SimpleApproval = Extract<ApprovalDetail, { kind: SimpleApprovalKind }>;
 type AccountSelectionApproval = Extract<ApprovalDetail, { kind: "requestAccounts" | "requestPermissions" }>;
 
-function getPreferredAccountKey(approval: AccountSelectionApproval, currentSelection: string | null): string | null {
-  const selectableAccountKeys = new Set(approval.request.selectableAccounts.map((account) => account.accountKey));
-  if (currentSelection && selectableAccountKeys.has(currentSelection)) {
+function getPreferredAccountId(approval: AccountSelectionApproval, currentSelection: string | null): string | null {
+  const selectableAccountIds = new Set(approval.request.selectableAccounts.map((account) => account.accountId));
+  if (currentSelection && selectableAccountIds.has(currentSelection)) {
     return currentSelection;
   }
 
-  return approval.request.recommendedAccountKey ?? approval.request.selectableAccounts[0]?.accountKey ?? null;
+  return approval.request.recommendedAccountId ?? approval.request.selectableAccounts[0]?.accountId ?? null;
 }
 
 export function SimpleApprovalRoutePage(params: {
@@ -60,17 +60,17 @@ export function AccountSelectionApprovalRoutePage(params: {
   const router = useRouter();
   const { approvalId, approval, rejectReason = "User rejected" } = params;
   const { pendingAction, errorMessage, submitResolution, showError, clearError } = useApprovalResolveAction();
-  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedAccountKey((current) => getPreferredAccountKey(approval, current));
+    setSelectedAccountId((current) => getPreferredAccountId(approval, current));
   }, [approval]);
 
   return (
     <ApprovalDetailScreen
       approval={approval}
       onApprove={() => {
-        if (!selectedAccountKey) {
+        if (!selectedAccountId) {
           showError("Choose an account to continue.");
           return;
         }
@@ -78,21 +78,21 @@ export function AccountSelectionApprovalRoutePage(params: {
         void submitResolution({
           approvalId,
           action: "approve",
-          decision: { accountKeys: [selectedAccountKey] },
+          decision: { accountIds: [selectedAccountId] },
         });
       }}
       onReject={() => void submitResolution({ approvalId, action: "reject", reason: rejectReason })}
       onBack={() => void router.navigate({ to: ROUTES.APPROVALS })}
       pending={pendingAction}
       errorMessage={errorMessage}
-      approveDisabled={!selectedAccountKey || !approval.actions.canApprove}
+      approveDisabled={!selectedAccountId || !approval.actions.canApprove}
     >
       <ApprovalAccountSelector
         approval={approval}
-        selectedAccountKey={selectedAccountKey}
-        onSelect={(accountKey) => {
+        selectedAccountId={selectedAccountId}
+        onSelect={(accountId) => {
           clearError();
-          setSelectedAccountKey(accountKey);
+          setSelectedAccountId(accountId);
         }}
       />
     </ApprovalDetailScreen>

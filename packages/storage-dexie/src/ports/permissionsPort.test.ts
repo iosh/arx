@@ -21,11 +21,11 @@ afterEach(async () => {
 });
 
 describe("DexiePermissionsPort", () => {
-  const createRecord = (args: { origin?: string; chains: Array<{ chainRef: string; accountKeys: string[] }> }) =>
+  const createRecord = (args: { origin?: string; chains: Array<{ chainRef: string; accountIds: string[] }> }) =>
     ({
       origin: args.origin ?? "https://dapp.example",
       namespace: "eip155",
-      chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
+      chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountIds])),
     }) satisfies PermissionRecord;
 
   it("upsert() + get() roundtrip", async () => {
@@ -33,7 +33,7 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const record = createRecord({
-      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     await port.upsert(record);
@@ -46,8 +46,8 @@ describe("DexiePermissionsPort", () => {
 
     const record = createRecord({
       chains: [
-        { chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        { chainRef: "eip155:137", accountKeys: [] },
+        { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { chainRef: "eip155:137", accountIds: [] },
       ],
     });
 
@@ -73,12 +73,12 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
-      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     const b1 = createRecord({
       origin: "https://other.example",
-      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);
@@ -93,12 +93,12 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
-      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     const b1 = createRecord({
       origin: "https://other.example",
-      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);

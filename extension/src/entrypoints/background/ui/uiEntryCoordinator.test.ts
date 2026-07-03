@@ -81,7 +81,7 @@ const createApprovalDetail = (approvalId: string): ApprovalDetail => ({
   },
   request: {
     selectableAccounts: [],
-    recommendedAccountKey: null,
+    recommendedAccountId: null,
   },
   review: null,
 });

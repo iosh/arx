@@ -167,8 +167,8 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
       return await this.records.where("chainRef").equals(query.chainRef).toArray();
     }
 
-    if (query.accountKey !== undefined) {
-      return await this.records.where("accountKey").equals(query.accountKey).toArray();
+    if (query.accountId !== undefined) {
+      return await this.records.where("accountId").equals(query.accountId).toArray();
     }
 
     if (query.status !== undefined) {
@@ -185,7 +185,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
   private matchesHistoryQuery(record: TransactionRecord, query: ListTransactionHistoryQuery): boolean {
     if (query.namespace !== undefined && record.namespace !== query.namespace) return false;
     if (query.chainRef !== undefined && record.chainRef !== query.chainRef) return false;
-    if (query.accountKey !== undefined && record.accountKey !== query.accountKey) return false;
+    if (query.accountId !== undefined && record.accountId !== query.accountId) return false;
     if (query.status !== undefined && record.status !== query.status) return false;
     if (
       query.before !== undefined &&

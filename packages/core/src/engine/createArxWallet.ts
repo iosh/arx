@@ -1,5 +1,6 @@
 import { createApprovalExecutor } from "../approvals/index.js";
 import { formatChainAddress } from "../chains/addressing.js";
+import { OWNER_CHANGED } from "../events/ownerChanged.js";
 import type { MethodExecutor } from "../invoke/methods.js";
 import { assembleNamespaceStatic } from "../namespaces/index.js";
 import {
@@ -33,12 +34,7 @@ import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletApiContext } from "../wallet/context.js";
 import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
-import {
-  WALLET_UI_CALLER_ORIGIN,
-  type WalletApi,
-  type WalletInvalidationEvent,
-  type WalletInvalidationTopic,
-} from "../wallet/index.js";
+import { WALLET_UI_CALLER_ORIGIN, type WalletApi, type WalletEvent } from "../wallet/index.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
 import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
@@ -132,7 +128,7 @@ type ArxWalletRuntime = Readonly<{
   providerAccess: ProviderRuntimeAccess;
   walletApi: WalletApi;
   createWalletMethodExecutor(options: WalletCreateWalletMethodExecutorOptions): MethodExecutor;
-  subscribeWalletInvalidation(listener: (event: WalletInvalidationEvent) => void): () => void;
+  subscribeWalletEvents(listener: (event: WalletEvent) => void): () => void;
 }>;
 
 type WalletCreateWalletMethodExecutorOptions = Readonly<{
@@ -221,38 +217,9 @@ const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): Session
   return Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined;
 };
 
-const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore) => {
+const createWalletEvents = (runtime: ArxWalletRuntimeCore) => {
   return {
-    subscribeInvalidation(listener: (event: WalletInvalidationEvent) => void) {
-      const emit = (...topics: WalletInvalidationTopic[]) => {
-        for (const topic of new Set(topics)) {
-          listener({ topic });
-        }
-      };
-      const unsubs = [
-        runtime.services.session.onStateChanged(() => emit("session", "setup")),
-        runtime.services.accounts.onStateChanged(() => emit("accounts", "setup", "balances")),
-        runtime.services.keyring.onStateChanged(() => emit("keyrings")),
-        runtime.services.walletChainSelection.subscribeChanged(() => {
-          emit("networks", "accounts", "balances");
-        }),
-        runtime.services.chainDefinitions.onChainUpdated(() => emit("networks", "balances")),
-        runtime.services.chainRpc.onEndpointsChanged(() => emit("networks", "balances")),
-        runtime.services.chainRpcDefaultEndpoints.subscribeChanged(() => emit("networks", "balances")),
-        runtime.services.chainRpcEndpointOverrides.subscribeChanged(() => emit("networks", "balances")),
-        runtime.services.approvals.onCreated(() => emit("approvals")),
-        runtime.services.approvals.onFinished(() => emit("approvals")),
-        runtime.services.attention.onStateChanged(() => emit("attention")),
-        runtime.transactions.onTransactionApprovalsChanged(() => emit("approvals")),
-        runtime.transactions.onTransactionsChanged(() => emit("transactions")),
-      ];
-
-      return () => {
-        for (const unsubscribe of unsubs) {
-          unsubscribe();
-        }
-      };
-    },
+    subscribe: (listener: (event: WalletEvent) => void) => runtime.messenger.subscribe(OWNER_CHANGED, listener),
   };
 };
 
@@ -343,6 +310,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     aggregateStore: transactionAggregateStore,
     namespaces: backgroundSupportScope.namespaceTransactions,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
+    messenger: bootstrapScope.messenger,
     approvalSessionOptions: {
       now: bootstrapScope.storageNow,
       ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
@@ -555,7 +523,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     runtimeAccess: providerAccess,
     dappConnections,
   });
-  const walletInvalidationSource = createWalletInvalidationSource(runtimeCore);
+  const walletEvents = createWalletEvents(runtimeCore);
   const buildWalletMethodExecutor = (options: WalletCreateWalletMethodExecutorOptions): MethodExecutor => {
     return createWalletMethodExecutor(
       createWalletApiContext(runtimeCore, approvalDetails, {
@@ -617,7 +585,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     providerAccess,
     walletApi,
     createWalletMethodExecutor: buildWalletMethodExecutor,
-    subscribeWalletInvalidation: walletInvalidationSource.subscribeInvalidation,
+    subscribeWalletEvents: walletEvents.subscribe,
   };
 
   return runtime;

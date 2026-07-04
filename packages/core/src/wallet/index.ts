@@ -34,12 +34,10 @@ export type {
   WalletApiNativeBalanceInput,
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
-  WalletInvalidationEvent,
-  WalletInvalidationTopic,
+  WalletEvent,
 } from "./api.js";
 export {
-  WALLET_INVALIDATION_EVENT,
-  WALLET_INVALIDATION_TOPICS,
+  WALLET_CHANGED_EVENT,
   WALLET_TARGET,
   WALLET_UI_CALLER_ORIGIN,
 } from "./api.js";

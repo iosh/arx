@@ -1,3 +1,4 @@
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import { SessionLockInvariantError } from "../errors.js";
 import { DEFAULT_AUTO_LOCK_MS } from "./constants.js";
 import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_UNLOCKED } from "./topics.js";
@@ -226,6 +227,7 @@ export class InMemoryUnlockService implements UnlockService {
 
     this.#lastPublishedState = cloneState(next);
     this.#messenger.publish(UNLOCK_STATE_CHANGED, next);
+    this.#messenger.publish(OWNER_CHANGED, { topic: "session", change: "state" });
   }
 
   #armAutoLockTimer(timeout: number, timestamp = this.#now()) {

@@ -10,7 +10,7 @@ import {
   type MethodExecutor,
 } from "@arx/core/invoke";
 import { createRpcInternalErrorFromUnknown, RpcInvalidRequestError } from "@arx/core/rpc";
-import { WALLET_INVALIDATION_EVENT, WALLET_TARGET, type WalletInvalidationEvent } from "@arx/core/wallet";
+import { WALLET_CHANGED_EVENT, WALLET_TARGET, type WalletEvent } from "@arx/core/wallet";
 import type { Runtime } from "webextension-polyfill";
 import {
   HOST_ENTRY_CHANGED_EVENT,
@@ -49,7 +49,7 @@ const createFailureReply = (request: InvokeRequest, error: unknown): InvokeFailu
 });
 
 export const createBackgroundUiPort = (deps: {
-  runtimeHost: Pick<BackgroundRuntimeHost, "getOrInitWalletMethodExecutor" | "subscribeWalletInvalidation">;
+  runtimeHost: Pick<BackgroundRuntimeHost, "getOrInitWalletMethodExecutor" | "subscribeWalletEvents">;
   host: HostMethods;
 }): BackgroundUiPort => {
   const ports = new Set<UiPort>();
@@ -58,7 +58,7 @@ export const createBackgroundUiPort = (deps: {
     context: deps.host,
     handlers: hostMethodHandlers,
   });
-  let walletInvalidationUnsubscribe: (() => void) | null = null;
+  let walletEventsUnsubscribe: (() => void) | null = null;
   let startPromise: Promise<void> | null = null;
 
   const detach = (port: UiPort) => {
@@ -144,7 +144,7 @@ export const createBackgroundUiPort = (deps: {
   };
 
   const start = async () => {
-    if (walletInvalidationUnsubscribe) {
+    if (walletEventsUnsubscribe) {
       return;
     }
 
@@ -153,16 +153,16 @@ export const createBackgroundUiPort = (deps: {
     }
 
     startPromise = deps.runtimeHost
-      .subscribeWalletInvalidation((event: WalletInvalidationEvent) => {
+      .subscribeWalletEvents((event: WalletEvent) => {
         broadcast({
           kind: "event",
           target: WALLET_TARGET,
-          name: WALLET_INVALIDATION_EVENT,
+          name: WALLET_CHANGED_EVENT,
           payload: event,
         });
       })
       .then((unsubscribe) => {
-        walletInvalidationUnsubscribe = unsubscribe;
+        walletEventsUnsubscribe = unsubscribe;
       })
       .finally(() => {
         startPromise = null;
@@ -174,8 +174,8 @@ export const createBackgroundUiPort = (deps: {
   return {
     start,
     destroy: () => {
-      walletInvalidationUnsubscribe?.();
-      walletInvalidationUnsubscribe = null;
+      walletEventsUnsubscribe?.();
+      walletEventsUnsubscribe = null;
 
       for (const port of Array.from(ports)) {
         detach(port);

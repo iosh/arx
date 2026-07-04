@@ -1,10 +1,5 @@
 import { createInvokeClient, createMethodApiProxy, type InvokeConnectionStatus } from "@arx/core/invoke";
-import {
-  WALLET_INVALIDATION_EVENT,
-  WALLET_TARGET,
-  type WalletApi,
-  type WalletInvalidationEvent,
-} from "@arx/core/wallet";
+import { WALLET_CHANGED_EVENT, WALLET_TARGET, type WalletApi, type WalletEvent } from "@arx/core/wallet";
 import { createHostApiClient, HOST_ENTRY_CHANGED_EVENT, HOST_TARGET, type UiEntryLaunchContext } from "@/lib/host";
 import { createUiPort } from "./uiPort";
 
@@ -28,13 +23,13 @@ export const app = {
   wallet: createMethodApiProxy<WalletApi>((action, input) => call(WALLET_TARGET, action, input)),
   host: createHostApiClient((action, input) => call(HOST_TARGET, action, input)),
   walletEvents: {
-    subscribeInvalidation(listener: (event: WalletInvalidationEvent) => void) {
+    subscribe(listener: (event: WalletEvent) => void) {
       return invokeClient.subscribe((event) => {
-        if (event.target !== WALLET_TARGET || event.name !== WALLET_INVALIDATION_EVENT) {
+        if (event.target !== WALLET_TARGET || event.name !== WALLET_CHANGED_EVENT) {
           return;
         }
 
-        listener(event.payload as WalletInvalidationEvent);
+        listener(event.payload as WalletEvent);
       });
     },
   },

@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { buildCreateEntryRedirect } from "@/ui/lib/onboardingFlow";
@@ -23,7 +23,6 @@ const requireOnboardingPassword = (password: string | null): string => {
 function GenerateMnemonicRoute() {
   const router = useRouter();
   const { data: setupStatus } = useUiSetupStatus();
-  const refreshSetupStatus = useRefreshUiSetupStatus();
   const password = useOnboardingStore((s) => s.password);
   const mnemonicWords = useOnboardingStore((s) => s.mnemonicWords);
   const mnemonicKeyringId = useOnboardingStore((s) => s.mnemonicKeyringId);
@@ -97,8 +96,6 @@ function GenerateMnemonicRoute() {
       clearPassword();
       setMnemonicWords(words);
       setMnemonicKeyringId(res.keyringId);
-
-      await refreshSetupStatus();
 
       await router.navigate({ to: ROUTES.ONBOARDING_BACKUP, replace: true });
       navigatedToBackup = true;

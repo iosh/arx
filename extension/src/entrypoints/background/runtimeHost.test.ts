@@ -4,7 +4,7 @@ import {
   type ApprovalListEntry,
   WALLET_UI_CALLER_ORIGIN,
   type WalletApiAttentionSnapshot,
-  type WalletInvalidationEvent,
+  type WalletEvent,
 } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
@@ -52,10 +52,10 @@ const makeRuntime = () => {
     executePath: vi.fn(async () => null),
   };
   const createWalletMethodExecutor = vi.fn(() => walletExecutor);
-  const invalidationListeners = new Set<(event: WalletInvalidationEvent) => void>();
-  const subscribeWalletInvalidation = vi.fn((listener: (event: WalletInvalidationEvent) => void) => {
-    invalidationListeners.add(listener);
-    return () => invalidationListeners.delete(listener);
+  const walletEventListeners = new Set<(event: WalletEvent) => void>();
+  const subscribeWalletEvents = vi.fn((listener: (event: WalletEvent) => void) => {
+    walletEventListeners.add(listener);
+    return () => walletEventListeners.delete(listener);
   });
   const provider = {
     getConnectionState: vi.fn(async () => ({ snapshot: null, accounts: [], connected: false })),
@@ -77,9 +77,8 @@ const makeRuntime = () => {
 
   return {
     walletExecutor,
-    emitInvalidation: (topic: WalletInvalidationEvent["topic"]) => {
-      const event = { topic } satisfies WalletInvalidationEvent;
-      for (const listener of invalidationListeners) {
+    emitEvents: (event: WalletEvent) => {
+      for (const listener of walletEventListeners) {
         listener(event);
       }
       return event;
@@ -106,11 +105,11 @@ const makeRuntime = () => {
       transactions: {},
       provider,
       createWalletMethodExecutor,
-      subscribeWalletInvalidation,
+      subscribeWalletEvents,
       shutdown,
     },
     createWalletMethodExecutor,
-    subscribeWalletInvalidation,
+    subscribeWalletEvents,
     shutdown,
     listPendingApprovals,
     getApprovalDetail,
@@ -169,7 +168,7 @@ describe("runtimeHost", () => {
     expect(firstExecutor).toBe(runtimeHarness.walletExecutor);
   });
 
-  it("forwards wallet invalidations to subscribers and UI entry access", async () => {
+  it("forwards wallet events to subscribers and UI entry access", async () => {
     const runtimeHarness = makeRuntime();
     createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     createCoreRuntimeFromArxWalletRuntimeMock.mockReturnValue({
@@ -181,20 +180,20 @@ describe("runtimeHost", () => {
       extensionOrigin: "chrome-extension://test",
     });
 
-    const invalidationListener = vi.fn();
-    const unsubscribe = await runtimeHost.subscribeWalletInvalidation(invalidationListener);
-    const emitted = runtimeHarness.emitInvalidation("accounts");
+    const walletEventListener = vi.fn();
+    const unsubscribe = await runtimeHost.subscribeWalletEvents(walletEventListener);
+    const emitted = runtimeHarness.emitEvents({ topic: "identity", change: "all" });
 
-    expect(runtimeHarness.subscribeWalletInvalidation).toHaveBeenCalledTimes(1);
-    expect(invalidationListener).toHaveBeenCalledWith(emitted);
+    expect(runtimeHarness.subscribeWalletEvents).toHaveBeenCalledTimes(1);
+    expect(walletEventListener).toHaveBeenCalledWith(emitted);
 
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
-    const attentionInvalidationListener = vi.fn();
-    const unsubscribeAttention = uiEntryAccess.subscribeUnlockAttentionInvalidation(attentionInvalidationListener);
+    const attentionEventsListener = vi.fn();
+    const unsubscribeAttention = uiEntryAccess.subscribeUnlockAttentionEvents(attentionEventsListener);
 
-    runtimeHarness.emitInvalidation("attention");
+    runtimeHarness.emitEvents({ topic: "attention", change: "state" });
 
-    expect(attentionInvalidationListener).toHaveBeenCalledTimes(1);
+    expect(attentionEventsListener).toHaveBeenCalledTimes(1);
     unsubscribeAttention();
 
     unsubscribe();
@@ -249,11 +248,11 @@ describe("runtimeHost", () => {
       extensionOrigin: "chrome-extension://test",
     });
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
-    const approvalInvalidationListener = vi.fn();
-    const unsubscribe = uiEntryAccess.subscribeApprovalInvalidation(approvalInvalidationListener);
+    const approvalEventsListener = vi.fn();
+    const unsubscribe = uiEntryAccess.subscribeApprovalEvents(approvalEventsListener);
 
-    runtimeHarness.emitInvalidation("approvals");
-    expect(approvalInvalidationListener).toHaveBeenCalledTimes(1);
+    runtimeHarness.emitEvents({ topic: "approvals", change: "queue", approvalId: "approval-1" });
+    expect(approvalEventsListener).toHaveBeenCalledTimes(1);
 
     await expect(uiEntryAccess.listPendingApprovals()).resolves.toEqual([
       {

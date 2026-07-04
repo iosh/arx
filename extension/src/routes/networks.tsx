@@ -3,7 +3,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Paragraph, XStack } from "tamagui";
 import { Button, Card, ChainBadge, LoadingScreen, Screen } from "@/ui/components";
-import { useRefreshUiNetworksStatus, useUiNetworksStatus } from "@/ui/hooks/useUiNetworksStatus";
+import { useUiNetworksStatus } from "@/ui/hooks/useUiNetworksStatus";
 import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -17,12 +17,8 @@ export const Route = createFileRoute("/networks")({
 function NetworkSwitchPage() {
   const router = useRouter();
   const networksQuery = useUiNetworksStatus();
-  const refreshNetworksStatus = useRefreshUiNetworksStatus();
   const switchChainMutation = useMutation({
     mutationFn: (chainRef: string) => app.wallet.networks.select({ chainRef }),
-    onSuccess: async () => {
-      await refreshNetworksStatus();
-    },
   });
   const [pendingRef, setPendingRef] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

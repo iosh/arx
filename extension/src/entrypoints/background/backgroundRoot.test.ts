@@ -112,7 +112,7 @@ describe("backgroundRoot", () => {
       }),
       getOrInitProvider: vi.fn(),
       getOrInitWalletMethodExecutor: vi.fn(),
-      subscribeWalletInvalidation: vi.fn(async () => vi.fn()),
+      subscribeWalletEvents: vi.fn(async () => vi.fn()),
       getOrInitUiEntryAccess: vi.fn(),
     });
 
@@ -140,7 +140,7 @@ describe("backgroundRoot", () => {
       initializeRuntime: vi.fn(async () => {}),
       getOrInitProvider: vi.fn(),
       getOrInitWalletMethodExecutor: vi.fn(),
-      subscribeWalletInvalidation: vi.fn(async () => vi.fn()),
+      subscribeWalletEvents: vi.fn(async () => vi.fn()),
       getOrInitUiEntryAccess: vi.fn(),
     });
 
@@ -168,7 +168,7 @@ describe("backgroundRoot", () => {
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
       getOrInitProvider: vi.fn(),
       getOrInitWalletMethodExecutor: vi.fn(),
-      subscribeWalletInvalidation: vi.fn(async () => vi.fn()),
+      subscribeWalletEvents: vi.fn(async () => vi.fn()),
       getOrInitUiEntryAccess: vi.fn(),
     };
     createBackgroundRuntimeHostMock.mockReturnValue(runtimeHost);

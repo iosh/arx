@@ -1,3 +1,4 @@
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
@@ -104,6 +105,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
       chainRef,
       previous: cloneChainDefinitionEntity(previous),
     });
+    this.#messenger.publish(OWNER_CHANGED, { topic: "network", change: "chain", chainRef });
     return { removed: true, previous: cloneChainDefinitionEntity(previous) };
   }
 
@@ -276,5 +278,6 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
         : { kind: "updated", chain: cloneChainDefinitionEntity(next), previous: cloneChainDefinitionEntity(previous) };
 
     this.#messenger.publish(CHAIN_DEFINITIONS_UPDATED, payload);
+    this.#messenger.publish(OWNER_CHANGED, { topic: "network", change: "chain", chainRef: next.chainRef });
   }
 }

@@ -1,6 +1,7 @@
 import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
@@ -58,6 +59,10 @@ export const createChainRpcEndpointOverridesService = ({
     return record ? cloneRpcEndpoints(record.rpcEndpoints) : null;
   };
 
+  const publishRpcChanged = (chainRef: ChainRef) => {
+    messenger.publish(OWNER_CHANGED, { topic: "network", change: "rpc", chainRef });
+  };
+
   const setEndpointOverride = async (
     chainRef: ChainRef,
     endpoints: RpcEndpoint[],
@@ -87,6 +92,7 @@ export const createChainRpcEndpointOverridesService = ({
         next: toRecord(clonedNext),
       };
       messenger.publish(CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED, payload);
+      publishRpcChanged(chainRef);
       return toRecord(clonedNext);
     });
   };
@@ -106,6 +112,7 @@ export const createChainRpcEndpointOverridesService = ({
         previous: toRecord(previous),
         next: null,
       });
+      publishRpcChanged(chainRef);
     });
   };
 

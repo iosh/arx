@@ -1,3 +1,4 @@
+import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { ChainNotAvailableError, ChainRpcAccessConfigError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
@@ -102,6 +103,7 @@ export class ChainRpcService implements ChainRpcReader, ChainRpcAccessUpdater {
 
     for (const chainRef of sortChainRefs(Array.from(changedChainRefs))) {
       this.#messenger.publish(CHAIN_RPC_ENDPOINTS_CHANGED, { chainRef });
+      this.#messenger.publish(OWNER_CHANGED, { topic: "network", change: "rpc", chainRef });
     }
   }
 

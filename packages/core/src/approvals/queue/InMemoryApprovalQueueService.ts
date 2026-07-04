@@ -1,4 +1,5 @@
 import { parseChainRef } from "../../chains/caip.js";
+import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
 import { TransportDisconnectedError } from "../../runtime/provider/errors.js";
@@ -454,10 +455,20 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
 
   #publishCreated(event: ApprovalCreatedEvent) {
     this.#messenger.publish(APPROVAL_CREATED, cloneCreatedEvent(event));
+    this.#messenger.publish(OWNER_CHANGED, {
+      topic: "approvals",
+      change: "queue",
+      approvalId: event.record.approvalId,
+    });
   }
 
   #publishFinished(event: ApprovalFinishedEvent<unknown>) {
     this.#messenger.publish(APPROVAL_FINISHED, cloneFinishEvent(event));
+    this.#messenger.publish(OWNER_CHANGED, {
+      topic: "approvals",
+      change: "queue",
+      approvalId: event.approvalId,
+    });
   }
 
   #getRejectionError(params: { approvalId: string; provided?: Error | undefined; message: string }): Error {

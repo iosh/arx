@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
 import { YStack } from "tamagui";
 import { getUiEntryMetadata } from "@/lib/uiEntryMetadata";
@@ -7,11 +7,11 @@ import { ApprovalsOrchestrator } from "@/ui/approvals";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
-import { useWalletInvalidations } from "@/ui/hooks/useWalletInvalidations";
+import { useWalletQueryInvalidations } from "@/ui/hooks/useWalletQueryInvalidations";
 import { app } from "@/ui/lib/app";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
-import { createUiSetupStatusQueryOptions, getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
+import { getOrFetchUiSetupStatus } from "@/ui/lib/uiSetupStatusQuery";
 // Router context type for route guards
 export interface RouterContext {
   queryClient: QueryClient;
@@ -86,17 +86,13 @@ function RootLayout() {
 }
 
 function RootInner() {
-  const queryClient = useQueryClient();
   const setupStatusQuery = useUiSetupStatus();
   const unlockMutation = useMutation({
     mutationFn: (password: string) => app.wallet.session.unlock({ password }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: createUiSetupStatusQueryOptions().queryKey });
-    },
   });
   const enabled = setupStatusQuery.data?.session.isUnlocked ?? false;
   useIdleTimer(enabled);
-  useWalletInvalidations();
+  useWalletQueryInvalidations();
 
   return (
     <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>

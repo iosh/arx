@@ -1,4 +1,5 @@
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
+import type { Messenger } from "../messenger/index.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
 import { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
@@ -22,6 +23,7 @@ type CreateTransactionServicesOptions = {
   accountAddressing: AccountAddressingByNamespace;
   approvalSessionOptions?: CreateApprovalSessionOptions;
   resourceLock?: TransactionResourceLock;
+  messenger?: Messenger;
 };
 
 export type TransactionServices = {
@@ -35,7 +37,7 @@ export type TransactionServices = {
 
 export const createTransactionServices = (options: CreateTransactionServicesOptions): TransactionServices => {
   const resourceLock = options.resourceLock ?? new TransactionResourceLock();
-  const invalidations = new TransactionInvalidations();
+  const invalidations = new TransactionInvalidations(options.messenger);
   const transactionsStore = notifyTransactionChanges(options.aggregateStore, invalidations);
   const approvals = new TransactionApprovalSessionService({
     transactions: transactionsStore,

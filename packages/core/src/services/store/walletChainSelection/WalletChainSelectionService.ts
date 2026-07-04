@@ -1,5 +1,6 @@
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { WalletChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
@@ -48,6 +49,12 @@ export const createWalletChainSelectionService = ({
     messenger.publish(WALLET_CHAIN_SELECTION_STORE_CHANGED, {
       previous: previous ? structuredClone(previous) : null,
       next: structuredClone(next),
+    });
+    messenger.publish(OWNER_CHANGED, {
+      topic: "network",
+      change: "selection",
+      namespace: next.selectedNamespace,
+      chainRef: next.chainRefByNamespace[next.selectedNamespace] ?? null,
     });
   };
 

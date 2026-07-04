@@ -1,5 +1,6 @@
 import { getAccountIdNamespace } from "../../../accounts/addressing/accountId.js";
 import { AccountNamespaceMismatchError } from "../../../accounts/errors.js";
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import { KeyringAccountNotFoundError } from "../../../keyring/errors.js";
 import type { Messenger } from "../../../messenger/index.js";
 import { PermissionDeniedError } from "../../../permissions/errors.js";
@@ -56,6 +57,7 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
 
     await port.upsert(record);
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "upsert", accountId: record.accountId });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "account", accountId: record.accountId });
   };
 
   const readSelection = async (): Promise<Record<string, AccountId>> => {
@@ -79,6 +81,7 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
 
     if (changedNamespace) {
       messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "setSelectedAccount", namespace: changedNamespace });
+      messenger.publish(OWNER_CHANGED, { topic: "identity", change: "selection", namespace: changedNamespace });
     }
   };
 
@@ -107,6 +110,7 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     await port.remove(accountId);
     await clearSelectedAccountIds(new Set([accountId]));
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "remove", accountId });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "account", accountId });
   };
 
   const removeByKeyringId = async (keyringId: AccountRecord["keyringId"]) => {
@@ -121,6 +125,7 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     await port.removeByKeyringId(keyringId);
     await clearSelectedAccountIds(new Set(removedAccountIds));
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "removeByKeyringId", keyringId });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "keyring", keyringId });
   };
 
   const setHidden = async (params: { accountId: AccountId; hidden: boolean }) => {
@@ -141,6 +146,7 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
       await clearSelectedAccountIds(new Set([next.accountId]));
     }
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "setHidden", accountId: next.accountId });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "account", accountId: next.accountId });
   };
 
   const getSelectedAccountIdsByNamespace = async () => {

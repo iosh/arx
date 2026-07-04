@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
@@ -32,7 +32,6 @@ const requireOnboardingPassword = (password: string | null): string => {
 function ImportSetupRoute() {
   const router = useRouter();
   const { data: setupStatus } = useUiSetupStatus();
-  const refreshSetupStatus = useRefreshUiSetupStatus();
 
   const password = useOnboardingStore((s) => s.password);
   const clear = useOnboardingStore((s) => s.clear);
@@ -84,7 +83,6 @@ function ImportSetupRoute() {
       }
 
       clear();
-      await refreshSetupStatus();
       router.navigate({ to: ROUTES.ONBOARDING_COMPLETE });
     } catch (err) {
       setError(getErrorMessage(err));

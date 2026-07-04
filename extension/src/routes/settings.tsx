@@ -3,7 +3,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Input, Paragraph, Slider, XStack } from "tamagui";
 import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
-import { useRefreshUiSetupStatus, useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
+import { useUiSetupStatus } from "@/ui/hooks/useUiSetupStatus";
 import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -22,18 +22,11 @@ const clamp = (value: number) => Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Mat
 function SettingsPage() {
   const router = useRouter();
   const setupStatusQuery = useUiSetupStatus();
-  const refreshSetupStatus = useRefreshUiSetupStatus();
   const setAutoLockDurationMutation = useMutation({
     mutationFn: (durationMs: number) => app.wallet.session.setAutoLockDuration({ durationMs }),
-    onSuccess: async () => {
-      await refreshSetupStatus();
-    },
   });
   const lockMutation = useMutation({
     mutationFn: () => app.wallet.session.lock(),
-    onSuccess: async () => {
-      await refreshSetupStatus();
-    },
   });
 
   const [minutes, setMinutes] = useState(15);

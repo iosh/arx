@@ -1,5 +1,6 @@
 import type { ApprovalAccountSelectionDecision } from "../approvals/queue/types.js";
 import type { ChainRef } from "../chains/ids.js";
+import type { OwnerChangedEvent } from "../events/ownerChanged.js";
 import type { SessionLockState } from "../runtime/session/unlock/types.js";
 import type { AttentionReason } from "../services/runtime/attention/types.js";
 import type { AccountId } from "../storage/records.js";
@@ -158,25 +159,10 @@ export type ApplyTransactionDraftEditInput = {
 };
 
 export const WALLET_TARGET = "wallet" as const;
-export const WALLET_INVALIDATION_EVENT = "invalidation" as const;
+export const WALLET_CHANGED_EVENT = "changed" as const;
 export const WALLET_UI_CALLER_ORIGIN = "arx://wallet-ui" as const;
 
-export const WALLET_INVALIDATION_TOPICS = [
-  "session",
-  "setup",
-  "accounts",
-  "networks",
-  "keyrings",
-  "approvals",
-  "attention",
-  "transactions",
-  "balances",
-] as const;
-
-export type WalletInvalidationTopic = (typeof WALLET_INVALIDATION_TOPICS)[number];
-export type WalletInvalidationEvent = {
-  topic: WalletInvalidationTopic;
-};
+export type WalletEvent = OwnerChangedEvent;
 
 export type WalletApi = Readonly<{
   session: Readonly<{

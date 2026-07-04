@@ -1,6 +1,7 @@
 import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../_shared/serialQueue.js";
@@ -59,6 +60,10 @@ export const createChainRpcDefaultEndpointsService = ({
     return record ? cloneRpcEndpoints(record.rpcEndpoints) : null;
   };
 
+  const publishRpcChanged = (chainRef: ChainRef) => {
+    messenger.publish(OWNER_CHANGED, { topic: "network", change: "rpc", chainRef });
+  };
+
   const setDefaultEndpoints = async (
     chainRef: ChainRef,
     endpoints: readonly RpcEndpoint[],
@@ -93,6 +98,7 @@ export const createChainRpcDefaultEndpointsService = ({
           previous: previousRecord,
           next: toRecord(clonedNext),
         });
+        publishRpcChanged(chainRef);
       }
 
       return toRecord(clonedNext);
@@ -135,6 +141,7 @@ export const createChainRpcDefaultEndpointsService = ({
           previous: previous ? toRecord(previous) : null,
           next: toRecord(next),
         });
+        publishRpcChanged(seed.chainRef);
       }
 
       for (const previous of previousByChainRef.values()) {
@@ -153,6 +160,7 @@ export const createChainRpcDefaultEndpointsService = ({
           previous: toRecord(previous),
           next: null,
         });
+        publishRpcChanged(previous.chainRef);
       }
     });
   };
@@ -172,6 +180,7 @@ export const createChainRpcDefaultEndpointsService = ({
         previous: toRecord(previous),
         next: null,
       });
+      publishRpcChanged(chainRef);
     });
   };
 

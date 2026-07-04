@@ -10,7 +10,7 @@ import {
   type ApprovalListEntry,
   WALLET_UI_CALLER_ORIGIN,
   type WalletApiAttentionSnapshot,
-  type WalletInvalidationEvent,
+  type WalletEvent,
 } from "@arx/core/wallet";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -26,7 +26,7 @@ export type BackgroundRuntimeHost = {
   getCoreReady: () => Promise<CoreRuntime>;
   getOrInitProvider: () => Promise<CoreProviderApi>;
   getOrInitWalletMethodExecutor: () => Promise<MethodExecutor>;
-  subscribeWalletInvalidation: (listener: (event: WalletInvalidationEvent) => void) => Promise<() => void>;
+  subscribeWalletEvents: (listener: (event: WalletEvent) => void) => Promise<() => void>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
 };
@@ -36,9 +36,9 @@ export type BackgroundUnlockAttentionRequestedPayload = WalletApiAttentionSnapsh
 };
 
 export type BackgroundUiEntryAccess = {
-  subscribeUnlockAttentionInvalidation: (listener: () => void) => () => void;
+  subscribeUnlockAttentionEvents: (listener: () => void) => () => void;
   listUnlockAttentionRequests: () => Promise<BackgroundUnlockAttentionRequestedPayload[]>;
-  subscribeApprovalInvalidation: (listener: () => void) => () => void;
+  subscribeApprovalEvents: (listener: () => void) => () => void;
   dismissApproval: (params: { approvalId: string }) => Promise<void>;
   listPendingApprovals: () => Promise<ApprovalListEntry[]>;
   getApprovalDetail: (approvalId: string) => Promise<ApprovalDetail | null>;
@@ -113,9 +113,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     return walletMethodExecutor;
   };
 
-  const subscribeWalletInvalidation = async (listener: (event: WalletInvalidationEvent) => void) => {
+  const subscribeWalletEvents = async (listener: (event: WalletEvent) => void) => {
     const active = await getOrInitRuntimeCache();
-    return active.runtime.subscribeWalletInvalidation(listener);
+    return active.runtime.subscribeWalletEvents(listener);
   };
 
   const getOrInitProvider = async (): Promise<CoreProviderApi> => {
@@ -135,16 +135,16 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const getOrInitUiEntryAccess = async (): Promise<BackgroundUiEntryAccess> => {
     const active = await getOrInitRuntimeCache();
-    const subscribeApprovalInvalidation = (listener: () => void) =>
-      active.runtime.subscribeWalletInvalidation((event) => {
+    const subscribeApprovalEvents = (listener: () => void) =>
+      active.runtime.subscribeWalletEvents((event) => {
         if (event.topic !== "approvals") {
           return;
         }
 
         listener();
       });
-    const subscribeUnlockAttentionInvalidation = (listener: () => void) =>
-      active.runtime.subscribeWalletInvalidation((event) => {
+    const subscribeUnlockAttentionEvents = (listener: () => void) =>
+      active.runtime.subscribeWalletEvents((event) => {
         if (event.topic !== "attention") {
           return;
         }
@@ -159,9 +159,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     };
 
     return {
-      subscribeUnlockAttentionInvalidation,
+      subscribeUnlockAttentionEvents,
       listUnlockAttentionRequests,
-      subscribeApprovalInvalidation,
+      subscribeApprovalEvents,
       dismissApproval: async ({ approvalId }) => {
         await active.core.wallet.approvals.dismiss({ approvalId });
       },
@@ -203,7 +203,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     getCoreReady,
     getOrInitProvider,
     getOrInitWalletMethodExecutor,
-    subscribeWalletInvalidation,
+    subscribeWalletEvents,
     getOrInitUiEntryAccess,
     shutdown,
   };

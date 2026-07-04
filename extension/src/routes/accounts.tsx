@@ -17,7 +17,7 @@ import {
   Sheet,
   TextField,
 } from "@/ui/components";
-import { useRefreshUiCurrentChainAccounts, useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
+import { useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts";
 import { useUiKeyringBackupStatus } from "@/ui/hooks/useUiKeyringBackupStatus";
 import { app } from "@/ui/lib/app";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
@@ -36,27 +36,17 @@ function AccountsPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const accountsQuery = useUiCurrentChainAccounts();
-  const refreshCurrentChainAccounts = useRefreshUiCurrentChainAccounts();
   const { backupStatus, markBackedUp } = useUiKeyringBackupStatus();
   const switchAccountMutation = useMutation({
     mutationFn: ({ chainRef, accountId }: { chainRef: string; accountId?: string | null }) =>
       app.wallet.accounts.switchActive({ chainRef, accountId }),
-    onSuccess: async () => {
-      await refreshCurrentChainAccounts();
-    },
   });
   const deriveAccountMutation = useMutation({
     mutationFn: (params: { keyringId: string }) => app.wallet.keyrings.deriveAccount(params),
-    onSuccess: async () => {
-      await refreshCurrentChainAccounts();
-    },
   });
   const importPrivateKeyMutation = useMutation({
     mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
       app.wallet.keyrings.importPrivateKey(params),
-    onSuccess: async () => {
-      await refreshCurrentChainAccounts();
-    },
   });
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
   const [accountErrorMessage, setAccountErrorMessage] = useState<string | null>(null);

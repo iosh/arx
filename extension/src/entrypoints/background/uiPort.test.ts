@@ -1,5 +1,5 @@
 import type { MethodExecutor } from "@arx/core/invoke";
-import { WALLET_INVALIDATION_EVENT, WALLET_TARGET, type WalletInvalidationEvent } from "@arx/core/wallet";
+import { WALLET_CHANGED_EVENT, WALLET_TARGET, type WalletEvent } from "@arx/core/wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HOST_ENTRY_CHANGED_EVENT, HOST_TARGET, UI_CHANNEL, type UiEntryLaunchContext } from "@/lib/host";
 import { createBackgroundUiPort } from "./uiPort";
@@ -47,11 +47,11 @@ const popupEntry: UiEntryLaunchContext = {
 };
 
 describe("createBackgroundUiPort", () => {
-  let invalidationListener: ((event: WalletInvalidationEvent) => void) | null;
+  let walletEventListener: ((event: WalletEvent) => void) | null;
   let walletExecutor: MethodExecutor;
 
   beforeEach(() => {
-    invalidationListener = null;
+    walletEventListener = null;
     walletExecutor = {
       executePath: vi.fn(async (path) => ({ path })),
     };
@@ -61,10 +61,10 @@ describe("createBackgroundUiPort", () => {
     const uiPort = createBackgroundUiPort({
       runtimeHost: {
         getOrInitWalletMethodExecutor: vi.fn(async () => walletExecutor),
-        subscribeWalletInvalidation: vi.fn(async (listener) => {
-          invalidationListener = listener;
+        subscribeWalletEvents: vi.fn(async (listener) => {
+          walletEventListener = listener;
           return () => {
-            invalidationListener = null;
+            walletEventListener = null;
           };
         }),
       },
@@ -117,14 +117,14 @@ describe("createBackgroundUiPort", () => {
     expect(walletExecutor.executePath).toHaveBeenCalledWith("session.getStatus", undefined);
   });
 
-  it("broadcasts wallet invalidations and host entry changes to attached ports", async () => {
+  it("broadcasts wallet events and host entry changes to attached ports", async () => {
     const uiPort = createBackgroundUiPort({
       runtimeHost: {
         getOrInitWalletMethodExecutor: vi.fn(async () => walletExecutor),
-        subscribeWalletInvalidation: vi.fn(async (listener) => {
-          invalidationListener = listener;
+        subscribeWalletEvents: vi.fn(async (listener) => {
+          walletEventListener = listener;
           return () => {
-            invalidationListener = null;
+            walletEventListener = null;
           };
         }),
       },
@@ -144,14 +144,15 @@ describe("createBackgroundUiPort", () => {
     firstPort.messages = [];
     secondPort.messages = [];
 
-    invalidationListener?.({ topic: "accounts" });
+    const walletEvent = { topic: "identity", change: "all" } satisfies WalletEvent;
+    walletEventListener?.(walletEvent);
     uiPort.broadcastEntryChanged(popupEntry);
 
     expect(firstPort.messages).toContainEqual({
       kind: "event",
       target: WALLET_TARGET,
-      name: WALLET_INVALIDATION_EVENT,
-      payload: { topic: "accounts" },
+      name: WALLET_CHANGED_EVENT,
+      payload: walletEvent,
     });
     expect(secondPort.messages).toContainEqual({
       kind: "event",

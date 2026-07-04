@@ -1,3 +1,4 @@
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { KeyringMetaRecord } from "../../../storage/records.js";
 import type { KeyringMetasPort } from "./port.js";
@@ -37,6 +38,7 @@ export const createKeyringMetasService = ({
 
     await port.upsert(record);
     messenger.publish(KEYRING_METAS_STORE_CHANGED, { kind: "upsert", id: record.id });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "keyring", keyringId: record.id });
   };
 
   const remove = async (id: KeyringMetaRecord["id"]) => {
@@ -47,6 +49,7 @@ export const createKeyringMetasService = ({
 
     await port.remove(id);
     messenger.publish(KEYRING_METAS_STORE_CHANGED, { kind: "remove", id });
+    messenger.publish(OWNER_CHANGED, { topic: "identity", change: "keyring", keyringId: id });
   };
 
   return {

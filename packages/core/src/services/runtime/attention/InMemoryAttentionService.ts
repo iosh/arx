@@ -1,3 +1,4 @@
+import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED } from "./topics.js";
 import type {
@@ -72,7 +73,7 @@ export class InMemoryAttentionService implements AttentionService {
 
     this.#messenger.publish(ATTENTION_REQUESTED, request);
     const state = this.getSnapshot();
-    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
+    this.#publishStateChanged(state);
 
     return { enqueued: true, request, state };
   }
@@ -99,7 +100,7 @@ export class InMemoryAttentionService implements AttentionService {
     this.#queue = [];
     this.#byKey.clear();
     const state = this.getSnapshot();
-    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
+    this.#publishStateChanged(state);
     return state;
   }
 
@@ -109,11 +110,16 @@ export class InMemoryAttentionService implements AttentionService {
     if (!changed) return this.getSnapshot();
 
     const state = this.getSnapshot();
-    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
+    this.#publishStateChanged(state);
     return state;
   }
 
   onStateChanged(handler: (state: AttentionState) => void): () => void {
     return this.#messenger.subscribe(ATTENTION_STATE_CHANGED, handler);
+  }
+
+  #publishStateChanged(state: AttentionState): void {
+    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
+    this.#messenger.publish(OWNER_CHANGED, { topic: "attention", change: "state" });
   }
 }

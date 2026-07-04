@@ -344,14 +344,14 @@ export const createUiEntryCoordinator = ({
         }
 
         subscriptions.push(
-          uiEntryAccess.subscribeUnlockAttentionInvalidation(() => {
+          uiEntryAccess.subscribeUnlockAttentionEvents(() => {
             void syncUnlockAttentionRequests(uiEntryAccess).catch((error) => {
               console.warn(LOG_PREFIX, "failed to sync unlock attention requests", error);
             });
           }),
         );
         subscriptions.push(
-          uiEntryAccess.subscribeApprovalInvalidation(() => {
+          uiEntryAccess.subscribeApprovalEvents(() => {
             void syncPendingApprovals(uiEntryAccess).catch((error) => {
               console.warn(LOG_PREFIX, "failed to sync pending approvals", error);
             });

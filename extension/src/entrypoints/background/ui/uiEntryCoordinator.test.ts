@@ -163,12 +163,12 @@ const buildHarness = (
       }
 
       return {
-        subscribeUnlockAttentionInvalidation: (handler: () => void) => {
+        subscribeUnlockAttentionEvents: (handler: () => void) => {
           unlockAttentionInvalidationHandlers.add(handler);
           return () => unlockAttentionInvalidationHandlers.delete(handler);
         },
         listUnlockAttentionRequests: async () => unlockAttentionRequests,
-        subscribeApprovalInvalidation: (handler: () => void) => {
+        subscribeApprovalEvents: (handler: () => void) => {
           approvalInvalidationHandlers.add(handler);
           return () => approvalInvalidationHandlers.delete(handler);
         },

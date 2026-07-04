@@ -43,6 +43,13 @@ export type ChainDefinitionSeed<TRpcEndpoint = unknown> = {
   defaultRpcEndpoints?: readonly TRpcEndpoint[] | undefined;
 };
 
+export interface RpcEndpoint {
+  url: string;
+  type?: "public" | "authenticated" | "private" | undefined;
+  weight?: number | undefined;
+  headers?: Record<string, string> | undefined;
+}
+
 export const defineChainDefinitionSeed = <const TSeed extends ChainDefinitionSeed>(seed: TSeed): TSeed => seed;
 
 export const defineChainDefinitionSeeds = <const TSeeds extends readonly ChainDefinitionSeed[]>(

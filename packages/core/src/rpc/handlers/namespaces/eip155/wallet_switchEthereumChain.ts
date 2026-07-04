@@ -79,15 +79,15 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
   locked: lockedQueue(),
   parseParams: readSwitchEthereumChainParams,
   handler: async ({ params, deps, executionContext, invocation }) => {
-    const supportedChains = deps.supportedChains;
-    if (!supportedChains) {
+    const chainDefinitions = deps.chainDefinitions;
+    if (!chainDefinitions) {
       throw new RpcInternalError({
-        message: "Missing supported chains service",
+        message: "Missing chain definitions service",
       });
     }
 
     const target = resolveSwitchEthereumChainTarget({
-      supportedChains,
+      chainDefinitions,
       chainRpc: deps.chainRpc,
       chainId: params.chainId,
     });

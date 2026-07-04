@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import type { RpcEndpoint } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
 import { buildRuntimeChainAdmission } from "./chainRpcDefaults.js";
 
 const BASE_MAINNET: ChainDefinitionSeed<RpcEndpoint> = {

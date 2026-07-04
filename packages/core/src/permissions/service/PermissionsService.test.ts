@@ -173,10 +173,12 @@ describe("PermissionsService", () => {
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
-    await service.revokeChainAuthorization(ORIGIN, {
-      namespace: NAMESPACE,
-      chainRef: MAINNET,
-    });
+    await expect(
+      service.revokeChainAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+        chainRef: MAINNET,
+      }),
+    ).resolves.toEqual({ removed: true });
 
     expect(service.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
       origin: ORIGIN,
@@ -188,13 +190,21 @@ describe("PermissionsService", () => {
       },
     });
 
-    await service.revokeChainAuthorization(ORIGIN, {
-      namespace: NAMESPACE,
-      chainRef: POLYGON,
-    });
+    await expect(
+      service.revokeChainAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+        chainRef: POLYGON,
+      }),
+    ).resolves.toEqual({ removed: true });
 
     expect(store.size).toBe(0);
     expect(service.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toBeNull();
+    await expect(
+      service.revokeChainAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+        chainRef: POLYGON,
+      }),
+    ).resolves.toEqual({ removed: false });
   });
 
   it("revokeNamespaceAuthorization() only removes the targeted namespace record", async () => {
@@ -214,9 +224,11 @@ describe("PermissionsService", () => {
     const service = new PermissionsService({ messenger, port });
 
     await service.waitForHydration();
-    await service.revokeNamespaceAuthorization(ORIGIN, {
-      namespace: NAMESPACE,
-    });
+    await expect(
+      service.revokeNamespaceAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+      }),
+    ).resolves.toEqual({ removed: true });
 
     expect(service.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toBeNull();
     expect(service.listOriginPermissions(ORIGIN)).toEqual([
@@ -230,6 +242,11 @@ describe("PermissionsService", () => {
         },
       },
     ]);
+    await expect(
+      service.revokeNamespaceAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+      }),
+    ).resolves.toEqual({ removed: false });
   });
 
   it("grantAuthorization() rejects chainRefs that drift across namespaces", async () => {
@@ -245,5 +262,20 @@ describe("PermissionsService", () => {
         chains: [{ chainRef: SOLANA_DEVNET, accountIds: [SOLANA_ACCOUNT_ID] }],
       }),
     ).rejects.toThrow(/does not belong to namespace/i);
+  });
+
+  it("grantAuthorization() rejects namespace whitespace", async () => {
+    const { port } = createInMemoryPort();
+    const messenger = createMessenger();
+    const service = new PermissionsService({ messenger, port });
+
+    await service.waitForHydration();
+
+    await expect(
+      service.grantAuthorization(ORIGIN, {
+        namespace: " eip155 ",
+        chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
+      }),
+    ).rejects.toThrow(/invalid permission namespace/i);
   });
 });

@@ -1,4 +1,3 @@
-import type { ApprovalChainContextRecord, ApprovalChainContextRequest } from "../../../approvals/chainContext.js";
 import type { ChainDefinition } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
 
@@ -27,18 +26,12 @@ export type FindAvailableChainViewParams = {
   namespace?: string;
 };
 
-export type ApprovalReviewChainViewParams = {
-  record: ApprovalChainContextRecord;
-  request?: ApprovalChainContextRequest;
-};
-
 export type ChainViewsService = {
   getSelectedNamespace(): string;
   getSelectedChainView(): ChainView;
   requireChainDefinition(chainRef: ChainRef): ChainDefinition;
   requireAvailableChainDefinition(chainRef: ChainRef): ChainDefinition;
   getActiveChainViewForNamespace(namespace: string): ChainView;
-  getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView;
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];

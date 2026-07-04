@@ -1,7 +1,6 @@
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
-import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import type { RpcEndpoint } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
 import { createMessenger, type Messenger } from "../../messenger/index.js";
 import {
@@ -114,20 +113,20 @@ export const createBackgroundBootstrapScope = ({
   storageOptions,
   approvalOptions,
   transactionOptions,
-  supportedChainsOptions,
+  chainDefinitionsOptions,
 }: {
   namespaceBootstrap: NamespaceStaticAssembly;
   storageOptions?: StorageOptions;
   approvalOptions?: BackgroundAssemblyOptions["approvals"];
   transactionOptions?: BackgroundAssemblyOptions["transactions"];
-  supportedChainsOptions: NonNullable<BackgroundAssemblyOptions["supportedChains"]>;
+  chainDefinitionsOptions: NonNullable<BackgroundAssemblyOptions["chainDefinitions"]>;
 }): BackgroundBootstrapScope => {
   const storageLogger = storageOptions?.logger ?? (() => {});
   const messenger = createMessenger();
   const registeredNamespaces = new Set(listRpcNamespaces(namespaceBootstrap.rpcRouting));
-  const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
+  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const chainAdmission = buildRuntimeChainAdmission({
-    admittedChainSeeds: supportedChainSeed.filter((entry) =>
+    admittedChainSeeds: chainDefinitionSeed.filter((entry) =>
       registeredNamespaces.has(getChainRefNamespace(entry.definition.chainRef)),
     ),
   });
@@ -138,7 +137,7 @@ export const createBackgroundBootstrapScope = ({
   const backgroundAssemblyOptions: BackgroundAssemblyOptions = {
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    supportedChains: { ...supportedChainsOptions, seed: [...supportedChainSeed] },
+    chainDefinitions: { ...chainDefinitionsOptions, seed: [...chainDefinitionSeed] },
   };
 
   return {
@@ -210,11 +209,11 @@ export const createBackgroundSessionScope = ({
     options: bootstrapScope.backgroundAssemblyOptions,
   });
 
-  const { stateServices, setApprovalExecutor, chainRpcAccessUpdater, supportedChainsService, permissionsReady } =
+  const { stateServices, setApprovalExecutor, chainRpcAccessUpdater, chainDefinitionsService, permissionsReady } =
     stateServicesInit;
 
   const chainViews = createChainViewsService({
-    supportedChains: supportedChainsService,
+    chainDefinitions: chainDefinitionsService,
     chainRpc: stateServices.chainRpc,
     selection: walletChainSelection,
   });
@@ -326,7 +325,7 @@ export const createBackgroundSupportScope = ({
 
   const chainRpcBootstrap = createChainRpcBootstrap({
     chainRpcAccessUpdater: sessionScope.chainRpcAccessUpdater,
-    supportedChains: sessionScope.stateServices.supportedChains,
+    chainDefinitions: sessionScope.stateServices.chainDefinitions,
     selection: sessionScope.walletChainSelection,
     defaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
     defaultEndpointSeeds: bootstrapScope.chainAdmission.admittedChainSeeds.flatMap((seed) =>

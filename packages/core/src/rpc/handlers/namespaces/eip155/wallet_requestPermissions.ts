@@ -3,13 +3,13 @@ import { ApprovalKinds } from "../../../../approvals/index.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { isArxBaseError } from "../../../../error.js";
 import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
+import { buildEip2255Permissions } from "../../../../permissions/eip2255.js";
 import {
   type ConnectionGrantKind,
   ConnectionGrantKinds,
   type ConnectionGrantRequest,
 } from "../../../../permissions/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
-import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
@@ -108,9 +108,11 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       });
     }
 
-    return buildEip2255PermissionsFromAuthorizationSnapshot({
+    const snapshot = deps.permissionViews.getAuthorizationSnapshot(origin, { chainRef });
+
+    return buildEip2255Permissions({
       origin,
-      snapshot: deps.permissionViews.getAuthorizationSnapshot(origin, { chainRef }),
+      accountAddresses: snapshot.accounts.map((account) => account.canonicalAddress),
     });
   },
 });

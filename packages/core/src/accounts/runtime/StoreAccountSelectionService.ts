@@ -19,7 +19,6 @@ import type {
   ActiveAccountView,
   ChainNamespace,
   MultiNamespaceAccountsState,
-  NamespaceAccountsState,
   NamespaceChainContext,
   OwnedAccountView,
 } from "./types.js";
@@ -226,7 +225,7 @@ export class StoreAccountSelectionService implements AccountSelectionService {
         selectedByNamespace = {};
       }
 
-      const nextNamespaces: Record<ChainNamespace, NamespaceAccountsState> = {};
+      const nextNamespaces: MultiNamespaceAccountsState["namespaces"] = {};
       const namespaces = [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]));
       for (const [ns, accountIds] of namespaces) {
         const [defaultAccountId, ...remainingAccountIds] = accountIds;

@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { accountIdFromChainAddress } from "../../../../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../../../../approvals/index.js";
 import type { ChainDefinitionSeed } from "../../../../../chains/definition.js";
-import {
-  type ChainMetadata,
-  deriveChainDefinitionFromMetadata,
-  type RpcEndpoint,
-} from "../../../../../chains/metadata.js";
+import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../../../../../chains/definition.js";
 import type { RequestPermissionsApprovalPayload } from "../../../../../permissions/service/types.js";
 import {
   MemoryChainDefinitionsPort,
@@ -20,7 +16,7 @@ import {
   connectOrigin,
   createExecutor,
   createRuntime,
-  getActiveChainMetadata,
+  getActiveChainDefinition,
   ORIGIN,
   setupApprovalResponder,
   setupSwitchChainApprovalResponder,
@@ -29,10 +25,10 @@ import {
 } from "./eip155.test.helpers.js";
 
 const toChainSeed = (
-  metadata: ChainMetadata,
+  metadata: ChainDefinition,
   defaultRpcEndpoints: readonly RpcEndpoint[],
 ): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: deriveChainDefinitionFromMetadata(metadata),
+  definition: cloneChainDefinition(metadata),
   defaultRpcEndpoints,
 });
 
@@ -69,7 +65,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const execute = createExecutor(runtime);
-    const mainnet = getActiveChainMetadata(runtime);
+    const mainnet = getActiveChainDefinition(runtime);
 
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
@@ -271,7 +267,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const mainnet = getActiveChainMetadata(runtime);
+    const mainnet = getActiveChainDefinition(runtime);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
@@ -429,7 +425,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(networkChain.displayName).toBe("Base Mainnet");
       expect(runtime.services.chainRpc.getEndpoints(ADDED_CHAIN_REF)[0]?.url).toBe("https://mainnet.base.org");
 
-      const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.services.chainDefinitions.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.definition.displayName).toBe("Base Mainnet");
       await expect(chainDefinitionsPort.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
         chainRef: ADDED_CHAIN_REF,
@@ -617,7 +613,7 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(runtime.services.chainRpc.getEndpoints(ADDED_CHAIN_REF)[0]?.url).toBe("https://new-rpc.example");
 
-      const registryEntry = runtime.services.supportedChains.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.services.chainDefinitions.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.definition.displayName).toBe("Base Mainnet");
       await expect(runtime.services.chainRpcDefaultEndpoints.get(ADDED_CHAIN_REF)).resolves.toMatchObject({
         rpcEndpoints: [{ url: "https://new-rpc.example", type: "public" }],
@@ -629,7 +625,7 @@ describe("eip155 handlers - core error paths", () => {
   });
 
   it("updates builtin default RPC endpoints without changing the builtin chain definition", async () => {
-    const mainnet: ChainMetadata = {
+    const mainnet: ChainDefinition = {
       chainRef: "eip155:1",
       namespace: "eip155",
       chainId: "0x1",
@@ -637,7 +633,7 @@ describe("eip155 handlers - core error paths", () => {
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     };
 
-    const existing: ChainMetadata = {
+    const existing: ChainDefinition = {
       chainRef: ADDED_CHAIN_REF,
       namespace: "eip155",
       chainId: "0X2105",
@@ -647,10 +643,10 @@ describe("eip155 handlers - core error paths", () => {
     };
 
     const runtime = createRuntime({
-      supportedChains: {
+      chainDefinitions: {
         seed: [
           toChainSeed(mainnet, [{ url: "https://rpc.ethereum.example", type: "public" }]),
-          toChainSeed(ALT_CHAIN as ChainMetadata, [{ url: "https://rpc.optimism.example", type: "public" }]),
+          toChainSeed(ALT_CHAIN as ChainDefinition, [{ url: "https://rpc.optimism.example", type: "public" }]),
           toChainSeed(existing, [
             {
               url: "https://secondary.base.org/",
@@ -695,7 +691,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(approvalRequested).toBe(true);
-      expect(runtime.services.supportedChains.getChain(ADDED_CHAIN_REF)).toMatchObject({
+      expect(runtime.services.chainDefinitions.getChain(ADDED_CHAIN_REF)).toMatchObject({
         source: "builtin",
         definition: {
           chainRef: existing.chainRef,
@@ -797,7 +793,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await connectOrigin({
       runtime,
       chainRefs: [chain.chainRef],
@@ -828,7 +824,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const main = getActiveChainMetadata(runtime);
+    const main = getActiveChainDefinition(runtime);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     await connectOrigin({
@@ -877,7 +873,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
@@ -954,7 +950,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
@@ -997,7 +993,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
@@ -1059,7 +1055,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
@@ -1126,7 +1122,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
     const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 
@@ -1161,7 +1157,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await connectOrigin({
       runtime,
       chainRefs: [chain.chainRef],
@@ -1191,7 +1187,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await connectOrigin({
       runtime,
       chainRefs: [chain.chainRef],
@@ -1231,7 +1227,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = getActiveChainMetadata(runtime);
+    const chain = getActiveChainDefinition(runtime);
     await connectOrigin({
       runtime,
       chainRefs: [chain.chainRef],

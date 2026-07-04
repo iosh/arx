@@ -1,7 +1,7 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
+import type { RpcEndpoint } from "../../chains/definition.js";
 import { type ChainDefinitionSeed, cloneChainDefinition } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { RpcEndpoint } from "../../chains/metadata.js";
 import { RuntimeConfigError } from "./errors.js";
 
 export type RuntimeWalletChainSelectionDefaults = {

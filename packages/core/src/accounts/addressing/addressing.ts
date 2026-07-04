@@ -1,5 +1,6 @@
 import { createEip155AddressFormat } from "../../chains/eip155/address.js";
 import type { ChainRef } from "../../chains/ids.js";
+import { AccountAddressNamespaceNotSupportedError } from "../errors.js";
 
 export type NamespaceAccountAddressing = {
   namespace: string;
@@ -25,7 +26,9 @@ export const accountAddressingForNamespace = (
   accountAddressing: AccountAddressingByNamespace,
   namespace: string,
 ): NamespaceAccountAddressing => {
-  return accountAddressing[namespace] as NamespaceAccountAddressing;
+  const addressing = accountAddressing[namespace];
+  if (addressing) return addressing;
+  throw new AccountAddressNamespaceNotSupportedError({ namespace });
 };
 
 const eip155AddressFormat = createEip155AddressFormat();

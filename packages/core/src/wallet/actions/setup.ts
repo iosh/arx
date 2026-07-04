@@ -10,7 +10,7 @@ import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 
 const hasAnyOwnedAccounts = (context: WalletApiContext): boolean => {
   const state = context.accounts.getState();
-  return Object.values(state.namespaces).some((namespace) => namespace.accountIds.length > 0);
+  return Object.values(state.namespaces).some((namespace) => (namespace?.accountIds.length ?? 0) > 0);
 };
 
 const assertSetupUninitialized = (context: WalletApiContext): void => {

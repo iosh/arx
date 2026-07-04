@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import { listRpcNamespaces } from "../rpc/index.js";
@@ -22,19 +22,17 @@ import {
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
-type TestChain = ChainMetadata & {
+type TestChain = ChainDefinition & {
   defaultRpcEndpoints: readonly RpcEndpoint[];
 };
 
 const toChainSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: deriveChainDefinitionFromMetadata(chain),
+  definition: cloneChainDefinition(chain),
   defaultRpcEndpoints: chain.defaultRpcEndpoints,
 });
 
 const MAINNET_CHAIN: TestChain = {
   chainRef: "eip155:1",
-  namespace: "eip155",
-  chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.mainnet", type: "public" }],
@@ -42,8 +40,6 @@ const MAINNET_CHAIN: TestChain = {
 
 const SOLANA_CHAIN: TestChain = {
   chainRef: "solana:101",
-  namespace: "solana",
-  chainId: "101",
   displayName: "Solana",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
   defaultRpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
@@ -118,7 +114,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
   it("assembles a second namespace without falling back to eip155 runtime defaults", async () => {
     const chainDefinitionsPort = new MemoryChainDefinitionsPort();
     const runtime = createBackgroundRuntime({
-      supportedChains: {
+      chainDefinitions: {
         seed: [toChainSeed(MAINNET_CHAIN), toChainSeed(SOLANA_CHAIN)],
       },
       namespaces: {

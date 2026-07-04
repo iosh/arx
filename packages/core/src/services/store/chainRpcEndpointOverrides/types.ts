@@ -1,5 +1,5 @@
+import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { RpcEndpoint } from "../../../chains/metadata.js";
 import type { Unsubscribe } from "../../../messenger/index.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
 

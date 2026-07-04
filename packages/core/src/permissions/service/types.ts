@@ -66,6 +66,10 @@ export type RevokeNamespaceAuthorizationOptions = {
   namespace: ChainNamespace;
 };
 
+export type RevokePermissionResult = {
+  removed: boolean;
+};
+
 export type ConnectionGrantChainRefs = [ChainRef, ...ChainRef[]];
 
 /**
@@ -101,9 +105,12 @@ export type PermissionsReader = {
 export type PermissionsWriter = {
   grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
   setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization>;
-  revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
-  revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
-  revokeOriginPermissions(origin: string): Promise<void>;
+  revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<RevokePermissionResult>;
+  revokeNamespaceAuthorization(
+    origin: string,
+    options: RevokeNamespaceAuthorizationOptions,
+  ): Promise<RevokePermissionResult>;
+  revokeOriginPermissions(origin: string): Promise<RevokePermissionResult>;
 };
 
 export type PermissionsEvents = {

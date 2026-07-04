@@ -1,5 +1,5 @@
+import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { RpcEndpoint } from "../../../chains/metadata.js";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";

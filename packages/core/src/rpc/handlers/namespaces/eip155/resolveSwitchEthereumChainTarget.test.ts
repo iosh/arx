@@ -28,7 +28,7 @@ const SOLANA = {
 
 const setup = (available: Array<ChainDefinition & { namespace: string; chainId: string }>) => {
   return {
-    supportedChains: {
+    chainDefinitions: {
       getChain: (chainRef: string) => {
         const chain = available.find((entry) => entry.chainRef === chainRef);
         return chain ? { definition: chain, namespace: chain.namespace } : null;

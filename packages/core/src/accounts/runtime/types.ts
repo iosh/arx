@@ -30,7 +30,7 @@ export type ActiveAccountView = OwnedAccountView & {
 export type ActivePointer = ActiveAccountView;
 
 export type MultiNamespaceAccountsState = {
-  namespaces: Record<ChainNamespace, NamespaceAccountsState>;
+  namespaces: Partial<Record<ChainNamespace, NamespaceAccountsState>>;
 };
 
 export const EMPTY_MULTI_NAMESPACE_STATE: MultiNamespaceAccountsState = {

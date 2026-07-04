@@ -13,7 +13,7 @@ export type ApprovalDetailsDeps = {
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
+  chainViews: Pick<ChainViewsService, "findAvailableChainView" | "requireChainDefinition">;
   transactionApprovals?: Pick<TransactionsService, "getTransactionApproval" | "listTransactionApprovals">;
 };
 
@@ -92,6 +92,11 @@ const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableA
     canonicalAddress: account.canonicalAddress,
     displayAddress: account.displayAddress,
   }));
+
+const toChainDisplayName = (chain: { displayName: string }): string | undefined => {
+  const name = chain.displayName.trim();
+  return name.length > 0 ? name : undefined;
+};
 
 const buildSelectionDetail = (
   record:
@@ -180,11 +185,11 @@ const buildStaticDetail = (
       };
 
     case ApprovalKinds.SwitchChain: {
-      const reviewChain = deps.chainViews.getApprovalReviewChainView({
-        record,
-        request: record.request,
-      });
-      const target = deps.chainViews.findAvailableChainView({ chainRef: reviewChain.chainRef }) ?? reviewChain;
+      const context = deriveApprovalReviewContext(record, { request: record.request });
+      const target =
+        deps.chainViews.findAvailableChainView({ chainRef: context.reviewChainRef }) ??
+        deps.chainViews.requireChainDefinition(context.reviewChainRef);
+      const displayName = toChainDisplayName(target);
 
       return {
         ...toDetailMeta(record),
@@ -194,9 +199,9 @@ const buildStaticDetail = (
           canReject: true,
         },
         request: {
-          chainRef: reviewChain.chainRef,
-          chainId: eip155ChainIdHexFromChainRef(reviewChain.chainRef),
-          ...(target.displayName ? { displayName: target.displayName } : {}),
+          chainRef: context.reviewChainRef,
+          chainId: eip155ChainIdHexFromChainRef(context.reviewChainRef),
+          ...(displayName ? { displayName } : {}),
         },
         review: null,
       };

@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { getChainRefNamespace, normalizeChainRef } from "../chains/caip.js";
+import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcReader } from "../chains/rpc/types.js";
 import { RpcInternalError } from "./errors.js";
 import { isJsonRpcErrorLike, JsonRpcResponseError } from "./jsonRpcError.js";

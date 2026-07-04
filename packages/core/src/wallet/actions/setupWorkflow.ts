@@ -73,7 +73,7 @@ export type WalletSetupWorkflow = Readonly<{
 
 const hasAnyOwnedAccounts = (accounts: Pick<AccountSelectionService, "getState">): boolean => {
   const state = accounts.getState();
-  return Object.values(state.namespaces).some((namespace) => namespace.accountIds.length > 0);
+  return Object.values(state.namespaces).some((namespace) => (namespace?.accountIds.length ?? 0) > 0);
 };
 
 const deriveSetupAvailability = (accounts: Pick<AccountSelectionService, "getState">): SetupAvailability => {

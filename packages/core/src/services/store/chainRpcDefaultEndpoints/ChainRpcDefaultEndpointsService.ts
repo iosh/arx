@@ -1,5 +1,5 @@
+import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { RpcEndpoint } from "../../../chains/metadata.js";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../../../chains/rpc/config.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
@@ -139,6 +139,10 @@ export const createChainRpcDefaultEndpointsService = ({
 
       for (const previous of previousByChainRef.values()) {
         if (nextChainRefs.has(previous.chainRef)) {
+          continue;
+        }
+        if (previous.source === "request") {
+          cache.set(previous.chainRef, toRecord(previous));
           continue;
         }
 

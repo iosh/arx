@@ -15,6 +15,7 @@ import {
   parsePermissionAccountIdsForNamespace,
   parsePermissionChainRefForNamespace,
   parsePermissionNamespace,
+  sortStrings,
 } from "./state.js";
 import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED } from "./topics.js";
 import type {
@@ -28,12 +29,9 @@ import type {
   PermissionsWriter,
   RevokeChainAuthorizationOptions,
   RevokeNamespaceAuthorizationOptions,
+  RevokePermissionResult,
   SetChainAccountIdsOptions,
 } from "./types.js";
-
-const sortStrings = <T extends string>(values: readonly T[]): T[] => {
-  return [...values].sort((left, right) => left.localeCompare(right));
-};
 
 export type PermissionsServiceOptions = {
   messenger: Messenger;
@@ -149,19 +147,22 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
     });
   }
 
-  async revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void> {
+  async revokeChainAuthorization(
+    origin: string,
+    options: RevokeChainAuthorizationOptions,
+  ): Promise<RevokePermissionResult> {
     await this.#ready;
 
-    await this.#enqueueWrite(async () => {
+    return await this.#enqueueWrite(async () => {
       const namespace = parsePermissionNamespace(options.namespace);
+      const chainRef = parsePermissionChainRefForNamespace(namespace, options.chainRef);
       const currentChains = this.#state.origins[origin]?.[namespace]?.chains;
       if (!currentChains) {
-        return;
+        return { removed: false };
       }
 
-      const chainRef = parsePermissionChainRefForNamespace(namespace, options.chainRef);
       if (!currentChains[chainRef]) {
-        return;
+        return { removed: false };
       }
 
       const nextChains = cloneChainStates(currentChains);
@@ -170,38 +171,44 @@ export class PermissionsService implements PermissionsReader, PermissionsWriter,
       if (Object.keys(nextChains).length === 0) {
         await this.#port.remove({ origin, namespace });
         this.#removeNamespaceAuthorization(origin, namespace);
-        return;
+        return { removed: true };
       }
 
       await this.#port.upsert(buildPermissionRecordFromChainStates(origin, namespace, nextChains));
       this.#setNamespaceAuthorization(origin, namespace, nextChains);
+      return { removed: true };
     });
   }
 
-  async revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void> {
+  async revokeNamespaceAuthorization(
+    origin: string,
+    options: RevokeNamespaceAuthorizationOptions,
+  ): Promise<RevokePermissionResult> {
     await this.#ready;
 
-    await this.#enqueueWrite(async () => {
+    return await this.#enqueueWrite(async () => {
       const namespace = parsePermissionNamespace(options.namespace);
       if (!this.#state.origins[origin]?.[namespace]) {
-        return;
+        return { removed: false };
       }
 
       await this.#port.remove({ origin, namespace });
       this.#removeNamespaceAuthorization(origin, namespace);
+      return { removed: true };
     });
   }
 
-  async revokeOriginPermissions(origin: string): Promise<void> {
+  async revokeOriginPermissions(origin: string): Promise<RevokePermissionResult> {
     await this.#ready;
 
-    await this.#enqueueWrite(async () => {
+    return await this.#enqueueWrite(async () => {
       if (!this.#state.origins[origin]) {
-        return;
+        return { removed: false };
       }
 
       await this.#port.clearOrigin(origin);
       this.#removeOrigin(origin);
+      return { removed: true };
     });
   }
 

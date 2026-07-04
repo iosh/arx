@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { RpcEndpoint } from "../../../chains/definition.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { RpcEndpoint } from "../../../chains/metadata.js";
 import { createMessenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
 import { createChainRpcDefaultEndpointsService } from "./ChainRpcDefaultEndpointsService.js";
@@ -90,7 +90,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
     expect(service.readDefaultEndpoints("eip155:1")).toEqual(record.rpcEndpoints);
   });
 
-  it("replaces the default access set and prunes removed chains", async () => {
+  it("replaces the bundle default access set without pruning request endpoints", async () => {
     const mainnet = {
       chainRef: "eip155:1",
       rpcEndpoints: [endpoint("https://rpc.mainnet.example")],
@@ -133,14 +133,14 @@ describe("ChainRpcDefaultEndpointsService", () => {
       source: "bundle",
       updatedAt: 1_000,
     });
-    expect(port.readRecord("solana:101")).toBeNull();
+    expect(port.readRecord("solana:101")).toEqual(solana);
     expect(service.readDefaultEndpoints("eip155:1")).toEqual([
       { url: "https://rpc.mainnet.v2.example", type: "public" },
     ]);
     expect(service.readDefaultEndpoints("eip155:10")).toEqual([
       { url: "https://rpc.optimism.example", type: "public" },
     ]);
-    expect(service.readDefaultEndpoints("solana:101")).toBeNull();
+    expect(service.readDefaultEndpoints("solana:101")).toEqual([{ url: "https://rpc.solana.example", type: "public" }]);
     expect(changed).toEqual([
       {
         chainRef: "eip155:1",
@@ -161,11 +161,6 @@ describe("ChainRpcDefaultEndpointsService", () => {
           source: "bundle",
           updatedAt: 1_000,
         },
-      },
-      {
-        chainRef: "solana:101",
-        previous: solana,
-        next: null,
       },
     ]);
   });

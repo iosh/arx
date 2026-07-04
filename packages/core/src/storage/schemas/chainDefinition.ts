@@ -1,5 +1,5 @@
+import type { ChainDefinition } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainDefinition } from "../../chains/metadata.js";
 
 export const CHAIN_DEFINITION_SOURCES = ["builtin", "custom"] as const;
 export type ChainDefinitionSource = (typeof CHAIN_DEFINITION_SOURCES)[number];

@@ -1,17 +1,8 @@
-import { type ChainDefinitionSeed, defineChainDefinitionSeeds } from "./definition.js";
-import { eip155ChainIdHexFromChainRef } from "./eip155/format.js";
-import { type ChainMetadata, deriveChainMetadataFromDefinitionSeed, type RpcEndpoint } from "./metadata.js";
+import { type ChainDefinitionSeed, defineChainDefinitionSeeds, type RpcEndpoint } from "./definition.js";
 
 const defineRpcChainDefinitionSeeds = <const TSeeds extends readonly ChainDefinitionSeed<RpcEndpoint>[]>(
   seeds: TSeeds,
 ): TSeeds => defineChainDefinitionSeeds(seeds);
-
-const deriveEip155ChainMetadataFromDefinitionSeed = (seed: ChainDefinitionSeed<RpcEndpoint>): ChainMetadata =>
-  deriveChainMetadataFromDefinitionSeed({
-    seed,
-    namespace: "eip155",
-    chainId: eip155ChainIdHexFromChainRef(seed.definition.chainRef),
-  });
 
 export const EIP155_MAINNET_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
   {
@@ -149,45 +140,36 @@ export const EIP155_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
   ...EIP155_TESTNET_DEFINITION_SEEDS,
 ]);
 
-export const EIP155_CHAIN_METADATA: readonly ChainMetadata[] = EIP155_CHAIN_DEFINITION_SEEDS.map(
-  deriveEip155ChainMetadataFromDefinitionSeed,
-);
-
-export const CONFLUX_NETWORKS = [
+export const CONFLUX_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
   {
-    chainRef: "conflux:cfx",
-    chainId: "0x405",
-    namespace: "conflux",
-    displayName: "Conflux Core Space",
-    shortName: "cfx",
-    nativeCurrency: { name: "Conflux", symbol: "CFX", decimals: 18 },
-    blockExplorers: [{ type: "default", url: "https://confluxscan.io", title: "ConfluxScan" }],
-    icon: {
-      url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
-      format: "png",
+    definition: {
+      chainRef: "conflux:cfx",
+      displayName: "Conflux Core Space",
+      shortName: "cfx",
+      nativeCurrency: { name: "Conflux", symbol: "CFX", decimals: 18 },
+      blockExplorers: [{ type: "default", url: "https://confluxscan.io", title: "ConfluxScan" }],
+      icon: {
+        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
+        format: "png",
+      },
     },
   },
   {
-    chainRef: "conflux:cfxtest",
-    namespace: "conflux",
-    chainId: "0x1",
-    displayName: "Conflux Core Testnet",
-    shortName: "cfxtest",
-    nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
-    blockExplorers: [{ type: "default", url: "https://testnet.confluxscan.io", title: "ConfluxScan Testnet" }],
-    icon: {
-      url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
-      format: "png",
+    definition: {
+      chainRef: "conflux:cfxtest",
+      displayName: "Conflux Core Testnet",
+      shortName: "cfxtest",
+      nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
+      blockExplorers: [{ type: "default", url: "https://testnet.confluxscan.io", title: "ConfluxScan Testnet" }],
+      icon: {
+        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
+        format: "png",
+      },
     },
   },
-] as const satisfies readonly ChainMetadata[];
+] as const);
 
 export const DEFAULT_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
   ...EIP155_CHAIN_DEFINITION_SEEDS,
   // ...CONFLUX_CHAIN_DEFINITION_SEEDS,
 ]);
-
-export const DEFAULT_CHAIN_METADATA: readonly ChainMetadata[] = [
-  ...EIP155_CHAIN_METADATA,
-  // ...CONFLUX_NETWORKS,
-];

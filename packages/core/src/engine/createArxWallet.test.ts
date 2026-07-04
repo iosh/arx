@@ -26,7 +26,7 @@ const ORIGIN = "https://dapp.example";
 const EIP155_NAMESPACE = "eip155";
 const EIP155_CHAIN_REF = "eip155:1" as const;
 const ACCOUNT_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
-const ACCOUNT_KEY = accountIdFromChainAddress({
+const ACCOUNT_ID = accountIdFromChainAddress({
   chainRef: EIP155_CHAIN_REF,
   address: ACCOUNT_ADDRESS,
   accountAddressing: TEST_ACCOUNT_CODECS,
@@ -77,7 +77,7 @@ const createWalletInput = (params?: {
 const createSeededAccountsPort = () =>
   new MemoryAccountsPort([
     {
-      accountId: ACCOUNT_KEY,
+      accountId: ACCOUNT_ID,
       namespace: EIP155_NAMESPACE,
       keyringId: KEYRING_ID,
       createdAt: 1,
@@ -90,7 +90,7 @@ const createSeededPermissionsPort = (origins: readonly string[] = [ORIGIN]) =>
       origin,
       namespace: EIP155_NAMESPACE,
       chainScopes: {
-        [EIP155_CHAIN_REF]: [ACCOUNT_KEY],
+        [EIP155_CHAIN_REF]: [ACCOUNT_ID],
       },
     })),
   );
@@ -382,7 +382,7 @@ describe("createArxWallet", () => {
 
       await wallet.permissions.grantAuthorization(ORIGIN, {
         namespace: EIP155_NAMESPACE,
-        chains: [{ chainRef: EIP155_CHAIN_REF, accountIds: [ACCOUNT_KEY] }],
+        chains: [{ chainRef: EIP155_CHAIN_REF, accountIds: [ACCOUNT_ID] }],
       });
       await flushAsync();
       await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
@@ -479,7 +479,7 @@ describe("createArxWallet", () => {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
         }),
-      ).toMatchObject({ accountId: ACCOUNT_KEY });
+      ).toMatchObject({ accountId: ACCOUNT_ID });
       expect(wallet.networks.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
       expect(wallet.networks.getSelectedChainView().chainRef).toBe(EIP155_CHAIN_REF);
 
@@ -556,9 +556,9 @@ describe("createArxWallet", () => {
       await expect(walletApi.accounts.listCurrentChain()).resolves.toMatchObject({
         totalCount: 1,
         active: {
-          accountId: ACCOUNT_KEY,
+          accountId: ACCOUNT_ID,
         },
-        list: [expect.objectContaining({ accountId: ACCOUNT_KEY })],
+        list: [expect.objectContaining({ accountId: ACCOUNT_ID })],
       });
       await expect(
         provider.request({

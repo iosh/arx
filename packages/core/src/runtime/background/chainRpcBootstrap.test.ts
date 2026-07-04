@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../../chains/metadata.js";
+import { getChainRefNamespace } from "../../chains/caip.js";
+import {
+  type ChainDefinition,
+  type ChainDefinitionSeed,
+  cloneChainDefinition,
+  type RpcEndpoint,
+} from "../../chains/definition.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
-import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
 import { createMessenger } from "../../messenger/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
 import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
@@ -19,14 +23,12 @@ import {
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createChainRpcBootstrap } from "./chainRpcBootstrap.js";
 
-type TestChain = ChainMetadata & {
+type TestChain = ChainDefinition & {
   defaultRpcEndpoints: readonly RpcEndpoint[];
 };
 
 const MAINNET_CHAIN: TestChain = {
   chainRef: "eip155:1",
-  namespace: "eip155",
-  chainId: "0x1",
   displayName: "Ethereum Mainnet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
@@ -34,8 +36,6 @@ const MAINNET_CHAIN: TestChain = {
 
 const ALT_CHAIN: TestChain = {
   chainRef: "eip155:10",
-  namespace: "eip155",
-  chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" }],
@@ -43,15 +43,16 @@ const ALT_CHAIN: TestChain = {
 
 const SOLANA_CHAIN: TestChain = {
   chainRef: "solana:101",
-  namespace: "solana",
-  chainId: "101",
   displayName: "Solana",
   nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
   defaultRpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
+const EIP155_NAMESPACE = "eip155";
+const SOLANA_NAMESPACE = "solana";
+
 const toDefinitionSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: deriveChainDefinitionFromMetadata(chain),
+  definition: cloneChainDefinition(chain),
   defaultRpcEndpoints: [...chain.defaultRpcEndpoints],
 });
 
@@ -78,8 +79,8 @@ const createChainRpcService = () => {
 const createSelectionService = (
   seed: WalletChainSelectionRecord | null,
   defaults = {
-    selectedNamespace: MAINNET_CHAIN.namespace,
-    chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+    selectedNamespace: EIP155_NAMESPACE,
+    chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
   },
   now = () => 1_000,
 ): { port: MemoryWalletChainSelectionPort; service: ReturnType<typeof createWalletChainSelectionService> } => {
@@ -127,40 +128,37 @@ const createChainRpcDefaultEndpoints = (
 
 const toCustomChainDefinition = (chain: TestChain) => ({
   chainRef: chain.chainRef,
-  namespace: chain.namespace,
-  definition: deriveChainDefinitionFromMetadata(chain),
+  namespace: getChainRefNamespace(chain.chainRef),
+  definition: cloneChainDefinition(chain),
   schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   source: "custom" as const,
   updatedAt: 0,
 });
 
-const createSupportedChains = async (params: { builtin?: TestChain[]; custom?: TestChain[] }) => {
+const createChainDefinitions = async (params: { builtin?: TestChain[]; custom?: TestChain[] }) => {
   const messenger = createMessenger();
   const chainDefinitions = new InMemoryChainDefinitionsService({
     messenger,
     port: new MemoryChainDefinitionsPort((params.custom ?? []).map(toCustomChainDefinition)),
-    seed: (params.builtin ?? []).map((chain) => deriveChainDefinitionFromMetadata(chain)),
+    seed: (params.builtin ?? []).map((chain) => cloneChainDefinition(chain)),
     now: () => 0,
   });
-  const supportedChains = new InMemorySupportedChainsService({
-    chainDefinitions,
-  });
-  await supportedChains.whenReady();
-  return supportedChains;
+  await chainDefinitions.whenReady();
+  return chainDefinitions;
 };
 
 describe("chainRpcBootstrap", () => {
   it("mounts only registered namespace chains, applies custom RPC, and repairs stored selection", async () => {
     const chainRpc = createChainRpcService();
-    const supportedChains = await createSupportedChains({
+    const chainDefinitions = await createChainDefinitions({
       builtin: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN],
     });
     const { port: selectionPort, service: selection } = createSelectionService({
       id: "wallet-chain-selection",
-      selectedNamespace: SOLANA_CHAIN.namespace,
+      selectedNamespace: SOLANA_NAMESPACE,
       chainRefByNamespace: {
-        eip155: ALT_CHAIN.chainRef,
-        solana: SOLANA_CHAIN.chainRef,
+        [EIP155_NAMESPACE]: ALT_CHAIN.chainRef,
+        [SOLANA_NAMESPACE]: SOLANA_CHAIN.chainRef,
       },
       updatedAt: 10,
     });
@@ -189,14 +187,14 @@ describe("chainRpcBootstrap", () => {
 
     const bootstrap = createChainRpcBootstrap({
       chainRpcAccessUpdater: chainRpc,
-      supportedChains,
+      chainDefinitions,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
       defaultEndpointSeeds: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN].map(toDefaultEndpointSeed),
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
-        selectedNamespace: MAINNET_CHAIN.namespace,
-        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        selectedNamespace: EIP155_NAMESPACE,
+        chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -214,7 +212,6 @@ describe("chainRpcBootstrap", () => {
       MAINNET_CHAIN.chainRef,
       ALT_CHAIN.chainRef,
     ]);
-    expect(chainRpcDefaultEndpointsPort.removed).toContain(SOLANA_CHAIN.chainRef);
     await expect(selectionPort.get()).resolves.toEqual({
       id: "wallet-chain-selection",
       selectedNamespace: "eip155",
@@ -224,15 +221,15 @@ describe("chainRpcBootstrap", () => {
     expect(chainRpcEndpointOverridesPort.removed).toContain(SOLANA_CHAIN.chainRef);
   });
 
-  it("repairs the selected UI chain when supported chains remove the current chain", async () => {
+  it("repairs the selected UI chain when chain definitions remove the current chain", async () => {
     const chainRpc = createChainRpcService();
-    const supportedChains = await createSupportedChains({
+    const chainDefinitions = await createChainDefinitions({
       custom: [MAINNET_CHAIN, ALT_CHAIN],
     });
     const { service: selection } = createSelectionService({
       id: "wallet-chain-selection",
-      selectedNamespace: MAINNET_CHAIN.namespace,
-      chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
+      selectedNamespace: EIP155_NAMESPACE,
+      chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
     const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints([
@@ -243,14 +240,14 @@ describe("chainRpcBootstrap", () => {
 
     const bootstrap = createChainRpcBootstrap({
       chainRpcAccessUpdater: chainRpc,
-      supportedChains,
+      chainDefinitions,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
       defaultEndpointSeeds: [],
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
-        selectedNamespace: MAINNET_CHAIN.namespace,
-        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        selectedNamespace: EIP155_NAMESPACE,
+        chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -258,7 +255,7 @@ describe("chainRpcBootstrap", () => {
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
     const chainViews = createChainViewsService({
-      supportedChains,
+      chainDefinitions,
       chainRpc,
       selection,
     });
@@ -268,7 +265,7 @@ describe("chainRpcBootstrap", () => {
     await bootstrap.flushPendingSync();
     bootstrap.start();
 
-    await supportedChains.removeChain(MAINNET_CHAIN.chainRef);
+    await chainDefinitions.removeCustomChain(MAINNET_CHAIN.chainRef);
     await bootstrap.flushPendingSync();
 
     expect(chainRpc.listChainRefs()).toEqual([ALT_CHAIN.chainRef]);
@@ -279,13 +276,13 @@ describe("chainRpcBootstrap", () => {
 
   it("repairs the selected namespace chain using the resolved active chain for the same namespace", async () => {
     const chainRpc = createChainRpcService();
-    const supportedChains = await createSupportedChains({
+    const chainDefinitions = await createChainDefinitions({
       custom: [ALT_CHAIN],
     });
     const { port: selectionPort, service: selection } = createSelectionService({
       id: "wallet-chain-selection",
-      selectedNamespace: MAINNET_CHAIN.namespace,
-      chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
+      selectedNamespace: EIP155_NAMESPACE,
+      chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
     const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints([toDefaultEndpointRecord(ALT_CHAIN)]);
@@ -293,14 +290,14 @@ describe("chainRpcBootstrap", () => {
 
     const bootstrap = createChainRpcBootstrap({
       chainRpcAccessUpdater: chainRpc,
-      supportedChains,
+      chainDefinitions,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
       defaultEndpointSeeds: [],
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
-        selectedNamespace: MAINNET_CHAIN.namespace,
-        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        selectedNamespace: EIP155_NAMESPACE,
+        chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -324,7 +321,7 @@ describe("chainRpcBootstrap", () => {
   it("flushes a sync requested during hydration after hydration ends", async () => {
     let isHydrating = true;
     const chainRpc = createChainRpcService();
-    const supportedChains = await createSupportedChains({
+    const chainDefinitions = await createChainDefinitions({
       builtin: [MAINNET_CHAIN],
     });
     const { service: selection } = createSelectionService(null);
@@ -333,7 +330,7 @@ describe("chainRpcBootstrap", () => {
 
     const bootstrap = createChainRpcBootstrap({
       chainRpcAccessUpdater: chainRpc,
-      supportedChains,
+      chainDefinitions,
       selection,
       defaultEndpoints: chainRpcDefaultEndpoints,
       defaultEndpointSeeds: [toDefinitionSeed(MAINNET_CHAIN)].flatMap((seed) =>
@@ -349,8 +346,8 @@ describe("chainRpcBootstrap", () => {
       ),
       endpointOverrides: chainRpcEndpointOverrides,
       selectionDefaults: {
-        selectedNamespace: MAINNET_CHAIN.namespace,
-        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        selectedNamespace: EIP155_NAMESPACE,
+        chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},

@@ -35,7 +35,7 @@ import type { ProviderRuntimeAccess } from "./provider/types.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
-export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "supportedChains"> & {
+export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "chainDefinitions"> & {
   rpcAccessPolicy: BackgroundRpcAccessPolicyHooks;
   walletChainSelection: {
     port: WalletChainSelectionPort;
@@ -64,7 +64,7 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "su
       transactionAggregates: TransactionsStoragePort;
     };
   };
-  supportedChains: Omit<BackgroundAssemblyOptions["supportedChains"], "port">;
+  chainDefinitions: Omit<BackgroundAssemblyOptions["chainDefinitions"], "port">;
   settings: {
     port: SettingsPort;
   };
@@ -121,8 +121,8 @@ const createNoopVaultMetaPort = (): VaultMetaPort => ({
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const chainDefinitionsPort = options.store.ports.chainDefinitions;
-  const supportedChains = {
-    ...options.supportedChains,
+  const chainDefinitions = {
+    ...options.chainDefinitions,
     port: chainDefinitionsPort,
   };
 
@@ -162,7 +162,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       assemblyOptions: {
         ...(options.approvals ? { approvals: options.approvals } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
-        supportedChains,
+        chainDefinitions,
       },
       ...(options.rpcClients ? { rpcClients: options.rpcClients } : {}),
       rpcAccessPolicy: options.rpcAccessPolicy,

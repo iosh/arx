@@ -5,7 +5,7 @@ import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
-import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
@@ -34,7 +34,7 @@ export type RpcHandlerDeps = {
   accounts: AccountSelectionService;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  supportedChains: SupportedChainsService;
+  chainDefinitions: ChainDefinitionsService;
   chainRpcDefaultEndpoints?: Pick<ChainRpcDefaultEndpointsService, "readDefaultEndpoints">;
   chainAddressing: ChainAddressingByNamespace;
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;

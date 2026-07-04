@@ -1,6 +1,6 @@
 import { z } from "zod";
+import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { RpcEndpoint } from "../chains/metadata.js";
 import type { KeyringType } from "./keyringSchemas.js";
 
 export type AccountNamespace = string;

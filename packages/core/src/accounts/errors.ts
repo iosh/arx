@@ -16,3 +16,15 @@ export class AccountNotOwnedError extends ArxBaseError {
     });
   }
 }
+
+export class AccountAddressNamespaceNotSupportedError extends ArxBaseError {
+  static readonly code = "account.address_namespace_not_supported";
+
+  constructor(input: ErrorCause & { namespace: string }) {
+    super(`No account address handling is available for namespace "${input.namespace}".`, {
+      code: AccountAddressNamespaceNotSupportedError.code,
+      details: { namespace: input.namespace },
+      cause: input.cause,
+    });
+  }
+}

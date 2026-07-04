@@ -7,11 +7,10 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SignTypedData, input),
   async approve(record, _decision, deps) {
     const payload = record.request;
-    const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: payload });
+    const { reviewChainRef } = deriveApprovalReviewContext(record, { request: payload });
     const chainRef = reviewChainRef;
 
     const signature = await deps.namespaceRuntime.approvals.signTypedData({
-      namespace,
       chainRef,
       address: payload.from,
       typedData: payload.typedData,

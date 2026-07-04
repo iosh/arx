@@ -1,6 +1,6 @@
+import type { RpcEndpoint } from "../definition.js";
 import { ChainRpcAccessConfigError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
-import type { RpcEndpoint } from "../metadata.js";
 import type { ChainRpcAccess, NonEmptyRpcEndpoints } from "./types.js";
 
 export const cloneNonEmptyRpcEndpoints = (endpoints: NonEmptyRpcEndpoints): NonEmptyRpcEndpoints => {

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
 import { ChainNotCompatibleError } from "../chains/errors.js";
-import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import {
   createWalletAccounts,
   createWalletApprovals,
@@ -31,19 +31,17 @@ import {
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
-type TestChain = ChainMetadata & {
+type TestChain = ChainDefinition & {
   defaultRpcEndpoints: readonly RpcEndpoint[];
 };
 
 const toChainDefinitionSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: deriveChainDefinitionFromMetadata(chain),
+  definition: cloneChainDefinition(chain),
   defaultRpcEndpoints: [...chain.defaultRpcEndpoints],
 });
 
 const MAINNET_CHAIN: TestChain = {
   chainRef: "eip155:1",
-  namespace: "eip155",
-  chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.mainnet", type: "public" }],
@@ -51,8 +49,6 @@ const MAINNET_CHAIN: TestChain = {
 
 const ALT_CHAIN: TestChain = {
   chainRef: "eip155:10",
-  namespace: "eip155",
-  chainId: "0xa",
   displayName: "Alt Chain",
   nativeCurrency: { name: "Alter", symbol: "ALT", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
@@ -60,14 +56,13 @@ const ALT_CHAIN: TestChain = {
 
 const BASE_CHAIN: TestChain = {
   chainRef: "eip155:8453",
-  namespace: "eip155",
-  chainId: "0x2105",
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   defaultRpcEndpoints: [{ url: "https://rpc.base", type: "public" }],
 };
 
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
+const EIP155_NAMESPACE = "eip155";
 const DEFAULT_RPC_ACCESS_POLICY = {
   isInternalOrigin: () => false,
   shouldRequestUnlockAttention: () => false,
@@ -99,7 +94,7 @@ const createTestRuntime = (params?: {
   rpcAccessPolicy?: Parameters<typeof createBackgroundRuntime>[0]["rpcAccessPolicy"];
   settingsPort?: MemorySettingsPort;
   storePorts?: Partial<Parameters<typeof createBackgroundRuntime>[0]["store"]["ports"]>;
-  supportedChains?: Parameters<typeof createBackgroundRuntime>[0]["supportedChains"];
+  chainDefinitions?: Parameters<typeof createBackgroundRuntime>[0]["chainDefinitions"];
   storage?: Parameters<typeof createBackgroundRuntime>[0]["storage"];
   session?: Parameters<typeof createBackgroundRuntime>[0]["session"];
   transactions?: Parameters<typeof createBackgroundRuntime>[0]["transactions"];
@@ -110,8 +105,8 @@ const createTestRuntime = (params?: {
 }) => {
   const chainDefinitionsPort = params?.chainDefinitionsPort ?? new MemoryChainDefinitionsPort();
   return createBackgroundRuntime({
-    supportedChains: {
-      ...(params?.supportedChains ?? {}),
+    chainDefinitions: {
+      ...(params?.chainDefinitions ?? {}),
       ...(params?.chainSeed ? { seed: params.chainSeed.map(toChainDefinitionSeed) } : {}),
     },
     namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
@@ -160,7 +155,7 @@ const createActiveAccount = async (
 ) => {
   const { address } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
   await runtime.services.accounts.setActiveAccount({
-    namespace: MAINNET_CHAIN.namespace,
+    namespace: EIP155_NAMESPACE,
     chainRef,
     accountId: accountIdFromChainAddress({
       chainRef,
@@ -190,7 +185,7 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
   });
   const walletNetworks = createWalletNetworks({
     walletChainSelection: runtime.services.walletChainSelection,
-    supportedChains: runtime.services.supportedChains,
+    chainDefinitions: runtime.services.chainDefinitions,
     chainRpcEndpointOverrides: runtime.services.chainRpcEndpointOverrides,
     chainViews: runtime.services.chainViews,
     chainActivation: runtime.services.chainActivation,
@@ -223,9 +218,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chainSeed: [BASE_CHAIN],
     });
 
-    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
+    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
     expect(runtime.services.walletChainSelection.getChainRefByNamespace()).toEqual({
-      [BASE_CHAIN.namespace]: BASE_CHAIN.chainRef,
+      [EIP155_NAMESPACE]: BASE_CHAIN.chainRef,
     });
 
     await runtime.lifecycle.initialize();
@@ -241,7 +236,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
       id: "wallet-chain-selection",
-      selectedNamespace: ALT_CHAIN.namespace,
+      selectedNamespace: EIP155_NAMESPACE,
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: now(),
     });
@@ -264,7 +259,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const chainRpcState = runtime.services.chainRpc.getState();
-    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
+    expect(runtime.services.walletChainSelection.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(chainRpcState.accesses.map((access) => access.chainRef)).toEqual([
       MAINNET_CHAIN.chainRef,
@@ -279,7 +274,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const providerChainSelectionPort = new MemoryProviderChainSelectionPort([
       {
         origin: "https://dapp.example",
-        namespace: MAINNET_CHAIN.namespace,
+        namespace: EIP155_NAMESPACE,
         chainRef: MAINNET_CHAIN.chainRef,
         updatedAt: 1,
       },
@@ -300,7 +295,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(
       runtime.services.providerChainSelection.getSelectedChainRef({
         origin: "https://dapp.example",
-        namespace: MAINNET_CHAIN.namespace,
+        namespace: EIP155_NAMESPACE,
       }),
     ).toBeNull();
 
@@ -352,7 +347,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const walletChainSelectionPort = new MemoryWalletChainSelectionPort({
       id: "wallet-chain-selection",
-      selectedNamespace: MAINNET_CHAIN.namespace,
+      selectedNamespace: EIP155_NAMESPACE,
       chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 0,
     });
@@ -381,7 +376,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(walletChainSelectionPort.saved.length).toBeGreaterThan(0);
     await expect(walletChainSelectionPort.get()).resolves.toMatchObject({
-      selectedNamespace: ALT_CHAIN.namespace,
+      selectedNamespace: EIP155_NAMESPACE,
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
 
@@ -398,7 +393,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     await runtime.services.permissions.grantAuthorization("https://dapp.example", {
-      namespace: MAINNET_CHAIN.namespace,
+      namespace: EIP155_NAMESPACE,
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
@@ -433,7 +428,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     await runtime.services.permissions.grantAuthorization("https://dapp.example", {
-      namespace: MAINNET_CHAIN.namespace,
+      namespace: EIP155_NAMESPACE,
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
@@ -505,7 +500,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const wallet = createWalletApiForRuntime(runtime);
 
     const activeAccount = runtime.services.accounts.getActiveAccountForNamespace({
-      namespace: MAINNET_CHAIN.namespace,
+      namespace: EIP155_NAMESPACE,
       chainRef: MAINNET_CHAIN.chainRef,
     });
     if (!activeAccount) {

@@ -1,10 +1,8 @@
 import { z } from "zod";
 import * as Hex from "../../utils/hex.js";
-import type { ChainDefinitionSeed } from "../definition.js";
-import type { ChainMetadata, RpcEndpoint } from "../metadata.js";
-import { deriveChainMetadataFromDefinitionSeed } from "../metadata.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../definition.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
-import { eip155ChainIdHexFromChainRef, eip155ChainRefFromChainIdHex } from "./format.js";
+import { eip155ChainRefFromChainIdHex } from "./format.js";
 
 const trimmed = () =>
   z
@@ -62,13 +60,4 @@ export const createEip155DefinitionSeedFromEip3085 = (input: unknown): ChainDefi
     },
     defaultRpcEndpoints: rpcUrls.map((url) => ({ url, type: "public" as const })),
   };
-};
-
-export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata => {
-  const seed = createEip155DefinitionSeedFromEip3085(input);
-  return deriveChainMetadataFromDefinitionSeed({
-    seed,
-    namespace: "eip155",
-    chainId: eip155ChainIdHexFromChainRef(seed.definition.chainRef),
-  });
 };

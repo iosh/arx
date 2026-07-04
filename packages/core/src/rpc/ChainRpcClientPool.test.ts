@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RpcEndpoint } from "../chains/metadata.js";
+import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRpcClientPoolOptions } from "./ChainRpcClientPool.js";
 import { ChainRpcClientPool, type RpcClientFactory, type RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { createEip155RpcClientFactory, type Eip155RpcCapabilities } from "./namespaceClients/eip155.js";

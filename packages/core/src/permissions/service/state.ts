@@ -1,9 +1,9 @@
 import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
-import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
+import { CAIP2_NAMESPACE_PATTERN, parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountId, PermissionRecord } from "../../storage/records.js";
+import { type AccountId, AccountIdSchema, type PermissionRecord } from "../../storage/records.js";
 import type {
   AuthorizationChainInput,
   ChainPermissionState,
@@ -12,7 +12,7 @@ import type {
   PermissionsState,
 } from "./types.js";
 
-const sortStrings = <T extends string>(values: readonly T[]): T[] => {
+export const sortStrings = <T extends string>(values: readonly T[]): T[] => {
   return [...values].sort((left, right) => left.localeCompare(right));
 };
 
@@ -51,15 +51,21 @@ export const clonePermissionsState = (state: PermissionsState): PermissionsState
 });
 
 export const parsePermissionNamespace = (namespace: string): ChainNamespace => {
-  const normalized = namespace.trim();
-  if (!normalized) {
+  if (typeof namespace !== "string" || namespace.length === 0) {
     throw new RpcInvalidRequestError({
       message: "Permission namespace is required",
       details: { namespace },
     });
   }
 
-  return normalized as ChainNamespace;
+  if (namespace.trim() !== namespace || !CAIP2_NAMESPACE_PATTERN.test(namespace)) {
+    throw new RpcInvalidRequestError({
+      message: `Invalid permission namespace "${namespace}"`,
+      details: { namespace },
+    });
+  }
+
+  return namespace as ChainNamespace;
 };
 
 export const parsePermissionChainRefForNamespace = (namespace: ChainNamespace, chainRef: ChainRef): ChainRef => {
@@ -80,7 +86,16 @@ export const parsePermissionAccountIdsForNamespace = (
 ): AccountId[] => {
   return uniqSorted(
     accountIds.map((value) => {
-      const accountId = String(value) as AccountId;
+      const parsed = AccountIdSchema.safeParse(value);
+      if (!parsed.success) {
+        throw new RpcInvalidRequestError({
+          message: "Permission accountId is invalid",
+          details: { namespace },
+          cause: parsed.error,
+        });
+      }
+
+      const accountId = parsed.data;
       if (getAccountIdNamespace(accountId) !== namespace) {
         throw new RpcInvalidRequestError({
           message: `Permission account does not belong to namespace "${namespace}"`,

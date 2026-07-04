@@ -1,4 +1,4 @@
-import type { ChainNamespace, MultiNamespaceAccountsState, NamespaceAccountsState } from "./types.js";
+import type { MultiNamespaceAccountsState, NamespaceAccountsState } from "./types.js";
 
 export const cloneNamespaceAccountsState = (state: NamespaceAccountsState): NamespaceAccountsState => ({
   accountIds: [...state.accountIds] as NamespaceAccountsState["accountIds"],
@@ -6,12 +6,11 @@ export const cloneNamespaceAccountsState = (state: NamespaceAccountsState): Name
 });
 
 export const cloneMultiNamespaceAccountsState = (state: MultiNamespaceAccountsState): MultiNamespaceAccountsState => {
-  const namespaces = Object.fromEntries(
-    Object.entries(state.namespaces).map(([ns, value]) => [
-      ns,
-      cloneNamespaceAccountsState(value as NamespaceAccountsState),
-    ]),
-  ) as Record<ChainNamespace, NamespaceAccountsState>;
+  const namespaces: MultiNamespaceAccountsState["namespaces"] = {};
+  for (const [ns, value] of Object.entries(state.namespaces)) {
+    if (!value) continue;
+    namespaces[ns] = cloneNamespaceAccountsState(value);
+  }
   return { namespaces };
 };
 

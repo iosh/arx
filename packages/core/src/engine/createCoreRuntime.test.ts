@@ -28,7 +28,7 @@ const EIP155_NAMESPACE = "eip155";
 const EIP155_CHAIN_REF = "eip155:1" as const;
 const ACCOUNT_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 const PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
-const ACCOUNT_KEY = accountIdFromChainAddress({
+const ACCOUNT_ID = accountIdFromChainAddress({
   chainRef: EIP155_CHAIN_REF,
   address: ACCOUNT_ADDRESS,
   accountAddressing: TEST_ACCOUNT_CODECS,
@@ -102,7 +102,7 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
     origin: ORIGIN,
     source: "provider",
     requestId: "request-1",
-    accountId: ACCOUNT_KEY,
+    accountId: ACCOUNT_ID,
     status,
     request: {
       payload: {

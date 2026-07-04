@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
+import { getChainRefNamespace } from "../chains/caip.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import { type ChainMetadata, deriveChainDefinitionFromMetadata, type RpcEndpoint } from "../chains/metadata.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
@@ -19,8 +20,8 @@ import type {
 import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { CreateBackgroundRuntimeResult } from "./__fixtures__/backgroundTestSetup.js";
 import {
+  createChainDefinition,
   createChainDefinitionSeed,
-  createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -41,26 +42,23 @@ import type { ProviderConnectionStateChange } from "./provider/types.js";
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
 
-type TestChain = ChainMetadata & {
+type TestChain = ChainDefinition & {
   defaultRpcEndpoints: readonly RpcEndpoint[];
 };
 
 const toChainSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: deriveChainDefinitionFromMetadata(chain),
+  definition: cloneChainDefinition(chain),
   defaultRpcEndpoints: chain.defaultRpcEndpoints,
 });
 
 const SOLANA_CHAIN: TestChain = {
   chainRef: "solana:101",
-  namespace: "solana",
-  chainId: "101",
   displayName: "Solana",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
   defaultRpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
-const EIP155_ALT_CHAIN = createChainMetadata({
+const EIP155_ALT_CHAIN = createChainDefinition({
   chainRef: "eip155:10",
-  chainId: "0xa",
   displayName: "Optimism",
   shortName: "OP",
 });
@@ -76,7 +74,7 @@ const deriveActiveAccount = async (runtime: CreateBackgroundRuntimeResult) => {
   const account = await runtime.services.keyring.deriveAccount(keyringId);
 
   await runtime.services.accounts.setActiveAccount({
-    namespace: chain.namespace,
+    namespace: getChainRefNamespace(chain.chainRef),
     chainRef: chain.chainRef,
     accountId: accountIdFromChainAddress({
       chainRef: chain.chainRef,
@@ -92,13 +90,13 @@ const grantProviderPermission = async (
   runtime: CreateBackgroundRuntimeResult,
   input: { origin: string; chainRef: string; address: string },
 ) => {
-  const chain = runtime.services.supportedChains.getChain(input.chainRef as ChainRef);
+  const chain = runtime.services.chainDefinitions.getChain(input.chainRef as ChainRef);
   if (!chain) {
     throw new Error(`Missing chain definition for ${input.chainRef}`);
   }
 
   await runtime.services.permissions.grantAuthorization(input.origin, {
-    namespace: chain.namespace,
+    namespace: getChainRefNamespace(chain.chainRef),
     chains: [
       {
         chainRef: input.chainRef,
@@ -279,7 +277,7 @@ const solanaNamespaceManifest = (() => {
 const setupNamespaceAwareProviderRuntime = async () => {
   const chainDefinitionsPort = new MemoryChainDefinitionsPort();
   const runtime = createBackgroundRuntime({
-    supportedChains: {
+    chainDefinitions: {
       seed: [createChainDefinitionSeed(), toChainSeed(SOLANA_CHAIN)],
     },
     namespaces: {
@@ -313,7 +311,7 @@ const setupNamespaceAwareProviderRuntime = async () => {
 
 const setupProviderConnectionStateRuntime = async () => {
   const background = await setupBackground({
-    chainSeed: [createChainMetadata(), EIP155_ALT_CHAIN],
+    chainSeed: [createChainDefinition(), EIP155_ALT_CHAIN],
     walletChainSelectionSeed: {
       id: "wallet-chain-selection",
       selectedNamespace: "eip155",
@@ -407,7 +405,7 @@ describe("createBackgroundRuntime provider access", () => {
 
   it("initializes provider chain selection on connection activation, not provider request execution", async () => {
     const background = await setupBackground({
-      chainSeed: [createChainMetadata(), EIP155_ALT_CHAIN],
+      chainSeed: [createChainDefinition(), EIP155_ALT_CHAIN],
       walletChainSelectionSeed: {
         id: "wallet-chain-selection",
         selectedNamespace: "eip155",
@@ -486,7 +484,7 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         chains: [
           {
             chainRef: chain.chainRef,
@@ -502,7 +500,7 @@ describe("createBackgroundRuntime provider access", () => {
       });
 
       const unlockedState = await background.runtime.providerAccess.buildConnectionState({
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         origin: ORIGIN,
       });
       expect(unlockedState.snapshot.isUnlocked).toBe(true);
@@ -638,15 +636,15 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
       await background.runtime.providerAccess.activateConnectionScope({
         origin: ORIGIN,
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
       });
       const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot({
         origin: ORIGIN,
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
       });
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         chains: [
           {
             chainRef: chain.chainRef,
@@ -688,7 +686,7 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         chains: [
           {
             chainRef: chain.chainRef,
@@ -702,12 +700,12 @@ describe("createBackgroundRuntime provider access", () => {
           },
         ],
       });
-      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
+      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
 
       const response = await requestProviderRpc(background.runtime, {
         id: "rpc-1",
         method: "eth_accounts",
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
       });
 
       expect(response).toMatchObject({
@@ -738,7 +736,7 @@ describe("createBackgroundRuntime provider access", () => {
     try {
       await initializeUnlockedSession(background.runtime);
       const { chain } = await deriveActiveAccount(background.runtime);
-      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
+      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
 
       let approvalCreatedResolve: (() => void) | null = null;
       let capturedApprovalRequesterId: string | null = null;
@@ -753,7 +751,7 @@ describe("createBackgroundRuntime provider access", () => {
       const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-2",
         method: "eth_requestAccounts",
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
       });
 
       await approvalCreated;
@@ -795,7 +793,7 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         chains: [
           {
             chainRef: chain.chainRef,
@@ -809,7 +807,7 @@ describe("createBackgroundRuntime provider access", () => {
           },
         ],
       });
-      await activateProviderConnectionScope(background.runtime, { namespace: chain.namespace });
+      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
 
       let capturedApprovalId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
@@ -832,7 +830,7 @@ describe("createBackgroundRuntime provider access", () => {
       const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-3",
         method: "eth_sendTransaction",
-        namespace: chain.namespace,
+        namespace: getChainRefNamespace(chain.chainRef),
         params: [
           {
             from: address,
@@ -872,9 +870,8 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("exposes eth_sendTransaction approval detail and completes after ready approval", async () => {
-    const chain = createChainMetadata({
+    const chain = createChainDefinition({
       chainRef: "eip155:1",
-      chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
@@ -899,7 +896,7 @@ describe("createBackgroundRuntime provider access", () => {
     }));
     const namespaceTransactions = new NamespaceTransactions([
       [
-        chain.namespace,
+        getChainRefNamespace(chain.chainRef),
         createNamespaceTransactionMock({
           prepareTransaction,
           createBroadcastArtifact,
@@ -992,9 +989,8 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast", async () => {
-    const chain = createChainMetadata({
+    const chain = createChainDefinition({
       chainRef: "eip155:1",
-      chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
     let releaseBroadcast = () => {};
@@ -1015,7 +1011,7 @@ describe("createBackgroundRuntime provider access", () => {
     });
     const namespaceTransactions = new NamespaceTransactions([
       [
-        chain.namespace,
+        getChainRefNamespace(chain.chainRef),
         createNamespaceTransactionMock({
           prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
             status: "ready",
@@ -1093,9 +1089,8 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast artifact creation", async () => {
-    const chain = createChainMetadata({
+    const chain = createChainDefinition({
       chainRef: "eip155:1",
-      chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
     let releaseSign = () => {};
@@ -1120,7 +1115,7 @@ describe("createBackgroundRuntime provider access", () => {
     }));
     const namespaceTransactions = new NamespaceTransactions([
       [
-        chain.namespace,
+        getChainRefNamespace(chain.chainRef),
         createNamespaceTransactionMock({
           prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
             status: "ready",
@@ -1198,9 +1193,8 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("returns eth_sendTransaction failure when broadcast fails and does not create a success record", async () => {
-    const chain = createChainMetadata({
+    const chain = createChainDefinition({
       chainRef: "eip155:1",
-      chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
     const broadcastTransaction = vi.fn<NamespaceTransactionSubmission["broadcast"]>(async () => {
@@ -1208,7 +1202,7 @@ describe("createBackgroundRuntime provider access", () => {
     });
     const namespaceTransactions = new NamespaceTransactions([
       [
-        chain.namespace,
+        getChainRefNamespace(chain.chainRef),
         createNamespaceTransactionMock({
           prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
             status: "ready",

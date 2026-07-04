@@ -11,5 +11,8 @@ describe("accounts/addressing namespace account addressing", () => {
 
     expect(Object.keys(accountAddressing)).toEqual(["eip155"]);
     expect(accountAddressingForNamespace(accountAddressing, "eip155")).toBe(eip155AccountAddressing);
+    expect(() => accountAddressingForNamespace(accountAddressing, "solana")).toThrow(
+      /No account address handling is available/,
+    );
   });
 });

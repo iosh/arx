@@ -3,9 +3,9 @@ import {
   buildAccountAddressingByNamespace,
 } from "../accounts/addressing/addressing.js";
 import { buildChainAddressingByNamespace, type ChainAddressingByNamespace } from "../chains/addressing.js";
-import type { ChainDefinitionSeed } from "../chains/definition.js";
+import { parseChainRef } from "../chains/caip.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import { ChainNotCompatibleError } from "../chains/errors.js";
-import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { buildRpcRouting, type RpcRouting } from "../rpc/routing.js";
@@ -42,7 +42,6 @@ export type NamespaceRuntimeAssembly = Readonly<{
 }>;
 
 type MaterializedNamespaceRuntime = {
-  namespace: string;
   approvals: NamespaceApprovalBindings;
   ui: NamespaceUiBindings;
 };
@@ -139,6 +138,13 @@ const namespaceRuntimeFor = (
   });
 };
 
+const namespaceRuntimeForChainRef = (
+  runtimes: ReadonlyMap<string, MaterializedNamespaceRuntime>,
+  chainRef: string,
+): MaterializedNamespaceRuntime => {
+  return namespaceRuntimeFor(runtimes, parseChainRef(chainRef).namespace);
+};
+
 export const materializeNamespaceRuntime = (params: {
   manifests: readonly NamespaceManifest[];
   rpcClients: Pick<ChainRpcClientPool, "getClient">;
@@ -158,7 +164,6 @@ export const materializeNamespaceRuntime = (params: {
     const signer = signerByNamespace.get(manifest.namespace);
 
     namespaceRuntimeByNamespace.set(manifest.namespace, {
-      namespace: manifest.namespace,
       approvals: manifest.runtime.createApprovalBindings({ signer }),
       ui: manifest.runtime.createUiBindings({ rpcClients, chains }),
     });
@@ -175,13 +180,13 @@ export const materializeNamespaceRuntime = (params: {
     services: {
       approvals: {
         signMessage: (input) =>
-          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).approvals.signMessage(input),
+          namespaceRuntimeForChainRef(namespaceRuntimeByNamespace, input.chainRef).approvals.signMessage(input),
         signTypedData: (input) =>
-          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).approvals.signTypedData(input),
+          namespaceRuntimeForChainRef(namespaceRuntimeByNamespace, input.chainRef).approvals.signTypedData(input),
       },
       ui: {
         getNativeBalance: (input) =>
-          namespaceRuntimeFor(namespaceRuntimeByNamespace, input.namespace).ui.getNativeBalance(input),
+          namespaceRuntimeForChainRef(namespaceRuntimeByNamespace, input.chainRef).ui.getNativeBalance(input),
       },
     },
   };

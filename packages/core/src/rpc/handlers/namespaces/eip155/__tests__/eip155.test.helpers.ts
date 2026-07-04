@@ -5,9 +5,9 @@ import {
 } from "../../../../../accounts/addressing/accountId.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../approvals/index.js";
 import { parseChainRef } from "../../../../../chains/caip.js";
+import { type ChainDefinition, cloneChainDefinition } from "../../../../../chains/definition.js";
 import { eip155ChainIdHexFromChainRef } from "../../../../../chains/eip155/format.js";
 import type { ChainRef } from "../../../../../chains/ids.js";
-import { type ChainMetadata, deriveChainMetadataFromDefinitionSeed } from "../../../../../chains/metadata.js";
 import {
   FakeVault,
   MemoryAccountsPort,
@@ -27,13 +27,18 @@ import { RpcExecutionContextKinds } from "../../../../index.js";
 
 export const ORIGIN = "https://dapp.example";
 
-export const ALT_CHAIN = {
+export type Eip155TestChainDefinition = ChainDefinition & {
+  namespace: "eip155";
+  chainId: string;
+};
+
+export const ALT_CHAIN: Eip155TestChainDefinition = {
   chainRef: "eip155:10",
   namespace: "eip155",
   chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-};
+} satisfies Eip155TestChainDefinition;
 
 export const ADD_CHAIN_PARAMS = {
   chainId: "0x2105",
@@ -53,7 +58,7 @@ export const createChainDefinitionsPort = () => new MemoryChainDefinitionsPort()
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
   const {
-    supportedChains,
+    chainDefinitions,
     session,
     walletChainSelection,
     providerChainSelection,
@@ -73,8 +78,8 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     ...(store?.ports ?? {}),
   };
   const runtime = createBackgroundRuntime({
-    supportedChains: {
-      ...(supportedChains ?? {}),
+    chainDefinitions: {
+      ...(chainDefinitions ?? {}),
     },
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
@@ -119,24 +124,24 @@ type TestAccountSelectionService = TestRuntime["services"]["accounts"] & {
   __originalGetOwnedAccount?: TestRuntime["services"]["accounts"]["getOwnedAccount"];
 };
 
-export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
-  const entry = runtime.services.supportedChains.getChain(chainRef);
+export const getChainDefinition = (runtime: TestRuntime, chainRef: ChainRef): Eip155TestChainDefinition | null => {
+  const entry = runtime.services.chainDefinitions.getChain(chainRef);
   if (!entry) {
     return null;
   }
 
-  return deriveChainMetadataFromDefinitionSeed({
-    seed: { definition: entry.definition },
+  return {
+    ...cloneChainDefinition(entry.definition),
     namespace: entry.namespace,
     chainId: eip155ChainIdHexFromChainRef(chainRef),
-  });
+  } as Eip155TestChainDefinition;
 };
 
-export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
+export const getActiveChainDefinition = (runtime: TestRuntime): Eip155TestChainDefinition => {
   const chainRef = runtime.services.chainViews.getSelectedChainView().chainRef;
-  const chain = getChainMetadata(runtime, chainRef);
+  const chain = getChainDefinition(runtime, chainRef);
   if (!chain) {
-    throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
+    throw new Error(`Missing chain definition for selected chain ${chainRef}`);
   }
   return chain;
 };
@@ -272,9 +277,9 @@ export const waitForChainInNetwork = async (
   runtime: ReturnType<typeof createRuntime>,
   chainRef: ChainRef,
   timeoutMs = 5000,
-): Promise<ChainMetadata> => {
+): Promise<Eip155TestChainDefinition> => {
   const isAvailable = runtime.services.chainRpc.hasEndpoints(chainRef);
-  const existing = isAvailable ? getChainMetadata(runtime, chainRef) : null;
+  const existing = isAvailable ? getChainDefinition(runtime, chainRef) : null;
   if (existing) {
     return existing;
   }
@@ -296,7 +301,7 @@ export const waitForChainInNetwork = async (
 
     const tryResolve = () => {
       const nextIsAvailable = runtime.services.chainRpc.hasEndpoints(chainRef);
-      const chain = nextIsAvailable ? getChainMetadata(runtime, chainRef) : null;
+      const chain = nextIsAvailable ? getChainDefinition(runtime, chainRef) : null;
       if (chain) {
         cleanup();
         resolve(chain);

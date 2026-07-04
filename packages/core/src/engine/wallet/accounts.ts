@@ -25,7 +25,7 @@ const deriveBackupStatus = (keyrings: Pick<KeyringService, "getKeyrings">): Wall
 const deriveWalletSetupState = (accounts: Pick<AccountSelectionService, "getState">): WalletSetupState => {
   const state = accounts.getState();
   const totalAccountCount = Object.values(state.namespaces).reduce((sum, namespaceState) => {
-    return sum + namespaceState.accountIds.length;
+    return sum + (namespaceState?.accountIds.length ?? 0);
   }, 0);
 
   return {

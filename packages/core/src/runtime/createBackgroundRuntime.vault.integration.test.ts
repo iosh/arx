@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VaultMetaSnapshot } from "../storage/index.js";
 import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
 import {
-  createChainMetadata,
+  createChainDefinition,
   FakeVault,
   MemoryAccountsPort,
   MemoryKeyringMetasPort,
@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe("createBackgroundRuntime (vault integration)", () => {
   it("imports a vault without reviving an unlocked session", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const sourceVault = new FakeVault(clock);
     const envelope = await sourceVault.initialize({ password: "secret", secret: encodePayload({ keyrings: [] }) });
@@ -69,7 +69,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("rejects createVault while the session is unlocked", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -99,7 +99,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("rejects importVault while the session is unlocked", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const sourceVault = new FakeVault(clock);
     const envelope = await sourceVault.initialize({ password: "secret", secret: encodePayload({ keyrings: [] }) });
@@ -132,7 +132,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("persists imported vault metadata before importVault resolves", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     let currentTime = TEST_INITIAL_TIME;
     const clock = () => currentTime;
     const sourceVault = new FakeVault(clock);
@@ -159,7 +159,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("persists vault metadata for recovery workflows", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     let currentTime = TEST_INITIAL_TIME;
     const clock = () => currentTime;
     const vaultFactory = () => new FakeVault(clock);
@@ -218,7 +218,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("fails boot without deleting projections when persisted vault metadata is invalid", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
 
     const first = await setupBackground({
@@ -280,7 +280,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("fails closed without deleting projections when persisted keyrings exist but vault secret bytes are empty", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -309,7 +309,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("reseeds an empty keyring payload when vault secret bytes are empty and no projections exist", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -333,7 +333,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("clears stale projections after a valid empty keyring payload hydrates", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -361,7 +361,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("fails closed when unlock hydration cannot materialize a persisted keyring", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -398,7 +398,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("fails closed when a persisted private-key account no longer matches its secret", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -435,7 +435,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("locks the session and clears runtime keyrings during destroy", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],
@@ -460,7 +460,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
   });
 
   it("rejects key material export and signing while locked", async () => {
-    const chain = createChainMetadata();
+    const chain = createChainDefinition();
     const clock = () => TEST_INITIAL_TIME;
     const context = await setupBackground({
       chainSeed: [chain],

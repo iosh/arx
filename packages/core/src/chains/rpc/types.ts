@@ -1,5 +1,5 @@
+import type { RpcEndpoint } from "../definition.js";
 import type { ChainRef } from "../ids.js";
-import type { RpcEndpoint } from "../metadata.js";
 
 export type NonEmptyRpcEndpoints = [RpcEndpoint, ...RpcEndpoint[]];
 

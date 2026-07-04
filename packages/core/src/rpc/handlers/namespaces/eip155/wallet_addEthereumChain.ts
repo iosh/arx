@@ -54,7 +54,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
 
-    const existing = deps.supportedChains.getChain(definition.chainRef);
+    const existing = deps.chainDefinitions.getChain(definition.chainRef);
     if (existing && existing.namespace !== "eip155") {
       throw new ChainNotCompatibleError({
         message: "Requested chain conflicts with an existing non-EVM chain",

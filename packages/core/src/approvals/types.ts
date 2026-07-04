@@ -6,7 +6,7 @@ import type {
   ApprovalResult,
   ApprovalTerminalReason,
 } from "../approvals/queue/types.js";
-import type { SupportedChainsService } from "../chains/runtime/supportedChains/types.js";
+import type { ChainDefinitionsService } from "../chains/runtime/chainDefinitions/types.js";
 import type { NamespaceRuntimeServices } from "../namespaces/index.js";
 import type { PermissionsWriter } from "../permissions/service/types.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
@@ -16,7 +16,7 @@ export type ApprovalFlowDeps = {
   accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain" | "selectProviderChain">;
-  supportedChains: Pick<SupportedChainsService, "getChain" | "addChain">;
+  chainDefinitions: Pick<ChainDefinitionsService, "getChain" | "upsertCustomChain">;
   chainRpcDefaultEndpoints: Pick<ChainRpcDefaultEndpointsService, "setDefaultEndpoints">;
   namespaceRuntime: NamespaceRuntimeServices;
 };

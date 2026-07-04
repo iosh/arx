@@ -48,7 +48,6 @@ import {
   createWalletAttention,
   createWalletDappConnections,
   createWalletNetworks,
-  createWalletPermissions,
   createWalletProvider,
   createWalletSession,
 } from "./wallet.js";
@@ -159,7 +158,7 @@ const createWalletApiContext = (
     }),
     networks: createWalletNetworks({
       walletChainSelection: runtime.services.walletChainSelection,
-      supportedChains: runtime.services.supportedChains,
+      chainDefinitions: runtime.services.chainDefinitions,
       chainRpcEndpointOverrides: runtime.services.chainRpcEndpointOverrides,
       chainViews: runtime.services.chainViews,
       chainActivation: runtime.services.chainActivation,
@@ -237,7 +236,7 @@ const createWalletInvalidationSource = (runtime: ArxWalletRuntimeCore) => {
         runtime.services.walletChainSelection.subscribeChanged(() => {
           emit("networks", "accounts", "balances");
         }),
-        runtime.services.supportedChains.onChainUpdated(() => emit("networks", "balances")),
+        runtime.services.chainDefinitions.onChainUpdated(() => emit("networks", "balances")),
         runtime.services.chainRpc.onEndpointsChanged(() => emit("networks", "balances")),
         runtime.services.chainRpcDefaultEndpoints.subscribeChanged(() => emit("networks", "balances")),
         runtime.services.chainRpcEndpointOverrides.subscribeChanged(() => emit("networks", "balances")),
@@ -292,8 +291,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(storageOptions ? { storageOptions } : {}),
     ...(assemblyOptions?.approvals ? { approvalOptions: assemblyOptions.approvals } : {}),
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
-    supportedChainsOptions: {
-      ...(assemblyOptions?.supportedChains ?? {}),
+    chainDefinitionsOptions: {
+      ...(assemblyOptions?.chainDefinitions ?? {}),
       port: input.storage.ports.chains.chainDefinitions,
     },
   });
@@ -328,7 +327,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
             accounts: stateServices.accounts,
             permissions: stateServices.permissions,
             chainActivation: activeSessionScope.chainActivation,
-            supportedChains: stateServices.supportedChains,
+            chainDefinitions: stateServices.chainDefinitions,
             chainRpcDefaultEndpoints: activeSessionScope.chainRpcDefaultEndpoints,
             namespaceRuntime: activeBackgroundSupportScope.namespaceRuntime,
           };
@@ -493,12 +492,10 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainViews: sessionScope.chainViews,
     transactionApprovals: transactionServices.transactions,
   });
-  const permissions = createWalletPermissions({
-    permissions: stateServices.permissions,
-  });
+  const permissions = stateServices.permissions;
   const networks = createWalletNetworks({
     walletChainSelection: sessionScope.walletChainSelection,
-    supportedChains: stateServices.supportedChains,
+    chainDefinitions: stateServices.chainDefinitions,
     chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
     chainViews: sessionScope.chainViews,
     chainActivation: sessionScope.chainActivation,

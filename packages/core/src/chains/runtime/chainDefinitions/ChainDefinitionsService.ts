@@ -2,9 +2,9 @@ import type { Messenger } from "../../../messenger/index.js";
 import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { getChainRefNamespace } from "../../caip.js";
+import { type ChainDefinition, isSameChainDefinition } from "../../definition.js";
 import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
-import { type ChainDefinition, isSameChainDefinition } from "../../metadata.js";
 import {
   cloneChainDefinitionEntity,
   cloneChainDefinitionsState,
@@ -20,7 +20,7 @@ import type {
   ChainDefinitionsUpsertCustomResult,
 } from "./types.js";
 
-type SupportedChainsServiceOptions = {
+type ChainDefinitionsServiceOptions = {
   messenger: Messenger;
   port: ChainDefinitionsPort;
   now?: () => number;
@@ -49,7 +49,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
     logger = () => {},
     seed = [],
     schemaVersion,
-  }: SupportedChainsServiceOptions) {
+  }: ChainDefinitionsServiceOptions) {
     this.#messenger = messenger;
     this.#port = port;
     this.#now = now;

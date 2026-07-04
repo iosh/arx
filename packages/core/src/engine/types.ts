@@ -12,16 +12,14 @@ import type {
   ApprovalResolveResult,
   ApprovalState,
 } from "../approvals/queue/types.js";
-import type { ChainDefinition } from "../chains/definition.js";
+import type { ChainDefinition, RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { RpcEndpoint } from "../chains/metadata.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
 import type {
-  AddSupportedChainOptions,
-  AddSupportedChainResult,
-  SupportedChainEntity,
-  SupportedChainsUpdate,
-} from "../chains/runtime/supportedChains/types.js";
+  ChainDefinitionsUpdate,
+  ChainDefinitionsUpsertCustomOptions,
+  ChainDefinitionsUpsertCustomResult,
+} from "../chains/runtime/chainDefinitions/types.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type {
   PermissionAuthorization,
@@ -68,7 +66,13 @@ import type { ProviderChainSelectionPort } from "../services/store/providerChain
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
 import type { WalletChainSelectionChangedHandler } from "../services/store/walletChainSelection/types.js";
-import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
+import type {
+  AccountRecord,
+  ChainDefinitionEntity,
+  KeyringMetaRecord,
+  VaultMetaPort,
+  VaultMetaSnapshot,
+} from "../storage/index.js";
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
@@ -229,8 +233,8 @@ export type WalletNetworks = Readonly<{
   getSelectedNamespace(): string;
   getChainRefByNamespace(): Record<string, ChainRef>;
   getSelectedChainRef(namespace: string): ChainRef | null;
-  getChain(chainRef: ChainRef): SupportedChainEntity | null;
-  listChains(): SupportedChainEntity[];
+  getChain(chainRef: ChainRef): ChainDefinitionEntity | null;
+  listChains(): ChainDefinitionEntity[];
   getSelectedChainView(): ChainView;
   findAvailableChainView(params: { chainRef?: ChainRef; namespace?: string }): ChainView | null;
   getActiveChainViewForNamespace(namespace: string): ChainView;
@@ -239,8 +243,11 @@ export type WalletNetworks = Readonly<{
   buildWalletNetworksSnapshot(): NetworksSnapshot;
   getChainRpcState(): ChainRpcState;
   getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
-  addChain(chain: ChainDefinition, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
-  removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
+  addChain(
+    chain: ChainDefinition,
+    options?: ChainDefinitionsUpsertCustomOptions,
+  ): Promise<ChainDefinitionsUpsertCustomResult>;
+  removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }>;
   setChainRpcEndpointOverride(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;
   clearChainRpcEndpointOverride(chainRef: ChainRef): Promise<void>;
   selectChain(chainRef: ChainRef): Promise<void>;
@@ -248,7 +255,7 @@ export type WalletNetworks = Readonly<{
   activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
   onStateChanged(listener: (state: ChainRpcState) => void): () => void;
   onSelectionChanged(listener: WalletChainSelectionChangedHandler): () => void;
-  onChainUpdated(listener: (update: SupportedChainsUpdate) => void): () => void;
+  onChainUpdated(listener: (update: ChainDefinitionsUpdate) => void): () => void;
   onChainRpcEndpointOverridesChanged(listener: ChainRpcEndpointOverridesChangedHandler): () => void;
 }>;
 

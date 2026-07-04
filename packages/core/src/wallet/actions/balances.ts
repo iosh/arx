@@ -27,7 +27,6 @@ export const getNativeBalance = async (context: WalletApiContext, input: WalletA
   }
 
   const amount = await context.namespaceRuntime.ui.getNativeBalance({
-    namespace,
     chainRef: input.chainRef,
     address: account.canonicalAddress,
   });

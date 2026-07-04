@@ -1,5 +1,5 @@
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
-import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
+import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
@@ -9,13 +9,13 @@ import type { WalletNetworks } from "../types.js";
 // Selected namespace, supported chains, and chain RPC controls.
 export const createWalletNetworks = (deps: {
   walletChainSelection: WalletChainSelectionService;
-  supportedChains: SupportedChainsService;
+  chainDefinitions: ChainDefinitionsService;
   chainRpcEndpointOverrides: ChainRpcEndpointOverridesService;
   chainViews: ChainViewsService;
   chainActivation: ChainActivationService;
   chainRpc: ChainRpcReader;
 }): WalletNetworks => {
-  const { walletChainSelection, supportedChains, chainRpcEndpointOverrides, chainViews, chainActivation, chainRpc } =
+  const { walletChainSelection, chainDefinitions, chainRpcEndpointOverrides, chainViews, chainActivation, chainRpc } =
     deps;
 
   return {
@@ -24,8 +24,8 @@ export const createWalletNetworks = (deps: {
     getSelectedNamespace: () => chainViews.getSelectedNamespace(),
     getChainRefByNamespace: () => walletChainSelection.getChainRefByNamespace(),
     getSelectedChainRef: (namespace) => walletChainSelection.getSelectedChainRef(namespace),
-    getChain: (chainRef) => supportedChains.getChain(chainRef),
-    listChains: () => supportedChains.listChains(),
+    getChain: (chainRef) => chainDefinitions.getChain(chainRef),
+    listChains: () => chainDefinitions.getChains(),
     getSelectedChainView: () => chainViews.getSelectedChainView(),
     findAvailableChainView: (params) => chainViews.findAvailableChainView(params),
     getActiveChainViewForNamespace: (namespace) => chainViews.getActiveChainViewForNamespace(namespace),
@@ -34,8 +34,8 @@ export const createWalletNetworks = (deps: {
     buildWalletNetworksSnapshot: () => chainViews.buildWalletNetworksSnapshot(),
     getChainRpcState: () => chainRpc.getState(),
     getRpcEndpoints: (chainRef) => chainRpc.getEndpoints(chainRef),
-    addChain: (chain, options) => supportedChains.addChain(chain, options),
-    removeChain: (chainRef) => supportedChains.removeChain(chainRef),
+    addChain: (chain, options) => chainDefinitions.upsertCustomChain(chain, options),
+    removeChain: (chainRef) => chainDefinitions.removeCustomChain(chainRef),
     setChainRpcEndpointOverride: async (chainRef, rpcEndpoints) => {
       await chainRpcEndpointOverrides.setEndpointOverride(chainRef, rpcEndpoints);
     },
@@ -47,7 +47,7 @@ export const createWalletNetworks = (deps: {
     activateNamespaceChain: (params) => chainActivation.activateNamespaceChain(params),
     onStateChanged: (listener) => chainRpc.onStateChanged(listener),
     onSelectionChanged: (listener) => walletChainSelection.subscribeChanged(listener),
-    onChainUpdated: (listener) => supportedChains.onChainUpdated(listener),
+    onChainUpdated: (listener) => chainDefinitions.onChainUpdated(listener),
     onChainRpcEndpointOverridesChanged: (listener) => chainRpcEndpointOverrides.subscribeChanged(listener),
   };
 };

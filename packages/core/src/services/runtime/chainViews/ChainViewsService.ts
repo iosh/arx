@@ -1,26 +1,14 @@
-import {
-  type ApprovalChainContextRecord,
-  type ApprovalChainContextRequest,
-  deriveApprovalReviewContext,
-} from "../../../approvals/chainContext.js";
 import { getChainRefNamespace } from "../../../chains/caip.js";
-import type { ChainDefinition } from "../../../chains/definition.js";
+import { type ChainDefinition, cloneChainDefinition } from "../../../chains/definition.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
-import { cloneChainDefinition } from "../../../chains/metadata.js";
 import type { ChainRpcReader } from "../../../chains/rpc/types.js";
-import type { SupportedChainsService } from "../../../chains/runtime/supportedChains/types.js";
+import type { ChainDefinitionsService } from "../../../chains/runtime/chainDefinitions/types.js";
 import type { WalletChainSelectionService } from "../../store/walletChainSelection/types.js";
-import type {
-  ApprovalReviewChainViewParams,
-  ChainView,
-  ChainViewsService,
-  FindAvailableChainViewParams,
-  NetworksSnapshot,
-} from "./types.js";
+import type { ChainView, ChainViewsService, FindAvailableChainViewParams, NetworksSnapshot } from "./types.js";
 
 type CreateChainViewsServiceOptions = {
-  supportedChains: SupportedChainsService;
+  chainDefinitions: ChainDefinitionsService;
   chainRpc: ChainRpcReader;
   selection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 };
@@ -41,12 +29,12 @@ const toChainView = (definition: ChainDefinition): ChainView => ({
 const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
 
 class DefaultChainViewsService implements ChainViewsService {
-  readonly #supportedChains: SupportedChainsService;
+  readonly #chainDefinitions: ChainDefinitionsService;
   readonly #chainRpc: ChainRpcReader;
   readonly #selection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 
   constructor(options: CreateChainViewsServiceOptions) {
-    this.#supportedChains = options.supportedChains;
+    this.#chainDefinitions = options.chainDefinitions;
     this.#chainRpc = options.chainRpc;
     this.#selection = options.selection;
   }
@@ -63,17 +51,12 @@ class DefaultChainViewsService implements ChainViewsService {
     return toChainView(this.requireAvailableChainDefinition(this.#resolveActiveChainRefForNamespace(namespace)));
   }
 
-  getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView {
-    const context = this.#deriveApprovalReviewContext(params.record, params.request);
-    return toChainView(this.requireChainDefinition(context.reviewChainRef));
-  }
-
   requireChainDefinition(chainRef: ChainRef): ChainDefinition {
     return this.#getRequiredChainDefinition(chainRef);
   }
 
   requireAvailableChainDefinition(chainRef: ChainRef): ChainDefinition {
-    const entry = this.#supportedChains.getChain(chainRef);
+    const entry = this.#chainDefinitions.getChain(chainRef);
     if (!entry) {
       throw new ChainNotFoundError();
     }
@@ -106,7 +89,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   listKnownChainViews(): ChainView[] {
-    const views = this.#supportedChains.getState().chains.map((entry) => toChainView(entry.definition));
+    const views = this.#chainDefinitions.getState().chains.map((entry) => toChainView(entry.definition));
     return sortChainViews(views);
   }
 
@@ -129,10 +112,6 @@ class DefaultChainViewsService implements ChainViewsService {
 
   #listAvailableDefinitions(): ChainDefinition[] {
     return this.#chainRpc.listChainRefs().map((chainRef) => this.requireAvailableChainDefinition(chainRef));
-  }
-
-  #deriveApprovalReviewContext(record: ApprovalChainContextRecord, request?: ApprovalChainContextRequest) {
-    return deriveApprovalReviewContext(record, request ? { request } : undefined);
   }
 
   #resolveActiveChainRefForNamespace(namespace: string, availableChainRefs = this.#chainRpc.listChainRefs()): ChainRef {
@@ -188,7 +167,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   #getRequiredChainDefinition(chainRef: ChainRef): ChainDefinition {
-    const definition = this.#supportedChains.getChain(chainRef)?.definition;
+    const definition = this.#chainDefinitions.getChain(chainRef)?.definition;
     if (!definition) {
       throw new ChainNotFoundError();
     }

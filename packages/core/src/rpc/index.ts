@@ -48,7 +48,6 @@ export {
 export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
 export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
 export type { RpcNamespaceModule } from "./namespaces/types.js";
-export * from "./permissions.js";
 export type { RequestContext } from "./requestContext.js";
 export type { RpcRequestKind } from "./requestKind.js";
 export { RpcRequestKinds } from "./requestKind.js";

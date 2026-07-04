@@ -4,14 +4,11 @@ import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import { InMemoryApprovalQueueService } from "../../approvals/queue/InMemoryApprovalQueueService.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
-import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import type { RpcEndpoint } from "../../chains/metadata.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
 import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
-import { InMemorySupportedChainsService } from "../../chains/runtime/supportedChains/SupportedChainsService.js";
-import type { SupportedChainsService } from "../../chains/runtime/supportedChains/types.js";
 import type { Messenger } from "../../messenger/index.js";
 import { PermissionsService } from "../../permissions/service/PermissionsService.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
@@ -26,7 +23,7 @@ export type BackgroundStateServiceOptions = {
     ttlMs?: number;
     logger?: (message: string, error?: unknown) => void;
   };
-  supportedChains: {
+  chainDefinitions: {
     port: ChainDefinitionsPort;
     seed?: ChainDefinitionSeed<RpcEndpoint>[];
     now?: () => number;
@@ -40,14 +37,12 @@ export type BackgroundStateServices = {
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   chainDefinitions: ChainDefinitionsService;
-  supportedChains: SupportedChainsService;
 };
 
 export type BackgroundStateServicesInitResult = {
   stateServices: BackgroundStateServices;
   chainRpcAccessUpdater: ChainRpcAccessUpdater;
   chainDefinitionsService: ChainDefinitionsService;
-  supportedChainsService: SupportedChainsService;
   permissionsService: PermissionsService;
   permissionsReady: Promise<void>;
   setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
@@ -68,9 +63,9 @@ export const initBackgroundStateServices = ({
   permissionsPort: PermissionsPort;
   options: BackgroundStateServiceOptions;
 }): BackgroundStateServicesInitResult => {
-  const { approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
+  const { approvals: approvalOptions, chainDefinitions: chainDefinitionsOptions } = options;
 
-  const supportedChainSeed = (supportedChainsOptions.seed ?? []).map((seed) => seed.definition);
+  const chainDefinitionSeed = (chainDefinitionsOptions.seed ?? []).map((seed) => seed.definition);
 
   const chainRpcService = new ChainRpcService({
     messenger,
@@ -104,29 +99,23 @@ export const initBackgroundStateServices = ({
 
   const chainDefinitionsService = new InMemoryChainDefinitionsService({
     messenger,
-    port: supportedChainsOptions.port,
-    seed: supportedChainSeed,
-    ...(supportedChainsOptions.now ? { now: supportedChainsOptions.now } : {}),
-    ...(supportedChainsOptions.logger ? { logger: supportedChainsOptions.logger } : {}),
+    port: chainDefinitionsOptions.port,
+    seed: chainDefinitionSeed,
+    ...(chainDefinitionsOptions.now ? { now: chainDefinitionsOptions.now } : {}),
+    ...(chainDefinitionsOptions.logger ? { logger: chainDefinitionsOptions.logger } : {}),
   });
-  const supportedChainsService = new InMemorySupportedChainsService({
-    chainDefinitions: chainDefinitionsService,
-  });
-
   const stateServices: BackgroundStateServices = {
     chainRpc: chainRpcService,
     accounts: accountSelectionService,
     approvals: approvalQueueService,
     permissions: permissionsService,
     chainDefinitions: chainDefinitionsService,
-    supportedChains: supportedChainsService,
   };
 
   return {
     stateServices,
     chainRpcAccessUpdater: chainRpcService,
     chainDefinitionsService,
-    supportedChainsService,
     permissionsService,
     permissionsReady,
     setApprovalExecutor(executor) {

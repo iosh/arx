@@ -1,8 +1,7 @@
 import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
 import type { ChainAddressingByNamespace } from "../chains/addressing.js";
-import type { ChainDefinitionSeed } from "../chains/definition.js";
+import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { RpcEndpoint } from "../chains/metadata.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
@@ -19,21 +18,18 @@ export type NamespaceCoreManifest = {
 };
 
 export type NamespaceSignMessageInput = {
-  namespace: string;
   chainRef: ChainRef;
   address: string;
   message: string;
 };
 
 export type NamespaceSignTypedDataInput = {
-  namespace: string;
   chainRef: ChainRef;
   address: string;
   typedData: string;
 };
 
 export type NamespaceNativeBalanceInput = {
-  namespace: string;
   chainRef: ChainRef;
   address: string;
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEip155DefinitionSeedFromEip3085, createEip155MetadataFromEip3085 } from "./eip3085.js";
+import { createEip155DefinitionSeedFromEip3085 } from "./eip3085.js";
 
 const baseRequest = {
   chainId: "0x2105",
@@ -27,17 +27,5 @@ describe("EIP-3085 chain import", () => {
     expect(seed.definition).not.toHaveProperty("chainId");
     expect(seed.definition).not.toHaveProperty("rpcEndpoints");
     expect(seed.defaultRpcEndpoints).toEqual([{ url: "https://mainnet.base.org", type: "public" }]);
-  });
-
-  it("keeps the legacy metadata projection separate from RPC endpoints", () => {
-    const metadata = createEip155MetadataFromEip3085(baseRequest);
-
-    expect(metadata).toMatchObject({
-      chainRef: "eip155:8453",
-      namespace: "eip155",
-      chainId: "0x2105",
-      displayName: "Base",
-    });
-    expect(metadata).not.toHaveProperty("rpcEndpoints");
   });
 });

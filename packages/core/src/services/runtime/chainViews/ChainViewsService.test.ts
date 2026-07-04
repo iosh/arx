@@ -1,67 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalKinds } from "../../../approvals/queue/types.js";
-import { type ChainMetadata, deriveChainDefinitionFromMetadata } from "../../../chains/metadata.js";
+import { getChainRefNamespace } from "../../../chains/caip.js";
+import { type ChainDefinition, cloneChainDefinition } from "../../../chains/definition.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
-const MAINNET: ChainMetadata = {
+const MAINNET: ChainDefinition = {
   chainRef: "eip155:1",
-  namespace: "eip155",
-  chainId: "0x1",
   displayName: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
-const OPTIMISM: ChainMetadata = {
+const OPTIMISM: ChainDefinition = {
   chainRef: "eip155:10",
-  namespace: "eip155",
-  chainId: "0xa",
   displayName: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
-const BASE: ChainMetadata = {
+const BASE: ChainDefinition = {
   chainRef: "eip155:8453",
-  namespace: "eip155",
-  chainId: "0x2105",
   displayName: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
-const SOLANA: ChainMetadata = {
+const SOLANA: ChainDefinition = {
   chainRef: "solana:101",
-  namespace: "solana",
-  chainId: "101",
   displayName: "Solana Mainnet",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
 };
 
 const setup = (params?: {
-  known?: ChainMetadata[];
-  available?: ChainMetadata[];
+  known?: ChainDefinition[];
+  available?: ChainDefinition[];
   selectedNamespace?: string;
   activeByNamespace?: Record<string, string>;
 }) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
-  const selectedNamespace = params?.selectedNamespace ?? MAINNET.namespace;
+  const selectedNamespace = params?.selectedNamespace ?? getChainRefNamespace(MAINNET.chainRef);
 
   return createChainViewsService({
-    supportedChains: {
+    chainDefinitions: {
       getState: () => ({
-        chains: known.map((metadata) => ({
-          chainRef: metadata.chainRef,
-          namespace: metadata.namespace,
-          definition: deriveChainDefinitionFromMetadata(metadata),
+        chains: known.map((definition) => ({
+          chainRef: definition.chainRef,
+          namespace: getChainRefNamespace(definition.chainRef),
+          definition: cloneChainDefinition(definition),
           source: "builtin" as const,
         })),
       }),
       getChain: (chainRef: string) => {
-        const metadata = known.find((entry) => entry.chainRef === chainRef);
-        return metadata
+        const definition = known.find((entry) => entry.chainRef === chainRef);
+        return definition
           ? {
-              chainRef: metadata.chainRef,
-              namespace: metadata.namespace,
-              definition: deriveChainDefinitionFromMetadata(metadata),
+              chainRef: definition.chainRef,
+              namespace: getChainRefNamespace(definition.chainRef),
+              definition: cloneChainDefinition(definition),
               source: "builtin" as const,
             }
           : null;
@@ -82,11 +74,11 @@ describe("ChainViewsService", () => {
   it("builds known and mounted views separately", () => {
     const service = setup();
 
-    expect(service.getSelectedNamespace()).toBe(MAINNET.namespace);
+    expect(service.getSelectedNamespace()).toBe("eip155");
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
     expect(service.getSelectedChainView()).not.toHaveProperty("chainId");
     expect(service.buildWalletNetworksSnapshot()).toEqual({
-      selectedNamespace: MAINNET.namespace,
+      selectedNamespace: "eip155",
       active: MAINNET.chainRef,
       known: expect.arrayContaining([
         expect.objectContaining({ chainRef: MAINNET.chainRef }),
@@ -105,11 +97,11 @@ describe("ChainViewsService", () => {
   it("resolves active chain views from namespace-specific selection", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      selectedNamespace: SOLANA.namespace,
+      selectedNamespace: "solana",
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
-    expect(service.getSelectedNamespace()).toBe(SOLANA.namespace);
+    expect(service.getSelectedNamespace()).toBe("solana");
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
     expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
     expect(service.getActiveChainViewForNamespace("solana")).toMatchObject({ chainRef: SOLANA.chainRef });
@@ -118,7 +110,7 @@ describe("ChainViewsService", () => {
   it("resolves active chain views when selected namespace differs from the requested namespace", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      selectedNamespace: SOLANA.namespace,
+      selectedNamespace: "solana",
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
@@ -133,36 +125,5 @@ describe("ChainViewsService", () => {
     });
 
     expect(() => service.getSelectedChainView()).toThrow(/no available chain/i);
-  });
-
-  it("derives approval review chains without falling back to wallet selected chain", () => {
-    const service = setup({
-      available: [MAINNET, SOLANA],
-      selectedNamespace: SOLANA.namespace,
-      activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
-    });
-
-    expect(
-      service.getApprovalReviewChainView({
-        record: {
-          approvalId: "approval-1",
-          kind: ApprovalKinds.RequestAccounts,
-          namespace: "eip155",
-          chainRef: MAINNET.chainRef,
-        },
-      }),
-    ).toMatchObject({ chainRef: MAINNET.chainRef, namespace: MAINNET.namespace });
-
-    expect(() =>
-      service.getApprovalReviewChainView({
-        record: {
-          approvalId: "approval-2",
-          kind: ApprovalKinds.SignMessage,
-          namespace: "eip155",
-          chainRef: MAINNET.chainRef,
-        },
-        request: { chainRef: SOLANA.chainRef },
-      }),
-    ).toThrow(/mismatched namespace and chainref/i);
   });
 });

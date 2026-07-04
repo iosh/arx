@@ -21,16 +21,11 @@ const unique = <T>(values: readonly T[]): T[] => {
   return [...new Set(values)];
 };
 
-const sanitizeAccountAddresses = (values: readonly unknown[]): string[] => {
-  return values.filter((value): value is string => typeof value === "string" && value.length > 0).map((value) => value);
-};
-
 export const buildEip2255Permissions = ({
   origin,
   accountAddresses,
 }: BuildEip2255PermissionsOptions): Eip2255PermissionDescriptor[] => {
-  const addresses = sanitizeAccountAddresses(accountAddresses ?? []);
-  const uniqueAddresses = unique(addresses);
+  const uniqueAddresses = unique(accountAddresses ?? []);
   if (uniqueAddresses.length === 0) {
     return [];
   }

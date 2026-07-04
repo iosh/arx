@@ -1,4 +1,4 @@
-import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
+import { buildEip2255Permissions } from "../../../../permissions/eip2255.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedAllow } from "../../locked.js";
 import {
@@ -15,11 +15,13 @@ export const walletGetPermissionsDefinition = defineNoParamsMethod({
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedAllow(),
   handler: ({ origin, deps, invocation }) => {
-    return buildEip2255PermissionsFromAuthorizationSnapshot({
+    const snapshot = deps.permissionViews.getAuthorizationSnapshot(origin, {
+      chainRef: invocation.chainRef,
+    });
+
+    return buildEip2255Permissions({
       origin,
-      snapshot: deps.permissionViews.getAuthorizationSnapshot(origin, {
-        chainRef: invocation.chainRef,
-      }),
+      accountAddresses: snapshot.accounts.map((account) => account.canonicalAddress),
     });
   },
 });

@@ -1,18 +1,16 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { buildChainAddressingByNamespace } from "../../chains/addressing.js";
-import { parseChainRef } from "../../chains/caip.js";
-import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
-import type { ChainDefinitionSeed } from "../../chains/definition.js";
-import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
-import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
-import type { ChainRef } from "../../chains/ids.js";
+import { getChainRefNamespace } from "../../chains/caip.js";
+import { DEFAULT_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
 import {
-  type ChainMetadata,
-  deriveChainDefinitionFromMetadata,
-  deriveChainMetadataFromDefinitionSeed,
+  type ChainDefinition,
+  type ChainDefinitionSeed,
+  cloneChainDefinition,
   type RpcEndpoint,
-} from "../../chains/metadata.js";
+} from "../../chains/definition.js";
+import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
+import type { ChainRef } from "../../chains/ids.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
@@ -261,30 +259,20 @@ export class MemoryKeyringMetasPort implements KeyringMetasPort {
   }
 }
 
-const defaultBaseChainMetadata = DEFAULT_CHAIN_METADATA[0];
-if (!defaultBaseChainMetadata) {
-  throw new Error("Missing DEFAULT_CHAIN_METADATA seed");
+const defaultBaseChainDefinition = DEFAULT_CHAIN_DEFINITION_SEEDS[0]?.definition;
+if (!defaultBaseChainDefinition) {
+  throw new Error("Missing DEFAULT_CHAIN_DEFINITION_SEEDS seed");
 }
-export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
+export const baseChainDefinition = cloneChainDefinition(defaultBaseChainDefinition);
 
-const requireActiveChainMetadata = (runtime: CreateBackgroundRuntimeResult): ChainMetadata => {
+const requireActiveChainDefinition = (runtime: CreateBackgroundRuntimeResult): ChainDefinition => {
   const view = runtime.services.chainViews.getSelectedChainView();
   const chainRef = view.chainRef;
-  const entry = runtime.services.supportedChains.getChain(chainRef);
-  const chain = entry
-    ? deriveChainMetadataFromDefinitionSeed({
-        seed: {
-          definition: entry.definition,
-        },
-        namespace: entry.namespace,
-        chainId:
-          entry.namespace === "eip155" ? eip155ChainIdHexFromChainRef(chainRef) : parseChainRef(chainRef).reference,
-      })
-    : null;
+  const chain = runtime.services.chainDefinitions.getChain(chainRef)?.definition ?? null;
   if (!chain) {
-    throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
+    throw new Error(`Missing chain definition for selected chain ${chainRef}`);
   }
-  return chain;
+  return cloneChainDefinition(chain);
 };
 
 const DEFAULT_FLUSH_TURNS = 8;
@@ -296,34 +284,32 @@ export const flushAsync = async (turns = DEFAULT_FLUSH_TURNS) => {
 };
 
 /**
- * Produces minimal chain metadata for tests while allowing selective overrides.
+ * Produces minimal chain definitions for tests while allowing selective overrides.
  */
-export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): ChainMetadata => {
-  const metadata: ChainMetadata = {
-    chainRef: overrides.chainRef ?? baseChainMetadata.chainRef,
-    namespace: overrides.namespace ?? baseChainMetadata.namespace,
-    chainId: overrides.chainId ?? baseChainMetadata.chainId,
-    displayName: overrides.displayName ?? baseChainMetadata.displayName,
-    shortName: overrides.shortName ?? baseChainMetadata.shortName,
-    nativeCurrency: overrides.nativeCurrency ?? clone(baseChainMetadata.nativeCurrency),
+export const createChainDefinition = (overrides: Partial<ChainDefinition> = {}): ChainDefinition => {
+  const definition: ChainDefinition = {
+    chainRef: overrides.chainRef ?? baseChainDefinition.chainRef,
+    displayName: overrides.displayName ?? baseChainDefinition.displayName,
+    shortName: overrides.shortName ?? baseChainDefinition.shortName,
+    nativeCurrency: overrides.nativeCurrency ?? clone(baseChainDefinition.nativeCurrency),
   };
 
   if (overrides.blockExplorers) {
-    metadata.blockExplorers = clone(overrides.blockExplorers);
-  } else if (baseChainMetadata.blockExplorers) {
-    metadata.blockExplorers = clone(baseChainMetadata.blockExplorers);
+    definition.blockExplorers = clone(overrides.blockExplorers);
+  } else if (baseChainDefinition.blockExplorers) {
+    definition.blockExplorers = clone(baseChainDefinition.blockExplorers);
   }
 
   if (overrides.icon) {
-    metadata.icon = overrides.icon;
-  } else if (baseChainMetadata.icon) {
-    metadata.icon = baseChainMetadata.icon;
+    definition.icon = overrides.icon;
+  } else if (baseChainDefinition.icon) {
+    definition.icon = baseChainDefinition.icon;
   }
 
-  return metadata;
+  return definition;
 };
 
-type TestChainSeedInput = ChainDefinitionSeed<RpcEndpoint> | ChainMetadata;
+type TestChainSeedInput = ChainDefinitionSeed<RpcEndpoint> | ChainDefinition;
 
 const createDefaultRpcEndpointsForTest = (chainRef: ChainRef): RpcEndpoint[] => [
   {
@@ -333,14 +319,14 @@ const createDefaultRpcEndpointsForTest = (chainRef: ChainRef): RpcEndpoint[] => 
 ];
 
 export const createChainDefinitionSeed = (
-  overrides: Partial<ChainMetadata> & { defaultRpcEndpoints?: readonly RpcEndpoint[] } = {},
+  overrides: Partial<ChainDefinition> & { defaultRpcEndpoints?: readonly RpcEndpoint[] } = {},
 ): ChainDefinitionSeed<RpcEndpoint> => {
-  const metadata = createChainMetadata(overrides);
+  const definition = createChainDefinition(overrides);
   return {
-    definition: deriveChainDefinitionFromMetadata(metadata),
+    definition: cloneChainDefinition(definition),
     defaultRpcEndpoints: overrides.defaultRpcEndpoints
       ? clone(overrides.defaultRpcEndpoints)
-      : createDefaultRpcEndpointsForTest(metadata.chainRef),
+      : createDefaultRpcEndpointsForTest(definition.chainRef),
   };
 };
 
@@ -758,7 +744,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   };
 
   const runtime = createBackgroundRuntime({
-    supportedChains: {
+    chainDefinitions: {
       seed: chainSeed.map(toChainDefinitionSeed),
     },
     namespaces: {
@@ -897,8 +883,8 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const deriveMethodNamespace = runtime.rpc.resolveMethodNamespace;
 
   const buildRpcHint = (overrides?: Partial<RpcInvocationHint>): RpcInvocationHint => {
-    const chain = requireActiveChainMetadata(runtime);
-    const namespace = overrides?.namespace ?? chain.namespace;
+    const chain = requireActiveChainDefinition(runtime);
+    const namespace = overrides?.namespace ?? getChainRefNamespace(chain.chainRef);
     const chainRef = overrides?.chainRef ?? chain.chainRef;
 
     return {

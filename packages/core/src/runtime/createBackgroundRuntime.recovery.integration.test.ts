@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { getChainRefNamespace } from "../chains/caip.js";
 import type { TransactionAggregate } from "../transactions/aggregate/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction, NamespaceTransactionTracking } from "../transactions/namespace/types.js";
 import {
-  createChainMetadata,
+  createChainDefinition,
   flushAsync,
   MemoryTransactionAggregatesPort,
   setupBackground,
@@ -11,11 +12,11 @@ import {
 
 describe("createBackgroundRuntime (recovery integration)", () => {
   it("refreshes submitted transaction monitoring during initialization", async () => {
-    const chain = createChainMetadata({
+    const chain = createChainDefinition({
       chainRef: "eip155:1",
-      chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
+    const namespace = getChainRefNamespace(chain.chainRef);
 
     const inspectSubmittedTransaction = vi.fn<NonNullable<NamespaceTransactionTracking["inspectSubmittedTransaction"]>>(
       async () => ({
@@ -28,7 +29,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       broadcastIdentity: { hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
       submitted: {
         hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        chainId: "0x1",
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
@@ -51,7 +51,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const seed: TransactionAggregate = {
       record: {
         id: txId,
-        namespace: chain.namespace,
+        namespace,
         chainRef: chain.chainRef,
         origin: "https://dapp.example",
         source: "provider",
@@ -76,7 +76,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         activeSubmissionId: null,
         submitted: {
           hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          chainId: "0x1",
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           nonce: "0x7",
         },
@@ -106,7 +105,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const context = await setupBackground({
       chainSeed: [chain],
       transactionAggregatesPort,
-      transactions: { namespaces: new NamespaceTransactions([[chain.namespace, adapter]]) },
+      transactions: { namespaces: new NamespaceTransactions([[namespace, adapter]]) },
       persistDebounceMs: 0,
     });
 

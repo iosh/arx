@@ -12,5 +12,4 @@ export * from "./store/chainRpcEndpointOverrides/index.js";
 export * from "./store/keyringMetas/index.js";
 export * from "./store/permissions/index.js";
 export * from "./store/providerChainSelection/index.js";
-export * from "./store/settings/index.js";
 export * from "./store/walletChainSelection/index.js";

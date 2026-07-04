@@ -26,7 +26,6 @@ describe("DexieAccountsPort", () => {
 
     const record = {
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
       alias: "A",
@@ -43,14 +42,12 @@ describe("DexieAccountsPort", () => {
 
     const a = {
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
     } satisfies AccountRecord;
 
     const b = {
       accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
-      namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 2000,
       hidden: true,
@@ -72,19 +69,16 @@ describe("DexieAccountsPort", () => {
 
     const a1 = {
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      namespace: "eip155",
       keyringId: keyringA,
       createdAt: 1000,
     } satisfies AccountRecord;
     const a2 = {
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      namespace: "eip155",
       keyringId: keyringA,
       createdAt: 2000,
     } satisfies AccountRecord;
     const b1 = {
       accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
-      namespace: "eip155",
       keyringId: keyringB,
       createdAt: 3000,
     } satisfies AccountRecord;
@@ -99,5 +93,22 @@ describe("DexieAccountsPort", () => {
     await port.removeByKeyringId(keyringA);
     expect(await port.get(a2.accountId)).toBeNull();
     expect(await port.get(b1.accountId)).toEqual(b1);
+  });
+
+  it("stores account selection state", async () => {
+    const storage = createTestStorage();
+    const port = storage.ports.accounts;
+
+    await expect(port.getSelectionState()).resolves.toBeNull();
+
+    const record = {
+      id: "account-selection",
+      selectedAccountIdsByNamespace: {
+        eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    } as const;
+
+    await port.putSelectionState(record);
+    await expect(port.getSelectionState()).resolves.toEqual(record);
   });
 });

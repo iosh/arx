@@ -15,7 +15,6 @@ import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "..
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
-import type { SettingsService } from "../../services/store/settings/types.js";
 
 export type BackgroundStateServiceOptions = {
   approvals?: {
@@ -52,14 +51,12 @@ export const initBackgroundStateServices = ({
   messenger,
   accountAddressing,
   accountsService,
-  settingsService,
   permissionsPort,
   options,
 }: {
   messenger: Messenger;
   accountAddressing: AccountAddressingByNamespace;
   accountsService: AccountsService;
-  settingsService: SettingsService;
   permissionsPort: PermissionsPort;
   options: BackgroundStateServiceOptions;
 }): BackgroundStateServicesInitResult => {
@@ -75,7 +72,6 @@ export const initBackgroundStateServices = ({
   const accountSelectionService: AccountSelectionService = new StoreAccountSelectionService({
     messenger,
     accounts: accountsService,
-    settings: settingsService,
     accountAddressing,
   });
 

@@ -16,7 +16,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryWalletChainSelectionPort,
 } from "./__fixtures__/backgroundTestSetup.js";
@@ -137,7 +136,6 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
           keyringMetas: new MemoryKeyringMetasPort(),
         },
       },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
     expect(listRpcNamespaces(runtime.rpc.routing)).toEqual(["eip155", "solana"]);

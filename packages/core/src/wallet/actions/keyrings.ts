@@ -40,21 +40,24 @@ const buildKeyringMetaFromRecord = (record: KeyringMetaRecord): KeyringMeta => (
     : {}),
 });
 
-const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): AccountMeta => ({
-  accountId: record.accountId,
-  canonicalAddress: canonicalChainAddressFromAccountId({
-    accountAddressing: context.accountAddressing,
-    chainRef:
-      context.networks.getSelectedChainRef(record.namespace) ??
-      context.networks.getActiveChainViewForNamespace(record.namespace).chainRef,
+const buildAccountMetaFromRecord = (context: WalletApiContext, record: AccountRecord): AccountMeta => {
+  const namespace = getAccountIdNamespace(record.accountId);
+  return {
     accountId: record.accountId,
-  }),
-  keyringId: record.keyringId,
-  createdAt: record.createdAt,
-  ...(record.derivationIndex !== undefined ? { derivationIndex: record.derivationIndex } : {}),
-  ...(record.alias !== undefined ? { alias: record.alias } : {}),
-  ...(record.hidden !== undefined ? { hidden: record.hidden } : {}),
-});
+    canonicalAddress: canonicalChainAddressFromAccountId({
+      accountAddressing: context.accountAddressing,
+      chainRef:
+        context.networks.getSelectedChainRef(namespace) ??
+        context.networks.getActiveChainViewForNamespace(namespace).chainRef,
+      accountId: record.accountId,
+    }),
+    keyringId: record.keyringId,
+    createdAt: record.createdAt,
+    ...(record.derivationIndex !== undefined ? { derivationIndex: record.derivationIndex } : {}),
+    ...(record.alias !== undefined ? { alias: record.alias } : {}),
+    ...(record.hidden !== undefined ? { hidden: record.hidden } : {}),
+  };
+};
 
 export const listKeyrings = (context: WalletApiContext) =>
   context.accounts.getKeyrings().map(buildKeyringMetaFromRecord);

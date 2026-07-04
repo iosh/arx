@@ -635,7 +635,6 @@ export class KeyringService {
 
     return {
       accountId,
-      namespace: params.namespace,
       keyringId: params.keyringId,
       derivationIndex: params.derivationIndex,
       alias: params.alias,

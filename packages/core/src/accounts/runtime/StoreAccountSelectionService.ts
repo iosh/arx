@@ -5,12 +5,9 @@ import {
 } from "../../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { parseChainRef } from "../../chains/caip.js";
-import { KeyringAccountNotFoundError } from "../../keyring/errors.js";
 import type { Messenger } from "../../messenger/index.js";
-import { PermissionDeniedError } from "../../permissions/errors.js";
-import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
+import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
-import type { SettingsService } from "../../services/store/settings/types.js";
 import type { AccountId } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED } from "./topics.js";
@@ -26,35 +23,25 @@ import type {
 type Options = {
   messenger: Messenger;
   accounts: AccountsService;
-  settings: SettingsService;
   accountAddressing: AccountAddressingByNamespace;
-  logger?: (message: string, error?: unknown) => void;
 };
 
 export class StoreAccountSelectionService implements AccountSelectionService {
   #messenger: Messenger;
   #accounts: AccountsService;
-  #settings: SettingsService;
   #accountAddressing: AccountAddressingByNamespace;
-  #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: MultiNamespaceAccountsState = { namespaces: {} };
   #ready: Promise<void>;
   #refreshPromise: Promise<void> | null = null;
   #unsubscribeAccounts: (() => void) | null = null;
-  #unsubscribeSettings: (() => void) | null = null;
 
-  constructor({ messenger, accounts, settings, accountAddressing, logger }: Options) {
+  constructor({ messenger, accounts, accountAddressing }: Options) {
     this.#messenger = messenger;
     this.#accounts = accounts;
-    this.#settings = settings;
     this.#accountAddressing = accountAddressing;
-    this.#logger = logger;
 
     this.#unsubscribeAccounts = this.#accounts.subscribeChanged(() => {
-      void this.refresh();
-    });
-    this.#unsubscribeSettings = this.#settings.subscribeChanged(() => {
       void this.refresh();
     });
 
@@ -67,22 +54,9 @@ export class StoreAccountSelectionService implements AccountSelectionService {
 
   destroy() {
     if (this.#unsubscribeAccounts) {
-      try {
-        this.#unsubscribeAccounts();
-      } catch (error) {
-        this.#logger?.("accounts: failed to remove accounts store listener", error);
-      } finally {
-        this.#unsubscribeAccounts = null;
-      }
-    }
-    if (this.#unsubscribeSettings) {
-      try {
-        this.#unsubscribeSettings();
-      } catch (error) {
-        this.#logger?.("accounts: failed to remove settings listener", error);
-      } finally {
-        this.#unsubscribeSettings = null;
-      }
+      const unsubscribeAccounts = this.#unsubscribeAccounts;
+      this.#unsubscribeAccounts = null;
+      unsubscribeAccounts();
     }
   }
 
@@ -135,23 +109,7 @@ export class StoreAccountSelectionService implements AccountSelectionService {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const accountId = params.accountId ?? null;
 
-    if (accountId !== null) {
-      this.#assertAccountIdNamespace(accountId, namespace);
-
-      const record = await this.#accounts.get(accountId);
-      if (!record) {
-        throw new KeyringAccountNotFoundError();
-      }
-      if (record.hidden) {
-        throw new PermissionDeniedError();
-      }
-    }
-
-    await this.#settings.update({
-      selectedAccountIdsByNamespace: {
-        [namespace]: accountId,
-      },
-    });
+    await this.#accounts.setSelectedAccountId({ namespace, accountId });
 
     await this.refresh();
     return this.getActiveAccountForNamespace({ namespace, chainRef });
@@ -171,16 +129,6 @@ export class StoreAccountSelectionService implements AccountSelectionService {
     }
 
     return params;
-  }
-
-  #assertAccountIdNamespace(accountId: AccountId, namespace: ChainNamespace): void {
-    const accountNamespace = getAccountIdNamespace(accountId);
-    if (accountNamespace !== namespace) {
-      throw new RpcInvalidParamsError({
-        message: `Account does not belong to namespace "${namespace}"`,
-        details: { namespace, accountNamespace },
-      });
-    }
   }
 
   #toOwnedAccountView(params: {
@@ -211,19 +159,13 @@ export class StoreAccountSelectionService implements AccountSelectionService {
       const records = await this.#accounts.list({ includeHidden: false });
       const byNamespace = new Map<string, AccountId[]>();
       for (const record of records) {
-        const list = byNamespace.get(record.namespace) ?? [];
+        const namespace = getAccountIdNamespace(record.accountId);
+        const list = byNamespace.get(namespace) ?? [];
         list.push(record.accountId);
-        byNamespace.set(record.namespace, list);
+        byNamespace.set(namespace, list);
       }
 
-      let selectedByNamespace: Record<string, AccountId> = {};
-      try {
-        const settings = await this.#settings.get();
-        selectedByNamespace = { ...(settings?.selectedAccountIdsByNamespace ?? {}) };
-      } catch (error) {
-        this.#logger?.("accounts: failed to load settings", error);
-        selectedByNamespace = {};
-      }
+      const selectedByNamespace = await this.#accounts.getSelectedAccountIdsByNamespace();
 
       const nextNamespaces: MultiNamespaceAccountsState["namespaces"] = {};
       const namespaces = [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]));

@@ -24,7 +24,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryWalletChainSelectionPort,
   TEST_MNEMONIC,
@@ -92,7 +91,6 @@ const createTestRuntime = (params?: {
   providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   namespaces?: Parameters<typeof createBackgroundRuntime>[0]["namespaces"];
   rpcAccessPolicy?: Parameters<typeof createBackgroundRuntime>[0]["rpcAccessPolicy"];
-  settingsPort?: MemorySettingsPort;
   storePorts?: Partial<Parameters<typeof createBackgroundRuntime>[0]["store"]["ports"]>;
   chainDefinitions?: Parameters<typeof createBackgroundRuntime>[0]["chainDefinitions"];
   storage?: Parameters<typeof createBackgroundRuntime>[0]["storage"];
@@ -122,9 +120,6 @@ const createTestRuntime = (params?: {
     },
     chainRpcEndpointOverrides: params?.chainRpcEndpointOverrides ?? {
       port: new MemoryChainRpcEndpointOverridesPort(),
-    },
-    settings: {
-      port: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
     },
     store: {
       ports: {

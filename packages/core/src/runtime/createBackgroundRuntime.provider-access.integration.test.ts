@@ -30,7 +30,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryWalletChainSelectionPort,
   setupBackground,
@@ -300,7 +299,6 @@ const setupNamespaceAwareProviderRuntime = async () => {
         keyringMetas: new MemoryKeyringMetasPort(),
       },
     },
-    settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
   });
 
   await runtime.lifecycle.initialize();

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createMessenger } from "../../../messenger/index.js";
-import type { AccountId, AccountRecord } from "../../../storage/records.js";
+import type { AccountId, AccountRecord, AccountSelectionStateRecord } from "../../../storage/records.js";
 import { createAccountsService } from "./AccountsService.js";
 import type { AccountsPort } from "./port.js";
 
 const createInMemoryPort = (seed: AccountRecord[] = []) => {
   const store = new Map<AccountId, AccountRecord>(seed.map((r) => [r.accountId, r]));
+  let selectionState: AccountSelectionStateRecord | null = null;
   const writes: AccountRecord[] = [];
+  const selectionWrites: AccountSelectionStateRecord[] = [];
 
   const port: AccountsPort = {
     async get(accountId) {
@@ -29,9 +31,16 @@ const createInMemoryPort = (seed: AccountRecord[] = []) => {
         }
       }
     },
+    async getSelectionState() {
+      return selectionState;
+    },
+    async putSelectionState(record) {
+      selectionState = record;
+      selectionWrites.push(record);
+    },
   };
 
-  return { port, store, writes };
+  return { port, store, writes, selectionWrites };
 };
 
 const createService = (port: AccountsPort) => createAccountsService({ messenger: createMessenger(), port });
@@ -41,20 +50,17 @@ describe("AccountsService", () => {
     const seed: AccountRecord[] = [
       {
         accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 2000,
         hidden: true,
       },
       {
         accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
       },
       {
         accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
-        namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1500,
       },
@@ -99,7 +105,6 @@ describe("AccountsService", () => {
     const seed: AccountRecord[] = [
       {
         accountId: "eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        namespace: "eip155",
         keyringId: "11111111-1111-4111-8111-111111111111",
         createdAt: 1000,
       },
@@ -132,5 +137,52 @@ describe("AccountsService", () => {
     expect(visible.hidden).toBeUndefined();
 
     expect(changed).toBe(2);
+  });
+
+  it("stores selected accounts by namespace and rejects hidden selections", async () => {
+    const visible: AccountRecord = {
+      accountId: "eip155:1111111111111111111111111111111111111111",
+      keyringId: "11111111-1111-4111-8111-111111111111",
+      createdAt: 1000,
+    };
+    const hidden: AccountRecord = {
+      accountId: "eip155:2222222222222222222222222222222222222222",
+      keyringId: "11111111-1111-4111-8111-111111111111",
+      createdAt: 2000,
+      hidden: true,
+    };
+    const { port, selectionWrites } = createInMemoryPort([visible, hidden]);
+    const service = createAccountsService({ messenger: createMessenger(), port });
+
+    await service.setSelectedAccountId({ namespace: "eip155", accountId: visible.accountId });
+
+    expect(await service.getSelectedAccountId("eip155")).toBe(visible.accountId);
+    expect(selectionWrites.at(-1)).toEqual({
+      id: "account-selection",
+      selectedAccountIdsByNamespace: { eip155: visible.accountId },
+    });
+
+    await expect(
+      service.setSelectedAccountId({ namespace: "eip155", accountId: hidden.accountId }),
+    ).rejects.toMatchObject({ code: "global.permission.denied" });
+  });
+
+  it("clears selected account when the account is hidden or removed", async () => {
+    const account: AccountRecord = {
+      accountId: "eip155:3333333333333333333333333333333333333333",
+      keyringId: "11111111-1111-4111-8111-111111111111",
+      createdAt: 1000,
+    };
+    const { port } = createInMemoryPort([account]);
+    const service = createAccountsService({ messenger: createMessenger(), port });
+
+    await service.setSelectedAccountId({ namespace: "eip155", accountId: account.accountId });
+    await service.setHidden({ accountId: account.accountId, hidden: true });
+    expect(await service.getSelectedAccountId("eip155")).toBeNull();
+
+    await service.setHidden({ accountId: account.accountId, hidden: false });
+    await service.setSelectedAccountId({ namespace: "eip155", accountId: account.accountId });
+    await service.remove(account.accountId);
+    expect(await service.getSelectedAccountId("eip155")).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import { KeyringDuplicateAccountError, KeyringSecretUnavailableError } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
@@ -613,7 +614,7 @@ export class RuntimeKeyringState {
       }
 
       this.#addressIndex.set(account.accountId, {
-        namespace: account.namespace,
+        namespace: getAccountIdNamespace(account.accountId),
         keyringId: account.keyringId,
         accountId: account.accountId,
       });

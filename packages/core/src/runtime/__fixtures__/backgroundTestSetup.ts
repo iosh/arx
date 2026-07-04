@@ -20,17 +20,16 @@ import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRp
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
-import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
 import type { ChainDefinitionEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
+  AccountSelectionStateRecord,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
-  SettingsRecord,
   WalletChainSelectionRecord,
 } from "../../storage/records.js";
 import type {
@@ -70,24 +69,6 @@ export type CreateBackgroundRuntimeResult = ReturnType<typeof createBackgroundRu
 
 // Utility functions
 export const clone = <T>(value: T): T => structuredClone(value);
-
-export class MemorySettingsPort implements SettingsPort {
-  #record: SettingsRecord | null;
-  public readonly saved: SettingsRecord[] = [];
-
-  constructor(seed: SettingsRecord | null = null) {
-    this.#record = seed ? clone(seed) : null;
-  }
-
-  async get(): Promise<SettingsRecord | null> {
-    return this.#record ? clone(this.#record) : null;
-  }
-
-  async put(record: SettingsRecord): Promise<void> {
-    this.#record = clone(record);
-    this.saved.push(clone(record));
-  }
-}
 
 export class MemoryPermissionsPort implements PermissionsPort {
   #records = new Map<string, PermissionRecord>();
@@ -195,11 +176,14 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
 
 export class MemoryAccountsPort implements AccountsPort {
   #records = new Map<string, AccountRecord>();
+  #selectionState: AccountSelectionStateRecord | null;
+  public readonly savedSelectionStates: AccountSelectionStateRecord[] = [];
 
-  constructor(seed: AccountRecord[] = []) {
+  constructor(seed: AccountRecord[] = [], selectionState: AccountSelectionStateRecord | null = null) {
     for (const record of seed) {
       this.#records.set(record.accountId, clone(record));
     }
+    this.#selectionState = selectionState ? clone(selectionState) : null;
   }
 
   async get(accountId: string): Promise<AccountRecord | null> {
@@ -227,6 +211,15 @@ export class MemoryAccountsPort implements AccountsPort {
         this.#records.delete(accountId);
       }
     }
+  }
+
+  async getSelectionState(): Promise<AccountSelectionStateRecord | null> {
+    return this.#selectionState ? clone(this.#selectionState) : null;
+  }
+
+  async putSelectionState(record: AccountSelectionStateRecord): Promise<void> {
+    this.#selectionState = clone(record);
+    this.savedSelectionStates.push(clone(record));
   }
 }
 
@@ -663,7 +656,6 @@ export type TestBackgroundContext = {
   chainRpcEndpointOverridesPort: MemoryChainRpcEndpointOverridesPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
-  settingsPort: MemorySettingsPort;
   destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
 };
@@ -673,8 +665,8 @@ export type SetupBackgroundOptions = {
   chainSeed?: TestChainSeedInput[];
   walletChainSelectionSeed?: WalletChainSelectionRecord | null;
   providerChainSelectionSeed?: ProviderChainSelectionRecord[];
-  settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
+  accountSelectionStateSeed?: AccountSelectionStateRecord | null;
   keyringMetasSeed?: KeyringMetaRecord[];
   accountsPort?: MemoryAccountsPort;
   keyringMetasPort?: MemoryKeyringMetasPort;
@@ -708,13 +700,10 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const vaultMetaPort = options.vaultMetaPort ?? new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionAggregatesPort = options.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort();
-  const accountsPort = options.accountsPort ?? new MemoryAccountsPort(options.accountsSeed ?? []);
+  const accountsPort =
+    options.accountsPort ??
+    new MemoryAccountsPort(options.accountsSeed ?? [], options.accountSelectionStateSeed ?? null);
   const keyringMetasPort = options.keyringMetasPort ?? new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
-
-  const settingsPort =
-    options.settingsSeed !== undefined
-      ? new MemorySettingsPort(options.settingsSeed)
-      : new MemorySettingsPort({ id: "settings", updatedAt: 0 });
 
   const storageOptions: NonNullable<CreateBackgroundRuntimeOptions["storage"]> = {
     vaultMetaPort,
@@ -773,7 +762,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       },
     },
     storage: storageOptions,
-    settings: { port: settingsPort },
     ...(sessionOptions ? { session: sessionOptions } : {}),
     ...(options.transactions ? { transactions: options.transactions } : {}),
   });
@@ -836,7 +824,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     chainRpcEndpointOverridesPort,
     vaultMetaPort,
     transactionAggregatesPort,
-    settingsPort,
     enableAutoApproval,
     destroy: () => {
       runtime.lifecycle.shutdown();

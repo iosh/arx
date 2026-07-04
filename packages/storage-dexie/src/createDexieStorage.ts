@@ -9,7 +9,6 @@ import { DexieChainRpcEndpointOverridesPort } from "./ports/chainRpcEndpointOver
 import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
 import { DexieProviderChainSelectionPort } from "./ports/providerChainSelectionPort.js";
-import { DexieSettingsPort } from "./ports/settingsPort.js";
 import { DexieTransactionAggregatesPort } from "./ports/transactionAggregatesPort.js";
 import { DexieVaultMetaPort } from "./ports/vaultMetaPort.js";
 import { DexieWalletChainSelectionPort } from "./ports/walletChainSelectionPort.js";
@@ -57,7 +56,6 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
         providerChainSelection: new DexieProviderChainSelectionPort(ctx),
       },
       transactions: new DexieTransactionAggregatesPort(ctx),
-      settings: new DexieSettingsPort(ctx),
     },
     close: () => db.close(),
     __debug: { db, ctx },

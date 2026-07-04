@@ -137,7 +137,6 @@ describe("runtimeHost", () => {
           walletChainSelection: {},
           providerChainSelection: {},
         },
-        settings: {},
       },
     });
   });

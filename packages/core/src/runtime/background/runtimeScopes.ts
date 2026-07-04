@@ -25,7 +25,6 @@ import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
 import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
-import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
 import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../../storage/index.js";
@@ -78,7 +77,6 @@ export type BackgroundSessionScope = {
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
-  settingsService: ReturnType<typeof initRuntimeStoreServices>["settingsService"];
   walletChainSelection: WalletChainSelectionService;
   providerChainSelection: ProviderChainSelectionService;
   chainRpcDefaultEndpoints: ChainRpcDefaultEndpointsService;
@@ -156,7 +154,6 @@ export const createBackgroundBootstrapScope = ({
 export const createBackgroundSessionScope = ({
   lifecycleLabel,
   bootstrapScope,
-  settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
   chainRpcDefaultEndpointsPort,
@@ -167,7 +164,6 @@ export const createBackgroundSessionScope = ({
 }: {
   lifecycleLabel?: string;
   bootstrapScope: BackgroundBootstrapScope;
-  settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
   chainRpcDefaultEndpointsPort: ChainRpcDefaultEndpointsPort;
@@ -181,7 +177,6 @@ export const createBackgroundSessionScope = ({
   sessionOptions?: SessionOptions;
 }): BackgroundSessionScope => {
   const {
-    settingsService,
     walletChainSelection,
     providerChainSelection,
     chainRpcDefaultEndpoints,
@@ -190,7 +185,6 @@ export const createBackgroundSessionScope = ({
     keyringMetas,
   } = initRuntimeStoreServices({
     messenger: bootstrapScope.messenger,
-    settingsPort,
     walletChainSelectionPort,
     providerChainSelectionPort,
     chainRpcDefaultEndpointsPort,
@@ -204,7 +198,6 @@ export const createBackgroundSessionScope = ({
     messenger: bootstrapScope.messenger,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     accountsService: accountsStore,
-    settingsService,
     permissionsPort: storePorts.permissions,
     options: bootstrapScope.backgroundAssemblyOptions,
   });
@@ -267,7 +260,6 @@ export const createBackgroundSessionScope = ({
     chainViews,
     chainActivation,
     attention,
-    settingsService,
     walletChainSelection,
     providerChainSelection,
     chainRpcDefaultEndpoints,

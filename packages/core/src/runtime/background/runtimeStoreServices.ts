@@ -10,8 +10,6 @@ import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import { createProviderChainSelectionService } from "../../services/store/providerChainSelection/ProviderChainSelectionService.js";
 import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
-import type { SettingsPort } from "../../services/store/settings/port.js";
-import { createSettingsService } from "../../services/store/settings/SettingsService.js";
 import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
 import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
@@ -23,7 +21,6 @@ export type RuntimeStorePorts = {
 };
 
 export type RuntimeStoreServices = {
-  settingsService: ReturnType<typeof createSettingsService>;
   walletChainSelection: ReturnType<typeof createWalletChainSelectionService>;
   providerChainSelection: ReturnType<typeof createProviderChainSelectionService>;
   chainRpcDefaultEndpoints: ReturnType<typeof createChainRpcDefaultEndpointsService>;
@@ -34,7 +31,6 @@ export type RuntimeStoreServices = {
 
 export const initRuntimeStoreServices = ({
   messenger,
-  settingsPort,
   walletChainSelectionPort,
   providerChainSelectionPort,
   chainRpcDefaultEndpointsPort,
@@ -44,7 +40,6 @@ export const initRuntimeStoreServices = ({
   now,
 }: {
   messenger: Messenger;
-  settingsPort: SettingsPort;
   walletChainSelectionPort: WalletChainSelectionPort;
   providerChainSelectionPort: ProviderChainSelectionPort;
   chainRpcDefaultEndpointsPort: ChainRpcDefaultEndpointsPort;
@@ -53,8 +48,6 @@ export const initRuntimeStoreServices = ({
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   now: () => number;
 }): RuntimeStoreServices => {
-  const settingsService = createSettingsService({ messenger, port: settingsPort, now });
-
   const walletChainSelection = createWalletChainSelectionService({
     messenger,
     port: walletChainSelectionPort,
@@ -81,7 +74,6 @@ export const initRuntimeStoreServices = ({
   const keyringMetas = createKeyringMetasService({ messenger, port: ports.keyringMetas });
 
   return {
-    settingsService,
     walletChainSelection,
     providerChainSelection,
     chainRpcDefaultEndpoints,

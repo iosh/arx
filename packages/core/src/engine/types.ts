@@ -63,7 +63,6 @@ import type { ChainRpcEndpointOverridesChangedHandler } from "../services/store/
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
-import type { SettingsPort } from "../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
 import type { WalletChainSelectionChangedHandler } from "../services/store/walletChainSelection/types.js";
 import type {
@@ -103,7 +102,6 @@ export type CoreStoragePorts = Readonly<{
   permissions: PermissionsPort;
   chains: CoreChainsStoragePorts;
   transactions: TransactionsStoragePort;
-  settings: SettingsPort;
 }>;
 
 /** Arguments for `createArxWallet()`. */

@@ -9,7 +9,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryVaultMetaPort,
   MemoryWalletChainSelectionPort,
@@ -64,7 +63,6 @@ const createCoreRuntimeInput = (params?: {
       providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
     },
     transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
-    settings: new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
   },
   ...(params?.boot ? { boot: params.boot } : {}),
 });

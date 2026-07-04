@@ -31,10 +31,10 @@ export * from "./services/runtime/permissionViews/index.js";
 export type {
   AccountNamespace,
   AccountRecord,
+  AccountSelectionStateRecord,
   KeyringMetaRecord,
   KeyringType,
   PermissionRecord,
-  SettingsRecord,
   VaultKeyringEntry,
   VaultKeyringPayload,
   VaultMetaPort,

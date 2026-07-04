@@ -1,5 +1,10 @@
+import { getAccountIdNamespace } from "../../../accounts/addressing/accountId.js";
+import { AccountNamespaceMismatchError } from "../../../accounts/errors.js";
+import { KeyringAccountNotFoundError } from "../../../keyring/errors.js";
 import type { Messenger } from "../../../messenger/index.js";
+import { PermissionDeniedError } from "../../../permissions/errors.js";
 import type { AccountId, AccountRecord } from "../../../storage/records.js";
+import { createSerialQueue } from "../_shared/serialQueue.js";
 import type { AccountsPort } from "./port.js";
 import { ACCOUNTS_STORE_CHANGED } from "./topics.js";
 import type { AccountsService, ListAccountsParams } from "./types.js";
@@ -11,14 +16,25 @@ export type CreateAccountsServiceOptions = {
 
 const areAccountRecordsEqual = (left: AccountRecord, right: AccountRecord): boolean =>
   left.accountId === right.accountId &&
-  left.namespace === right.namespace &&
   left.keyringId === right.keyringId &&
   left.derivationIndex === right.derivationIndex &&
   left.alias === right.alias &&
   Boolean(left.hidden) === Boolean(right.hidden) &&
   left.createdAt === right.createdAt;
 
+const areAccountSelectionsEqual = (left: Record<string, AccountId>, right: Record<string, AccountId>): boolean => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
+};
+
+const cloneSelection = (selectedAccountIdsByNamespace: Record<string, AccountId>): Record<string, AccountId> => ({
+  ...selectedAccountIdsByNamespace,
+});
+
 export const createAccountsService = ({ messenger, port }: CreateAccountsServiceOptions): AccountsService => {
+  const runSelectionWrite = createSerialQueue();
+
   const get = async (accountId: AccountId) => {
     return await port.get(accountId);
   };
@@ -42,6 +58,46 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "upsert", accountId: record.accountId });
   };
 
+  const readSelection = async (): Promise<Record<string, AccountId>> => {
+    const record = await port.getSelectionState();
+    return cloneSelection(record?.selectedAccountIdsByNamespace ?? {});
+  };
+
+  const writeSelection = async (
+    currentSelectedAccountIdsByNamespace: Record<string, AccountId>,
+    nextSelectedAccountIdsByNamespace: Record<string, AccountId>,
+    changedNamespace: string | null,
+  ): Promise<void> => {
+    if (areAccountSelectionsEqual(currentSelectedAccountIdsByNamespace, nextSelectedAccountIdsByNamespace)) {
+      return;
+    }
+
+    await port.putSelectionState({
+      id: "account-selection",
+      selectedAccountIdsByNamespace: cloneSelection(nextSelectedAccountIdsByNamespace),
+    });
+
+    if (changedNamespace) {
+      messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "setSelectedAccount", namespace: changedNamespace });
+    }
+  };
+
+  const clearSelectedAccountIds = async (accountIds: Set<AccountId>): Promise<void> => {
+    if (accountIds.size === 0) return;
+
+    await runSelectionWrite(async () => {
+      const current = await readSelection();
+      const next = cloneSelection(current);
+      for (const [namespace, selectedAccountId] of Object.entries(next)) {
+        if (accountIds.has(selectedAccountId)) {
+          delete next[namespace];
+        }
+      }
+
+      await writeSelection(current, next, null);
+    });
+  };
+
   const remove = async (accountId: AccountId) => {
     const existing = await port.get(accountId);
     if (!existing) {
@@ -49,16 +105,21 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     }
 
     await port.remove(accountId);
+    await clearSelectedAccountIds(new Set([accountId]));
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "remove", accountId });
   };
 
   const removeByKeyringId = async (keyringId: AccountRecord["keyringId"]) => {
     const accounts = await port.list();
-    if (!accounts.some((account) => account.keyringId === keyringId)) {
+    const removedAccountIds = accounts
+      .filter((account) => account.keyringId === keyringId)
+      .map((account) => account.accountId);
+    if (removedAccountIds.length === 0) {
       return;
     }
 
     await port.removeByKeyringId(keyringId);
+    await clearSelectedAccountIds(new Set(removedAccountIds));
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "removeByKeyringId", keyringId });
   };
 
@@ -76,8 +137,56 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     }
 
     await port.upsert(next);
+    if (params.hidden) {
+      await clearSelectedAccountIds(new Set([next.accountId]));
+    }
     messenger.publish(ACCOUNTS_STORE_CHANGED, { kind: "setHidden", accountId: next.accountId });
   };
+
+  const getSelectedAccountIdsByNamespace = async () => {
+    return await readSelection();
+  };
+
+  const getSelectedAccountId = async (namespace: string) => {
+    const namespaceKey = namespace.trim();
+    if (!namespaceKey) return null;
+
+    const selectedAccountIdsByNamespace = await readSelection();
+    return selectedAccountIdsByNamespace[namespaceKey] ?? null;
+  };
+
+  const setSelectedAccountId = async (params: { namespace: string; accountId: AccountId | null }) => {
+    const namespace = params.namespace.trim();
+    if (!namespace) return;
+
+    if (params.accountId !== null) {
+      const accountNamespace = getAccountIdNamespace(params.accountId);
+      if (accountNamespace !== namespace) {
+        throw new AccountNamespaceMismatchError({ namespace, accountNamespace });
+      }
+
+      const record = await port.get(params.accountId);
+      if (!record) {
+        throw new KeyringAccountNotFoundError();
+      }
+      if (record.hidden) {
+        throw new PermissionDeniedError();
+      }
+    }
+
+    await runSelectionWrite(async () => {
+      const current = await readSelection();
+      const next = cloneSelection(current);
+      if (params.accountId === null) {
+        delete next[namespace];
+      } else {
+        next[namespace] = params.accountId;
+      }
+
+      await writeSelection(current, next, namespace);
+    });
+  };
+
   return {
     subscribeChanged: (handler) => messenger.subscribe(ACCOUNTS_STORE_CHANGED, handler),
 
@@ -87,5 +196,8 @@ export const createAccountsService = ({ messenger, port }: CreateAccountsService
     remove,
     removeByKeyringId,
     setHidden,
+    getSelectedAccountIdsByNamespace,
+    getSelectedAccountId,
+    setSelectedAccountId,
   };
 };

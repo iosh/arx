@@ -300,7 +300,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   sessionScope = createBackgroundSessionScope({
     lifecycleLabel: input.runtime?.lifecycleLabel ?? "createArxWallet",
     bootstrapScope,
-    settingsPort: input.storage.ports.settings,
     walletChainSelectionPort: input.storage.ports.chains.walletChainSelection,
     providerChainSelectionPort: input.storage.ports.chains.providerChainSelection,
     chainRpcDefaultEndpointsPort: input.storage.ports.chains.chainRpcDefaultEndpoints,
@@ -542,7 +541,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       session: sessionScope.sessionLayer.session,
       keyring: sessionScope.keyringService,
       accounts: stateServices.accounts,
-      settings: sessionScope.settingsService,
       accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     }),
   };

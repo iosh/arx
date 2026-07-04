@@ -4,12 +4,12 @@ export type {
   AccountId,
   AccountNamespace,
   AccountRecord,
+  AccountSelectionStateRecord,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
   KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
-  SettingsRecord,
   WalletChainSelectionRecord,
 } from "./records.js";
 export { AccountIdSchema } from "./records.js";

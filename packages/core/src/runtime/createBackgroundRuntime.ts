@@ -20,7 +20,6 @@ import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { ProviderChainSelectionPort } from "../services/store/providerChainSelection/port.js";
 import type { ProviderChainSelectionService } from "../services/store/providerChainSelection/types.js";
-import type { SettingsPort } from "../services/store/settings/port.js";
 import type { WalletChainSelectionPort } from "../services/store/walletChainSelection/port.js";
 import type { WalletChainSelectionService } from "../services/store/walletChainSelection/types.js";
 import type { VaultMetaPort } from "../storage/index.js";
@@ -65,9 +64,6 @@ export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "ch
     };
   };
   chainDefinitions: Omit<BackgroundAssemblyOptions["chainDefinitions"], "port">;
-  settings: {
-    port: SettingsPort;
-  };
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
   namespaces: {
@@ -148,7 +144,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
           providerChainSelection: providerChainSelectionPort,
         },
         transactions: options.store.ports.transactionAggregates,
-        settings: options.settings.port,
       },
       ...(options.storage?.hydrate !== undefined ? { hydrate: options.storage.hydrate } : {}),
     },

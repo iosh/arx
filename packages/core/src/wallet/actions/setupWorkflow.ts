@@ -11,7 +11,6 @@ import type {
   InitialPrivateKeyKeyringDraft,
   KeyringService,
 } from "../../runtime/keyring/KeyringService.js";
-import type { SettingsService } from "../../services/store/settings/types.js";
 
 type InitialKeyringDraft = InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft;
 
@@ -99,14 +98,15 @@ const toAccountId = (input: {
 };
 
 const rollbackSelectedAccount = async (params: {
-  settings: Pick<SettingsService, "update">;
+  accounts: Pick<AccountSelectionService, "setActiveAccount">;
   namespace: string;
+  chainRef: ChainRef;
   previousAccountId: string | null;
 }) => {
-  await params.settings.update({
-    selectedAccountIdsByNamespace: {
-      [params.namespace]: params.previousAccountId,
-    },
+  await params.accounts.setActiveAccount({
+    namespace: params.namespace,
+    chainRef: params.chainRef,
+    accountId: params.previousAccountId,
   });
 };
 
@@ -124,7 +124,6 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
     | "removeCommittedInitialKeyring"
   >;
   accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountId" | "setActiveAccount" | "whenReady">;
-  settings: Pick<SettingsService, "update">;
   accountAddressing: AccountAddressingByNamespace;
   password: string;
   namespace: string;
@@ -167,8 +166,9 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
     } catch (error) {
       if (selectionWriteStarted) {
         await rollbackSelectedAccount({
-          settings: params.settings,
+          accounts: params.accounts,
           namespace: params.namespace,
+          chainRef: params.chainRef,
           previousAccountId: previousSelectedAccountId,
         });
       }
@@ -197,7 +197,6 @@ export const createWalletSetupWorkflow = (deps: {
     | "removeCommittedInitialKeyring"
   >;
   accounts: Pick<AccountSelectionService, "getState" | "getSelectedAccountId" | "setActiveAccount" | "whenReady">;
-  settings: Pick<SettingsService, "update">;
   accountAddressing: AccountAddressingByNamespace;
 }): WalletSetupWorkflow => {
   return {

@@ -28,3 +28,15 @@ export class AccountAddressNamespaceNotSupportedError extends ArxBaseError {
     });
   }
 }
+
+export class AccountNamespaceMismatchError extends ArxBaseError {
+  static readonly code = "account.namespace_mismatch";
+
+  constructor(input: ErrorCause & { namespace: string; accountNamespace: string }) {
+    super(`Account does not belong to namespace "${input.namespace}".`, {
+      code: AccountNamespaceMismatchError.code,
+      details: { namespace: input.namespace, accountNamespace: input.accountNamespace },
+      cause: input.cause,
+    });
+  }
+}

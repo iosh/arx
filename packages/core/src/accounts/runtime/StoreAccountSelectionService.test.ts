@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { createMessenger } from "../../messenger/index.js";
-import { MemoryAccountsPort, MemorySettingsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
+import { MemoryAccountsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createAccountsService } from "../../services/store/accounts/index.js";
-import { createSettingsService } from "../../services/store/settings/index.js";
-import type { AccountRecord, SettingsRecord } from "../../storage/records.js";
+import type { AccountRecord, AccountSelectionStateRecord } from "../../storage/records.js";
 import { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
 
 const chainRef = "eip155:1" as const;
@@ -14,7 +13,6 @@ const keyringId = "11111111-1111-4111-8111-111111111111";
 const makeAccount = (payloadHex: string, createdAt: number, extra?: Partial<AccountRecord>): AccountRecord =>
   ({
     accountId: `eip155:${payloadHex}`,
-    namespace,
     keyringId,
     createdAt,
     ...extra,
@@ -22,22 +20,22 @@ const makeAccount = (payloadHex: string, createdAt: number, extra?: Partial<Acco
 
 const addressOf = (payloadHex: string) => `0x${payloadHex}`;
 
-const createService = async (params?: { accounts?: AccountRecord[]; settings?: SettingsRecord | null }) => {
-  const accountsPort = new MemoryAccountsPort(params?.accounts ?? []);
-  const settingsPort = new MemorySettingsPort(params?.settings ?? { id: "settings", updatedAt: 0 });
+const createService = async (params?: {
+  accounts?: AccountRecord[];
+  selectionState?: AccountSelectionStateRecord | null;
+}) => {
+  const accountsPort = new MemoryAccountsPort(params?.accounts ?? [], params?.selectionState ?? null);
   const messenger = createMessenger();
   const accounts = createAccountsService({ messenger, port: accountsPort });
-  const settings = createSettingsService({ messenger, port: settingsPort, now: () => 10_000 });
   const service = new StoreAccountSelectionService({
     messenger,
     accounts,
-    settings,
     accountAddressing: buildAccountAddressingByNamespace([eip155AccountAddressing]),
   });
 
   await service.refresh();
 
-  return { service, settingsPort };
+  return { service, accountsPort };
 };
 
 const createdServices: StoreAccountSelectionService[] = [];
@@ -56,12 +54,11 @@ describe("StoreAccountSelectionService", () => {
 
     const { service } = await createService({
       accounts: [first, second, hidden],
-      settings: {
-        id: "settings",
+      selectionState: {
+        id: "account-selection",
         selectedAccountIdsByNamespace: {
           eip155: "eip155:ffffffffffffffffffffffffffffffffffffffff",
         },
-        updatedAt: 1,
       },
     });
     createdServices.push(service);
@@ -89,14 +86,13 @@ describe("StoreAccountSelectionService", () => {
     const first = makeAccount("1111111111111111111111111111111111111111", 100);
     const second = makeAccount("2222222222222222222222222222222222222222", 200);
 
-    const { service, settingsPort } = await createService({
+    const { service, accountsPort } = await createService({
       accounts: [first, second],
-      settings: {
-        id: "settings",
+      selectionState: {
+        id: "account-selection",
         selectedAccountIdsByNamespace: {
           other: "other:aa",
         },
-        updatedAt: 1,
       },
     });
     createdServices.push(service);
@@ -114,7 +110,7 @@ describe("StoreAccountSelectionService", () => {
       canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
 
-    expect(settingsPort.saved.at(-1)).toMatchObject({
+    expect(accountsPort.savedSelectionStates.at(-1)).toMatchObject({
       selectedAccountIdsByNamespace: {
         other: "other:aa",
         eip155: second.accountId,

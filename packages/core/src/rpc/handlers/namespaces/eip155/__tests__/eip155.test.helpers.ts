@@ -17,7 +17,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryWalletChainSelectionPort,
   TEST_NAMESPACE_MANIFESTS,
@@ -94,7 +93,6 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     providerChainSelection: providerChainSelection ?? { port: new MemoryProviderChainSelectionPort() },
     chainRpcDefaultEndpoints: chainRpcDefaultEndpoints ?? { port: new MemoryChainRpcDefaultEndpointsPort() },
     chainRpcEndpointOverrides: chainRpcEndpointOverrides ?? { port: new MemoryChainRpcEndpointOverridesPort() },
-    settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ...(store ?? {}),
       ports: storePorts,

@@ -12,10 +12,9 @@ export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, 
 });
 export type AccountId = string;
 
-export type SettingsRecord = {
-  id: "settings";
-  selectedAccountIdsByNamespace?: Record<string, AccountId> | undefined;
-  updatedAt: number;
+export type AccountSelectionStateRecord = {
+  id: "account-selection";
+  selectedAccountIdsByNamespace: Record<string, AccountId>;
 };
 
 export type ChainRpcEndpointOverrideRecord = {
@@ -57,7 +56,6 @@ export type KeyringMetaRecord = {
 
 export type AccountRecord = {
   accountId: AccountId;
-  namespace: AccountNamespace;
   keyringId: string;
   derivationIndex?: number | undefined;
   alias?: string | undefined;

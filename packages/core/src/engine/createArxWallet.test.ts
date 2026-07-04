@@ -11,7 +11,6 @@ import {
   MemoryKeyringMetasPort,
   MemoryPermissionsPort,
   MemoryProviderChainSelectionPort,
-  MemorySettingsPort,
   MemoryTransactionAggregatesPort,
   MemoryVaultMetaPort,
   MemoryWalletChainSelectionPort,
@@ -44,7 +43,6 @@ const createWalletInput = (params?: {
   providerChainSelectionPort?: MemoryProviderChainSelectionPort;
   accountsPort?: MemoryAccountsPort;
   permissionsPort?: MemoryPermissionsPort;
-  settingsPort?: MemorySettingsPort;
   keyringMetasPort?: MemoryKeyringMetasPort;
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
 }): CreateArxWalletInput => {
@@ -68,7 +66,6 @@ const createWalletInput = (params?: {
           providerChainSelection: params?.providerChainSelectionPort ?? new MemoryProviderChainSelectionPort(),
         },
         transactions: params?.transactionAggregatesPort ?? new MemoryTransactionAggregatesPort(),
-        settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
       },
     },
   };
@@ -78,7 +75,6 @@ const createSeededAccountsPort = () =>
   new MemoryAccountsPort([
     {
       accountId: ACCOUNT_ID,
-      namespace: EIP155_NAMESPACE,
       keyringId: KEYRING_ID,
       createdAt: 1,
     },

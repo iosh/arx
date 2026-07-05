@@ -11,41 +11,39 @@ import {
   ApprovalTimeoutError,
   ApprovalUserDismissedError,
 } from "../errors.js";
-import type { ApprovalExecutor } from "../types.js";
 import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED } from "./topics.js";
 import type {
   ApprovalCreatedEvent,
   ApprovalCreateParams,
   ApprovalFinishedEvent,
   ApprovalHandle,
-  ApprovalQueueKind,
+  ApprovalKind,
   ApprovalQueueService,
   ApprovalRecord,
   ApprovalRequester,
   ApprovalResolveInput,
   ApprovalResolveResult,
-  ApprovalResultByKind,
+  ApprovalScope,
   ApprovalState,
   ApprovalTerminalReason,
-  PendingApproval,
-  PendingApprovalSettlement,
 } from "./types.js";
-import {
-  cloneCreatedEvent,
-  cloneFinishEvent,
-  cloneRecord,
-  cloneState,
-  createDeferred,
-  deriveApprovalFinalStatus,
-  serializeApprovalFinishedError,
-} from "./utils.js";
+import { createDeferred, deriveApprovalFinalStatus, serializeApprovalFinishedError } from "./utils.js";
 
 type CreateInMemoryApprovalQueueServiceOptions = {
   messenger: Messenger;
   autoRejectMessage?: string;
   ttlMs?: number;
   logger?: (message: string, error?: unknown) => void;
-  getExecutor?: () => ApprovalExecutor | undefined;
+};
+
+type PendingApprovalSettlement = {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+};
+
+type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
+  record: ApprovalRecord<K>;
+  settlement: PendingApprovalSettlement;
 };
 
 const getApprovalRequestChainRef = (request: ApprovalCreateParams): ApprovalCreateParams["chainRef"] => {
@@ -157,28 +155,38 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
   }
 };
 
+const isSameApprovalScope = (left: ApprovalScope, right: ApprovalScope): boolean => {
+  if (left.transport !== right.transport || left.origin !== right.origin) {
+    return false;
+  }
+
+  if (left.transport === "provider" && right.transport === "provider") {
+    return left.portId === right.portId && left.sessionId === right.sessionId;
+  }
+
+  return left.transport === "wallet-ui" && right.transport === "wallet-ui";
+};
+
 export class InMemoryApprovalQueueService implements ApprovalQueueService {
   #messenger: Messenger;
   #autoRejectMessage: string;
   #ttlMs: number;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
-  #getExecutor?: (() => ApprovalExecutor | undefined) | undefined;
 
   #state: ApprovalState = { pending: [] };
   #records: Map<string, ApprovalRecord> = new Map();
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-  constructor({ messenger, autoRejectMessage, ttlMs, logger, getExecutor }: CreateInMemoryApprovalQueueServiceOptions) {
+  constructor({ messenger, autoRejectMessage, ttlMs, logger }: CreateInMemoryApprovalQueueServiceOptions) {
     this.#messenger = messenger;
     this.#autoRejectMessage = autoRejectMessage ?? "User rejected the request.";
     this.#ttlMs = ttlMs ?? 5 * 60_000;
     this.#logger = logger;
-    this.#getExecutor = getExecutor;
   }
 
   getState(): ApprovalState {
-    return cloneState(this.#state);
+    return structuredClone(this.#state);
   }
 
   onStateChanged(handler: (state: ApprovalState) => void): () => void {
@@ -189,7 +197,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     return this.#messenger.subscribe(APPROVAL_CREATED, handler);
   }
 
-  onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void {
+  onFinished(handler: (event: ApprovalFinishedEvent) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_FINISHED, handler);
   }
 
@@ -199,29 +207,26 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
 
   get(approvalId: string): ApprovalRecord | undefined {
     const record = this.#records.get(approvalId);
-    return record ? cloneRecord(record) : undefined;
+    return record ? structuredClone(record) : undefined;
   }
 
-  create<K extends ApprovalQueueKind>(
-    request: ApprovalCreateParams<K>,
-    requester: ApprovalRequester,
-  ): ApprovalHandle<K> {
-    const deferred = createDeferred<ApprovalResultByKind[K]>();
+  listPending(): ApprovalRecord[] {
+    return this.#state.pending.flatMap((item) => {
+      const record = this.#records.get(item.approvalId);
+      return record ? [structuredClone(record)] : [];
+    });
+  }
+
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle {
+    const deferred = createDeferred<unknown>();
     const record = this.#enqueuePendingApproval(request, requester, {
-      kind: "handle",
-      resolve: deferred.resolve as (value: unknown) => void,
+      resolve: deferred.resolve,
       reject: deferred.reject,
     });
     return { approvalId: record.approvalId, settled: deferred.promise };
   }
 
-  createPending<K extends ApprovalQueueKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void {
-    this.#enqueuePendingApproval(request, requester, {
-      kind: "internal",
-    });
-  }
-
-  #enqueuePendingApproval<K extends ApprovalQueueKind>(
+  #enqueuePendingApproval<K extends ApprovalKind>(
     request: ApprovalCreateParams<K>,
     requester: ApprovalRequester,
     settlement: PendingApprovalSettlement,
@@ -229,7 +234,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     if (!requester) throw new Error("Approval requester is required");
     assertApprovalContext(request);
 
-    const record = cloneRecord({ ...request, requester });
+    const record = structuredClone({ ...request, requester });
 
     if (record.origin !== requester.origin) {
       throw new Error("Approval origin mismatch between request and requester");
@@ -271,18 +276,6 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
         message: input.reason ?? input.error?.message ?? this.#autoRejectMessage,
       });
 
-      const executor = this.#getExecutor?.();
-      if (executor) {
-        try {
-          await executor.reject(entry.record, {
-            ...(input.reason !== undefined ? { reason: input.reason } : {}),
-            error,
-          });
-        } catch (cleanupError) {
-          this.#logger?.("approvals: reject cleanup failed", cleanupError);
-        }
-      }
-
       this.#rejectPendingApproval(entry, error);
 
       this.#publishFinished({
@@ -296,38 +289,18 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       return { approvalId: input.approvalId, status: "rejected", terminalReason: "user_reject" };
     }
 
-    try {
-      const executor = this.#getExecutor?.();
-      if (!executor) {
-        throw new Error(`Approval executor not configured for ${input.approvalId}`);
-      }
+    const decision = input.decision;
 
-      const value = await executor.approve(entry.record, input.decision);
+    this.#resolvePendingApproval(entry, decision);
 
-      this.#publishFinished({
-        approvalId: input.approvalId,
-        status: "approved",
-        terminalReason: "user_approve",
-        ...this.#recordMeta(entry.record),
-        value,
-      });
+    this.#publishFinished({
+      approvalId: input.approvalId,
+      status: "approved",
+      terminalReason: "user_approve",
+      ...this.#recordMeta(entry.record),
+    });
 
-      this.#resolvePendingApproval(entry, value);
-      return { approvalId: input.approvalId, status: "approved", terminalReason: "user_approve", value };
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-
-      this.#publishFinished({
-        approvalId: input.approvalId,
-        status: "failed",
-        terminalReason: "internal_error",
-        ...this.#recordMeta(entry.record),
-        error: serializeApprovalFinishedError(err),
-      });
-
-      this.#rejectPendingApproval(entry, err);
-      throw err;
-    }
+    return { approvalId: input.approvalId, status: "approved", terminalReason: "user_approve", decision };
   }
 
   async cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void> {
@@ -344,15 +317,6 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
         meta: this.#recordMeta(entry.record),
       });
 
-    const executor = this.#getExecutor?.();
-    if (executor) {
-      try {
-        await executor.cancel(entry.record, input.reason, error);
-      } catch (cleanupError) {
-        this.#logger?.("approvals: cancel cleanup failed", cleanupError);
-      }
-    }
-
     this.#rejectPendingApproval(entry, error);
 
     this.#publishFinished({
@@ -362,6 +326,18 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       ...this.#recordMeta(entry.record),
       error: serializeApprovalFinishedError(error),
     });
+  }
+
+  async cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): Promise<number> {
+    const approvalIds = [...this.#pending.values()]
+      .filter((entry) => isSameApprovalScope(entry.record.scope, scope))
+      .map((entry) => entry.record.approvalId);
+
+    for (const approvalId of approvalIds) {
+      await this.cancel({ approvalId, reason });
+    }
+
+    return approvalIds.length;
   }
 
   #enqueue(record: ApprovalRecord) {
@@ -375,6 +351,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
         approvalId: record.approvalId,
         kind: record.kind,
         source: record.requester.source,
+        scope: record.scope,
         origin: record.origin,
         namespace: record.namespace,
         chainRef: record.chainRef,
@@ -419,18 +396,10 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   }
 
   #resolvePendingApproval(entry: PendingApproval, value: unknown): void {
-    if (entry.settlement.kind !== "handle") {
-      return;
-    }
-
     entry.settlement.resolve(value);
   }
 
   #rejectPendingApproval(entry: PendingApproval, error: Error): void {
-    if (entry.settlement.kind !== "handle") {
-      return;
-    }
-
     try {
       entry.settlement.reject(error);
     } catch (rejectError) {
@@ -450,11 +419,11 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   }
 
   #publishState() {
-    this.#messenger.publish(APPROVAL_STATE_CHANGED, cloneState(this.#state));
+    this.#messenger.publish(APPROVAL_STATE_CHANGED, structuredClone(this.#state));
   }
 
   #publishCreated(event: ApprovalCreatedEvent) {
-    this.#messenger.publish(APPROVAL_CREATED, cloneCreatedEvent(event));
+    this.#messenger.publish(APPROVAL_CREATED, structuredClone(event));
     this.#messenger.publish(OWNER_CHANGED, {
       topic: "approvals",
       change: "queue",
@@ -462,8 +431,8 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     });
   }
 
-  #publishFinished(event: ApprovalFinishedEvent<unknown>) {
-    this.#messenger.publish(APPROVAL_FINISHED, cloneFinishEvent(event));
+  #publishFinished(event: ApprovalFinishedEvent) {
+    this.#messenger.publish(APPROVAL_FINISHED, structuredClone(event));
     this.#messenger.publish(OWNER_CHANGED, {
       topic: "approvals",
       change: "queue",

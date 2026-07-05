@@ -6,21 +6,10 @@ export type RpcProviderRequestContext = RequestContext & {
 
 export type RpcProviderRequestCancellationReason = "caller_disconnected";
 
-export type RpcBlockingApprovalReservation = {
-  approvalId: string;
-  createdAt: number;
-};
-
-type Awaitable<T> = T | Promise<T>;
-
 export type RpcProviderRequestHandle = {
   id: string;
   namespace: string;
   signal: AbortSignal;
-  attachBlockingApproval<T extends object>(
-    createApproval: (reservation: RpcBlockingApprovalReservation) => Awaitable<T>,
-    reservation?: Partial<RpcBlockingApprovalReservation>,
-  ): Promise<T & RpcBlockingApprovalReservation>;
   fulfill(): boolean;
   reject(): boolean;
   cancel(reason: RpcProviderRequestCancellationReason): Promise<boolean>;

@@ -1,32 +1,17 @@
 import type { AccountSelectionService } from "../accounts/runtime/types.js";
-import type {
-  ApprovalAccountSelectionDecision,
-  ApprovalDecision,
-  ApprovalQueueKind,
-  ApprovalRecord,
-} from "../approvals/queue/types.js";
+import type { ApprovalAccountSelectionDecision, ApprovalRecord } from "../approvals/queue/types.js";
 import { PermissionDeniedError } from "../permissions/errors.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";
-import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
+import { deriveApprovalReviewContext } from "./chainContext.js";
 
 type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
 };
 
-export const parseNoDecision = <K extends ApprovalQueueKind>(kind: K, input: unknown): ApprovalDecision<K> => {
-  if (input !== undefined) {
-    throw new RpcInvalidParamsError({
-      message: `Approval kind "${kind}" does not accept a decision payload.`,
-    });
-  }
-
-  return undefined as ApprovalDecision<K>;
-};
-
-export const parseAccountSelectionDecision = <K extends ApprovalQueueKind>(
-  kind: K,
+const requireAccountSelectionDecision = (
+  kind: ApprovalRecord["kind"],
   input: unknown,
-): ApprovalDecision<K> => {
+): ApprovalAccountSelectionDecision => {
   const decision = input as Partial<ApprovalAccountSelectionDecision> | undefined;
   if (!decision?.accountIds?.length) {
     throw new RpcInvalidParamsError({
@@ -34,14 +19,7 @@ export const parseAccountSelectionDecision = <K extends ApprovalQueueKind>(
     });
   }
 
-  return decision as ApprovalDecision<K>;
-};
-
-export const deriveApprovalReviewContext = (
-  record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
-  options?: DeriveApprovalReviewContextOptions,
-) => {
-  return deriveApprovalReviewContextBase(record, options);
+  return decision as ApprovalAccountSelectionDecision;
 };
 
 export const getApprovalSelectableAccounts = (
@@ -77,11 +55,12 @@ export const resolveApprovalSelectedAccounts = (args: {
   record: Pick<ApprovalRecord, "kind" | "origin">;
   namespace: string;
   chainRef: ApprovalRecord["chainRef"];
-  decision: ApprovalAccountSelectionDecision;
+  decision: unknown;
   selectableAccounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"];
 }) => {
+  const decision = requireAccountSelectionDecision(args.record.kind, args.decision);
   const byKey = new Map(args.selectableAccounts.map((account) => [account.accountId, account] as const));
-  const selected = args.decision.accountIds.map((accountId) => {
+  const selected = decision.accountIds.map((accountId) => {
     const account = byKey.get(accountId);
     if (!account) {
       throw new PermissionDeniedError();
@@ -90,16 +69,4 @@ export const resolveApprovalSelectedAccounts = (args: {
   });
 
   return selected;
-};
-
-export const deriveApprovalChainContext = (
-  record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
-  options?: DeriveApprovalReviewContextOptions,
-) => {
-  const context = deriveApprovalReviewContext(record, options);
-
-  return {
-    chainRef: context.reviewChainRef,
-    namespace: context.namespace,
-  };
 };

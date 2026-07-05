@@ -3,13 +3,7 @@ import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
-import { ChainNotCompatibleError } from "../chains/errors.js";
-import {
-  createWalletAccounts,
-  createWalletApprovals,
-  createWalletNetworks,
-  createWalletSession,
-} from "../engine/wallet.js";
+import { createWalletAccounts, createWalletNetworks, createWalletSession } from "../engine/wallet.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
@@ -190,9 +184,7 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
     session: walletSession,
     accounts: walletAccounts,
     networks: walletNetworks,
-    approvals: createWalletApprovals({
-      approvals: runtime.services.approvals,
-    }),
+    approvals: runtime.services.approvals,
     approvalDetails: {
       listPending: () => approvalDetails.listPending(),
       getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
@@ -447,6 +439,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: ALT_CHAIN.chainRef,
+        scope: {
+          transport: "provider",
+          origin: "https://dapp.example",
+          portId: "port-1",
+          sessionId: "session-1",
+        },
         createdAt: 1,
         request: { chainRef: ALT_CHAIN.chainRef },
       },
@@ -463,7 +461,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(
       wallet.approvals.resolve({ approvalId: "switch-chain-approval", action: "approve" }),
     ).resolves.toBeNull();
-    await expect(approvalPromise).resolves.toBeNull();
+    await expect(approvalPromise).resolves.toBeUndefined();
     expect(runtime.services.permissions.getState()).toEqual(before);
 
     runtime.lifecycle.shutdown();
@@ -517,70 +515,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       blockTag: "latest",
       timeoutMs: 15_000,
     });
-
-    runtime.lifecycle.shutdown();
-  });
-
-  it("fails closed when sign approvals are unsupported for the namespace", async () => {
-    const runtime = createTestRuntime({
-      chainSeed: [MAINNET_CHAIN],
-      namespaces: {
-        manifests: [
-          {
-            ...eip155NamespaceManifest,
-            runtime: {
-              ...eip155NamespaceManifest.runtime,
-              createApprovalBindings: () => ({
-                signMessage: async () => {
-                  throw new ChainNotCompatibleError({
-                    message: `SignMessage is not supported for namespace "eip155".`,
-                  });
-                },
-                signTypedData: async () => {
-                  throw new ChainNotCompatibleError({
-                    message: `SignTypedData is not supported for namespace "eip155".`,
-                  });
-                },
-              }),
-            },
-          },
-        ],
-      },
-    });
-
-    await runtime.lifecycle.initialize();
-    runtime.lifecycle.start();
-
-    const approvalPromise = runtime.services.approvals.create(
-      {
-        approvalId: "sign-message-approval",
-        kind: ApprovalKinds.SignMessage,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: MAINNET_CHAIN.chainRef,
-        createdAt: 1,
-        request: {
-          chainRef: MAINNET_CHAIN.chainRef,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          message: "0x68656c6c6f",
-        },
-      },
-      {
-        origin: "https://dapp.example",
-        source: "provider",
-        requestId: "request-1",
-      },
-    ).settled;
-
-    await expect(
-      runtime.services.approvals.resolve({ approvalId: "sign-message-approval", action: "approve" }),
-    ).rejects.toMatchObject({
-      code: "chain.not_compatible",
-    });
-    await expect(approvalPromise).rejects.toMatchObject({
-      code: "chain.not_compatible",
-    });
-    expect(runtime.services.approvals.getState().pending).toEqual([]);
 
     runtime.lifecycle.shutdown();
   });

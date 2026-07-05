@@ -1,20 +1,7 @@
-import type { ApprovalResolveInput } from "../../approvals/queue/types.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../rpc/errors.js";
 import { buildTransactionTerminalReason } from "../../transactions/index.js";
 import type { DismissApprovalInput, ResolveApprovalInput, WalletApiApprovalDetailInput } from "../api.js";
 import type { WalletApiContext } from "../context.js";
-
-const toApprovalResolveInput = (input: ResolveApprovalInput): ApprovalResolveInput => {
-  if (input.action === "approve") {
-    return input.decision === undefined
-      ? { approvalId: input.approvalId, action: "approve" }
-      : { approvalId: input.approvalId, action: "approve", decision: input.decision };
-  }
-
-  return input.reason === undefined
-    ? { approvalId: input.approvalId, action: "reject" }
-    : { approvalId: input.approvalId, action: "reject", reason: input.reason };
-};
 
 export const listPendingApprovals = async (context: WalletApiContext) => await context.approvalDetails.listPending();
 
@@ -47,7 +34,7 @@ export const dismissApproval = async (context: WalletApiContext, input: DismissA
 export const resolveApproval = async (context: WalletApiContext, input: ResolveApprovalInput) => {
   const transactionApproval = context.transactions.getTransactionApproval(input.approvalId);
   if (!transactionApproval) {
-    await context.approvals.resolve(toApprovalResolveInput(input));
+    await context.approvals.resolve(input);
     return null;
   }
 

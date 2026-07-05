@@ -1,4 +1,3 @@
-import { createApprovalExecutor } from "../approvals/index.js";
 import { formatChainAddress } from "../chains/addressing.js";
 import { OWNER_CHANGED } from "../events/ownerChanged.js";
 import type { MethodExecutor } from "../invoke/methods.js";
@@ -25,11 +24,7 @@ import type { SessionOptions } from "../runtime/background/session.js";
 import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
 import { createProviderRequests } from "../runtime/provider/providerRequests.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
-import {
-  buildTransactionTerminalReason,
-  createTransactionServices,
-  TransactionAggregateStore,
-} from "../transactions/index.js";
+import { createTransactionServices, TransactionAggregateStore } from "../transactions/index.js";
 import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { WalletApiContext } from "../wallet/context.js";
@@ -40,7 +35,6 @@ import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js
 import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
 import {
   createWalletAccounts,
-  createWalletApprovals,
   createWalletAttention,
   createWalletDappConnections,
   createWalletNetworks,
@@ -160,9 +154,7 @@ const createWalletApiContext = (
       chainActivation: runtime.services.chainActivation,
       chainRpc: runtime.services.chainRpc,
     }),
-    approvals: createWalletApprovals({
-      approvals: runtime.services.approvals,
-    }),
+    approvals: runtime.services.approvals,
     attention: {
       getSnapshot: () => runtime.services.attention.getSnapshot(),
     },
@@ -235,20 +227,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   let sessionScope: BackgroundSessionScope | null = null;
   let backgroundSupportScope: BackgroundSupportScope | null = null;
 
-  const requireSessionScope = () => {
-    if (!sessionScope) {
-      throw new Error("Wallet session scope is not initialized");
-    }
-    return sessionScope;
-  };
-
-  const requireBackgroundSupportScope = () => {
-    if (!backgroundSupportScope) {
-      throw new Error("Wallet background support scope is not initialized");
-    }
-    return backgroundSupportScope;
-  };
-
   const assemblyOptions = input.runtime?.assemblyOptions;
   const runtimeSessionOptions = buildRuntimeSessionOptions(input);
   const runtimeRpcAccessPolicy = input.runtime?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY;
@@ -283,22 +261,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   backgroundSupportScope = createBackgroundSupportScope({
     bootstrapScope,
     sessionScope,
-    createApprovalExecutor: ({ stateServices }) =>
-      createApprovalExecutor({
-        getDeps: () => {
-          const activeSessionScope = requireSessionScope();
-          const activeBackgroundSupportScope = requireBackgroundSupportScope();
-
-          return {
-            accounts: stateServices.accounts,
-            permissions: stateServices.permissions,
-            chainActivation: activeSessionScope.chainActivation,
-            chainDefinitions: stateServices.chainDefinitions,
-            chainRpcDefaultEndpoints: activeSessionScope.chainRpcDefaultEndpoints,
-            namespaceRuntime: activeBackgroundSupportScope.namespaceRuntime,
-          };
-        },
-      }),
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
   const transactionAggregateStore = new TransactionAggregateStore({
@@ -332,11 +294,15 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const stateServices = sessionScope.stateServices;
   const rpcHandlerDeps: RpcHandlerDeps = {
+    createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
+    now: bootstrapScope.storageNow,
     ...stateServices,
     walletChainSelection: sessionScope.walletChainSelection,
+    chainActivation: sessionScope.chainActivation,
     chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
     chainAddressing: bootstrapScope.namespaceBootstrap.chainAddressing,
     permissionViews: backgroundSupportScope.permissionViews,
+    namespaceRuntime: backgroundSupportScope.namespaceRuntime,
     transactions: transactionServices.transactions,
   };
   const rpcRouting = bootstrapScope.namespaceBootstrap.rpcRouting;
@@ -383,24 +349,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const providerRequests = createProviderRequests({
     generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
     now: bootstrapScope.storageNow,
-    cancelApproval: async ({ approvalId, reason }) => {
-      const transaction = await transactionServices.transactions.cancelTransactionApproval({
-        approvalId,
-        reason: buildTransactionTerminalReason({
-          kind: "approval_cancelled",
-          code: `provider.${reason}`,
-          message:
-            reason === "caller_disconnected"
-              ? "Provider caller disconnected before transaction approval completed."
-              : "Provider request ended before transaction approval completed.",
-          details: { reason },
-        }),
-      });
-      if (transaction) {
-        return;
-      }
-      await stateServices.approvals.cancel({ approvalId, reason });
-    },
   });
   const providerAccess = createProviderRuntimeAccess({
     messenger: bootstrapScope.messenger,
@@ -430,6 +378,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       backgroundSupportScope.permissionViews.getAuthorizationSnapshot(origin, {
         chainRef: options.chainRef,
       }).isAuthorized,
+    approvals: stateServices.approvals,
     providerRequests,
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
@@ -450,9 +399,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyring: sessionScope.keyringService,
     keyringExport: sessionScope.keyringExport,
   });
-  const approvals = createWalletApprovals({
-    approvals: stateServices.approvals,
-  });
+  const approvals = stateServices.approvals;
   const approvalDetails = createApprovalDetails({
     approvals: stateServices.approvals,
     accounts,

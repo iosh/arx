@@ -220,6 +220,12 @@ describe("createArxWallet", () => {
           origin: ORIGIN,
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
+          scope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: "port-1",
+            sessionId: "session-1",
+          },
           createdAt: 1_000,
           request: {
             chainRef: EIP155_CHAIN_REF,
@@ -247,9 +253,8 @@ describe("createArxWallet", () => {
         approvalId,
         status: "approved",
         terminalReason: "user_approve",
-        value: expect.stringMatching(/^0x[0-9a-f]+$/i),
       });
-      await expect(handle.settled).resolves.toMatch(/^0x[0-9a-f]+$/i);
+      await expect(handle.settled).resolves.toBeUndefined();
       expect(wallet.approvals.getState()).toEqual({ pending: [] });
     } finally {
       await runtime.shutdown();
@@ -273,6 +278,12 @@ describe("createArxWallet", () => {
           origin: ORIGIN,
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
+          scope: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: "port-1",
+            sessionId: "session-1",
+          },
           createdAt: 2_000,
           request: {
             chainRef: EIP155_CHAIN_REF,

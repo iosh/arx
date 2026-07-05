@@ -1,3 +1,4 @@
+import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { isArxBaseError } from "../../error.js";
 import { eventTopic, type Messenger } from "../../messenger/index.js";
@@ -78,6 +79,7 @@ type ProviderRuntimeAccessDeps = {
     namespace: string | null;
   }) => void;
   isAuthorized: (origin: string, options: { namespace: string; chainRef: ChainRef }) => boolean;
+  approvals: Pick<ApprovalQueueService, "cancelScope">;
   providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
@@ -199,6 +201,7 @@ export const createProviderRuntimeAccess = ({
   shouldRequestUnlockAttention,
   requestUnlockAttention,
   isAuthorized,
+  approvals,
   providerRequests,
   subscribeSessionUnlocked,
   subscribeSessionLocked,
@@ -677,7 +680,19 @@ export const createProviderRuntimeAccess = ({
   });
 
   const cancelRequestScope = async (input: ProviderRuntimeRequestScope) => {
-    return await providerRequests.cancelScope(input, "caller_disconnected");
+    const [requestCount] = await Promise.all([
+      providerRequests.cancelScope(input, "caller_disconnected"),
+      approvals.cancelScope(
+        {
+          transport: "provider",
+          origin: input.origin,
+          portId: input.portId,
+          sessionId: input.sessionId,
+        },
+        "caller_disconnected",
+      ),
+    ]);
+    return requestCount;
   };
 
   return {

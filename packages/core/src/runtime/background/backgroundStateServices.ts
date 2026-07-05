@@ -3,7 +3,6 @@ import { StoreAccountSelectionService } from "../../accounts/runtime/StoreAccoun
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import { InMemoryApprovalQueueService } from "../../approvals/queue/InMemoryApprovalQueueService.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
-import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
@@ -44,7 +43,6 @@ export type BackgroundStateServicesInitResult = {
   chainDefinitionsService: ChainDefinitionsService;
   permissionsService: PermissionsService;
   permissionsReady: Promise<void>;
-  setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
 };
 
 export const initBackgroundStateServices = ({
@@ -75,8 +73,6 @@ export const initBackgroundStateServices = ({
     accountAddressing,
   });
 
-  let approvalExecutor: ApprovalExecutor | undefined;
-
   const approvalQueueService = new InMemoryApprovalQueueService({
     messenger,
     ...(approvalOptions?.autoRejectMessage !== undefined
@@ -84,7 +80,6 @@ export const initBackgroundStateServices = ({
       : {}),
     ...(approvalOptions?.ttlMs !== undefined ? { ttlMs: approvalOptions.ttlMs } : {}),
     ...(approvalOptions?.logger !== undefined ? { logger: approvalOptions.logger } : {}),
-    getExecutor: () => approvalExecutor,
   });
 
   const permissionsService = new PermissionsService({
@@ -114,8 +109,5 @@ export const initBackgroundStateServices = ({
     chainDefinitionsService,
     permissionsService,
     permissionsReady,
-    setApprovalExecutor(executor) {
-      approvalExecutor = executor;
-    },
   };
 };

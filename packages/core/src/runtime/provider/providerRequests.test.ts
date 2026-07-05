@@ -9,13 +9,11 @@ const REQUEST_SCOPE = {
 };
 
 describe("createProviderRequests", () => {
-  it("cancels only the matched request scope and precisely expires the linked approval", async () => {
-    const cancelApproval = vi.fn(async () => {});
-    const generatedIds = ["request-1", "request-2", "approval-1"];
+  it("cancels only the matched request scope", async () => {
+    const generatedIds = ["request-1", "request-2"];
     const providerRequests = createProviderRequests({
       generateId: () => generatedIds.shift() ?? "unexpected-request-id",
       now: () => 100,
-      cancelApproval,
     });
 
     const targetHandle = providerRequests.beginRequest({
@@ -31,17 +29,8 @@ describe("createProviderRequests", () => {
       method: "eth_requestAccounts",
     });
 
-    await targetHandle.attachBlockingApproval(({ approvalId }) => ({
-      approvalId,
-    }));
-
     await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
-    expect(cancelApproval).toHaveBeenCalledTimes(1);
-    expect(cancelApproval).toHaveBeenCalledWith({
-      approvalId: "approval-1",
-      reason: "caller_disconnected",
-    });
     expect(providerRequests.has("request-1")).toBe(false);
     expect(providerRequests.has("request-2")).toBe(true);
     expect(targetHandle.getTerminalError()).toMatchObject({
@@ -54,7 +43,6 @@ describe("createProviderRequests", () => {
     const providerRequests = createProviderRequests({
       generateId: () => "request-2",
       now: () => 200,
-      cancelApproval: async () => {},
     });
 
     const handle = providerRequests.beginRequest({
@@ -77,7 +65,6 @@ describe("createProviderRequests", () => {
     const providerRequests = createProviderRequests({
       generateId: () => "request-4",
       now: () => 400,
-      cancelApproval: async () => {},
     });
 
     const handle = providerRequests.beginRequest({
@@ -101,7 +88,6 @@ describe("createProviderRequests", () => {
     const providerRequests = createProviderRequests({
       generateId: () => "request-5",
       now: () => 500,
-      cancelApproval: async () => {},
     });
 
     const handle = providerRequests.beginRequest({
@@ -120,55 +106,26 @@ describe("createProviderRequests", () => {
     expect(providerRequests.has("request-5")).toBe(false);
   });
 
-  it("does not resurrect a request when it is cancelled while creating the blocking approval", async () => {
-    const cancelApproval = vi.fn(async () => {});
-    const generatedIds = ["request-3", "approval-3"];
+  it("keeps listPending in createdAt order", () => {
+    const generatedIds = ["request-b", "request-a"];
     const providerRequests = createProviderRequests({
       generateId: () => generatedIds.shift() ?? "unexpected-id",
-      now: () => 300,
-      cancelApproval,
+      now: vi.fn().mockReturnValueOnce(200).mockReturnValueOnce(100),
     });
 
-    const handle = providerRequests.beginRequest({
+    providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
-      rpcId: "rpc-3",
+      rpcId: "rpc-b",
       namespace: "eip155",
       method: "personal_sign",
     });
-
-    let cancelPromise: Promise<boolean> | null = null;
-    await expect(
-      handle.attachBlockingApproval(({ approvalId, createdAt }) => {
-        expect(createdAt).toBe(300);
-        expect(providerRequests.get("request-3")).toMatchObject({
-          id: "request-3",
-          blockingApprovalId: approvalId,
-        });
-        cancelPromise = handle.cancel("caller_disconnected");
-
-        return {
-          approvalId,
-        };
-      }),
-    ).rejects.toMatchObject({
-      code: "global.transport.disconnected",
+    providerRequests.beginRequest({
+      scope: REQUEST_SCOPE,
+      rpcId: "rpc-a",
+      namespace: "eip155",
+      method: "eth_chainId",
     });
 
-    await expect(cancelPromise).resolves.toBe(true);
-    expect(cancelApproval).toHaveBeenCalledTimes(2);
-    expect(cancelApproval).toHaveBeenNthCalledWith(1, {
-      approvalId: "approval-3",
-      reason: "caller_disconnected",
-    });
-    expect(cancelApproval).toHaveBeenNthCalledWith(2, {
-      approvalId: "approval-3",
-      reason: "caller_disconnected",
-    });
-    expect(providerRequests.has("request-3")).toBe(false);
-    expect(providerRequests.get("request-3")).toBeUndefined();
-    expect(providerRequests.listPending()).toEqual([]);
-    expect(handle.getTerminalError()).toMatchObject({
-      code: "global.transport.disconnected",
-    });
+    expect(providerRequests.listPending().map((record) => record.id)).toEqual(["request-a", "request-b"]);
   });
 });

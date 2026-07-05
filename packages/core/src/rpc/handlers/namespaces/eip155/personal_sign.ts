@@ -55,13 +55,19 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
         executionContext,
         method: "personal_sign",
         kind: ApprovalKinds.SignMessage,
+        chainRef,
         request: {
           chainRef,
           from: account.canonicalAddress,
           message,
         },
       });
-      return await approval.settled;
+      await approval.settled;
+      return await deps.namespaceRuntime.approvals.signMessage({
+        chainRef,
+        address: account.canonicalAddress,
+        message,
+      });
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw new RpcInternalError({

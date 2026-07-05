@@ -46,7 +46,8 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
   },
-  handler: async ({ params: seed, deps, executionContext }) => {
+  handler: async (context) => {
+    const { params: seed, deps, executionContext } = context;
     const { definition, defaultRpcEndpoints = [] } = seed;
     if (getChainRefNamespace(definition.chainRef) !== "eip155") {
       throw new ChainNotCompatibleError({
@@ -87,6 +88,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       executionContext,
       method: "wallet_addEthereumChain",
       kind: ApprovalKinds.AddChain,
+      chainRef: definition.chainRef,
       request: {
         definition,
         defaultRpcEndpoints,
@@ -94,6 +96,8 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       },
     });
     await approval.settled;
+    await deps.chainDefinitions.upsertCustomChain(definition, { createdByOrigin: context.origin });
+    await deps.chainRpcDefaultEndpoints?.setDefaultEndpoints(definition.chainRef, defaultRpcEndpoints, "request");
 
     return null;
   },

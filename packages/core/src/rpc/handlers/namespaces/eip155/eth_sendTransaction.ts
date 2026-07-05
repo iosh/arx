@@ -36,33 +36,32 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       prepared: txRequest,
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, account, deps, executionContext }) => {
+  executeAuthorizedRequest: async (context) => {
+    const { prepared, account, deps, executionContext } = context;
     const requestContext = requireRequestContext(executionContext, "eth_sendTransaction");
     const providerRequestHandle = requireProviderRequestHandle(executionContext, "eth_sendTransaction");
 
-    const { decision } = await providerRequestHandle.attachBlockingApproval(({ approvalId }) =>
-      deps.transactions.requestTransactionApproval({
-        namespace: "eip155",
-        chainRef: prepared.chainRef,
-        origin,
-        source: "provider",
-        requestId: requestContext.requestId,
-        accountId: account.accountId,
-        approvalId,
-        cancellation: {
-          signal: providerRequestHandle.signal,
-          reason: buildTransactionTerminalReason({
-            kind: "approval_cancelled",
-            code: "provider.caller_disconnected",
-            message: "Provider caller disconnected before transaction approval completed.",
-            details: { reason: "caller_disconnected" },
-          }),
-        },
-        request: {
-          payload: prepared.payload as JsonValue,
-        },
-      }),
-    );
+    const { decision } = await deps.transactions.requestTransactionApproval({
+      namespace: "eip155",
+      chainRef: prepared.chainRef,
+      origin: context.origin,
+      source: "provider",
+      requestId: requestContext.requestId,
+      accountId: account.accountId,
+      approvalId: deps.createId(),
+      cancellation: {
+        signal: providerRequestHandle.signal,
+        reason: buildTransactionTerminalReason({
+          kind: "approval_cancelled",
+          code: "provider.caller_disconnected",
+          message: "Provider caller disconnected before transaction approval completed.",
+          details: { reason: "caller_disconnected" },
+        }),
+      },
+      request: {
+        payload: prepared.payload as JsonValue,
+      },
+    });
 
     const approvalDecision = await decision;
     if (approvalDecision.status === "rejected") {

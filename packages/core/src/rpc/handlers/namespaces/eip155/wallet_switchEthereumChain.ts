@@ -1,4 +1,5 @@
 import { ApprovalKinds } from "../../../../approvals/index.js";
+import { NamespaceChainActivationReasons } from "../../../../services/runtime/chainActivation/types.js";
 import * as Hex from "../../../../utils/hex.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
@@ -78,7 +79,8 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: readSwitchEthereumChainParams,
-  handler: async ({ params, deps, executionContext, invocation }) => {
+  handler: async (context) => {
+    const { params, deps, executionContext, invocation } = context;
     const chainDefinitions = deps.chainDefinitions;
     if (!chainDefinitions) {
       throw new RpcInternalError({
@@ -101,10 +103,18 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
       executionContext,
       method: "wallet_switchEthereumChain",
       kind: ApprovalKinds.SwitchChain,
+      chainRef: target.chainRef,
       request: {
         chainRef: target.chainRef,
       },
     });
-    return await approval.settled;
+    await approval.settled;
+    await deps.chainActivation.selectProviderChain({
+      origin: context.origin,
+      namespace: invocation.namespace,
+      chainRef: target.chainRef,
+      reason: NamespaceChainActivationReasons.SwitchChain,
+    });
+    return null;
   },
 });

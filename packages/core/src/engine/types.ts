@@ -4,7 +4,7 @@ import type {
   ApprovalCreateParams,
   ApprovalFinishedEvent,
   ApprovalHandle,
-  ApprovalQueueKind,
+  ApprovalKind,
   ApprovalQueueService,
   ApprovalRecord,
   ApprovalRequester,
@@ -198,15 +198,12 @@ export type WalletApprovals = Readonly<{
   getState(): ApprovalState;
   get(id: string): ApprovalRecord | undefined;
   listPending(): ApprovalRecord[];
-  create<K extends ApprovalQueueKind>(
-    request: ApprovalCreateParams<K>,
-    requester: ApprovalRequester,
-  ): ApprovalHandle<K>;
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle;
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
   cancel: ApprovalQueueService["cancel"];
   onStateChanged: ApprovalQueueService["onStateChanged"];
   onCreated(listener: (event: ApprovalCreatedEvent) => void): () => void;
-  onFinished(listener: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
+  onFinished(listener: (event: ApprovalFinishedEvent) => void): () => void;
 }>;
 
 /** Persistent authorization facts stored by the permissions service. */

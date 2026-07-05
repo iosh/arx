@@ -32,13 +32,19 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
         executionContext,
         method: "eth_signTypedData_v4",
         kind: ApprovalKinds.SignTypedData,
+        chainRef,
         request: {
           chainRef,
           from: account.canonicalAddress,
           typedData,
         },
       });
-      return await approval.settled;
+      await approval.settled;
+      return await deps.namespaceRuntime.approvals.signTypedData({
+        chainRef,
+        address: account.canonicalAddress,
+        typedData,
+      });
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw new RpcInternalError({

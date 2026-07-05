@@ -1,22 +1,13 @@
 import type { ChainNamespace } from "../../accounts/runtime/types.js";
 import type { ChainDefinition, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type {
-  RequestPermissionsApprovalPayload,
-  RequestPermissionsApprovalResult,
-} from "../../permissions/service/types.js";
+import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";
 import type { AccountId } from "../../storage/records.js";
 import type { ApprovalSource } from "../source.js";
-import {
-  type ApprovalKind,
-  ApprovalKinds,
-  type ApprovalQueueKind,
-  type ApprovalType,
-  ApprovalTypes,
-} from "./constants.js";
+import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
 export { getApprovalKind, getApprovalType } from "./constants.js";
-export type { ApprovalKind, ApprovalQueueKind, ApprovalType };
+export type { ApprovalKind, ApprovalType };
 export { ApprovalKinds, ApprovalTypes };
 
 export type ApprovalTerminalReason =
@@ -38,10 +29,23 @@ export type ApprovalRequester = {
   requestId?: string | undefined;
 };
 
+export type ApprovalScope =
+  | {
+      transport: "provider";
+      origin: string;
+      portId: string;
+      sessionId: string;
+    }
+  | {
+      transport: "wallet-ui";
+      origin: string;
+    };
+
 export type ApprovalQueueItem = {
   approvalId: string;
-  kind: ApprovalQueueKind;
+  kind: ApprovalKind;
   source: ApprovalSource;
+  scope: ApprovalScope;
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
@@ -70,53 +74,37 @@ export type ApprovalRequestByKind = {
     defaultRpcEndpoints: readonly RpcEndpoint[];
     isUpdate: boolean;
   };
+  [ApprovalKinds.SendTransaction]: {
+    chainRef: ChainRef;
+  };
 };
 
 export type ApprovalAccountSelectionDecision = {
   accountIds: [AccountId, ...AccountId[]];
 };
 
-export type ApprovalDecisionByKind = {
-  [ApprovalKinds.RequestAccounts]: ApprovalAccountSelectionDecision;
-  [ApprovalKinds.RequestPermissions]: ApprovalAccountSelectionDecision;
-  [ApprovalKinds.SignMessage]: undefined;
-  [ApprovalKinds.SignTypedData]: undefined;
-  [ApprovalKinds.SwitchChain]: undefined;
-  [ApprovalKinds.AddChain]: undefined;
-};
+export type ApprovalRequest<K extends ApprovalKind = ApprovalKind> = ApprovalRequestByKind[K];
 
-export type ApprovalResultByKind = {
-  [ApprovalKinds.RequestAccounts]: string[];
-  [ApprovalKinds.RequestPermissions]: RequestPermissionsApprovalResult;
-  [ApprovalKinds.SignMessage]: string;
-  [ApprovalKinds.SignTypedData]: string;
-  [ApprovalKinds.SwitchChain]: null;
-  [ApprovalKinds.AddChain]: null;
-};
+export type ApprovalDecision = unknown;
 
-export type ApprovalRequest<K extends ApprovalQueueKind = ApprovalQueueKind> = ApprovalRequestByKind[K];
-
-export type ApprovalDecision<K extends ApprovalQueueKind = ApprovalQueueKind> = ApprovalDecisionByKind[K];
-
-export type ApprovalResult<K extends ApprovalQueueKind = ApprovalQueueKind> = ApprovalResultByKind[K];
-
-export type ApprovalCreateParams<K extends ApprovalQueueKind = ApprovalQueueKind> = {
+export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   approvalId: string;
   kind: K;
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
+  scope: ApprovalScope;
   request: ApprovalRequest<K>;
   createdAt: number;
 };
 
-export type ApprovalRecord<K extends ApprovalQueueKind = ApprovalQueueKind> = ApprovalCreateParams<K> & {
+export type ApprovalRecord<K extends ApprovalKind = ApprovalKind> = ApprovalCreateParams<K> & {
   requester: ApprovalRequester;
 };
 
-export type ApprovalHandle<K extends ApprovalQueueKind = ApprovalQueueKind> = {
+export type ApprovalHandle = {
   approvalId: string;
-  settled: Promise<ApprovalResult<K>>;
+  settled: Promise<ApprovalDecision>;
 };
 
 export type ApprovalCreatedEvent = {
@@ -129,17 +117,16 @@ export type ApprovalFinishedErrorSummary = {
   code?: string | undefined;
 };
 
-export type ApprovalFinishedEvent<T = unknown> = {
+export type ApprovalFinishedEvent = {
   approvalId: string;
   status: ApprovalFinalStatus;
   terminalReason: ApprovalTerminalReason;
 
-  kind?: ApprovalQueueKind | undefined;
+  kind?: ApprovalKind | undefined;
   origin?: string | undefined;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
 
-  value?: T | undefined;
   error?: ApprovalFinishedErrorSummary | undefined;
 };
 
@@ -156,16 +143,16 @@ export type ApprovalResolveInput =
   | {
       approvalId: string;
       action: "reject";
-      reason?: string;
-      error?: Error;
+      reason?: string | undefined;
+      error?: Error | undefined;
     };
 
-export type ApprovalResolveResult<T = unknown> =
+export type ApprovalResolveResult =
   | {
       approvalId: string;
       status: "approved";
       terminalReason: "user_approve";
-      value: T;
+      decision: ApprovalDecision;
     }
   | {
       approvalId: string;
@@ -173,36 +160,19 @@ export type ApprovalResolveResult<T = unknown> =
       terminalReason: "user_reject";
     };
 
-export type PendingApprovalSettlement =
-  | {
-      kind: "handle";
-      resolve: (value: unknown) => void;
-      reject: (error: Error) => void;
-    }
-  | {
-      kind: "internal";
-    };
-
-export type PendingApproval<K extends ApprovalQueueKind = ApprovalQueueKind> = {
-  record: ApprovalRecord<K>;
-  settlement: PendingApprovalSettlement;
-};
-
 export type ApprovalQueueService = {
   getState(): ApprovalState;
   get(approvalId: string): ApprovalRecord | undefined;
-  create<K extends ApprovalQueueKind>(
-    request: ApprovalCreateParams<K>,
-    requester: ApprovalRequester,
-  ): ApprovalHandle<K>;
-  createPending<K extends ApprovalQueueKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void;
+  listPending(): ApprovalRecord[];
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void;
-  onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
+  onFinished(handler: (event: ApprovalFinishedEvent) => void): () => void;
 
   has(approvalId: string): boolean;
 
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 
   cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
+  cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): Promise<number>;
 };

@@ -1,4 +1,3 @@
-import type { ApprovalExecutor } from "../../approvals/types.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
@@ -72,7 +71,6 @@ export type BackgroundBootstrapScope = {
 export type BackgroundSessionScope = {
   stateServices: BackgroundStateServices;
   chainRpcAccessUpdater: ChainRpcAccessUpdater;
-  setApprovalExecutor: ReturnType<typeof initBackgroundStateServices>["setApprovalExecutor"];
   permissionsReady: Promise<void>;
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
@@ -202,8 +200,7 @@ export const createBackgroundSessionScope = ({
     options: bootstrapScope.backgroundAssemblyOptions,
   });
 
-  const { stateServices, setApprovalExecutor, chainRpcAccessUpdater, chainDefinitionsService, permissionsReady } =
-    stateServicesInit;
+  const { stateServices, chainRpcAccessUpdater, chainDefinitionsService, permissionsReady } = stateServicesInit;
 
   const chainViews = createChainViewsService({
     chainDefinitions: chainDefinitionsService,
@@ -255,7 +252,6 @@ export const createBackgroundSessionScope = ({
   return {
     stateServices,
     chainRpcAccessUpdater,
-    setApprovalExecutor,
     permissionsReady,
     chainViews,
     chainActivation,
@@ -277,12 +273,10 @@ export const createBackgroundSupportScope = ({
   bootstrapScope,
   sessionScope,
   rpcClientOptions,
-  createApprovalExecutor,
 }: {
   bootstrapScope: BackgroundBootstrapScope;
   sessionScope: BackgroundSessionScope;
   rpcClientOptions?: RpcLayerOptions;
-  createApprovalExecutor?: (params: { stateServices: BackgroundStateServices }) => ApprovalExecutor | undefined;
 }): BackgroundSupportScope => {
   const manifestRpcClientFactories = bootstrapScope.namespaceBootstrap.rpcClientFactories;
   const overrideRpcClientFactories = rpcClientOptions?.factories ?? [];
@@ -302,13 +296,6 @@ export const createBackgroundSupportScope = ({
       : {}),
   });
   const namespaceTransactions = materializedNamespaceRuntime.namespaceTransactions;
-
-  const approvalExecutor = createApprovalExecutor?.({
-    stateServices: sessionScope.stateServices,
-  });
-  sessionScope.setApprovalExecutor(approvalExecutor);
-  // Approval execution is wired after namespace bindings exist, so decisions
-  // observe fully materialized namespace-specific approval support.
 
   const permissionViews = createPermissionViewsService({
     accounts: sessionScope.stateServices.accounts,

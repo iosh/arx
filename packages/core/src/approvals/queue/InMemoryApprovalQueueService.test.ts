@@ -1,15 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../messenger/index.js";
-import type { ApprovalExecutor } from "../types.js";
 import { InMemoryApprovalQueueService } from "./InMemoryApprovalQueueService.js";
 import {
   type ApprovalCreatedEvent,
   type ApprovalCreateParams,
   type ApprovalFinishedEvent,
   ApprovalKinds,
+  type ApprovalScope,
 } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
+
+const scope: ApprovalScope = {
+  transport: "provider",
+  origin: ORIGIN,
+  portId: "port-1",
+  sessionId: "session-1",
+};
 
 const requester = {
   origin: ORIGIN,
@@ -24,17 +31,12 @@ const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalK
     origin: ORIGIN,
     namespace: "eip155",
     chainRef: "eip155:1",
+    scope,
     createdAt: 1000,
     request: { chainRef: "eip155:1", suggestedAccounts: ["0xabc"] },
     ...overrides,
   } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>;
 };
-
-const createExecutor = (value: unknown): ApprovalExecutor => ({
-  approve: vi.fn(async () => value),
-  reject: vi.fn(async () => {}),
-  cancel: vi.fn(async () => {}),
-});
 
 describe("InMemoryApprovalQueueService", () => {
   afterEach(() => {
@@ -69,6 +71,7 @@ describe("InMemoryApprovalQueueService", () => {
       origin: ORIGIN,
       namespace: "eip155",
       chainRef: "eip155:1",
+      scope,
       createdAt: 1000,
       request: {
         chainRef: "eip155:1",
@@ -84,86 +87,68 @@ describe("InMemoryApprovalQueueService", () => {
     expect(() => queue.create(request, requester)).toThrow(/must include explicit chainrefs/i);
   });
 
-  it("create() enqueues + resolve(approve) finalizes + resolves the original promise", async () => {
+  it("create() enqueues + resolve(approve) finalizes + resolves the original promise with the decision", async () => {
     const messenger = createMessenger();
-    const value = ["0xabc"];
-    const executor = createExecutor(value);
-    const queue = new InMemoryApprovalQueueService({
-      messenger,
-      getExecutor: () => executor,
-    });
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const request = createRequest({ approvalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
     const handle = queue.create(request, requester);
 
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);
 
-    const resolved = await queue.resolve({ approvalId: request.approvalId, action: "approve" });
+    const decision = { accountIds: ["eip155:1:0xabc"] };
+    const resolved = await queue.resolve({ approvalId: request.approvalId, action: "approve", decision });
 
-    await expect(handle.settled).resolves.toEqual(value);
+    await expect(handle.settled).resolves.toEqual(decision);
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
-    expect(executor.approve).toHaveBeenCalledTimes(1);
     expect(resolved).toEqual({
       approvalId: request.approvalId,
       status: "approved",
       terminalReason: "user_approve",
-      value,
+      decision,
     });
   });
 
   it("allows synchronous onCreated handlers to resolve without races", async () => {
     const messenger = createMessenger();
-    const value = ["0xabc"];
-    const executor = createExecutor(value);
-    const queue = new InMemoryApprovalQueueService({
-      messenger,
-      getExecutor: () => executor,
-    });
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const request = createRequest({ approvalId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
     const unsubscribe = queue.onCreated(({ record }) => {
-      void queue.resolve({ approvalId: record.approvalId, action: "approve" });
+      void queue.resolve({
+        approvalId: record.approvalId,
+        action: "approve",
+        decision: { accountIds: ["eip155:1:0xabc"] },
+      });
     });
 
     try {
       const handle = queue.create(request, requester);
-      await expect(handle.settled).resolves.toEqual(value);
+      await expect(handle.settled).resolves.toEqual({ accountIds: ["eip155:1:0xabc"] });
     } finally {
       unsubscribe();
     }
   });
 
-  it("prevents duplicate approve execution while approval settlement is in flight", async () => {
+  it("prevents duplicate approve settlement while approval settlement is in flight", async () => {
     const messenger = createMessenger();
-    const value = ["0xabc"];
-    const approve = vi.fn(async () => {
-      await Promise.resolve();
-      return value;
-    });
-    const queue = new InMemoryApprovalQueueService({
-      messenger,
-      getExecutor: () => ({
-        approve,
-        reject: vi.fn(async () => {}),
-        cancel: vi.fn(async () => {}),
-      }),
-    });
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const request = createRequest({ approvalId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd" });
     const handle = queue.create(request, requester);
+    const decision = { accountIds: ["eip155:1:0xabc"] };
 
-    const first = queue.resolve({ approvalId: request.approvalId, action: "approve" });
-    const second = queue.resolve({ approvalId: request.approvalId, action: "approve" });
+    const first = queue.resolve({ approvalId: request.approvalId, action: "approve", decision });
+    const second = queue.resolve({ approvalId: request.approvalId, action: "approve", decision });
 
     await expect(first).resolves.toEqual({
       approvalId: request.approvalId,
       status: "approved",
       terminalReason: "user_approve",
-      value,
+      decision,
     });
     await expect(second).rejects.toThrow(`Approval ${request.approvalId} not found`);
-    await expect(handle.settled).resolves.toEqual(value);
-    expect(approve).toHaveBeenCalledTimes(1);
+    await expect(handle.settled).resolves.toEqual(decision);
   });
 
   it("cancel() rejects caller-disconnected approvals and removes them from state", async () => {
@@ -181,11 +166,36 @@ describe("InMemoryApprovalQueueService", () => {
     await expect(handle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
   });
 
+  it("cancelScope() cancels only approvals attached to the matching scope", async () => {
+    const messenger = createMessenger();
+    const queue = new InMemoryApprovalQueueService({ messenger });
+
+    const target = createRequest({ approvalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
+    const sibling = createRequest({
+      approvalId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      scope: { ...scope, sessionId: "session-2" },
+    });
+    const targetHandle = queue.create(target, requester);
+    const siblingHandle = queue.create(sibling, requester);
+
+    await expect(queue.cancelScope(scope, "caller_disconnected")).resolves.toBe(1);
+
+    await expect(targetHandle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
+    expect(queue.getState().pending.map((item) => item.approvalId)).toEqual([sibling.approvalId]);
+
+    await queue.resolve({
+      approvalId: sibling.approvalId,
+      action: "approve",
+      decision: { accountIds: ["eip155:1:0xabc"] },
+    });
+    await expect(siblingHandle.settled).resolves.toEqual({ accountIds: ["eip155:1:0xabc"] });
+  });
+
   it("resolve(reject) preserves caller-provided Error instance", async () => {
     const messenger = createMessenger();
     const queue = new InMemoryApprovalQueueService({ messenger });
 
-    const request = createRequest({ approvalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
+    const request = createRequest({ approvalId: "01010101-0101-4101-8101-010101010101" });
     const handle = queue.create(request, requester);
 
     const custom = new Error("custom rejection");
@@ -212,23 +222,20 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {
     const messenger = createMessenger();
-    const value = ["0xabc"];
-    const executor = createExecutor(value);
-    const queue = new InMemoryApprovalQueueService({
-      messenger,
-      getExecutor: () => executor,
-    });
+    const queue = new InMemoryApprovalQueueService({ messenger });
 
     const createdEvents: ApprovalCreatedEvent[] = [];
-    const finishedEvents: ApprovalFinishedEvent<unknown>[] = [];
+    const finishedEvents: ApprovalFinishedEvent[] = [];
     const unsubscribeCreated = queue.onCreated((event) => createdEvents.push(event));
     const unsubscribeFinished = queue.onFinished((event) => finishedEvents.push(event));
 
     try {
       const approvedRequest = createRequest({ approvalId: "f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0" });
+      const decision = { accountIds: ["eip155:1:0xabc"] };
       await queue.resolve({
         approvalId: queue.create(approvedRequest, requester).approvalId,
         action: "approve",
+        decision,
       });
 
       const cancelledRequest = createRequest({ approvalId: "abababab-abab-4aba-8aba-abababababab" });
@@ -250,7 +257,6 @@ describe("InMemoryApprovalQueueService", () => {
             origin: approvedRequest.origin,
             namespace: approvedRequest.namespace,
             chainRef: approvedRequest.chainRef,
-            value,
           }),
           expect.objectContaining({
             approvalId: cancelledRequest.approvalId,
@@ -278,7 +284,7 @@ describe("InMemoryApprovalQueueService", () => {
       ttlMs: 1_000,
     });
 
-    const request = createRequest({ approvalId: "ffffffff-ffff-4fff-8fff-ffffffffffff" });
+    const request = createRequest({ approvalId: "12121212-1212-4121-8121-121212121212" });
     const handle = queue.create(request, requester);
 
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);

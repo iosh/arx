@@ -1,6 +1,6 @@
-import { requestApproval } from "../../../../approvals/creation.js";
-import type { ApprovalQueueKind, ApprovalRequest, ApprovalRequester } from "../../../../approvals/queue/types.js";
+import type { ApprovalKind, ApprovalQueueService, ApprovalRequest } from "../../../../approvals/queue/types.js";
 import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../../../../chains/addressing.js";
+import { parseChainRef } from "../../../../chains/caip.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type {
@@ -19,7 +19,6 @@ import {
   type MethodHandler,
   type RpcExecutionContext,
   RpcExecutionContextKinds,
-  type RpcProviderRequestContext,
 } from "../../types.js";
 
 export const requireRequestContext = (executionContext: RpcExecutionContext, method: string) => {
@@ -40,40 +39,42 @@ export const requireProviderRequestHandle = (executionContext: RpcExecutionConte
   return executionContext.providerRequestHandle;
 };
 
-export const buildDappApprovalRequester = (requestContext: RpcProviderRequestContext): ApprovalRequester => ({
-  origin: requestContext.origin,
-  source: "provider",
-  requestId: requestContext.requestId,
-});
-
-export const requestProviderApproval = <K extends ApprovalQueueKind>(args: {
+export const requestProviderApproval = <K extends ApprovalKind>(args: {
   deps: {
-    approvals: {
-      create: Parameters<typeof requestApproval>[0]["approvals"]["create"];
-    };
+    createId: () => string;
+    now: () => number;
+    approvals: Pick<ApprovalQueueService, "create">;
   };
   executionContext: RpcExecutionContext;
   method: string;
   kind: K;
+  chainRef: ChainRef;
   request: ApprovalRequest<K>;
 }) => {
   const requestContext = requireRequestContext(args.executionContext, args.method);
-  const providerRequestHandle = requireProviderRequestHandle(args.executionContext, args.method);
+  const chain = parseChainRef(args.chainRef);
 
-  return providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
-    requestApproval(
-      {
-        approvals: args.deps.approvals,
-        now: Date.now,
+  return args.deps.approvals.create(
+    {
+      approvalId: args.deps.createId(),
+      kind: args.kind,
+      origin: requestContext.origin,
+      namespace: chain.namespace,
+      chainRef: args.chainRef,
+      scope: {
+        transport: "provider",
+        origin: requestContext.origin,
+        portId: requestContext.portId,
+        sessionId: requestContext.sessionId,
       },
-      {
-        kind: args.kind,
-        requester: buildDappApprovalRequester(requestContext),
-        request: args.request,
-        approvalId,
-        createdAt,
-      },
-    ),
+      request: args.request,
+      createdAt: args.deps.now(),
+    },
+    {
+      origin: requestContext.origin,
+      source: "provider",
+      requestId: requestContext.requestId,
+    },
   );
 };
 

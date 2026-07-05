@@ -28,6 +28,7 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
+import type { SessionStatus } from "../runtime/background/session.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,
@@ -53,8 +54,6 @@ import type {
 import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
 import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
-import type { KeyringExportService } from "../services/runtime/keyringExport.js";
-import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../services/store/chainRpcDefaultEndpoints/port.js";
@@ -179,8 +178,8 @@ export type WalletAccounts = Readonly<{
   importMnemonic: (params: ImportMnemonicParams) => ReturnType<KeyringService["importMnemonic"]>;
   importPrivateKey: (params: ImportPrivateKeyParams) => ReturnType<KeyringService["importPrivateKey"]>;
   deriveAccount: KeyringService["deriveAccount"];
-  exportMnemonic: KeyringExportService["exportMnemonic"];
-  exportPrivateKeyByAccountId: KeyringExportService["exportPrivateKeyByAccountId"];
+  exportMnemonic: KeyringService["exportMnemonic"];
+  exportPrivateKeyByAccountId: KeyringService["exportPrivateKeyByAccountId"];
   hideHdAccount: KeyringService["hideHdAccount"];
   unhideHdAccount: KeyringService["unhideHdAccount"];
   renameKeyring: KeyringService["renameKeyring"];

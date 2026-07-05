@@ -1,5 +1,5 @@
 import type { Messenger, Unsubscribe } from "../../../messenger/index.js";
-import type { UnlockVaultParams, VaultStatus } from "../../../vault/types.js";
+import type { UnlockVaultParams, VaultLifecycleStatus } from "../../../vault/types.js";
 
 export type UnlockReason = "manual" | "timeout" | "suspend" | "reload";
 
@@ -29,7 +29,7 @@ export type UnlockParams = UnlockVaultParams;
 export type UnlockVaultPort = {
   unlock(params: UnlockParams): Promise<void>;
   lock(): void;
-  getStatus(): VaultStatus;
+  getStatus(): VaultLifecycleStatus;
 };
 
 export type UnlockLockedPayload = { at: number; reason: UnlockReason };

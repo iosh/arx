@@ -111,10 +111,7 @@ const rollbackSelectedAccount = async (params: {
 };
 
 const commitInitialSetup = async <TResult extends SetupResult>(params: {
-  session: Pick<
-    BackgroundSessionServices,
-    "createVaultWithSecret" | "clearVault" | "withVaultMetaPersistHold" | "unlock"
-  >;
+  session: Pick<BackgroundSessionServices, "createVaultWithSecret" | "clearVault" | "persistVaultMeta" | "unlock">;
   keyring: Pick<
     KeyringService,
     | "buildInitialHdKeyring"
@@ -140,54 +137,50 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
     accountAddressing: params.accountAddressing,
   });
 
-  return await params.session.withVaultMetaPersistHold(async () => {
-    let committedKeyringId: string | null = null;
-    let selectionWriteStarted = false;
+  let committedKeyringId: string | null = null;
+  let selectionWriteStarted = false;
 
-    try {
-      await params.session.createVaultWithSecret({
-        password: params.password,
-        secret: params.keyring.encodeInitialDraftPayload(draft),
-      });
+  try {
+    await params.session.createVaultWithSecret({
+      password: params.password,
+      secret: params.keyring.encodeInitialDraftPayload(draft),
+    });
 
-      await params.keyring.commitInitialKeyring(draft);
-      committedKeyringId = draft.keyringId;
+    await params.keyring.commitInitialKeyring(draft);
+    committedKeyringId = draft.keyringId;
 
-      await params.accounts.whenReady?.();
-      selectionWriteStarted = true;
-      await params.accounts.setActiveAccount({
+    await params.accounts.whenReady?.();
+    selectionWriteStarted = true;
+    await params.accounts.setActiveAccount({
+      namespace: params.namespace,
+      chainRef: params.chainRef,
+      accountId,
+    });
+    await params.session.unlock.unlock({ password: params.password });
+    await params.session.persistVaultMeta();
+
+    return params.draftBuilder.buildResult(draft);
+  } catch (error) {
+    if (selectionWriteStarted) {
+      await rollbackSelectedAccount({
+        accounts: params.accounts,
         namespace: params.namespace,
         chainRef: params.chainRef,
-        accountId,
+        previousAccountId: previousSelectedAccountId,
       });
-      await params.session.unlock.unlock({ password: params.password });
-
-      return params.draftBuilder.buildResult(draft);
-    } catch (error) {
-      if (selectionWriteStarted) {
-        await rollbackSelectedAccount({
-          accounts: params.accounts,
-          namespace: params.namespace,
-          chainRef: params.chainRef,
-          previousAccountId: previousSelectedAccountId,
-        });
-      }
-
-      if (committedKeyringId) {
-        await params.keyring.removeCommittedInitialKeyring(committedKeyringId);
-      }
-
-      await params.session.clearVault();
-      throw error;
     }
-  });
+
+    if (committedKeyringId) {
+      await params.keyring.removeCommittedInitialKeyring(committedKeyringId);
+    }
+
+    await params.session.clearVault();
+    throw error;
+  }
 };
 
 export const createWalletSetupWorkflow = (deps: {
-  session: Pick<
-    BackgroundSessionServices,
-    "createVaultWithSecret" | "clearVault" | "withVaultMetaPersistHold" | "unlock"
-  >;
+  session: Pick<BackgroundSessionServices, "createVaultWithSecret" | "clearVault" | "persistVaultMeta" | "unlock">;
   keyring: Pick<
     KeyringService,
     | "buildInitialHdKeyring"

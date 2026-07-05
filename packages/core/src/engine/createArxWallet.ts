@@ -65,9 +65,7 @@ type WalletRuntimeServices = Readonly<
     chainRpcEndpointOverrides: BackgroundSessionScope["chainRpcEndpointOverrides"];
     namespaceRuntime: BackgroundSupportScope["namespaceRuntime"];
     session: BackgroundSessionScope["sessionLayer"]["session"];
-    sessionStatus: BackgroundSessionScope["sessionStatus"];
     accountSigning: BackgroundSessionScope["accountSigning"];
-    keyringExport: BackgroundSessionScope["keyringExport"];
     keyring: BackgroundSessionScope["keyringService"];
   }
 >;
@@ -138,13 +136,11 @@ const createWalletApiContext = (
   return {
     session: createWalletSession({
       session: runtime.services.session,
-      sessionStatus: runtime.services.sessionStatus,
       keyring: runtime.services.keyring,
     }),
     accounts: createWalletAccounts({
       accounts: runtime.services.accounts,
       keyring: runtime.services.keyring,
-      keyringExport: runtime.services.keyringExport,
     }),
     networks: createWalletNetworks({
       walletChainSelection: runtime.services.walletChainSelection,
@@ -353,7 +349,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const providerAccess = createProviderRuntimeAccess({
     messenger: bootstrapScope.messenger,
     getIsInitialized: () => lifecycle.getIsInitialized(),
-    getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
+    getSessionStatus: () => sessionScope.sessionLayer.session.getStatus(),
     resolveProviderChain,
     initializeProviderChainSelection,
     listPermittedAccountsView: (origin, options) =>
@@ -391,13 +387,11 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const session = createWalletSession({
     session: sessionScope.sessionLayer.session,
-    sessionStatus: sessionScope.sessionStatus,
     keyring: sessionScope.keyringService,
   });
   const accounts = createWalletAccounts({
     accounts: stateServices.accounts,
     keyring: sessionScope.keyringService,
-    keyringExport: sessionScope.keyringExport,
   });
   const approvals = stateServices.approvals;
   const approvalDetails = createApprovalDetails({
@@ -446,9 +440,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
     namespaceRuntime: backgroundSupportScope.namespaceRuntime,
     session: sessionScope.sessionLayer.session,
-    sessionStatus: sessionScope.sessionStatus,
     accountSigning: sessionScope.accountSigning,
-    keyringExport: sessionScope.keyringExport,
     keyring: sessionScope.keyringService,
   };
   const setup = {

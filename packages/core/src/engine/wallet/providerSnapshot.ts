@@ -2,7 +2,6 @@ import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import { ChainNotAvailableError, ChainNotSupportedError } from "../../chains/errors.js";
 import type { ProviderRuntimeConnectionQuery, ProviderRuntimeSnapshot } from "../../runtime/provider/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
-import type { SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
 
 export type ProviderChainResolutionDeps = {
@@ -31,7 +30,7 @@ const deriveEip155ProviderChain = (
 };
 
 export type ProviderSnapshotDeps = {
-  sessionStatus: Pick<SessionStatusService, "getStatus">;
+  getSessionStatus: () => { isUnlocked: boolean };
   chainViews: Pick<ChainViewsService, "findAvailableChainView">;
   providerChainSelection: Pick<ProviderChainSelectionService, "getSelectedChainRef">;
 };
@@ -74,6 +73,6 @@ export const buildProviderSnapshot = (
   return {
     namespace,
     chain,
-    isUnlocked: deps.sessionStatus.getStatus().isUnlocked,
+    isUnlocked: deps.getSessionStatus().isUnlocked,
   };
 };

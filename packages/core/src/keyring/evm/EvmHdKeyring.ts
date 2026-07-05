@@ -1,7 +1,6 @@
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import { copyBytes, zeroize } from "../../utils/bytes.js";
 import {
   KeyringAccountNotFoundError,
   KeyringDuplicateAccountError,
@@ -45,11 +44,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     this.clear();
 
     const seed = mnemonicToSeedSync(mnemonic, options?.passphrase);
-    try {
-      this.#root = HDKey.fromMasterSeed(seed);
-    } finally {
-      zeroize(seed);
-    }
+    this.#root = HDKey.fromMasterSeed(seed);
     this.#nextIndex = 0;
   }
 
@@ -105,8 +100,6 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     if (index != null) {
       this.#derivedIndices.delete(index);
     }
-
-    zeroize(entry.secret);
   }
 
   exportPrivateKey(address: string): Uint8Array {
@@ -115,7 +108,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     if (!entry) {
       throw new KeyringAccountNotFoundError();
     }
-    return copyBytes(entry.secret);
+    return new Uint8Array(entry.secret);
   }
 
   toSnapshot(): HierarchicalDeterministicKeyringSnapshot<EvmKeyringAccount> {
@@ -184,9 +177,6 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
       this.#nextIndex = Math.max(this.#nextIndex, index + 1);
       return entry;
     } finally {
-      if (privateKey) {
-        zeroize(privateKey);
-      }
       node.wipePrivateData();
     }
   }
@@ -195,7 +185,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     const canonical = canonicalizeEvmAddress(account.address);
     const entry: StoredAccount = {
       account: { ...account, address: canonical },
-      secret: copyBytes(secret),
+      secret: new Uint8Array(secret),
     };
     this.#accounts.set(canonical, entry);
     this.#order.push(canonical);
@@ -203,9 +193,6 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
   }
 
   #clearAccounts(): void {
-    for (const entry of this.#accounts.values()) {
-      zeroize(entry.secret);
-    }
     this.#accounts.clear();
     this.#order = [];
     this.#derivedIndices.clear();

@@ -48,6 +48,18 @@ export class VaultInvalidPasswordError extends ArxBaseError {
   }
 }
 
+export class VaultPlatformUnavailableError extends ArxBaseError {
+  static readonly code = "vault.platform_unavailable";
+
+  constructor(input: ErrorCause & { platform: string }) {
+    super(`Vault platform API "${input.platform}" is not available.`, {
+      code: VaultPlatformUnavailableError.code,
+      details: { platform: input.platform },
+      cause: input.cause,
+    });
+  }
+}
+
 export class VaultInvariantViolationError extends ArxBaseError {
   static readonly code = "vault.invariant_violation";
 

@@ -5,7 +5,6 @@ import { createChainRpcDefaultEndpointsService } from "../../services/store/chai
 import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
 import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
 import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
-import { createKeyringMetasService } from "../../services/store/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import { createProviderChainSelectionService } from "../../services/store/providerChainSelection/ProviderChainSelectionService.js";
@@ -26,7 +25,7 @@ export type RuntimeStoreServices = {
   chainRpcDefaultEndpoints: ReturnType<typeof createChainRpcDefaultEndpointsService>;
   chainRpcEndpointOverrides: ReturnType<typeof createChainRpcEndpointOverridesService>;
   accountsStore: ReturnType<typeof createAccountsService>;
-  keyringMetas: ReturnType<typeof createKeyringMetasService>;
+  keyringMetas: KeyringMetasPort;
 };
 
 export const initRuntimeStoreServices = ({
@@ -71,7 +70,6 @@ export const initRuntimeStoreServices = ({
   });
 
   const accountsStore = createAccountsService({ messenger, port: ports.accounts });
-  const keyringMetas = createKeyringMetasService({ messenger, port: ports.keyringMetas });
 
   return {
     walletChainSelection,
@@ -79,6 +77,6 @@ export const initRuntimeStoreServices = ({
     chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides,
     accountsStore,
-    keyringMetas,
+    keyringMetas: ports.keyringMetas,
   };
 };

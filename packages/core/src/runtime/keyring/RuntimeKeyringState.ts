@@ -3,7 +3,6 @@ import { KeyringDuplicateAccountError, KeyringSecretUnavailableError } from "../
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
-import { zeroize } from "../../utils/bytes.js";
 import { decodePayload, encodePayload } from "./keyring-utils.js";
 import type { NamespaceConfig } from "./namespaces.js";
 import {
@@ -41,6 +40,8 @@ type RuntimeKeyringFactory = () => HierarchicalDeterministicKeyring | SimpleKeyr
 
 export class RuntimeKeyringState {
   #options: KeyringServiceOptions;
+  #defaultNamespace: string;
+  #namespacesConfig: Map<string, NamespaceConfig>;
 
   #keyrings = new Map<string, RuntimeKeyring>();
   #keyringMetas = new Map<string, KeyringMetaRecord>();
@@ -57,6 +58,12 @@ export class RuntimeKeyringState {
 
   constructor(options: KeyringServiceOptions) {
     this.#options = options;
+    const [first] = options.namespaces;
+    if (!first) {
+      throw new Error("No keyring namespace configured");
+    }
+    this.#defaultNamespace = first.namespace;
+    this.#namespacesConfig = new Map(options.namespaces.map((namespace) => [namespace.namespace, namespace]));
   }
 
   async attach() {
@@ -264,7 +271,7 @@ export class RuntimeKeyringState {
           return;
         }
 
-        if (this.#options.vault.getStatus().status !== "unlocked") {
+        if (this.#options.vault.getStatus() !== "unlocked") {
           this.#clearRuntimeState();
           this.#payload = { keyrings: [] };
           return;
@@ -329,8 +336,6 @@ export class RuntimeKeyringState {
       } else {
         throw error;
       }
-    } finally {
-      zeroize(secret);
     }
 
     const reconciliation = reconcileRuntimeKeyringState({
@@ -359,11 +364,10 @@ export class RuntimeKeyringState {
       this.#accounts.set(account.accountId, cloneAccountRecord(account));
     }
 
-    const defaultNamespace = this.#getDefaultNamespace();
     const accounts = snapshot.reconciliation.reconciledAccounts;
 
     for (const entry of snapshot.payload.keyrings) {
-      this.#keyrings.set(entry.keyringId, this.#buildRuntimeKeyring(entry, defaultNamespace, accounts));
+      this.#keyrings.set(entry.keyringId, this.#buildRuntimeKeyring(entry, accounts));
     }
 
     this.#reindexHydratedAccounts(false);
@@ -397,11 +401,11 @@ export class RuntimeKeyringState {
     }
   }
 
-  #buildRuntimeKeyring(entry: VaultKeyringEntry, defaultNamespace: string, accounts: AccountRecord[]): RuntimeKeyring {
+  #buildRuntimeKeyring(entry: VaultKeyringEntry, accounts: AccountRecord[]): RuntimeKeyring {
     try {
       this.#assertHydrationMetadata(entry);
 
-      const namespace = entry.namespace ?? defaultNamespace;
+      const namespace = entry.namespace ?? this.#defaultNamespace;
       const config = this.#getNamespaceConfig(namespace);
       const factory = this.#getRuntimeKeyringFactory(entry, config);
       const instance = factory();
@@ -442,12 +446,7 @@ export class RuntimeKeyringState {
   }
 
   #getRuntimeKeyringFactory(entry: VaultKeyringEntry, config: NamespaceConfig): RuntimeKeyringFactory {
-    const factory =
-      entry.type === "hd"
-        ? config.factories.hd
-        : entry.type === "private-key"
-          ? config.factories["private-key"]
-          : undefined;
+    const factory = config.factories[entry.type];
 
     if (!factory) {
       throw new Error(
@@ -579,10 +578,6 @@ export class RuntimeKeyringState {
         await listener(payload);
       } catch (error) {
         this.#options.logger?.("keyring: payload listener threw", error);
-      } finally {
-        if (payload) {
-          zeroize(payload);
-        }
       }
     }
   }
@@ -649,16 +644,8 @@ export class RuntimeKeyringState {
     this.#notifyStateChanged();
   }
 
-  #getDefaultNamespace(): string {
-    const [first] = this.#options.namespaces;
-    if (!first) {
-      throw new Error("No keyring namespace configured");
-    }
-    return first.namespace;
-  }
-
   #getNamespaceConfig(namespace: string) {
-    const config = this.#options.namespaces.find((candidate) => candidate.namespace === namespace);
+    const config = this.#namespacesConfig.get(namespace);
     if (!config) {
       throw new Error(`Namespace "${namespace}" is not supported`);
     }

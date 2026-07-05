@@ -45,7 +45,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vaultUnlock,
         lock: vaultLock,
-        getStatus: () => ({ status: vaultUnlocked ? "unlocked" : "locked" }),
+        getStatus: () => (vaultUnlocked ? "unlocked" : "locked"),
       },
       autoLockDurationMs: 500,
       now: () => now,
@@ -111,7 +111,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vi.fn(async () => {}),
         lock: vi.fn(),
-        getStatus: () => ({ status: "locked" }),
+        getStatus: () => "locked",
       },
       autoLockDurationMs: 600,
       now: () => now,
@@ -153,7 +153,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vaultUnlock,
         lock: vi.fn(),
-        getStatus: () => ({ status: "locked" }),
+        getStatus: () => "locked",
       },
       autoLockDurationMs: 1_000,
       now: () => 10_000,
@@ -184,7 +184,7 @@ describe("InMemoryUnlockService", () => {
       vault: {
         unlock: vi.fn(async () => {}),
         lock: vi.fn(),
-        getStatus: () => ({ status: hasEnvelope ? "locked" : "uninitialized" }),
+        getStatus: () => (hasEnvelope ? "locked" : "uninitialized"),
       },
       autoLockDurationMs: 1_000,
       now: () => 10_000,

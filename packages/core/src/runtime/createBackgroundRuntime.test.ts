@@ -165,11 +165,9 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
   const walletAccounts = createWalletAccounts({
     accounts: runtime.services.accounts,
     keyring: runtime.services.keyring,
-    keyringExport: runtime.services.keyringExport,
   });
   const walletSession = createWalletSession({
     session: runtime.services.session,
-    sessionStatus: runtime.services.sessionStatus,
     keyring: runtime.services.keyring,
   });
   const walletNetworks = createWalletNetworks({

@@ -4,16 +4,16 @@ export {
   VaultInvariantViolationError,
   VaultLockedError,
   VaultNotInitializedError,
+  VaultPlatformUnavailableError,
 } from "./errors.js";
 export type {
   CommitSecretParams,
   CreateVaultParams,
   ReencryptVaultParams,
-  SealVaultParams,
   UnlockVaultParams,
   VaultConfig,
   VaultEnvelope,
+  VaultLifecycleStatus,
   VaultService,
-  VaultStatus,
 } from "./types.js";
 export { createVaultService, VAULT_VERSION } from "./vaultService.js";

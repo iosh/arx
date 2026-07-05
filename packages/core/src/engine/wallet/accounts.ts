@@ -1,6 +1,5 @@
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { KeyringExportService } from "../../services/runtime/keyringExport.js";
 import type { WalletAccounts, WalletBackupStatus, WalletSetupState } from "../types.js";
 
 const deriveBackupStatus = (keyrings: Pick<KeyringService, "getKeyrings">): WalletBackupStatus => {
@@ -37,9 +36,11 @@ const deriveWalletSetupState = (accounts: Pick<AccountSelectionService, "getStat
 export const createWalletAccounts = (deps: {
   accounts: AccountSelectionService;
   keyring: KeyringService;
-  keyringExport: KeyringExportService;
 }): WalletAccounts => {
-  const { accounts, keyring, keyringExport } = deps;
+  const { accounts, keyring } = deps;
+  const waitForAccountReadModel = async () => {
+    await accounts.whenReady?.();
+  };
 
   return {
     getState: () => accounts.getState(),
@@ -50,19 +51,43 @@ export const createWalletAccounts = (deps: {
     getActiveAccountForNamespace: (params) => accounts.getActiveAccountForNamespace(params),
     setActiveAccount: (params) => accounts.setActiveAccount(params),
     generateMnemonic: (wordCount) => keyring.generateMnemonic(wordCount),
-    confirmNewMnemonic: (params) => keyring.confirmNewMnemonic(params),
-    importMnemonic: (params) => keyring.importMnemonic(params),
-    importPrivateKey: (params) => keyring.importPrivateKey(params),
-    deriveAccount: (keyringId) => keyring.deriveAccount(keyringId),
-    exportMnemonic: (keyringId, password) => keyringExport.exportMnemonic(keyringId, password),
-    exportPrivateKeyByAccountId: (accountId, password) =>
-      keyringExport.exportPrivateKeyByAccountId(accountId, password),
-    hideHdAccount: (accountId) => keyring.hideHdAccount(accountId),
-    unhideHdAccount: (accountId) => keyring.unhideHdAccount(accountId),
+    confirmNewMnemonic: async (params) => {
+      const created = await keyring.confirmNewMnemonic(params);
+      await waitForAccountReadModel();
+      return created;
+    },
+    importMnemonic: async (params) => {
+      const imported = await keyring.importMnemonic(params);
+      await waitForAccountReadModel();
+      return imported;
+    },
+    importPrivateKey: async (params) => {
+      const imported = await keyring.importPrivateKey(params);
+      await waitForAccountReadModel();
+      return imported;
+    },
+    deriveAccount: async (keyringId) => {
+      const derived = await keyring.deriveAccount(keyringId);
+      await waitForAccountReadModel();
+      return derived;
+    },
+    exportMnemonic: (keyringId, password) => keyring.exportMnemonic(keyringId, password),
+    exportPrivateKeyByAccountId: (accountId, password) => keyring.exportPrivateKeyByAccountId(accountId, password),
+    hideHdAccount: async (accountId) => {
+      await keyring.hideHdAccount(accountId);
+      await waitForAccountReadModel();
+    },
+    unhideHdAccount: async (accountId) => {
+      await keyring.unhideHdAccount(accountId);
+      await waitForAccountReadModel();
+    },
     renameKeyring: (keyringId, alias) => keyring.renameKeyring(keyringId, alias),
     renameAccount: (accountId, alias) => keyring.renameAccount(accountId, alias),
     markBackedUp: (keyringId) => keyring.markBackedUp(keyringId),
-    removePrivateKeyKeyring: (keyringId) => keyring.removePrivateKeyKeyring(keyringId),
+    removePrivateKeyKeyring: async (keyringId) => {
+      await keyring.removePrivateKeyKeyring(keyringId);
+      await waitForAccountReadModel();
+    },
     getKeyrings: () => keyring.getKeyrings(),
     getAccountsByKeyring: (keyringId, includeHidden) => keyring.getAccountsByKeyring(keyringId, includeHidden),
     getBackupStatus: () => deriveBackupStatus(keyring),

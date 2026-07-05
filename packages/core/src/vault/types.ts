@@ -19,18 +19,11 @@ export type VaultEnvelope = {
 
 export type VaultLifecycleStatus = "uninitialized" | "locked" | "unlocked";
 
-export type VaultStatus = {
-  status: VaultLifecycleStatus;
-};
-
 export type CreateVaultParams = {
   password: string;
-};
-
-export type SealVaultParams = {
   // Payload bytes to seal into a new vault envelope.
   secret: Uint8Array;
-} & CreateVaultParams;
+};
 
 export type UnlockVaultParams = {
   password: string;
@@ -54,7 +47,7 @@ export type VaultConfig = {
 
 export interface VaultService {
   // Creates a locked vault envelope from the provided secret bytes.
-  initialize(params: SealVaultParams): Promise<VaultEnvelope>;
+  initialize(params: CreateVaultParams): Promise<VaultEnvelope>;
   unlock(params: UnlockVaultParams): Promise<void>;
   lock(): void;
   clear(): void;
@@ -65,8 +58,8 @@ export interface VaultService {
   reencrypt(params: ReencryptVaultParams): Promise<VaultEnvelope>;
 
   // Imports an existing envelope without reviving an unlocked session.
-  importEnvelope(envelope: VaultEnvelope): void;
+  loadEnvelope(envelope: VaultEnvelope): void;
   verifyPassword(password: string): Promise<void>;
   getEnvelope(): VaultEnvelope | null;
-  getStatus(): VaultStatus;
+  getStatus(): VaultLifecycleStatus;
 }

@@ -1,4 +1,4 @@
-import { VaultInvalidCiphertextError, VaultInvalidPasswordError } from "./errors.js";
+import { VaultInvalidCiphertextError, VaultInvalidPasswordError, VaultPlatformUnavailableError } from "./errors.js";
 
 const KEY_LENGTH_BITS = 256;
 
@@ -6,7 +6,7 @@ const cryptoApi = (() => {
   if (typeof globalThis.crypto !== "undefined" && globalThis.crypto !== null) {
     return globalThis.crypto as Crypto;
   }
-  throw new Error("Web Crypto API is not available in this runtime");
+  throw new VaultPlatformUnavailableError({ platform: "WebCrypto" });
 })();
 
 const encoder = new TextEncoder();
@@ -37,7 +37,7 @@ export const toBase64 = (bytes: Uint8Array): string => {
     }
     return globalThis.btoa(parts.join(""));
   }
-  throw new Error("Base64 encoder is not available");
+  throw new VaultPlatformUnavailableError({ platform: "btoa" });
 };
 
 export const fromBase64 = (value: string): Uint8Array => {
@@ -49,11 +49,11 @@ export const fromBase64 = (value: string): Uint8Array => {
     }
     return output;
   }
-  throw new Error("Base64 decoder is not available");
+  throw new VaultPlatformUnavailableError({ platform: "atob" });
 };
 
 export const importPasswordKey = (password: string): Promise<CryptoKey> => {
-  if (password.trim().length === 0) {
+  if (password.length === 0) {
     throw new VaultInvalidPasswordError();
   }
   return cryptoApi.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);

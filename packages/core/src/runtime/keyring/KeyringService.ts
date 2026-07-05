@@ -3,7 +3,6 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { parseAccountId } from "../../accounts/addressing/accountId.js";
-import { isArxBaseError } from "../../error.js";
 import {
   KeyringAccountNotFoundError,
   KeyringDuplicateAccountError,
@@ -13,9 +12,9 @@ import {
   KeyringSecretUnavailableError,
 } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
+import type { HdVaultPayload } from "../../storage/keyringSchemas.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
-import { AccountIdSchema, type AccountRecord } from "../../storage/records.js";
-import { zeroize } from "../../utils/bytes.js";
+import type { AccountRecord } from "../../storage/records.js";
 import { SessionLockedError } from "../session/errors.js";
 import { encodePayload } from "./keyring-utils.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
@@ -50,15 +49,23 @@ export type ImportPrivateKeyParams = {
   namespace?: string;
 };
 
+type HdVaultEntry = VaultKeyringEntry & { type: "hd"; payload: HdVaultPayload };
+
 export type { InitialHdKeyringDraft, InitialPrivateKeyKeyringDraft } from "./types.js";
 
 export class KeyringService {
   #options: KeyringServiceOptions;
+  #defaultNamespace: string;
   #namespacesConfig: Map<string, NamespaceConfig>;
   #runtimeKeyringState: RuntimeKeyringState;
 
   constructor(options: KeyringServiceOptions) {
     this.#options = options;
+    const [firstNamespace] = options.namespaces;
+    if (!firstNamespace) {
+      throw new Error("No keyring namespace configured");
+    }
+    this.#defaultNamespace = firstNamespace.namespace;
     this.#namespacesConfig = new Map(options.namespaces.map((ns) => [ns.namespace, ns]));
     this.#runtimeKeyringState = new RuntimeKeyringState(options);
   }
@@ -298,7 +305,7 @@ export class KeyringService {
 
   async exportMnemonic(keyringId: string, password: string): Promise<string> {
     await this.#waitForUnlockedRuntimeKeyrings();
-    await this.#verifyPassword(password);
+    await this.#options.vault.verifyPassword(password);
     this.#requireUnlockedSession();
 
     const entry = this.#runtimeKeyringState.getPayloadEntry(keyringId);
@@ -309,7 +316,7 @@ export class KeyringService {
 
   async exportPrivateKey(namespace: string, address: string, password: string): Promise<Uint8Array> {
     await this.#waitForUnlockedRuntimeKeyrings();
-    await this.#verifyPassword(password);
+    await this.#options.vault.verifyPassword(password);
     return this.#exportPrivateKeyFromUnlockedRuntime(namespace, address);
   }
 
@@ -325,7 +332,7 @@ export class KeyringService {
 
   async exportPrivateKeyByAccountId(accountId: AccountId, password: string): Promise<Uint8Array> {
     await this.#waitForUnlockedRuntimeKeyrings();
-    await this.#verifyPassword(password);
+    await this.#options.vault.verifyPassword(password);
     return this.#exportPrivateKeyByAccountIdFromUnlockedRuntime(accountId);
   }
 
@@ -343,17 +350,13 @@ export class KeyringService {
     }
 
     const secret = this.#exportPrivateKeyByAccountIdFromUnlockedRuntime(accountId);
-    try {
-      const signature = secp256k1.sign(digest, secret, { lowS: true });
-      return {
-        r: signature.r,
-        s: signature.s,
-        yParity: signature.recovery,
-        bytes: signature.toCompactRawBytes(),
-      };
-    } finally {
-      zeroize(secret);
-    }
+    const signature = secp256k1.sign(digest, secret, { lowS: true });
+    return {
+      r: signature.r,
+      s: signature.s,
+      yParity: signature.recovery,
+      bytes: signature.toCompactRawBytes(),
+    };
   }
 
   // ----- private helpers -----
@@ -371,15 +374,6 @@ export class KeyringService {
   #requireUnlockedSession(): void {
     if (!this.#options.unlock.isUnlocked()) {
       throw new SessionLockedError();
-    }
-  }
-
-  async #verifyPassword(password: string) {
-    try {
-      await this.#options.vault.verifyPassword(password);
-    } catch (error) {
-      if (isArxBaseError(error) && error.code === "vault.invalid_password") throw error;
-      throw error;
     }
   }
 
@@ -405,16 +399,17 @@ export class KeyringService {
       throw new KeyringInvalidMnemonicError();
     }
 
-    const namespace = params.namespace ?? this.#defaultNamespace();
+    const defaultNamespace = this.#defaultNamespace;
+    const namespace = params.namespace ?? defaultNamespace;
     const payload = this.#runtimeKeyringState.getPayload();
 
-    const existingHd = payload.keyrings.find(
-      (entry) =>
-        entry.type === "hd" &&
-        (entry.namespace ?? this.#defaultNamespace()) === namespace &&
-        Array.isArray((entry.payload as { mnemonic?: unknown[] }).mnemonic) &&
-        (entry.payload as { mnemonic: string[] }).mnemonic.join(" ") === normalized,
-    );
+    const existingHd = payload.keyrings.find((entry) => {
+      if (entry.type !== "hd") return false;
+      const hdEntry = entry as HdVaultEntry;
+      if ((entry.namespace ?? defaultNamespace) !== namespace) return false;
+      const { mnemonic } = hdEntry.payload;
+      return Array.isArray(mnemonic) && mnemonic.join(" ") === normalized;
+    });
 
     if (existingHd) {
       throw new KeyringDuplicateAccountError();
@@ -472,7 +467,7 @@ export class KeyringService {
   }
 
   #buildInitialPrivateKeyKeyring(params: ImportPrivateKeyParams): InitialPrivateKeyKeyringDraft {
-    const namespace = params.namespace ?? this.#defaultNamespace();
+    const namespace = params.namespace ?? this.#defaultNamespace;
     const config = this.#getConfig(namespace);
     const factory = config.factories["private-key"];
     if (!factory) throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
@@ -491,7 +486,6 @@ export class KeyringService {
 
     const secret = instance.exportPrivateKey(canonical);
     const secretHex = bytesToHex(secret);
-    zeroize(secret);
 
     return {
       keyringId,
@@ -631,7 +625,7 @@ export class KeyringService {
     derivationIndex?: number;
   }): AccountRecord {
     const payloadHex = this.#accountIdPayloadFromAddress(params.namespace, params.address);
-    const accountId = AccountIdSchema.parse(`${params.namespace}:${payloadHex}`);
+    const accountId = `${params.namespace}:${payloadHex}`;
 
     return {
       accountId,
@@ -662,13 +656,7 @@ export class KeyringService {
 
   #toAccountId(namespace: string, address: string): AccountId {
     const payloadHex = this.#accountIdPayloadFromAddress(namespace, address);
-    return AccountIdSchema.parse(`${namespace}:${payloadHex}`);
-  }
-
-  #defaultNamespace(): string {
-    const [first] = this.#options.namespaces;
-    if (!first) throw new Error("No keyring namespace configured");
-    return first.namespace;
+    return `${namespace}:${payloadHex}`;
   }
 
   #getConfig(namespace: string): NamespaceConfig {

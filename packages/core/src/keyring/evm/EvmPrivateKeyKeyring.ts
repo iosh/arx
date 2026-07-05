@@ -1,4 +1,3 @@
-import { copyBytes, zeroize } from "../../utils/bytes.js";
 import { KeyringAccountNotFoundError, KeyringSecretUnavailableError } from "../errors.js";
 import type { KeyringAccount, SimpleKeyring, SimpleKeyringSnapshot } from "../types.js";
 import { canonicalizeEvmAddress, parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";
@@ -15,14 +14,9 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
   // Replace any existing secret with the provided one.
   loadFromPrivateKey(privateKey: string | Uint8Array): void {
     const secret = parsePrivateKeyBytes(privateKey);
-    try {
-      const address = privateKeyToEvmAddress(secret);
-      this.#clearEntry(); // always replace
-      this.#entry = { account: { address, derivationPath: null, derivationIndex: null, source: "imported" }, secret };
-    } catch (error) {
-      zeroize(secret);
-      throw error;
-    }
+    const address = privateKeyToEvmAddress(secret);
+    this.#clearEntry();
+    this.#entry = { account: { address, derivationPath: null, derivationIndex: null, source: "imported" }, secret };
   }
 
   importAccount(privateKey: string | Uint8Array): KeyringAccount<string> {
@@ -65,7 +59,7 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
     if (!entry) {
       throw new KeyringSecretUnavailableError();
     }
-    return copyBytes(entry.secret);
+    return new Uint8Array(entry.secret);
   }
 
   toSnapshot(): SimpleKeyringSnapshot<KeyringAccount<string>> {
@@ -100,7 +94,6 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
 
   #clearEntry(): void {
     if (this.#entry) {
-      zeroize(this.#entry.secret);
       this.#entry = null;
     }
   }

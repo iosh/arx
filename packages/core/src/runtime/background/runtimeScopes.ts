@@ -12,9 +12,7 @@ import { type AccountSigningService, createAccountSigningService } from "../../s
 import { createAttentionService } from "../../services/runtime/attention/index.js";
 import { createChainActivationService } from "../../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
-import { createKeyringExportService, type KeyringExportService } from "../../services/runtime/keyringExport.js";
 import { createPermissionViewsService } from "../../services/runtime/permissionViews/index.js";
-import { createSessionStatusService, type SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
 import type { ChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/types.js";
@@ -80,9 +78,7 @@ export type BackgroundSessionScope = {
   chainRpcDefaultEndpoints: ChainRpcDefaultEndpointsService;
   chainRpcEndpointOverrides: ChainRpcEndpointOverridesService;
   sessionLayer: SessionLayerResult;
-  sessionStatus: SessionStatusService;
   accountSigning: AccountSigningService;
-  keyringExport: KeyringExportService;
   keyringService: KeyringService;
   runtimeLifecycle: ReturnType<typeof createRuntimeLifecycle>;
 };
@@ -237,15 +233,7 @@ export const createBackgroundSessionScope = ({
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
     ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
   });
-  const sessionStatus = createSessionStatusService({
-    unlock: sessionLayer.session.unlock,
-    vault: sessionLayer.session.vault,
-  });
   const accountSigning = createAccountSigningService({
-    keyring: sessionLayer.keyringService,
-  });
-  const keyringExport = createKeyringExportService({
-    sessionStatus,
     keyring: sessionLayer.keyringService,
   });
 
@@ -261,9 +249,7 @@ export const createBackgroundSessionScope = ({
     chainRpcDefaultEndpoints,
     chainRpcEndpointOverrides,
     sessionLayer,
-    sessionStatus,
     accountSigning,
-    keyringExport,
     keyringService: sessionLayer.keyringService,
     runtimeLifecycle,
   };

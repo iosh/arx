@@ -9,9 +9,7 @@ import type { AccountSigningService } from "../services/runtime/accountSigning.j
 import type { createAttentionService } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import type { createChainViewsService } from "../services/runtime/chainViews/index.js";
-import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
-import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../services/store/chainRpcDefaultEndpoints/port.js";
@@ -85,9 +83,7 @@ export type BackgroundRuntime = {
     providerChainSelection: ProviderChainSelectionService;
     namespaceRuntime: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntime"];
     session: BackgroundSessionServices;
-    sessionStatus: SessionStatusService;
     accountSigning: AccountSigningService;
-    keyringExport: KeyringExportService;
     keyring: KeyringService;
   };
   rpc: {

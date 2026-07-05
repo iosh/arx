@@ -30,7 +30,7 @@ const lockSession = (context: BackgroundContext) => {
   return context.runtime.services.session.unlock.getState();
 };
 
-const isSessionUnlocked = (context: BackgroundContext) => context.runtime.services.sessionStatus.isUnlocked();
+const isSessionUnlocked = (context: BackgroundContext) => context.runtime.services.session.isUnlocked();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -56,13 +56,13 @@ describe("createBackgroundRuntime (vault integration)", () => {
     try {
       await context.runtime.services.session.importVault(envelope);
 
-      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+      expect(context.runtime.services.session.getStatus()).toMatchObject({
         status: "locked",
         vaultInitialized: true,
         isUnlocked: false,
       });
       expect(context.runtime.services.session.unlock.isUnlocked()).toBe(false);
-      expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
+      expect(context.runtime.services.session.vault.getStatus()).toBe("locked");
     } finally {
       context.destroy();
     }
@@ -86,13 +86,13 @@ describe("createBackgroundRuntime (vault integration)", () => {
         message: "createVault requires the session to be locked",
       });
 
-      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+      expect(context.runtime.services.session.getStatus()).toMatchObject({
         status: "unlocked",
         vaultInitialized: true,
         isUnlocked: true,
       });
       expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
-      expect(context.runtime.services.session.vault.getStatus().status).toBe("unlocked");
+      expect(context.runtime.services.session.vault.getStatus()).toBe("unlocked");
     } finally {
       context.destroy();
     }
@@ -119,13 +119,13 @@ describe("createBackgroundRuntime (vault integration)", () => {
         message: "importVault requires the session to be locked",
       });
 
-      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+      expect(context.runtime.services.session.getStatus()).toMatchObject({
         status: "unlocked",
         vaultInitialized: true,
         isUnlocked: true,
       });
       expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
-      expect(context.runtime.services.session.vault.getStatus().status).toBe("unlocked");
+      expect(context.runtime.services.session.vault.getStatus()).toBe("unlocked");
     } finally {
       context.destroy();
     }
@@ -389,7 +389,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
       await expect(unlockSession(context, "secret")).rejects.toThrow();
       expect(isSessionUnlocked(context)).toBe(false);
-      expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
+      expect(context.runtime.services.session.vault.getStatus()).toBe("locked");
       await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
       await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
     } finally {
@@ -426,7 +426,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
       await expect(unlockSession(context, "secret")).rejects.toThrow();
       expect(isSessionUnlocked(context)).toBe(false);
-      expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
+      expect(context.runtime.services.session.vault.getStatus()).toBe("locked");
       await expect(context.accountsPort.list()).resolves.toEqual(accountsBefore);
       await expect(context.keyringMetasPort.list()).resolves.toEqual(keyringMetasBefore);
     } finally {
@@ -448,13 +448,13 @@ describe("createBackgroundRuntime (vault integration)", () => {
     await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
     expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
-    expect(context.runtime.services.session.vault.getStatus().status).toBe("unlocked");
+    expect(context.runtime.services.session.vault.getStatus()).toBe("unlocked");
     expect(context.runtime.services.keyring.getKeyrings()).toHaveLength(1);
 
     context.destroy();
 
     expect(context.runtime.services.session.unlock.isUnlocked()).toBe(false);
-    expect(context.runtime.services.session.vault.getStatus().status).toBe("locked");
+    expect(context.runtime.services.session.vault.getStatus()).toBe("locked");
     expect(context.runtime.services.keyring.getKeyrings()).toEqual([]);
     expect(context.runtime.services.keyring.getAccounts(true)).toEqual([]);
   });

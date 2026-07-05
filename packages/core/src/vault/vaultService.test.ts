@@ -18,13 +18,13 @@ describe("vaultService", () => {
       name: "pbkdf2",
       hash: "sha256",
       salt: expect.any(String),
-      iterations: 600_000,
+      iterations: 1_00_000,
     });
     expect(envelope.cipher.name).toBe("aes-gcm");
     expect(typeof envelope.cipher.iv).toBe("string");
     expect(typeof envelope.cipher.data).toBe("string");
 
-    expect(vault.getStatus()).toEqual({ status: "locked" });
+    expect(vault.getStatus()).toBe("locked");
     try {
       vault.exportSecret();
       throw new Error("Expected exportSecret to throw");
@@ -42,14 +42,14 @@ describe("vaultService", () => {
     });
   });
 
-  it("supports importing an envelope and unlocking", async () => {
+  it("supports loading an envelope and unlocking", async () => {
     const customSecret = Uint8Array.from({ length: 32 }, (_, index) => index);
     const vault1 = createVaultService();
     const envelope1 = await vault1.initialize({ password: PASSWORD, secret: customSecret });
 
     const vault2 = createVaultService();
-    vault2.importEnvelope(envelope1);
-    expect(vault2.getStatus()).toEqual({ status: "locked" });
+    vault2.loadEnvelope(envelope1);
+    expect(vault2.getStatus()).toBe("locked");
 
     await vault2.unlock({ password: PASSWORD });
     expect(toArray(vault2.exportSecret())).toEqual(toArray(customSecret));
@@ -76,7 +76,7 @@ describe("vaultService", () => {
 
     await vault.unlock({ password: PASSWORD, envelope });
 
-    expect(vault.getStatus()).toEqual({ status: "unlocked" });
+    expect(vault.getStatus()).toBe("unlocked");
     expect(toArray(vault.exportSecret())).toEqual(toArray(secret));
   });
 
@@ -88,7 +88,17 @@ describe("vaultService", () => {
 
   it("rejects empty passwords", async () => {
     const vault = createVaultService();
-    await expect(vault.initialize({ password: "   ", secret: SECRET })).rejects.toThrowError(/password/i);
+    await expect(vault.initialize({ password: "", secret: SECRET })).rejects.toThrowError(/password/i);
+  });
+
+  it("throws when initialize is called twice", async () => {
+    const vault = createVaultService();
+    await vault.initialize({ password: PASSWORD, secret: SECRET });
+
+    await expect(vault.initialize({ password: PASSWORD, secret: SECRET })).rejects.toMatchObject({
+      code: "vault.invariant_violation",
+      details: { invariant: "already_initialized" },
+    });
   });
 
   it("commitSecret reseals using the current derived key without a password", async () => {

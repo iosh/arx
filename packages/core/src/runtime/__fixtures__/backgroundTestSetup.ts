@@ -628,7 +628,7 @@ export class FakeVault implements VaultService {
     return structuredClone(this.#envelope);
   }
 
-  importEnvelope(value: VaultEnvelope): void {
+  loadEnvelope(value: VaultEnvelope): void {
     this.#envelope = structuredClone(value);
     this.#unlocked = false;
   }
@@ -638,9 +638,9 @@ export class FakeVault implements VaultService {
   }
 
   getStatus() {
-    if (this.#unlocked) return { status: "unlocked" as const };
-    if (this.#envelope) return { status: "locked" as const };
-    return { status: "uninitialized" as const };
+    if (this.#unlocked) return "unlocked" as const;
+    if (this.#envelope) return "locked" as const;
+    return "uninitialized" as const;
   }
 }
 

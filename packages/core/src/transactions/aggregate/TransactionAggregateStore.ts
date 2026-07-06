@@ -19,6 +19,7 @@ import type {
   TerminalSubmissionInput,
   TerminalTransactionInput,
   TransactionAggregate,
+  TransactionAggregateServiceOptions,
   TransactionConflictKey,
   TransactionRecord,
   TransactionRestartAction,
@@ -38,10 +39,14 @@ export class TransactionAggregateStore {
 
   constructor(deps: TransactionAggregateStoreDeps) {
     this.#transactionsPort = deps.transactionsPort;
-    this.#service = new TransactionAggregateService({
-      ...(deps.now !== undefined ? { now: deps.now } : {}),
-      ...(deps.createId !== undefined ? { createId: deps.createId } : {}),
-    });
+    const serviceOptions: TransactionAggregateServiceOptions = {};
+    if (deps.now !== undefined) {
+      serviceOptions.now = deps.now;
+    }
+    if (deps.createId !== undefined) {
+      serviceOptions.createId = deps.createId;
+    }
+    this.#service = new TransactionAggregateService(serviceOptions);
   }
 
   async loadTransactionAggregate(transactionId: string): Promise<TransactionAggregate | null> {

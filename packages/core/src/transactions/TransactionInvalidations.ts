@@ -5,8 +5,6 @@ type InvalidationHandler<T extends string> = (ids: readonly T[]) => void;
 
 export type TransactionsChangedHandler = InvalidationHandler<string>;
 
-export type TransactionApprovalsChangedHandler = InvalidationHandler<string>;
-
 const emitInvalidation = <T extends string>(handlers: Set<InvalidationHandler<T>>, ids: readonly T[]): T[] => {
   const uniqueIds = Array.from(new Set(ids));
   if (uniqueIds.length === 0) {
@@ -28,7 +26,6 @@ const emitInvalidation = <T extends string>(handlers: Set<InvalidationHandler<T>
 export class TransactionInvalidations {
   #messenger: Messenger | null;
   #transactionChangedHandlers = new Set<TransactionsChangedHandler>();
-  #approvalChangedHandlers = new Set<TransactionApprovalsChangedHandler>();
 
   constructor(messenger?: Messenger) {
     this.#messenger = messenger ?? null;
@@ -41,13 +38,6 @@ export class TransactionInvalidations {
     };
   }
 
-  onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void {
-    this.#approvalChangedHandlers.add(handler);
-    return () => {
-      this.#approvalChangedHandlers.delete(handler);
-    };
-  }
-
   publishTransactionsChanged(transactionIds: readonly string[]): void {
     const uniqueIds = emitInvalidation(this.#transactionChangedHandlers, transactionIds);
     if (uniqueIds.length > 0) {
@@ -55,17 +45,6 @@ export class TransactionInvalidations {
         topic: "transactions",
         change: "records",
         transactionIds: uniqueIds,
-      });
-    }
-  }
-
-  publishTransactionApprovalsChanged(approvalIds: readonly string[]): void {
-    const uniqueIds = emitInvalidation(this.#approvalChangedHandlers, approvalIds);
-    if (uniqueIds.length > 0) {
-      this.#messenger?.publish(OWNER_CHANGED, {
-        topic: "approvals",
-        change: "transactionApproval",
-        approvalIds: uniqueIds,
       });
     }
   }

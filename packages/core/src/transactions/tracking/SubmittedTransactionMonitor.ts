@@ -1,20 +1,14 @@
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { isArxBaseError } from "../../error.js";
-import type { JsonValue, TransactionAggregateStore, TransactionRecord } from "../aggregate/index.js";
+import type { TransactionAggregateStore, TransactionRecord } from "../aggregate/index.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type {
-  NamespaceTransactionTracking,
   PendingSubmittedTransactionInspection,
   SubmittedTransactionInspection,
-  TransactionFailure,
   TransactionTrackingContext,
 } from "../namespace/types.js";
 import { buildSubmittedTransactionTrackingContext } from "./contexts.js";
-import {
-  SubmittedTransactionTrackingCadenceError,
-  SubmittedTransactionTrackingInvariantError,
-  SubmittedTransactionTrackingUnsupportedError,
-} from "./errors.js";
+import { SubmittedTransactionTrackingCadenceError, SubmittedTransactionTrackingInvariantError } from "./errors.js";
 import type { SubmittedTransactionTracker, SubmittedTransactionTrackerResult } from "./SubmittedTransactionTracker.js";
 
 type SubmittedTransactionMonitorDeps = {
@@ -59,8 +53,6 @@ export type SubmittedTransactionMonitorRunResult = {
 
 const toScopeKey = (record: Pick<TransactionRecord, "namespace" | "chainRef">): string =>
   `${record.namespace}:${record.chainRef}`;
-
-const cloneFailureData = (data: JsonValue | null): JsonValue | null => (data === null ? null : structuredClone(data));
 
 const isPendingInspection = (
   inspection: SubmittedTransactionInspection,
@@ -210,11 +202,7 @@ export class SubmittedTransactionMonitor {
     }
 
     const existing = this.#entries.get(transactionId);
-    const namespaceTracking = this.#getNamespaceTracking(aggregate.record.namespace);
-    if (!namespaceTracking) {
-      this.#entries.delete(transactionId);
-      return;
-    }
+    const namespaceTracking = this.#namespaces.require(aggregate.record.namespace).tracking;
 
     const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountAddressing);
     const nextWakeAt =
@@ -253,7 +241,7 @@ export class SubmittedTransactionMonitor {
       return;
     }
 
-    const namespaceTracking = this.#requireNamespaceTracking(entry.context.namespace);
+    const namespaceTracking = this.#namespaces.require(entry.context.namespace).tracking;
     const attempt = entry.attempt + 1;
 
     if (tracking.status === "pending") {
@@ -284,11 +272,7 @@ export class SubmittedTransactionMonitor {
       return;
     }
 
-    const failure: TransactionFailure = {
-      reason: tracking.failure.reason,
-      message: tracking.failure.message,
-      data: cloneFailureData(tracking.failure.data),
-    };
+    const failure = structuredClone(tracking.failure);
     const delay = this.#readInspectionDelay({
       namespace: entry.context.namespace,
       operation: "tracking.getRetryInspectionDelay",
@@ -307,24 +291,9 @@ export class SubmittedTransactionMonitor {
     });
     result.retryLater.push({
       transactionId: entry.transactionId,
-      reason: tracking.failure.reason,
+      reason: tracking.failure.code,
       nextWakeAt,
     });
-  }
-
-  #requireNamespaceTracking(namespace: string): NamespaceTransactionTracking {
-    const tracking = this.#getNamespaceTracking(namespace);
-    if (!tracking) {
-      throw new SubmittedTransactionTrackingUnsupportedError({
-        namespace,
-        operation: "tracking",
-      });
-    }
-    return tracking;
-  }
-
-  #getNamespaceTracking(namespace: string): NamespaceTransactionTracking | undefined {
-    return this.#namespaces.require(namespace).tracking;
   }
 
   #readInspectionDelay(input: { namespace: string; operation: string; read: () => number }): number {

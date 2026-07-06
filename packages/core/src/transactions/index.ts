@@ -1,37 +1,18 @@
 export { buildTransactionTerminalReason, TransactionAggregateStore } from "./aggregate/index.js";
-export type {
-  ApprovalStaleTransactionApprovalSessionResult,
-  ApprovedTransactionApprovalSessionResult,
-  ApproveTransactionApprovalSessionInput,
-  ApproveTransactionApprovalSessionResult,
-  BlockedTransactionApprovalSessionResult,
-  EditTransactionApprovalSessionInput,
-  FailedTransactionApprovalSessionResult,
-  OpenTransactionApprovalSessionInput,
-  PrepareTransactionApprovalSessionInput,
-  ResolveTransactionApprovalSessionInput,
-  TransactionApprovalBlockedState,
-  TransactionApprovalDraft,
-  TransactionApprovalFailedState,
-  TransactionApprovalPrepareState,
-  TransactionApprovalPreparingState,
-  TransactionApprovalReadyState,
-  TransactionApprovalSession,
-} from "./approval/index.js";
-export {
-  TransactionApprovalSessionConflictError,
-  TransactionApprovalSessionInvariantError,
-  TransactionApprovalSessionNotFoundError,
-  TransactionApprovalSessionService,
-} from "./approval/index.js";
 export type { TransactionServices } from "./createTransactionServices.js";
 export { createTransactionServices } from "./createTransactionServices.js";
+export { TransactionReplacementUnavailableError } from "./errors.js";
 export type {
   TransactionIntent,
   TransactionIntentAccount,
 } from "./intent/index.js";
 export type { Eip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export { createEip155Broadcaster } from "./namespace/eip155/broadcaster.js";
+export {
+  Eip155ChainRefError,
+  Eip155FeeOracleResponseError,
+  Eip155SigningAbortedError,
+} from "./namespace/eip155/errors.js";
 export type { Eip155PrepareTransaction } from "./namespace/eip155/prepareTransaction.js";
 export { createEip155PrepareTransaction } from "./namespace/eip155/prepareTransaction.js";
 export {
@@ -43,9 +24,8 @@ export type { Eip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Signer } from "./namespace/eip155/signer.js";
 export { createEip155Transaction } from "./namespace/eip155/transaction.js";
 export type {
+  Eip155RawTransactionArtifact,
   Eip155SubmittedTransaction,
-  Eip155TransactionDraftChange,
-  Eip155TransactionDraftEdit,
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
   Eip155TransactionReceipt,
@@ -57,6 +37,10 @@ export type {
   Eip155UnsignedTransactionDraft,
 } from "./namespace/eip155/unsignedTransaction.js";
 export { buildEip155TransactionConflictKey } from "./namespace/eip155/unsignedTransaction.js";
+export {
+  NamespaceTransactionAlreadyRegisteredError,
+  NamespaceTransactionNotFoundError,
+} from "./namespace/errors.js";
 export { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 export type {
   BroadcastArtifact,
@@ -68,15 +52,18 @@ export type {
   NamespaceTransactionTracking,
   SignedTransactionPayload,
   SubmittedTransactionInspection,
-  TransactionApprovalReviewContext,
   TransactionBroadcastArtifactContext,
   TransactionBroadcastContext,
-  TransactionDraftEditContext,
   TransactionFailure,
+  TransactionFinalizeSubmitContext,
+  TransactionFinalizeSubmitResult,
+  TransactionIssue,
   TransactionPrepareContext,
   TransactionPrepareResult,
   TransactionProposalBlocker,
   TransactionProposalError,
+  TransactionResourceKeyContext,
+  TransactionReviewContext,
   TransactionSignContext,
   TransactionTrackingContext,
   TransactionValidationContext,
@@ -86,47 +73,27 @@ export type {
   TransactionReviewDetails,
 } from "./review.js";
 export type {
-  ApprovalStaleTransactionResult,
-  ApproveAndSubmitTransactionResult,
-  ApprovedTransactionResult,
-  ApproveTransactionInput,
-  ApproveTransactionResult,
-  BlockedTransactionApprovalResult,
-  CancelTransactionApprovalInput,
-  CreateReplacementTransactionApprovalInput,
-  FailedTransactionApprovalResult,
   ListTransactionsQuery,
-  RejectTransactionApprovalInput,
-  RequestTransactionApprovalInput,
-  RequestTransactionApprovalResult,
-  RerunApprovalPrepareInput,
-  SubmittedTransactionResult,
+  PrepareReplacementTransactionInput,
+  PrepareTransactionInput,
+  SubmitTransactionInput,
+  SubmitTransactionResult,
   Transaction,
   TransactionAccount,
-  TransactionApproval,
-  TransactionApprovalBlocked,
-  TransactionApprovalDecision,
-  TransactionApprovalFailed,
-  TransactionApprovalPrepare,
-  TransactionApprovalPreparing,
-  TransactionApprovalReady,
-  TransactionApprovalsChangedHandler,
+  TransactionBlockedProposal,
+  TransactionFailedProposal,
+  TransactionProposal,
+  TransactionReadyProposal,
   TransactionReceiptSummary,
   TransactionReplacementSummary,
-  TransactionSubmissionOutcome,
-  TransactionSubmittedOutcome,
   TransactionSubmittedSummary,
   TransactionsChangedHandler,
   TransactionsEvents,
-  TransactionTerminalOutcome,
-  UpdateApprovalDraftInput,
-  WaitForTransactionSubmissionOutcomeInput,
 } from "./TransactionsService.js";
 export { TransactionsService } from "./TransactionsService.js";
 export {
   SubmittedTransactionTrackingCadenceError,
   SubmittedTransactionTrackingInvariantError,
-  SubmittedTransactionTrackingUnsupportedError,
 } from "./tracking/errors.js";
 export type { SubmittedTransactionMonitorRunResult } from "./tracking/SubmittedTransactionMonitor.js";
 export { SubmittedTransactionMonitor } from "./tracking/SubmittedTransactionMonitor.js";
@@ -134,7 +101,8 @@ export type { SubmittedTransactionTrackerResult } from "./tracking/SubmittedTran
 export { SubmittedTransactionTracker } from "./tracking/SubmittedTransactionTracker.js";
 export type {
   Eip155TransactionRequest,
-  NamespaceTransactionDraftEdit,
+  TransactionApproved,
+  TransactionBroadcastArtifact,
   TransactionCaller,
   TransactionPrepared,
   TransactionRequest,

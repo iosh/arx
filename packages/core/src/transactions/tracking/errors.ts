@@ -14,25 +14,6 @@ export class SubmittedTransactionTrackingInvariantError extends ArxBaseError {
   }
 }
 
-export class SubmittedTransactionTrackingUnsupportedError extends ArxBaseError {
-  static readonly code = "transaction.tracking.unsupported";
-
-  readonly namespace: string;
-  readonly operation: string;
-
-  constructor(input: { namespace: string; operation: string }) {
-    super(`Namespace transaction "${input.namespace}" does not implement ${input.operation}.`, {
-      code: SubmittedTransactionTrackingUnsupportedError.code,
-      details: {
-        namespace: input.namespace,
-        operation: input.operation,
-      },
-    });
-    this.namespace = input.namespace;
-    this.operation = input.operation;
-  }
-}
-
 export class SubmittedTransactionTrackingCadenceError extends ArxBaseError {
   static readonly code = "transaction.tracking.cadence";
 

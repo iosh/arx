@@ -1,3 +1,4 @@
+export { findBlockingActiveTransactionRecords } from "./activeTransactionConflicts.js";
 export {
   TransactionAggregateAlreadyExistsError,
   TransactionAggregateInvariantError,
@@ -54,6 +55,7 @@ export type {
   TransactionRecord,
   TransactionReplacementType,
   TransactionRequestSnapshot,
+  TransactionResourceKey,
   TransactionRestartAction,
   TransactionSource,
   TransactionStatus,

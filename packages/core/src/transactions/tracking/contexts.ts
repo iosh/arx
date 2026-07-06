@@ -40,6 +40,6 @@ export const buildSubmittedTransactionTrackingContext = (
       chainRef: aggregate.record.chainRef,
       accountId: aggregate.record.accountId,
     }),
-    submitted: structuredClone(aggregate.record.submitted as Record<string, unknown>),
+    submitted: structuredClone(aggregate.record.submitted),
   };
 };

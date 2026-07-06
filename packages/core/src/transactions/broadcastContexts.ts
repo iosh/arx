@@ -1,6 +1,6 @@
 import { canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
-import { type TransactionAggregate, TransactionAggregateInvariantError } from "./aggregate/index.js";
+import type { TransactionAggregate } from "./aggregate/index.js";
 import type {
   BroadcastArtifact,
   TransactionBroadcastArtifactContext,
@@ -13,17 +13,6 @@ const readAggregateFromAddress = (aggregate: TransactionAggregate, accountAddres
     chainRef: aggregate.record.chainRef,
     accountId: aggregate.record.accountId,
   });
-};
-
-const requireApprovedPayload = (aggregate: TransactionAggregate) => {
-  const approvedRequest = aggregate.record.approvedRequest;
-  if (!approvedRequest) {
-    throw new TransactionAggregateInvariantError(
-      aggregate.record.id,
-      `Transaction "${aggregate.record.id}" is missing an approved request payload.`,
-    );
-  }
-  return approvedRequest.payload;
 };
 
 export const buildBroadcastArtifactContext = (
@@ -39,9 +28,9 @@ export const buildBroadcastArtifactContext = (
   request: {
     namespace: aggregate.record.namespace,
     chainRef: aggregate.record.chainRef,
-    payload: structuredClone(aggregate.record.request.payload as Record<string, unknown>),
+    payload: structuredClone(aggregate.record.request.payload),
   },
-  approvedPayload: structuredClone(requireApprovedPayload(aggregate) as Record<string, unknown>),
+  approvedPayload: structuredClone(aggregate.record.approvedRequest.payload),
 });
 
 export const buildBroadcastContext = (

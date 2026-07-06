@@ -163,9 +163,9 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
           trackingStatus: "failed",
           receipt: receipt.receipt,
           error: {
-            reason: "on_chain_failed",
+            code: "on_chain_failed",
             message: "EIP-155 transaction failed on chain.",
-            data: {
+            details: {
               hash: context.submitted.hash,
               chainRef: context.chainRef,
             },

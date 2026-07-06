@@ -46,6 +46,7 @@ describe("namespace assembly", () => {
     const overriddenTransaction = {
       proposal: {
         prepare: async () => ({ status: "ready" as const, prepared: {} }),
+        buildReplacementRequest: async (context) => context.targetRequest,
       },
     };
 

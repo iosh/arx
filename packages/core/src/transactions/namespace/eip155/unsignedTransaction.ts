@@ -34,6 +34,17 @@ export type Eip155UnsignedEip1559Transaction = Eip155TransactionCoreFields & {
 /** Final EIP-155 payload used for signing and durable approval storage. */
 export type Eip155UnsignedTransaction = Eip155UnsignedLegacyTransaction | Eip155UnsignedEip1559Transaction;
 
+export type Eip155PreparedLegacyTransaction = Omit<Eip155UnsignedLegacyTransaction, "nonce"> & {
+  nonce?: Hex;
+};
+
+export type Eip155PreparedEip1559Transaction = Omit<Eip155UnsignedEip1559Transaction, "nonce"> & {
+  nonce?: Hex;
+};
+
+/** Prepared review/submission proposal. Wallet-managed nonce may be absent until final submit. */
+export type Eip155PreparedTransaction = Eip155PreparedLegacyTransaction | Eip155PreparedEip1559Transaction;
+
 /**
  * Partial prepared transaction shown while gas, fees, or nonce are still
  * settling during review.

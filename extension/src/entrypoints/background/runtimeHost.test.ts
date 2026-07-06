@@ -228,10 +228,9 @@ describe("runtimeHost", () => {
         approvalId: "transaction-approval-1",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
-        prepareId: "prepare-1",
+        proposalId: "proposal-1",
       },
       review: {
-        updatedAt: 1_000,
         details: null,
         prepare: {
           state: "ready",

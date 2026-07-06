@@ -3,22 +3,26 @@ import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
-import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
+import { createEip155FeeOracle } from "./feeOracle.js";
 import { createEip155PrepareTransaction } from "./prepareTransaction.js";
 import { createEip155ReceiptService } from "./receipt.js";
 import { deriveEip155TransactionRequestForChain } from "./request.js";
 import type { Eip155Signer } from "./signer.js";
-import type { Eip155SubmittedTransaction } from "./transactionTypes.js";
+import type { Eip155SubmittedTransaction, Eip155TransactionPayload } from "./transactionTypes.js";
 import type {
-  Eip155ApprovalFinalizeContext,
-  Eip155ApprovalFinalizeResult,
   Eip155ApprovalReviewContext,
-  Eip155DraftEditContext,
+  Eip155FinalizeSubmitContext,
+  Eip155FinalizeSubmitResult,
   Eip155PrepareContext,
+  Eip155ReplacementRequestContext,
 } from "./types.js";
-import { buildEip155TransactionConflictKey, type Eip155UnsignedTransaction } from "./unsignedTransaction.js";
+import {
+  buildEip155TransactionConflictKey,
+  type Eip155PreparedTransaction,
+  type Eip155UnsignedTransaction,
+} from "./unsignedTransaction.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
@@ -32,64 +36,96 @@ const EIP155_INITIAL_INSPECTION_DELAY_MS = 3_000;
 const EIP155_PENDING_INSPECTION_DELAY_MS = 12_000;
 const EIP155_RETRY_BASE_DELAY_MS = 5_000;
 const EIP155_RETRY_MAX_DELAY_MS = 60_000;
-
-const requireEip155Request = (request: {
-  namespace: string;
-  payload?: unknown;
-  chainRef: string;
-}): Eip155TransactionRequest => {
-  if (request.namespace !== "eip155") {
-    throw new Error(`EIP-155 transaction received namespace "${request.namespace}"`);
-  }
-  if (!request.payload || typeof request.payload !== "object" || Array.isArray(request.payload)) {
-    throw new Error("EIP-155 transaction request requires an object payload");
-  }
-  return {
-    namespace: "eip155",
-    chainRef: request.chainRef,
-    payload: request.payload as Eip155TransactionRequest["payload"],
-  };
-};
+const EIP155_CANCEL_GAS_LIMIT: Hex.Hex = "0x5208";
+const REPLACEMENT_FEE_BUMP_NUMERATOR = 11n;
+const REPLACEMENT_FEE_BUMP_DENOMINATOR = 10n;
 
 const buildEip155SubmittedTransaction = (params: {
   hash: `0x${string}`;
   transaction: Eip155UnsignedTransaction;
 }): Eip155SubmittedTransaction => {
   const { type: _type, ...submittedFields } = params.transaction;
-
-  return params.transaction.type === "legacy"
-    ? {
-        hash: params.hash,
-        ...submittedFields,
-        gasPrice: params.transaction.gasPrice,
-      }
-    : {
-        hash: params.hash,
-        ...submittedFields,
-        maxFeePerGas: params.transaction.maxFeePerGas,
-        maxPriorityFeePerGas: params.transaction.maxPriorityFeePerGas,
-      };
-};
-
-const toBroadcastArtifactPayload = (signed: { raw: string }) => ({
-  raw: signed.raw,
-});
-
-const readSignedTransactionPayload = (broadcastArtifact: { kind: string; payload: Record<string, unknown> }) => {
-  const raw = broadcastArtifact.payload.raw;
-  if (typeof raw !== "string" || !raw.startsWith("0x")) {
-    throw new Error(`EIP-155 broadcast artifact "${broadcastArtifact.kind}" is missing a raw transaction payload.`);
-  }
-
   return {
-    raw,
+    hash: params.hash,
+    ...submittedFields,
   };
 };
 
-const isWalletManagedNonce = (context: Eip155ApprovalFinalizeContext): boolean =>
-  context.request.payload.nonce === undefined;
+const raiseReplacementFee = (fee: Hex.Hex): Hex.Hex => {
+  const scaled = Hex.toBigInt(fee) * REPLACEMENT_FEE_BUMP_NUMERATOR;
+  const quotient = scaled / REPLACEMENT_FEE_BUMP_DENOMINATOR;
+  const roundedUp = scaled % REPLACEMENT_FEE_BUMP_DENOMINATOR === 0n ? quotient : quotient + 1n;
+  return Hex.fromNumber(roundedUp) as Hex.Hex;
+};
 
-const hasAllowedReplacementTarget = (context: Eip155ApprovalFinalizeContext): boolean => {
+const higherFee = (left: Hex.Hex, right: Hex.Hex): Hex.Hex =>
+  Hex.toBigInt(left) >= Hex.toBigInt(right) ? left : right;
+
+const priceReplacementFees = async (
+  transaction: Eip155UnsignedTransaction,
+  chainRef: string,
+  deps: Pick<AdapterDeps, "rpcClientFactory">,
+): Promise<Pick<Eip155TransactionPayload, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">> => {
+  const rpc = deps.rpcClientFactory(chainRef);
+  if (transaction.type === "legacy") {
+    const raisedGasPrice = raiseReplacementFee(transaction.gasPrice);
+    const latestGasPrice = await rpc.getGasPrice().catch(() => null);
+    return {
+      gasPrice: latestGasPrice === null ? raisedGasPrice : higherFee(raisedGasPrice, latestGasPrice),
+    };
+  }
+
+  const raisedMaxFeePerGas = raiseReplacementFee(transaction.maxFeePerGas);
+  const raisedMaxPriorityFeePerGas = raiseReplacementFee(transaction.maxPriorityFeePerGas);
+  const suggestion = await createEip155FeeOracle({ rpc })
+    .suggestFees()
+    .catch(() => null);
+  if (suggestion?.mode !== "eip1559") {
+    return {
+      maxFeePerGas: raisedMaxFeePerGas,
+      maxPriorityFeePerGas: raisedMaxPriorityFeePerGas,
+    };
+  }
+
+  return {
+    maxFeePerGas: higherFee(raisedMaxFeePerGas, suggestion.maxFeePerGas),
+    maxPriorityFeePerGas: higherFee(raisedMaxPriorityFeePerGas, suggestion.maxPriorityFeePerGas),
+  };
+};
+
+const createEip155ReplacementRequest = async (
+  context: Eip155ReplacementRequestContext,
+  deps: Pick<AdapterDeps, "rpcClientFactory">,
+): Promise<Eip155TransactionRequest> => {
+  const target = context.targetApprovedPayload;
+  const fees = await priceReplacementFees(target, context.chainRef, deps);
+  const payload: Eip155TransactionPayload = {
+    chainId: target.chainId,
+    from: target.from,
+    to: context.type === "cancel" ? target.from : target.to,
+    value: context.type === "cancel" ? "0x0" : target.value,
+    data: context.type === "cancel" ? "0x" : target.data,
+    gas: context.type === "cancel" ? EIP155_CANCEL_GAS_LIMIT : target.gas,
+    nonce: target.nonce,
+    ...fees,
+  };
+
+  return {
+    namespace: "eip155",
+    chainRef: context.chainRef,
+    payload,
+  };
+};
+
+const approvePreparedTransaction = (
+  preparedPayload: Eip155PreparedTransaction,
+  nonce: Hex.Hex,
+): Eip155UnsignedTransaction => ({
+  ...preparedPayload,
+  nonce,
+});
+
+const isReplacingSubmittedNonce = (context: Eip155FinalizeSubmitContext, nonce: `0x${string}`): boolean => {
   const replacement = context.replacement;
   if (!replacement) {
     return false;
@@ -102,24 +138,21 @@ const hasAllowedReplacementTarget = (context: Eip155ApprovalFinalizeContext): bo
     return false;
   }
 
-  return replaced.approvedPayload.nonce === context.approvedPayload.nonce;
+  return replaced.approvedPayload.nonce === nonce;
 };
 
-const findBlockingLocalNonceConflicts = (context: Eip155ApprovalFinalizeContext): string[] => {
+const findBlockingLocalNonceConflicts = (context: Eip155FinalizeSubmitContext, nonce: `0x${string}`): string[] => {
+  const replacingSubmittedNonce = isReplacingSubmittedNonce(context, nonce);
+
   return context.localActiveTransactions
-    .filter((transaction) => transaction.approvedPayload.nonce === context.approvedPayload.nonce)
+    .filter((transaction) => transaction.approvedPayload.nonce === nonce)
     .filter((transaction) => {
-      const replacement = context.replacement;
-      return !(
-        replacement &&
-        replacement.transactionId === transaction.transactionId &&
-        transaction.status === "submitted"
-      );
+      return !(replacingSubmittedNonce && transaction.status === "submitted");
     })
     .map((transaction) => transaction.transactionId);
 };
 
-const deriveLocalNextNonce = (context: Eip155ApprovalFinalizeContext): `0x${string}` | null => {
+const deriveLocalNextNonce = (context: Eip155FinalizeSubmitContext): `0x${string}` | null => {
   let maxNonce: bigint | null = null;
 
   for (const transaction of context.localActiveTransactions) {
@@ -131,23 +164,21 @@ const deriveLocalNextNonce = (context: Eip155ApprovalFinalizeContext): `0x${stri
   return maxNonce === null ? null : (Hex.fromNumber(maxNonce + 1n) as `0x${string}`);
 };
 
-const finalizeEip155Approval = async (
-  context: Eip155ApprovalFinalizeContext,
+const finalizeEip155Submit = async (
+  context: Eip155FinalizeSubmitContext,
   deps: Pick<AdapterDeps, "rpcClientFactory">,
-): Promise<Eip155ApprovalFinalizeResult> => {
+): Promise<Eip155FinalizeSubmitResult> => {
   const rpc = deps.rpcClientFactory(context.chainRef);
   const pendingNonce = await rpc.getTransactionCount(context.from, { blockTag: "pending" });
+  const preparedPayload = context.preparedPayload;
 
-  if (isWalletManagedNonce(context)) {
+  if (preparedPayload.nonce === undefined) {
     const localNextNonce = deriveLocalNextNonce(context);
     const finalNonce =
       localNextNonce === null || Hex.toBigInt(localNextNonce) <= Hex.toBigInt(pendingNonce)
         ? pendingNonce
         : localNextNonce;
-    const approvedPayload: Eip155UnsignedTransaction = {
-      ...context.approvedPayload,
-      nonce: finalNonce,
-    };
+    const approvedPayload = approvePreparedTransaction(preparedPayload, finalNonce);
     return {
       status: "approved",
       approvedPayload,
@@ -156,50 +187,51 @@ const finalizeEip155Approval = async (
         accountId: context.accountId,
         nonce: approvedPayload.nonce,
       }),
-      expiresAt: null,
     };
   }
 
-  const approvedNonce = BigInt(context.approvedPayload.nonce);
+  const approvedPayload = approvePreparedTransaction(preparedPayload, preparedPayload.nonce);
+  const approvedNonce = Hex.toBigInt(approvedPayload.nonce);
   const latestPendingNonce = BigInt(pendingNonce);
-  const blockingLocalConflicts = findBlockingLocalNonceConflicts(context);
+  const blockingLocalConflicts = findBlockingLocalNonceConflicts(context, approvedPayload.nonce);
   if (blockingLocalConflicts.length > 0) {
     return {
-      status: "approval_stale",
-      stale: {
-        reason: "transaction.approval_stale",
-        message: "Transaction approval is stale and must be refreshed.",
-        data: {
-          currentNonce: context.approvedPayload.nonce,
+      status: "blocked",
+      blocker: {
+        code: "transaction.submit.nonce_conflict",
+        message: "Another local transaction is already using this nonce.",
+        details: {
+          nonce: approvedPayload.nonce,
           conflictingTransactionIds: blockingLocalConflicts,
         },
       },
+      reviewSnapshot: null,
     };
   }
 
-  if (approvedNonce < latestPendingNonce && !hasAllowedReplacementTarget(context)) {
+  if (approvedNonce < latestPendingNonce && !isReplacingSubmittedNonce(context, approvedPayload.nonce)) {
     return {
-      status: "approval_stale",
-      stale: {
-        reason: "transaction.approval_stale",
-        message: "Transaction approval is stale and must be refreshed.",
-        data: {
-          currentNonce: context.approvedPayload.nonce,
+      status: "blocked",
+      blocker: {
+        code: "transaction.submit.nonce_already_used",
+        message: "The requested nonce is already below the network pending nonce.",
+        details: {
+          nonce: approvedPayload.nonce,
           pendingNonce,
         },
       },
+      reviewSnapshot: null,
     };
   }
 
   return {
     status: "approved",
-    approvedPayload: context.approvedPayload,
+    approvedPayload,
     conflictKey: buildEip155TransactionConflictKey({
       chainRef: context.chainRef,
       accountId: context.accountId,
-      nonce: context.approvedPayload.nonce,
+      nonce: approvedPayload.nonce,
     }),
-    expiresAt: null,
   };
 };
 
@@ -214,28 +246,22 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
   return {
     request: {
       deriveForChain(request, chainRef) {
-        return deriveEip155TransactionRequestForChain(requireEip155Request(request), chainRef);
+        return deriveEip155TransactionRequestForChain(request, chainRef);
       },
       validateRequest,
     },
     proposal: {
       prepare: (context: Eip155PrepareContext) => prepareTransaction(context),
       buildReview: (context: Eip155ApprovalReviewContext) => buildEip155ApprovalReview(context),
-      applyDraftEdit: (context: Eip155DraftEditContext) => applyEip155TransactionDraftEdit(context),
-      deriveApprovalResourceKey(context) {
+      buildReplacementRequest: (context: Eip155ReplacementRequestContext) =>
+        createEip155ReplacementRequest(context, deps),
+      deriveResourceKey(context) {
         return {
           kind: "eip155.account_nonce",
           value: `${context.chainRef}:${context.accountId}`,
         };
       },
-      finalizeApproval: (context: Eip155ApprovalFinalizeContext) => finalizeEip155Approval(context, deps),
-      deriveConflictKey(context) {
-        return buildEip155TransactionConflictKey({
-          chainRef: context.chainRef,
-          accountId: context.accountId,
-          nonce: context.approvedPayload.nonce,
-        });
-      },
+      finalizeSubmit: (context: Eip155FinalizeSubmitContext) => finalizeEip155Submit(context, deps),
     },
     submission: {
       async createBroadcastArtifact(context, options) {
@@ -253,7 +279,9 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
 
         return {
           kind: "eip155.raw_transaction",
-          payload: toBroadcastArtifactPayload(signed),
+          payload: {
+            raw: signed.raw,
+          },
         };
       },
       async broadcast(context) {
@@ -265,7 +293,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
             from: context.from,
             request: context.request,
           },
-          readSignedTransactionPayload(context.broadcastArtifact),
+          context.broadcastArtifact.payload,
         );
         const txHash = broadcast.hash as `0x${string}`;
         const submitted = buildEip155SubmittedTransaction({

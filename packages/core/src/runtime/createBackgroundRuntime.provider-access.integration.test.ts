@@ -150,14 +150,33 @@ const createNamespaceTransactionMock = (params: {
     });
 
   return {
+    request: {
+      deriveForChain: (request, chainRef) => ({ ...request, chainRef }),
+      validateRequest: () => {},
+    },
     proposal: {
       prepare: params.prepareTransaction,
+      buildReview: () => null,
+      buildReplacementRequest: async (context) => context.targetRequest,
+      deriveResourceKey: () => null,
+      finalizeSubmit: async (context) => ({
+        status: "approved",
+        approvedPayload: context.preparedPayload,
+        conflictKey: null,
+      }),
     },
     submission: {
       createBroadcastArtifact,
       broadcast: broadcastTransaction,
     },
-    ...(params.tracking ? { tracking: params.tracking } : {}),
+    tracking:
+      params.tracking ??
+      ({
+        inspectSubmittedTransaction: async () => ({ trackingStatus: "pending", evidence: null }),
+        getInitialInspectionDelay: () => 1_000,
+        getPendingInspectionDelay: () => 1_000,
+        getRetryInspectionDelay: () => 1_000,
+      } satisfies NamespaceTransactionTracking),
   };
 };
 
@@ -166,7 +185,6 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,
-    transactionApprovals: runtime.transactions,
   });
 
 const requestProviderRpc = (
@@ -233,8 +251,33 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
 });
 
 const createTestNamespaceTransaction = (): NamespaceTransaction => ({
+  request: {
+    deriveForChain: (request, chainRef) => ({ ...request, chainRef }),
+    validateRequest: () => {},
+  },
   proposal: {
-    prepare: async () => ({ status: "ready", prepared: {} }),
+    prepare: async () => ({ status: "ready", prepared: {}, reviewSnapshot: {} }),
+    buildReview: () => null,
+    buildReplacementRequest: async (context) => context.targetRequest,
+    deriveResourceKey: () => null,
+    finalizeSubmit: async (context) => ({
+      status: "approved",
+      approvedPayload: context.preparedPayload,
+      conflictKey: null,
+    }),
+  },
+  submission: {
+    createBroadcastArtifact: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
+    broadcast: async () => ({
+      broadcastIdentity: { hash: "0xhash" },
+      submitted: { hash: "0xhash" },
+    }),
+  },
+  tracking: {
+    inspectSubmittedTransaction: async () => ({ trackingStatus: "pending", evidence: null }),
+    getInitialInspectionDelay: () => 1_000,
+    getPendingInspectionDelay: () => 1_000,
+    getRetryInspectionDelay: () => 1_000,
   },
 });
 
@@ -784,20 +827,39 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("cancels eth_sendTransaction approvals together with the provider request scope", async () => {
-    const background = await setupBackground();
+    const chain = createChainDefinition({
+      chainRef: "eip155:1",
+      displayName: "Ethereum Mainnet",
+    });
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        getChainRefNamespace(chain.chainRef),
+        createNamespaceTransactionMock({
+          prepareTransaction: vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+            status: "ready",
+            prepared: { nonce: "0x7" },
+          })),
+        }),
+      ],
+    ]);
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
 
     try {
       await initializeUnlockedSession(background.runtime);
-      const { chain, address } = await deriveActiveAccount(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
 
       await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: getChainRefNamespace(chain.chainRef),
+        namespace: getChainRefNamespace(activeChain.chainRef),
         chains: [
           {
-            chainRef: chain.chainRef,
+            chainRef: activeChain.chainRef,
             accountIds: [
               accountIdFromChainAddress({
-                chainRef: chain.chainRef,
+                chainRef: activeChain.chainRef,
                 address,
                 accountAddressing: background.runtime.services.accountAddressing,
               }),
@@ -805,30 +867,26 @@ describe("createBackgroundRuntime provider access", () => {
           },
         ],
       });
-      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
+      await activateProviderConnectionScope(background.runtime, {
+        namespace: getChainRefNamespace(activeChain.chainRef),
+      });
 
       let capturedApprovalId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
-        const unsubscribeApprovalChange = background.runtime.transactions.onTransactionApprovalsChanged(
-          (approvalIds) => {
-            for (const approvalId of approvalIds) {
-              const approval = background.runtime.transactions.getTransactionApproval(approvalId);
-              if (!approval) {
-                continue;
-              }
-              capturedApprovalId = approval.approvalId;
-              unsubscribeApprovalChange();
-              resolve();
-              return;
-            }
-          },
-        );
+        const unsubscribeApprovalChange = background.runtime.services.approvals.onCreated(({ record }) => {
+          if (record.kind !== ApprovalKinds.SendTransaction) {
+            return;
+          }
+          capturedApprovalId = record.approvalId;
+          unsubscribeApprovalChange();
+          resolve();
+        });
       });
 
       const pendingResponse = requestProviderRpc(background.runtime, {
         id: "rpc-3",
         method: "eth_sendTransaction",
-        namespace: getChainRefNamespace(chain.chainRef),
+        namespace: getChainRefNamespace(activeChain.chainRef),
         params: [
           {
             from: address,
@@ -841,7 +899,7 @@ describe("createBackgroundRuntime provider access", () => {
       await approvalCreated;
       await flushAsync();
       expect(capturedApprovalId).toBeTruthy();
-      expect(background.runtime.transactions.getTransactionApproval(capturedApprovalId ?? "")).toBeTruthy();
+      expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeTruthy();
 
       await expect(
         background.runtime.providerAccess.cancelRequestScope({
@@ -860,7 +918,7 @@ describe("createBackgroundRuntime provider access", () => {
           code: "global.transport.disconnected",
         },
       });
-      expect(background.runtime.transactions.getTransactionApproval(capturedApprovalId ?? "")).toBeNull();
+      expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeUndefined();
       await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([]);
     } finally {
       background.destroy();
@@ -910,17 +968,13 @@ describe("createBackgroundRuntime provider access", () => {
 
     let capturedApprovalId: string | null = null;
     const approvalCreated = new Promise<void>((resolve) => {
-      const unsubscribe = background.runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
-        for (const approvalId of approvalIds) {
-          const approval = background.runtime.transactions.getTransactionApproval(approvalId);
-          if (!approval) {
-            continue;
-          }
-          capturedApprovalId = approval.approvalId;
-          unsubscribe();
-          resolve();
+      const unsubscribe = background.runtime.services.approvals.onCreated(({ record }) => {
+        if (record.kind !== ApprovalKinds.SendTransaction) {
           return;
         }
+        capturedApprovalId = record.approvalId;
+        unsubscribe();
+        resolve();
       });
     });
 
@@ -964,14 +1018,14 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
 
-      const approval = background.runtime.transactions.getTransactionApproval(capturedApprovalId ?? "");
+      const approval = background.runtime.services.approvals.get(capturedApprovalId ?? "");
       if (!approval) {
         throw new Error("Missing transaction approval.");
       }
 
-      await background.runtime.transactions.approveAndSubmitTransaction({
+      await background.runtime.services.approvals.resolve({
         approvalId: capturedApprovalId ?? "",
-        expectedPrepareId: approval.prepare.id,
+        action: "approve",
       });
 
       await expect(pendingResponse).resolves.toMatchObject({

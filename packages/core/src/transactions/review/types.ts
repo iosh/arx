@@ -30,7 +30,6 @@ export type TransactionReviewPrepare =
     };
 
 export type SendTransactionApprovalReview = {
-  updatedAt: number;
   details: TransactionReviewDetails | null;
   prepare: TransactionReviewPrepare;
 };

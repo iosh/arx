@@ -6,7 +6,7 @@ import type { SessionStatus } from "../runtime/background/session.js";
 import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
-import type { Transaction } from "../transactions/TransactionsService.js";
+import type { SubmitTransactionResult, Transaction, TransactionProposal } from "../transactions/TransactionsService.js";
 import type { WalletApiAttentionSnapshot } from "./api.js";
 
 export type { NetworksSnapshot } from "../services/runtime/chainViews/types.js";
@@ -140,7 +140,7 @@ type SendTransactionRequest = {
   approvalId: string;
   chainRef: ChainRef;
   origin: string;
-  prepareId: string | null;
+  proposalId: string;
 };
 
 export type ApprovalAccountSelectionDetail =
@@ -215,9 +215,8 @@ export type WalletApiExportPrivateKeyResult = {
   privateKey: string;
 };
 
-export type WalletApiRequestSendTransactionApprovalResult = {
-  approvalId: string;
-};
+export type WalletApiPrepareTransactionResult = TransactionProposal;
+export type WalletApiSubmitTransactionResult = SubmitTransactionResult;
 
 export type WalletApiOwnedAccountSummary = {
   accountId: AccountId;

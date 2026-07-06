@@ -8,8 +8,8 @@ import { deriveFields } from "./resolvers/fieldResolver.js";
 import { deriveGas } from "./resolvers/gasResolver.js";
 import type { Eip155CallParams, Eip155PrepareContext, Eip155PrepareResult, Eip155PrepareStepResult } from "./types.js";
 import type {
+  Eip155PreparedTransaction,
   Eip155TransactionCoreFields,
-  Eip155UnsignedTransaction,
   Eip155UnsignedTransactionDraft,
 } from "./unsignedTransaction.js";
 import { readErrorMessage } from "./utils/validation.js";
@@ -35,19 +35,23 @@ const applyPrepareStep = <TPatch>(
   return null;
 };
 
-type Eip155PreparedLegacyDraft = Eip155TransactionCoreFields & {
+type Eip155PreparedCoreFields = Omit<Eip155TransactionCoreFields, "nonce"> & {
+  nonce?: Eip155TransactionCoreFields["nonce"];
+};
+
+type Eip155PreparedLegacyDraft = Eip155PreparedCoreFields & {
   gasPrice: NonNullable<Eip155UnsignedTransactionDraft["gasPrice"]>;
 };
 
-type Eip155PreparedEip1559Draft = Eip155TransactionCoreFields & {
+type Eip155PreparedEip1559Draft = Eip155PreparedCoreFields & {
   maxFeePerGas: NonNullable<Eip155UnsignedTransactionDraft["maxFeePerGas"]>;
   maxPriorityFeePerGas: NonNullable<Eip155UnsignedTransactionDraft["maxPriorityFeePerGas"]>;
 };
 
-/** Turns the mutable review snapshot into the final signable payload. */
+/** Turns the mutable review snapshot into a submit-ready proposal payload. */
 const buildPreparedTransaction = (
   transaction: Eip155PreparedLegacyDraft | Eip155PreparedEip1559Draft,
-): Eip155UnsignedTransaction => {
+): Eip155PreparedTransaction => {
   if ("gasPrice" in transaction) {
     return {
       ...transaction,
@@ -61,15 +65,18 @@ const buildPreparedTransaction = (
   };
 };
 
-const buildPreparedCoreFields = (transaction: Eip155UnsignedTransactionDraft): Eip155TransactionCoreFields => ({
-  chainId: transaction.chainId as Eip155TransactionCoreFields["chainId"],
-  from: transaction.from as Eip155TransactionCoreFields["from"],
-  to: transaction.to ?? null,
-  value: transaction.value as Eip155TransactionCoreFields["value"],
-  data: transaction.data as Eip155TransactionCoreFields["data"],
-  gas: transaction.gas as Eip155TransactionCoreFields["gas"],
-  nonce: transaction.nonce as Eip155TransactionCoreFields["nonce"],
-});
+const readPreparedCoreFields = (transaction: Eip155UnsignedTransactionDraft): Eip155PreparedCoreFields => {
+  const resolved = transaction as Eip155PreparedCoreFields;
+  return {
+    chainId: resolved.chainId,
+    from: resolved.from,
+    to: resolved.to ?? null,
+    value: resolved.value,
+    data: resolved.data,
+    gas: resolved.gas,
+    ...(resolved.nonce !== undefined ? { nonce: resolved.nonce } : {}),
+  };
+};
 
 export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
   const chains = deps.chains;
@@ -77,10 +84,6 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
   const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 
   return async (ctx: Eip155PrepareContext): Promise<Eip155PrepareResult> => {
-    if (ctx.namespace !== "eip155") {
-      throw new Error(`Transaction preparer expects namespace "eip155" but received "${ctx.namespace}"`);
-    }
-
     const payload = ctx.request.payload;
     const prepared: Eip155UnsignedTransactionDraft = {};
 
@@ -113,9 +116,9 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
       return {
         status: "failed",
         error: {
-          reason: "transaction.prepare.rpc_unavailable",
+          code: "transaction.prepare.rpc_unavailable",
           message: "Failed to create RPC client.",
-          data: { error: readErrorMessage(error) },
+          details: { error: readErrorMessage(error) },
         },
         reviewSnapshot: prepared,
       };
@@ -133,7 +136,6 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
       rpc,
       callParams,
       gasProvided: fieldPatch.payloadValues.gas ?? null,
-      nonceProvided: fieldPatch.payloadValues.nonce ?? null,
     });
     const gasResult = applyPrepareStep(prepared, gasResolution, (patch) => patch);
     if (gasResult) return gasResult;
@@ -146,27 +148,28 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     const balanceResult = applyPrepareStep(prepared, balanceResolution, (patch) => patch);
     if (balanceResult) return balanceResult;
 
-    const coreFields = buildPreparedCoreFields(prepared);
+    const coreFields = readPreparedCoreFields(prepared);
 
-    if (prepared.gasPrice) {
+    const gasPrice = prepared.gasPrice;
+    if (gasPrice) {
       return {
         status: "ready",
         prepared: buildPreparedTransaction({
           ...coreFields,
-          gasPrice: prepared.gasPrice,
+          gasPrice,
         }),
         reviewSnapshot: prepared,
       };
     }
 
+    const maxFeePerGas = prepared.maxFeePerGas;
+    const maxPriorityFeePerGas = prepared.maxPriorityFeePerGas;
     return {
       status: "ready",
       prepared: buildPreparedTransaction({
         ...coreFields,
-        maxFeePerGas: prepared.maxFeePerGas as NonNullable<Eip155UnsignedTransactionDraft["maxFeePerGas"]>,
-        maxPriorityFeePerGas: prepared.maxPriorityFeePerGas as NonNullable<
-          Eip155UnsignedTransactionDraft["maxPriorityFeePerGas"]
-        >,
+        maxFeePerGas: maxFeePerGas as Eip155PreparedEip1559Draft["maxFeePerGas"],
+        maxPriorityFeePerGas: maxPriorityFeePerGas as Eip155PreparedEip1559Draft["maxPriorityFeePerGas"],
       }),
       reviewSnapshot: prepared,
     };

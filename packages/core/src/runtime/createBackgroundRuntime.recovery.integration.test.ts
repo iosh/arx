@@ -35,6 +35,21 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     }));
 
     const adapter: NamespaceTransaction = {
+      request: {
+        deriveForChain: (request, chainRef) => ({ ...request, chainRef }),
+        validateRequest: () => {},
+      },
+      proposal: {
+        prepare: async () => ({ status: "ready", prepared: {}, reviewSnapshot: {} }),
+        buildReview: () => null,
+        buildReplacementRequest: async (context) => context.targetRequest,
+        deriveResourceKey: () => null,
+        finalizeSubmit: async (context) => ({
+          status: "approved",
+          approvedPayload: context.preparedPayload,
+          conflictKey: null,
+        }),
+      },
       submission: {
         createBroadcastArtifact,
         broadcast: broadcastTransaction,
@@ -55,7 +70,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         chainRef: chain.chainRef,
         origin: "https://dapp.example",
         source: "provider",
-        requestId: "request-1",
         accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         status: "submitted",
         request: {
@@ -67,11 +81,9 @@ describe("createBackgroundRuntime (recovery integration)", () => {
           },
         },
         approvedRequest: {
-          approvalId: "approval-1",
           payload: {
             nonce: "0x7",
           },
-          approvedAt: 1_000,
         },
         activeSubmissionId: null,
         submitted: {
@@ -81,8 +93,8 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         },
         receipt: null,
         conflictKey: null,
-        replacesTransactionId: null,
-        replacementType: null,
+        resourceKey: null,
+        replacement: null,
         replacedByTransactionId: null,
         terminalReason: null,
         createdAt: 1_000,

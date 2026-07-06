@@ -29,7 +29,6 @@ const createApprovedTransactionAggregate = (service: TransactionAggregateService
     chainRef: "eip155:1",
     origin: "https://dapp.example",
     source: "provider",
-    requestId: "rpc-1",
     accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     request: {
       payload: {
@@ -38,9 +37,6 @@ const createApprovedTransactionAggregate = (service: TransactionAggregateService
         value: "0x1",
       },
     },
-    approvalId: "approval-1",
-    submissionId: "submission-1",
-    approvedAt: null,
     approvedRequestPayload: {
       chainId: "0x1",
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -56,7 +52,17 @@ const createApprovedTransactionAggregate = (service: TransactionAggregateService
       kind: "eip155.nonce",
       value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     },
+    resourceKey: {
+      kind: "eip155.account_nonce",
+      value: "eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+    replacement: null,
   });
+
+const getActiveSubmissionId = (aggregate: TransactionAggregate): string => {
+  expect(aggregate.record.activeSubmissionId).toEqual(expect.any(String));
+  return aggregate.record.activeSubmissionId as string;
+};
 
 describe("TransactionAggregateService", () => {
   it("creates a durable approved transaction with a queued submission", () => {
@@ -68,13 +74,12 @@ describe("TransactionAggregateService", () => {
       id: "tx-1",
       status: "submitting",
       approvedRequest: {
-        approvalId: "approval-1",
         payload: {
           nonce: "0x7",
           gas: "0x5208",
         },
       },
-      activeSubmissionId: "submission-1",
+      activeSubmissionId: "tx-2",
       submitted: null,
       terminalReason: null,
       createdAt: 1_000,
@@ -82,7 +87,7 @@ describe("TransactionAggregateService", () => {
     });
     expect(aggregate.submissions).toEqual([
       expect.objectContaining({
-        id: "submission-1",
+        id: "tx-2",
         transactionId: "tx-1",
         status: "queued",
       }),
@@ -102,19 +107,19 @@ describe("TransactionAggregateService", () => {
         kind: "eip155.wallet.speedUp",
         payload: { value: "0x1" },
       },
-      approvalId: "approval-1",
-      approvedAt: null,
       approvedRequestPayload: { value: "0x1" },
-      submissionId: "submission-1",
       conflictKey: null,
+      resourceKey: null,
       replacement: {
         transactionId: "tx-old",
         type: "speed_up",
       },
     });
 
-    expect(aggregate.record.replacesTransactionId).toBe("tx-old");
-    expect(aggregate.record.replacementType).toBe("speed_up");
+    expect(aggregate.record.replacement).toEqual({
+      transactionId: "tx-old",
+      type: "speed_up",
+    });
   });
 
   it("records local cancellation before broadcast as a terminal transaction", () => {
@@ -173,7 +178,7 @@ describe("TransactionAggregateService", () => {
 
     expect(() =>
       service.beginSubmissionSigning(failed, {
-        submissionId: "submission-1",
+        submissionId: getActiveSubmissionId(created),
       }),
     ).toThrow(TransactionAggregateInvariantError);
   });
@@ -181,10 +186,11 @@ describe("TransactionAggregateService", () => {
   it("advances signing and keeps signed broadcast artifact out of durable state", () => {
     const { service, tick } = createService();
     const aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
 
     tick(3_000);
     const signing = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
 
     expect(signing.record.submitted).toBeNull();
@@ -209,15 +215,16 @@ describe("TransactionAggregateService", () => {
   it("records broadcast acceptance by accepting the submission and marking the transaction submitted", () => {
     const { service } = createService();
     let aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
 
     const submitted = service.recordBroadcastAcceptance(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
       submitted: {
         hash: "0x1111",
         chainId: "0x1",
@@ -236,14 +243,15 @@ describe("TransactionAggregateService", () => {
   it("prevents cancelling a submitted transaction as local cancellation", () => {
     const { service } = createService();
     let aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.recordBroadcastAcceptance(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
       submitted: { hash: "0x1111" },
     });
 
@@ -253,11 +261,12 @@ describe("TransactionAggregateService", () => {
   it("prevents local cancellation after broadcast starts", () => {
     const { service } = createService();
     let aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
 
     expect(() => service.cancelTransaction(aggregate, { reason: null })).toThrow(TransactionAggregateInvariantError);
@@ -266,14 +275,15 @@ describe("TransactionAggregateService", () => {
   it("records submitted transaction outcomes", () => {
     const { service } = createService();
     let aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.recordBroadcastAcceptance(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
       submitted: { hash: "0x1111" },
     });
 
@@ -294,14 +304,15 @@ describe("TransactionAggregateService", () => {
   it("records submitted transaction expiry from tracking", () => {
     const { service } = createService();
     let aggregate = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(aggregate);
     aggregate = service.beginSubmissionSigning(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.queueSubmissionBroadcast(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
     });
     aggregate = service.recordBroadcastAcceptance(aggregate, {
-      submissionId: "submission-1",
+      submissionId,
       submitted: { signature: "solana-signature" },
     });
 
@@ -324,18 +335,20 @@ describe("TransactionAggregateService", () => {
   it("lists restart actions only for incomplete local submission", () => {
     const { service } = createService();
     let submitting = createApprovedTransactionAggregate(service);
+    const submittingSubmissionId = getActiveSubmissionId(submitting);
     submitting = service.beginSubmissionSigning(submitting, {
-      submissionId: "submission-1",
+      submissionId: submittingSubmissionId,
     });
     let submitted = createApprovedTransactionAggregate(service);
+    const submittedSubmissionId = getActiveSubmissionId(submitted);
     submitted = service.beginSubmissionSigning(submitted, {
-      submissionId: "submission-1",
+      submissionId: submittedSubmissionId,
     });
     submitted = service.queueSubmissionBroadcast(submitted, {
-      submissionId: "submission-1",
+      submissionId: submittedSubmissionId,
     });
     submitted = service.recordBroadcastAcceptance(submitted, {
-      submissionId: "submission-1",
+      submissionId: submittedSubmissionId,
       submitted: { hash: "0x1234" },
     });
 
@@ -352,9 +365,10 @@ describe("TransactionAggregateService", () => {
   it("returns a next aggregate without mutating the current aggregate", () => {
     const { service } = createService();
     const created = createApprovedTransactionAggregate(service);
+    const submissionId = getActiveSubmissionId(created);
 
     const signing = service.beginSubmissionSigning(created, {
-      submissionId: "submission-1",
+      submissionId,
     });
     signing.record.status = "confirmed";
     signing.record.request.payload = { mutated: true };

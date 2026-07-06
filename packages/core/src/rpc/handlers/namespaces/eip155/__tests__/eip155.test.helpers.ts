@@ -232,7 +232,6 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
         providerRequestHandle: {
           id: requestContext.requestId,
           namespace: "eip155",
-          signal: new AbortController().signal,
           fulfill: () => true,
           reject: () => true,
           cancel: async () => true,

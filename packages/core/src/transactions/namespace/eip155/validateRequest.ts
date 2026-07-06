@@ -69,7 +69,8 @@ export const createEip155RequestValidator = (deps: Deps) => {
       throw new RpcInvalidParamsError({
         message: issue.message,
         details: {
-          code: issue.reason,
+          code: issue.code,
+          ...issue.details,
         },
       });
     }

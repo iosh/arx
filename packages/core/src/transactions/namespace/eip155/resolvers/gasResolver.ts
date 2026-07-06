@@ -7,39 +7,12 @@ type GasResolverParams = {
   rpc: Eip155RpcCapabilities | null;
   callParams: Eip155CallParams;
   gasProvided?: Hex.Hex | null;
-  nonceProvided?: Hex.Hex | null;
 };
 
 export const deriveGas = async (
   params: GasResolverParams,
 ): Promise<Eip155PrepareStepResult<GasResolutionResult["prepared"]>> => {
   const prepared: GasResolutionResult["prepared"] = {};
-
-  if (!params.nonceProvided && params.rpc && params.callParams.from) {
-    try {
-      const fetchedNonce = await params.rpc.getTransactionCount(params.callParams.from, { blockTag: "pending" });
-      const nonceHex = parseOptionalHexQuantity(fetchedNonce, "nonce");
-      if (nonceHex) {
-        prepared.nonce = nonceHex;
-      }
-    } catch (error) {
-      if (error instanceof Eip155FieldParseError) {
-        return { status: "failed", error: error.toProposalError(), patch: prepared };
-      }
-      return {
-        status: "failed",
-        error: {
-          reason: "transaction.prepare.nonce_failed",
-          message: "Failed to fetch nonce from RPC.",
-          data: {
-            method: "eth_getTransactionCount",
-            error: readErrorMessage(error),
-          },
-        },
-        patch: prepared,
-      };
-    }
-  }
 
   if (!params.gasProvided && params.rpc) {
     try {
@@ -58,9 +31,9 @@ export const deriveGas = async (
           return {
             status: "blocked",
             blocker: {
-              reason: "transaction.prepare.gas_zero",
+              code: "transaction.prepare.gas_zero",
               message: "RPC returned gas=0x0, please confirm manually.",
-              data: { estimate: estimatedGas },
+              details: { estimate: estimatedGas },
             },
             patch: prepared,
           };
@@ -73,9 +46,9 @@ export const deriveGas = async (
       return {
         status: "failed",
         error: {
-          reason: "transaction.prepare.gas_estimation_failed",
+          code: "transaction.prepare.gas_estimation_failed",
           message: "Failed to estimate gas.",
-          data: {
+          details: {
             method: "eth_estimateGas",
             error: readErrorMessage(error),
           },

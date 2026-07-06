@@ -2,6 +2,7 @@ import * as Hex from "ox/Hex";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { Eip155TransactionRequest, WalletTransactionRequest } from "../../types.js";
+import { Eip155ChainRefError } from "./errors.js";
 import type { Eip155TransactionPayload } from "./transactionTypes.js";
 
 export const eip155Request = (
@@ -14,7 +15,7 @@ export const eip155Request = (
 export const deriveEip155HexChainIdFromChainRef = (chainRef: ChainRef): `0x${string}` => {
   const parsed = parseChainRef(chainRef);
   if (parsed.namespace !== "eip155" || !/^\d+$/.test(parsed.reference)) {
-    throw new Error(`Cannot derive eip155 chainId from chainRef "${chainRef}"`);
+    throw new Eip155ChainRefError(chainRef);
   }
   return Hex.fromNumber(BigInt(parsed.reference)) as `0x${string}`;
 };

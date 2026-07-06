@@ -5,7 +5,7 @@ import { useUiCurrentChainAccounts } from "@/ui/hooks/useUiCurrentChainAccounts"
 import { requireSetupComplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { SendScreen } from "@/ui/screens/SendScreen";
-import { useSendApprovalAction } from "@/ui/send/useSendApprovalAction";
+import { useSendAction } from "@/ui/send/useSendAction";
 
 export const Route = createFileRoute("/send")({
   beforeLoad: requireSetupComplete,
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/send")({
 function SendPage() {
   const router = useRouter();
   const accountsQuery = useUiCurrentChainAccounts();
-  const { pending, errorMessage, submitSendApproval } = useSendApprovalAction();
+  const { pending, errorMessage, prepareTransaction } = useSendAction();
 
   if (accountsQuery.isLoading || !accountsQuery.data) {
     return <LoadingScreen />;
@@ -31,7 +31,7 @@ function SendPage() {
       errorMessage={errorMessage}
       onCancel={() => router.navigate({ to: ROUTES.HOME })}
       onSubmit={(params) => {
-        void submitSendApproval({
+        void prepareTransaction({
           request: eip155Request({
             to: params.to,
             value: params.value,

@@ -111,7 +111,6 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
       },
     },
     approvedRequest: {
-      approvalId: "approval-1",
       payload: {
         chainId: "0x1",
         from: ACCOUNT_ADDRESS,
@@ -121,7 +120,6 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
         gas: "0x5208",
         nonce: "0x7",
       },
-      approvedAt: 1,
     },
     activeSubmissionId: status === "submitting" ? "submission-1" : null,
     submitted:
@@ -133,8 +131,8 @@ const createRecoverableTransactionAggregate = (status: "submitting" | "submitted
         : null,
     receipt: null,
     conflictKey: null,
-    replacesTransactionId: null,
-    replacementType: null,
+    resourceKey: null,
+    replacement: null,
     replacedByTransactionId: null,
     terminalReason: null,
     createdAt: 1,

@@ -3,6 +3,7 @@ import type { ChainDefinition, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";
 import type { AccountId } from "../../storage/records.js";
+import type { TransactionReadyProposal } from "../../transactions/TransactionsService.js";
 import type { ApprovalSource } from "../source.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
@@ -75,7 +76,7 @@ export type ApprovalRequestByKind = {
     isUpdate: boolean;
   };
   [ApprovalKinds.SendTransaction]: {
-    chainRef: ChainRef;
+    proposal: TransactionReadyProposal;
   };
 };
 

@@ -269,10 +269,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     namespaces: backgroundSupportScope.namespaceTransactions,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     messenger: bootstrapScope.messenger,
-    approvalSessionOptions: {
-      now: bootstrapScope.storageNow,
-      ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
-    },
+    now: bootstrapScope.storageNow,
+    ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
   });
 
   const lifecycle = createBackgroundRuntimeLifecycle({
@@ -398,7 +396,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     approvals: stateServices.approvals,
     accounts,
     chainViews: sessionScope.chainViews,
-    transactionApprovals: transactionServices.transactions,
   });
   const permissions = stateServices.permissions;
   const networks = createWalletNetworks({

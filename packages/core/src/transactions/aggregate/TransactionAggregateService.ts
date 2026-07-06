@@ -57,7 +57,7 @@ export class TransactionAggregateService {
   createApprovedTransaction(input: CreateApprovedTransactionInput): TransactionAggregate {
     const id = this.#createId();
     const at = this.#now();
-    const submissionId = input.submissionId ?? this.#createId();
+    const submissionId = this.#createId();
 
     return {
       record: {
@@ -66,23 +66,20 @@ export class TransactionAggregateService {
         chainRef: input.chainRef,
         origin: input.origin,
         source: input.source,
-        requestId: input.requestId ?? null,
         accountId: input.accountId,
         status: "submitting",
         request: {
           payload: cloneJsonValue(input.request.payload),
         },
         approvedRequest: {
-          approvalId: input.approvalId,
           payload: cloneJsonValue(input.approvedRequestPayload),
-          approvedAt: input.approvedAt ?? at,
         },
         activeSubmissionId: submissionId,
         submitted: null,
         receipt: null,
         conflictKey: input.conflictKey,
-        replacesTransactionId: input.replacement?.transactionId ?? null,
-        replacementType: input.replacement?.type ?? null,
+        resourceKey: input.resourceKey,
+        replacement: input.replacement === null ? null : { ...input.replacement },
         replacedByTransactionId: null,
         terminalReason: null,
         createdAt: at,

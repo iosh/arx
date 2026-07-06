@@ -1,9 +1,11 @@
 import type { AccountAddress } from "../../accounts/runtime/types.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { TransactionConflictKey, TransactionReplacementType } from "../aggregate/types.js";
+import type { JsonObject } from "../aggregate/json.js";
+import type { TransactionConflictKey, TransactionReplacementType, TransactionResourceKey } from "../aggregate/types.js";
 import type { TransactionReviewDetails } from "../review.js";
 import type {
-  NamespaceTransactionDraftEdit,
+  TransactionApproved,
+  TransactionBroadcastArtifact,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
@@ -11,38 +13,26 @@ import type {
   TransactionSubmitted,
 } from "../types.js";
 
-// User-resolvable proposal stop: review can be shown, but approval is not allowed.
-export type TransactionProposalBlocker = {
-  reason: string;
+export type TransactionIssue = {
+  code: string;
   message: string;
-  data?: unknown;
+  details: JsonObject;
 };
+
+// User-resolvable proposal stop: review can be shown, but approval is not allowed.
+export type TransactionProposalBlocker = TransactionIssue;
 
 // Prepare/review infrastructure failure: retry or reject instead of approve.
-export type TransactionProposalError = {
-  reason: string;
-  message: string;
-  data?: unknown;
-};
-
-export type TransactionApprovalStale = {
-  reason: string;
-  message: string;
-  data?: unknown;
-};
+export type TransactionProposalError = TransactionIssue;
 
 // Execution/tracking failure normalized for namespace-owned flow results.
-export type TransactionFailure = {
-  reason: string;
-  message: string;
-  data?: unknown;
-};
+export type TransactionFailure = TransactionIssue;
 
 /** Result of one namespace prepare pass. */
 export type TransactionPrepareResult<TPrepared = TransactionPrepared, TReviewSnapshot = TPrepared> =
-  | { status: "ready"; prepared: TPrepared; reviewSnapshot?: TReviewSnapshot | null }
-  | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot?: TReviewSnapshot | null }
-  | { status: "failed"; error: TransactionProposalError; reviewSnapshot?: TReviewSnapshot | null };
+  | { status: "ready"; prepared: TPrepared; reviewSnapshot: TReviewSnapshot }
+  | { status: "blocked"; blocker: TransactionProposalBlocker; reviewSnapshot: TReviewSnapshot | null }
+  | { status: "failed"; error: TransactionProposalError; reviewSnapshot: TReviewSnapshot | null };
 
 /** Signed payload ready for namespace-owned broadcast. */
 export type SignedTransactionPayload = {
@@ -52,18 +42,18 @@ export type SignedTransactionPayload = {
 
 export type BroadcastArtifact = {
   kind: string;
-  payload: Record<string, unknown>;
+  payload: JsonObject;
 };
 
 export type BroadcastResult<TNamespace extends string = string> = {
-  broadcastIdentity: Record<string, unknown>;
+  broadcastIdentity: JsonObject;
   submitted: TransactionSubmitted<TNamespace>;
 };
 
 export type SubmittedTransactionInspection<TNamespace extends string = string> =
   | {
       trackingStatus: "pending";
-      evidence: Record<string, unknown> | null;
+      evidence: JsonObject | null;
     }
   | {
       trackingStatus: "confirmed";
@@ -76,11 +66,11 @@ export type SubmittedTransactionInspection<TNamespace extends string = string> =
     }
   | {
       trackingStatus: "dropped";
-      evidence: Record<string, unknown> | null;
+      evidence: JsonObject | null;
     }
   | {
       trackingStatus: "expired";
-      evidence: Record<string, unknown> | null;
+      evidence: JsonObject | null;
     };
 
 export type PendingSubmittedTransactionInspection<TNamespace extends string = string> = Extract<
@@ -142,7 +132,7 @@ export type TransactionRetryInspectionDelayContext<TNamespace extends string = s
     failure: TransactionFailure;
   };
 
-export type TransactionApprovalReviewContext<TNamespace extends string = string> = {
+export type TransactionReviewContext<TNamespace extends string = string> = {
   transactionId: string;
   namespace: TNamespace;
   chainRef: ChainRef;
@@ -153,18 +143,7 @@ export type TransactionApprovalReviewContext<TNamespace extends string = string>
   reviewSnapshot: TransactionReviewSnapshot<TNamespace> | null;
 };
 
-export type TransactionDraftEditContext<TNamespace extends string = string> = {
-  transactionId: string;
-  namespace: TNamespace;
-  chainRef: ChainRef;
-  origin: string;
-  from: AccountAddress | null;
-  request: TransactionRequest<TNamespace>;
-  edit: NamespaceTransactionDraftEdit<TNamespace>;
-  mode?: string;
-};
-
-export type TransactionProposalConflictContext<TNamespace extends string = string> = {
+export type TransactionResourceKeyContext<TNamespace extends string = string> = {
   transactionId: string;
   namespace: TNamespace;
   chainRef: ChainRef;
@@ -172,65 +151,61 @@ export type TransactionProposalConflictContext<TNamespace extends string = strin
   accountId: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
-  approvedPayload: TransactionPrepared<TNamespace>;
-};
-
-export type TransactionApprovalResourceKey = {
-  kind: string;
-  value: string;
-};
-
-export type TransactionApprovalResourceContext<TNamespace extends string = string> = {
-  transactionId: string;
-  namespace: TNamespace;
-  chainRef: ChainRef;
-  origin: string;
-  accountId: string;
-  from: AccountAddress;
-};
-
-export type TransactionApprovalFinalizeContext<TNamespace extends string = string> = {
-  transactionId: string;
-  approvalId: string;
-  namespace: TNamespace;
-  chainRef: ChainRef;
-  origin: string;
-  accountId: string;
-  from: AccountAddress;
-  request: TransactionRequest<TNamespace>;
-  approvedPayload: TransactionPrepared<TNamespace>;
+  preparedPayload: TransactionPrepared<TNamespace>;
   replacement: {
     transactionId: string;
-    type: TransactionReplacementType | null;
+    type: TransactionReplacementType;
+  } | null;
+};
+
+export type TransactionReplacementRequestContext<TNamespace extends string = string> = {
+  namespace: TNamespace;
+  chainRef: ChainRef;
+  origin: string;
+  accountId: string;
+  from: AccountAddress;
+  type: TransactionReplacementType;
+  targetTransactionId: string;
+  targetRequest: TransactionRequest<TNamespace>;
+  targetApprovedPayload: TransactionApproved<TNamespace>;
+};
+
+export type TransactionFinalizeSubmitContext<TNamespace extends string = string> = {
+  transactionId: string;
+  namespace: TNamespace;
+  chainRef: ChainRef;
+  origin: string;
+  accountId: string;
+  from: AccountAddress;
+  request: TransactionRequest<TNamespace>;
+  preparedPayload: TransactionPrepared<TNamespace>;
+  replacement: {
+    transactionId: string;
+    type: TransactionReplacementType;
   } | null;
   localActiveTransactions: readonly {
     transactionId: string;
     status: "submitting" | "submitted";
-    approvedPayload: TransactionPrepared<TNamespace>;
+    approvedPayload: TransactionApproved<TNamespace>;
     conflictKey: TransactionConflictKey | null;
   }[];
 };
 
-export type TransactionApprovalFinalizeResult<TNamespace extends string = string> =
+export type TransactionFinalizeSubmitResult<TNamespace extends string = string> =
   | {
       status: "approved";
-      approvedPayload: TransactionPrepared<TNamespace>;
+      approvedPayload: TransactionApproved<TNamespace>;
       conflictKey: TransactionConflictKey | null;
-      expiresAt: number | null;
-    }
-  | {
-      status: "approval_stale";
-      stale: TransactionApprovalStale;
     }
   | {
       status: "blocked";
       blocker: TransactionProposalBlocker;
-      reviewSnapshot?: TransactionReviewSnapshot<TNamespace> | null;
+      reviewSnapshot: TransactionReviewSnapshot<TNamespace> | null;
     }
   | {
       status: "failed";
       error: TransactionProposalError;
-      reviewSnapshot?: TransactionReviewSnapshot<TNamespace> | null;
+      reviewSnapshot: TransactionReviewSnapshot<TNamespace> | null;
     };
 
 export type TransactionBroadcastArtifactContext<TNamespace extends string = string> = {
@@ -241,39 +216,38 @@ export type TransactionBroadcastArtifactContext<TNamespace extends string = stri
   accountId: string;
   from: AccountAddress;
   request: TransactionRequest<TNamespace>;
-  approvedPayload: TransactionPrepared<TNamespace>;
+  approvedPayload: TransactionApproved<TNamespace>;
 };
 
 export type TransactionBroadcastContext<TNamespace extends string = string> =
   TransactionBroadcastArtifactContext<TNamespace> & {
-    broadcastArtifact: BroadcastArtifact;
+    broadcastArtifact: TransactionBroadcastArtifact<TNamespace>;
   };
 
 export type NamespaceTransactionRequest<TNamespace extends string = string> = {
-  deriveForChain?(request: TransactionRequest<TNamespace>, chainRef: ChainRef): TransactionRequest<TNamespace>;
-  validateRequest?(context: TransactionValidationContext<TNamespace>): void;
+  deriveForChain(request: TransactionRequest<TNamespace>, chainRef: ChainRef): TransactionRequest<TNamespace>;
+  validateRequest(context: TransactionValidationContext<TNamespace>): void;
 };
 
 export type NamespaceTransactionProposal<TNamespace extends string = string> = {
   prepare(
     context: TransactionPrepareContext<TNamespace>,
   ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>, TransactionReviewSnapshot<TNamespace>>>;
-  buildReview?(context: TransactionApprovalReviewContext<TNamespace>): TransactionReviewDetails | null;
-  applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
-  deriveApprovalResourceKey?(
-    context: TransactionApprovalResourceContext<TNamespace>,
-  ): TransactionApprovalResourceKey | null;
-  finalizeApproval?(
-    context: TransactionApprovalFinalizeContext<TNamespace>,
-  ): Promise<TransactionApprovalFinalizeResult<TNamespace>>;
-  deriveConflictKey?(context: TransactionProposalConflictContext<TNamespace>): TransactionConflictKey | null;
+  buildReview(context: TransactionReviewContext<TNamespace>): TransactionReviewDetails | null;
+  buildReplacementRequest(
+    context: TransactionReplacementRequestContext<TNamespace>,
+  ): Promise<TransactionRequest<TNamespace>>;
+  deriveResourceKey(context: TransactionResourceKeyContext<TNamespace>): TransactionResourceKey | null;
+  finalizeSubmit(
+    context: TransactionFinalizeSubmitContext<TNamespace>,
+  ): Promise<TransactionFinalizeSubmitResult<TNamespace>>;
 };
 
 export type NamespaceTransactionSubmission<TNamespace extends string = string> = {
   createBroadcastArtifact(
     context: TransactionBroadcastArtifactContext<TNamespace>,
     options?: TransactionSignOptions,
-  ): Promise<BroadcastArtifact>;
+  ): Promise<TransactionBroadcastArtifact<TNamespace>>;
   broadcast(context: TransactionBroadcastContext<TNamespace>): Promise<BroadcastResult<TNamespace>>;
 };
 
@@ -287,10 +261,10 @@ export type NamespaceTransactionTracking<TNamespace extends string = string> = {
 };
 
 export type NamespaceTransaction<TNamespace extends string = string> = {
-  request?: NamespaceTransactionRequest<TNamespace>;
-  proposal?: NamespaceTransactionProposal<TNamespace>;
-  submission?: NamespaceTransactionSubmission<TNamespace>;
-  tracking?: NamespaceTransactionTracking<TNamespace>;
+  request: NamespaceTransactionRequest<TNamespace>;
+  proposal: NamespaceTransactionProposal<TNamespace>;
+  submission: NamespaceTransactionSubmission<TNamespace>;
+  tracking: NamespaceTransactionTracking<TNamespace>;
 };
 
 export type AnyNamespaceTransaction = NamespaceTransaction<string>;

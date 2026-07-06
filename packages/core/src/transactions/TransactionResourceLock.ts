@@ -1,4 +1,4 @@
-import type { TransactionApprovalResourceKey } from "./namespace/types.js";
+import type { TransactionResourceKey } from "./aggregate/index.js";
 
 type LockState = {
   tail: Promise<void>;
@@ -8,7 +8,7 @@ type LockState = {
 export class TransactionResourceLock {
   #locks = new Map<string, LockState>();
 
-  async withKey<T>(resourceKey: TransactionApprovalResourceKey | null, run: () => Promise<T>): Promise<T> {
+  async withKey<T>(resourceKey: TransactionResourceKey | null, run: () => Promise<T>): Promise<T> {
     if (!resourceKey) {
       return await run();
     }

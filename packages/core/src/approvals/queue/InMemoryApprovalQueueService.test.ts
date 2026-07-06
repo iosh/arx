@@ -52,16 +52,6 @@ describe("InMemoryApprovalQueueService", () => {
     expect(() => queue.create(request, null)).toThrow(/requester/i);
   });
 
-  it("create() rejects approvals whose request chainRef does not match the record chainRef", async () => {
-    const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
-    const request = createRequest({
-      request: { chainRef: "eip155:10", suggestedAccounts: ["0xabc"] },
-    });
-
-    expect(() => queue.create(request, requester)).toThrow(/request chainref must match/i);
-  });
-
   it("create() rejects request-permissions approvals with empty descriptor chainRefs", async () => {
     const messenger = createMessenger();
     const queue = new InMemoryApprovalQueueService({ messenger });

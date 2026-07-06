@@ -61,29 +61,6 @@ describe("createProviderRequests", () => {
     });
   });
 
-  it("aborts request-bound work when the provider scope is cancelled", async () => {
-    const providerRequests = createProviderRequests({
-      generateId: () => "request-4",
-      now: () => 400,
-    });
-
-    const handle = providerRequests.beginRequest({
-      scope: REQUEST_SCOPE,
-      rpcId: "rpc-send",
-      namespace: "eip155",
-      method: "eth_sendTransaction",
-    });
-
-    expect(handle.signal.aborted).toBe(false);
-    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
-
-    expect(handle.signal.aborted).toBe(true);
-    expect(handle.signal.reason).toMatchObject({
-      code: "global.transport.disconnected",
-    });
-    expect(providerRequests.has("request-4")).toBe(false);
-  });
-
   it("keeps a cancelled request terminal even if completion arrives later", async () => {
     const providerRequests = createProviderRequests({
       generateId: () => "request-5",

@@ -1,4 +1,5 @@
 import {
+  findBlockingActiveTransactionRecords,
   type InsertApprovedTransactionAggregateInput,
   type ListRecoverableTransactionAggregatesQuery,
   type ListTransactionHistoryQuery,
@@ -85,22 +86,7 @@ export class DexieTransactionAggregatesPort implements TransactionsStoragePort {
           .where("[conflictKey.kind+conflictKey.value]")
           .equals([conflictKey.kind, conflictKey.value])
           .toArray();
-        const conflicting = candidates.filter((candidate) => {
-          if (candidate.id === transactionId) {
-            return false;
-          }
-          if (candidate.status !== "submitting" && candidate.status !== "submitted") {
-            return false;
-          }
-          if (
-            aggregate.record.replacesTransactionId &&
-            aggregate.record.replacesTransactionId === candidate.id &&
-            candidate.status === "submitted"
-          ) {
-            return false;
-          }
-          return true;
-        });
+        const conflicting = findBlockingActiveTransactionRecords(aggregate.record, candidates);
 
         if (conflicting.length > 0) {
           throw new TransactionConflictKeyCollisionError({

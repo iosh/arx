@@ -181,8 +181,8 @@ describe("prepareTransaction - fees", () => {
       const result = await prepareTransaction(ctx);
 
       expect(result.status).toBe("failed");
-      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.fee_estimation_failed");
-      expect(result.status === "failed" ? result.error.data : null).toMatchObject({
+      expect(result.status === "failed" ? result.error.code : null).toBe("transaction.prepare.fee_estimation_failed");
+      expect(result.status === "failed" ? result.error.details : null).toMatchObject({
         method: "feeOracle.suggestFees",
         error: "fee rpc down",
       });

@@ -40,14 +40,17 @@ describe("createMessenger", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it("lets listener errors propagate", () => {
+  it("propagates listener errors", () => {
     const messenger = createMessenger();
     const error = new Error("listener failed");
+    const afterError = vi.fn();
 
     messenger.subscribe(TOPIC, () => {
       throw error;
     });
+    messenger.subscribe(TOPIC, afterError);
 
     expect(() => messenger.publish(TOPIC, { value: 1 })).toThrow(error);
+    expect(afterError).not.toHaveBeenCalled();
   });
 });

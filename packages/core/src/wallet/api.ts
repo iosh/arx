@@ -1,13 +1,15 @@
 import type { ApprovalAccountSelectionDecision } from "../approvals/queue/types.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { OwnerChangedEvent } from "../events/ownerChanged.js";
+import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
 import type { SessionLockState } from "../runtime/session/unlock/types.js";
 import type { AttentionReason } from "../services/runtime/attention/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { TransactionStatus } from "../transactions/aggregate/index.js";
 import type {
-  Eip155TransactionDraftChange,
-  NamespaceTransactionDraftEdit as TransactionNamespaceDraftEdit,
+  SubmitTransactionResult,
+  TransactionProposal,
+  TransactionReadyProposal,
   WalletTransactionRequest,
 } from "../transactions/index.js";
 import type {
@@ -28,15 +30,14 @@ import type {
   WalletApiNetworksResult,
   WalletApiOwnedAccountSummary,
   WalletApiPendingApprovalsResult,
-  WalletApiRequestSendTransactionApprovalResult,
+  WalletApiPrepareTransactionResult,
   WalletApiResolveApprovalResult,
   WalletApiSessionStatusResult,
   WalletApiSetupStatusResult,
+  WalletApiSubmitTransactionResult,
   WalletApiTransactionDetailResult,
   WalletApiTransactionsResult,
 } from "./types.js";
-
-export type { Eip155TransactionDraftChange };
 
 export type UnlockSessionInput = { password: string };
 export type LockSessionInput = { reason?: "manual" | "timeout" | "suspend" | "reload" };
@@ -80,7 +81,6 @@ export type ResolveApprovalInput =
       approvalId: string;
       action: "approve";
       decision?: ApprovalAccountSelectionDecision;
-      expectedPrepareId?: string;
     }
   | {
       approvalId: string;
@@ -133,8 +133,11 @@ export type WalletApiAttentionSnapshot = {
   count: number;
 };
 
-export type RequestSendTransactionApprovalInput = {
+export type PrepareTransactionInput = {
   request: WalletTransactionRequest;
+};
+export type SubmitTransactionInput = {
+  proposal: TransactionReadyProposal;
 };
 export type WalletApiTransactionsInput = {
   namespace?: string;
@@ -148,19 +151,10 @@ export type WalletApiTransactionsInput = {
   };
 };
 export type WalletApiTransactionDetailInput = { transactionId: string };
-export type RerunTransactionPrepareInput = { approvalId: string };
-export type NamespaceTransactionDraftEdit = Omit<TransactionNamespaceDraftEdit, "changes"> & {
-  readonly changes: readonly Eip155TransactionDraftChange[];
-};
-export type ApplyTransactionDraftEditInput = {
-  approvalId: string;
-  edit: NamespaceTransactionDraftEdit;
-  mode?: string;
-};
 
 export const WALLET_TARGET = "wallet" as const;
 export const WALLET_CHANGED_EVENT = "changed" as const;
-export const WALLET_UI_CALLER_ORIGIN = "arx://wallet-ui" as const;
+export const WALLET_UI_CALLER_ORIGIN = WALLET_UI_ORIGIN;
 
 export type WalletEvent = OwnerChangedEvent;
 
@@ -228,10 +222,10 @@ export type WalletApi = Readonly<{
   transactions: Readonly<{
     listHistory(input?: WalletApiTransactionsInput): Promise<WalletApiTransactionsResult>;
     getDetail(input: WalletApiTransactionDetailInput): Promise<WalletApiTransactionDetailResult>;
-    requestSendTransactionApproval(
-      input: RequestSendTransactionApprovalInput,
-    ): Promise<WalletApiRequestSendTransactionApprovalResult>;
-    rerunPrepare(input: RerunTransactionPrepareInput): Promise<null>;
-    applyDraftEdit(input: ApplyTransactionDraftEditInput): Promise<null>;
+    prepareTransaction(input: PrepareTransactionInput): Promise<WalletApiPrepareTransactionResult>;
+    submitTransaction(input: SubmitTransactionInput): Promise<WalletApiSubmitTransactionResult>;
   }>;
 }>;
+
+export type WalletApiSendTransactionProposal = TransactionProposal;
+export type WalletApiSubmitTransactionOutcome = SubmitTransactionResult;

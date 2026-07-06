@@ -1,7 +1,6 @@
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { Messenger } from "../messenger/index.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
-import { TransactionApprovalSessionService } from "./approval/TransactionApprovalSessionService.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 import { notifyTransactionChanges } from "./notifyTransactionChanges.js";
 import { TransactionRecoveryService } from "./recovery/TransactionRecoveryService.js";
@@ -12,23 +11,18 @@ import { TransactionsService } from "./TransactionsService.js";
 import { SubmittedTransactionMonitor } from "./tracking/SubmittedTransactionMonitor.js";
 import { SubmittedTransactionTracker } from "./tracking/SubmittedTransactionTracker.js";
 
-type CreateApprovalSessionOptions = {
-  now?: () => number;
-  createId?: () => string;
-};
-
 type CreateTransactionServicesOptions = {
   aggregateStore: TransactionAggregateStore;
   namespaces: NamespaceTransactions;
   accountAddressing: AccountAddressingByNamespace;
-  approvalSessionOptions?: CreateApprovalSessionOptions;
   resourceLock?: TransactionResourceLock;
   messenger?: Messenger;
+  now?: () => number;
+  createId?: () => string;
 };
 
 export type TransactionServices = {
   transactions: TransactionsService;
-  approvals: TransactionApprovalSessionService;
   submission: TransactionSubmissionExecutor;
   tracker: SubmittedTransactionTracker;
   monitor: SubmittedTransactionMonitor;
@@ -39,25 +33,27 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   const resourceLock = options.resourceLock ?? new TransactionResourceLock();
   const invalidations = new TransactionInvalidations(options.messenger);
   const transactionsStore = notifyTransactionChanges(options.aggregateStore, invalidations);
-  const approvals = new TransactionApprovalSessionService({
-    transactions: transactionsStore,
-    namespaces: options.namespaces,
-    resourceLock,
-    ...options.approvalSessionOptions,
-  });
   const submission = new TransactionSubmissionExecutor({
     transactions: transactionsStore,
     namespaces: options.namespaces,
     accountAddressing: options.accountAddressing,
     resourceLock,
   });
-  const transactions = new TransactionsService({
+  const transactionServiceDeps: ConstructorParameters<typeof TransactionsService>[0] = {
     aggregateStore: transactionsStore,
-    approvalSessions: approvals,
+    namespaces: options.namespaces,
     submission,
     accountAddressing: options.accountAddressing,
+    resourceLock,
     invalidations,
-  });
+  };
+  if (options.now !== undefined) {
+    transactionServiceDeps.now = options.now;
+  }
+  if (options.createId !== undefined) {
+    transactionServiceDeps.createId = options.createId;
+  }
+  const transactions = new TransactionsService(transactionServiceDeps);
 
   const tracker = new SubmittedTransactionTracker({
     transactions: transactionsStore,
@@ -83,7 +79,6 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
 
   return {
     transactions,
-    approvals,
     submission,
     tracker,
     monitor,

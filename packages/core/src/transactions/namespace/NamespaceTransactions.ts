@@ -1,3 +1,4 @@
+import { NamespaceTransactionAlreadyRegisteredError, NamespaceTransactionNotFoundError } from "./errors.js";
 import type { AnyNamespaceTransaction } from "./types.js";
 
 export class NamespaceTransactions {
@@ -8,7 +9,7 @@ export class NamespaceTransactions {
 
     for (const [namespace, transaction] of initial ?? []) {
       if (transactionByNamespace.has(namespace)) {
-        throw new Error(`Duplicate namespace transaction "${namespace}"`);
+        throw new NamespaceTransactionAlreadyRegisteredError(namespace);
       }
       transactionByNamespace.set(namespace, transaction);
     }
@@ -35,7 +36,7 @@ export class NamespaceTransactions {
   require(namespace: string): AnyNamespaceTransaction {
     const transaction = this.find(namespace);
     if (!transaction) {
-      throw new Error(`Missing namespace transaction "${namespace}"`);
+      throw new NamespaceTransactionNotFoundError(namespace);
     }
     return transaction;
   }

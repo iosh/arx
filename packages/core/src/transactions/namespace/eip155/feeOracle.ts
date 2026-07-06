@@ -1,6 +1,7 @@
 import type { Hex as OxHex } from "ox/Hex";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
+import { Eip155FeeOracleResponseError } from "./errors.js";
 
 export type Eip155FeeSuggestion =
   | { mode: "legacy"; gasPrice: OxHex; source: "eth_gasPrice" }
@@ -96,7 +97,7 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
       const gasPriceHex = await deps.rpc.getGasPrice(rpcOverrides);
       const gasPrice = toBigIntQuantity(gasPriceHex);
       if (gasPrice === null || gasPrice < 0n) {
-        throw new Error("RPC returned invalid gasPrice");
+        throw new Eip155FeeOracleResponseError({ method: "eth_gasPrice", value: gasPriceHex });
       }
       return { mode: "legacy", gasPrice: Hex.fromNumber(gasPrice), source: "eth_gasPrice" };
     },

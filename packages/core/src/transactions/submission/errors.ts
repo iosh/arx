@@ -1,11 +1,11 @@
 import { ArxBaseError } from "../../error.js";
-import type { JsonValue } from "../aggregate/index.js";
+import type { JsonObject } from "../aggregate/index.js";
 
 type TransactionAcceptanceCommitErrorInput = {
   transactionId: string;
   submissionId: string;
-  broadcastIdentity: JsonValue;
-  submitted: JsonValue;
+  broadcastIdentity: JsonObject;
+  submitted: JsonObject;
   cause: unknown;
 };
 
@@ -14,8 +14,8 @@ export class TransactionAcceptanceCommitError extends ArxBaseError {
 
   readonly transactionId: string;
   readonly submissionId: string;
-  readonly broadcastIdentity: JsonValue;
-  readonly submitted: JsonValue;
+  readonly broadcastIdentity: JsonObject;
+  readonly submitted: JsonObject;
 
   constructor(input: TransactionAcceptanceCommitErrorInput) {
     const details = {

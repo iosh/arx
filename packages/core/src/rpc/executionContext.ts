@@ -9,7 +9,6 @@ export type RpcProviderRequestCancellationReason = "caller_disconnected";
 export type RpcProviderRequestHandle = {
   id: string;
   namespace: string;
-  signal: AbortSignal;
   fulfill(): boolean;
   reject(): boolean;
   cancel(reason: RpcProviderRequestCancellationReason): Promise<boolean>;

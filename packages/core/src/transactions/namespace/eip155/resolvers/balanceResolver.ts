@@ -62,9 +62,9 @@ export const checkBalanceForMaxCost = async ({
     return {
       status: "failed",
       error: {
-        reason: "transaction.prepare.balance_unavailable",
+        code: "transaction.prepare.balance_unavailable",
         message: "Failed to fetch account balance.",
-        data: { method: "eth_getBalance", blockTag: "latest", error: readErrorMessage(error) },
+        details: { method: "eth_getBalance", blockTag: "latest", error: readErrorMessage(error) },
       },
       patch: {},
     };
@@ -74,9 +74,9 @@ export const checkBalanceForMaxCost = async ({
     return {
       status: "failed",
       error: {
-        reason: "transaction.prepare.balance_unavailable",
+        code: "transaction.prepare.balance_unavailable",
         message: "Failed to fetch account balance.",
-        data: { method: "eth_getBalance", blockTag: "latest" },
+        details: { method: "eth_getBalance", blockTag: "latest" },
       },
       patch: {},
     };
@@ -87,9 +87,9 @@ export const checkBalanceForMaxCost = async ({
     return {
       status: "failed",
       error: {
-        reason: "transaction.prepare.balance_unavailable",
+        code: "transaction.prepare.balance_unavailable",
         message: "Failed to parse account balance from RPC.",
-        data: { method: "eth_getBalance", blockTag: "latest", balance: balanceHex },
+        details: { method: "eth_getBalance", blockTag: "latest", balance: balanceHex },
       },
       patch: {},
     };
@@ -100,9 +100,9 @@ export const checkBalanceForMaxCost = async ({
     return {
       status: "blocked",
       blocker: {
-        reason: "transaction.prepare.insufficient_funds",
+        code: "transaction.prepare.insufficient_funds",
         message: "Insufficient funds for transaction.",
-        data: {
+        details: {
           balance: balanceHex,
           required: Hex.fromNumber(requiredWei),
           deficit: Hex.fromNumber(deficitWei),

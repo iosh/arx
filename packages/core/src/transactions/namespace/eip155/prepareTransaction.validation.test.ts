@@ -9,15 +9,6 @@ import {
 import { createEip155RpcClient, createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - validation", () => {
-  describe("namespace validation", () => {
-    it("rejects requests from non-eip155 namespace", async () => {
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn() });
-      const ctx = createPrepareContext({ namespace: "conflux" });
-
-      await expect(prepareTransaction(ctx)).rejects.toThrow(/eip155/);
-    });
-  });
-
   describe("from address validation", () => {
     it("returns blocked when from is missing", async () => {
       const prepareTransaction = createTestPrepareTransaction({
@@ -33,7 +24,7 @@ describe("prepareTransaction - validation", () => {
 
       const result = await prepareTransaction(ctx);
       expect(result.status).toBe("blocked");
-      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.from_missing");
+      expect(result.status === "blocked" ? result.blocker.code : null).toBe("transaction.prepare.from_missing");
     });
 
     it("returns blocked when from address is invalid", async () => {
@@ -47,7 +38,7 @@ describe("prepareTransaction - validation", () => {
 
       const result = await prepareTransaction(ctx);
       expect(result.status).toBe("blocked");
-      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.from_invalid");
+      expect(result.status === "blocked" ? result.blocker.code : null).toBe("transaction.prepare.from_invalid");
     });
 
     it("records mismatch detail when payload from differs from active account", async () => {
@@ -62,8 +53,8 @@ describe("prepareTransaction - validation", () => {
       const result = await prepareTransaction(ctx);
 
       expect(result.status).toBe("blocked");
-      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.from_mismatch");
-      expect(result.status === "blocked" ? result.blocker.data : null).toEqual({
+      expect(result.status === "blocked" ? result.blocker.code : null).toBe("transaction.prepare.from_mismatch");
+      expect(result.status === "blocked" ? result.blocker.details : null).toEqual({
         payloadFrom: TEST_ADDRESSES.TO_B,
         activeFrom: TEST_ADDRESSES.FROM_A,
       });
@@ -71,7 +62,6 @@ describe("prepareTransaction - validation", () => {
 
     it("fills from using active account when payload omits it", async () => {
       const rpc = createEip155RpcMock();
-      rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
@@ -88,10 +78,7 @@ describe("prepareTransaction - validation", () => {
       const prepared = requireReadyPrepared(result);
 
       expect(prepared.from).toBe(TEST_ADDRESSES.MIXED_CASE.toLowerCase());
-      expect(rpc.getTransactionCount).toHaveBeenCalledWith(
-        TEST_ADDRESSES.MIXED_CASE.toLowerCase(),
-        expect.objectContaining({ blockTag: "pending" }),
-      );
+      expect(rpc.getTransactionCount).not.toHaveBeenCalled();
     });
   });
 
@@ -105,7 +92,7 @@ describe("prepareTransaction - validation", () => {
 
       const result = await prepareTransaction(ctx);
       expect(result.status).toBe("blocked");
-      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.to_invalid");
+      expect(result.status === "blocked" ? result.blocker.code : null).toBe("transaction.prepare.to_invalid");
     });
   });
 
@@ -131,7 +118,7 @@ describe("prepareTransaction - validation", () => {
       const prepared = requirePartialPrepared(result);
 
       expect(result.status).toBe("blocked");
-      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.from_mismatch");
+      expect(result.status === "blocked" ? result.blocker.code : null).toBe("transaction.prepare.from_mismatch");
       expect(prepared.chainId).toBeUndefined();
     });
 
@@ -199,7 +186,7 @@ describe("prepareTransaction - validation", () => {
       const result = await prepareTransaction(ctx);
 
       expect(result.status).toBe("failed");
-      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
+      expect(result.status === "failed" ? result.error.code : null).toBe("transaction.prepare.invalid_hex");
     });
   });
 });

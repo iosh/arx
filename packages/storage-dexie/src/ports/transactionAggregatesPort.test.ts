@@ -36,7 +36,6 @@ const createSubmittedAggregateRecord = (
     chainRef: "eip155:1",
     origin: "https://dapp.example",
     source: "provider",
-    requestId: "rpc-1",
     accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitted",
     request: {
@@ -47,7 +46,6 @@ const createSubmittedAggregateRecord = (
       },
     },
     approvedRequest: {
-      approvalId: `approval:${transactionId}`,
       payload: {
         chainId: "0x1",
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -57,7 +55,6 @@ const createSubmittedAggregateRecord = (
         gas: "0x5208",
         nonce: "0x7",
       },
-      approvedAt: 1_100,
     },
     activeSubmissionId: null,
     submitted: {
@@ -68,8 +65,8 @@ const createSubmittedAggregateRecord = (
     },
     receipt: null,
     conflictKey: null,
-    replacesTransactionId: null,
-    replacementType: null,
+    resourceKey: null,
+    replacement: null,
     replacedByTransactionId: null,
     terminalReason: null,
     createdAt: 1_000,
@@ -86,7 +83,6 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
     chainRef: "eip155:1",
     origin: "https://dapp.example",
     source: "provider",
-    requestId: "rpc-1",
     accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "submitting",
     request: {
@@ -97,7 +93,6 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
       },
     },
     approvedRequest: {
-      approvalId: "approval-1",
       payload: {
         chainId: "0x1",
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -107,7 +102,6 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
         gas: "0x5208",
         nonce: "0x7",
       },
-      approvedAt: createdAt + 100,
     },
     activeSubmissionId: `${transactionId}:submission-1`,
     submitted: null,
@@ -116,8 +110,8 @@ const createSubmittingAggregate = (transactionId: string, createdAt = 1_000): Tr
       kind: "eip155.nonce",
       value: `eip155:1:eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:${transactionId}`,
     },
-    replacesTransactionId: null,
-    replacementType: null,
+    resourceKey: null,
+    replacement: null,
     replacedByTransactionId: null,
     terminalReason: null,
     createdAt,
@@ -146,7 +140,7 @@ const createTerminalReason = (kind: TransactionTerminalReason["kind"]): Transact
   message: "Transaction preparation failed.",
   namespace: null,
   code: kind,
-  details: null,
+  details: {},
   retryable: false,
 });
 

@@ -46,5 +46,7 @@ export const requireReadyPrepared = (result: Eip155PrepareResult): Eip155Unsigne
 };
 
 export const requirePartialPrepared = (result: Eip155PrepareResult): Eip155UnsignedTransactionDraft => {
-  return result.status === "ready" ? result.prepared : (result.reviewSnapshot ?? {});
+  if (result.status === "ready") return result.prepared;
+  if (result.reviewSnapshot === null) return {};
+  return result.reviewSnapshot;
 };

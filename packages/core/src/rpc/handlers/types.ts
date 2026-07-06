@@ -43,7 +43,7 @@ export type RpcHandlerDeps = {
   chainAddressing: ChainAddressingByNamespace;
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
   namespaceRuntime: NamespaceRuntimeServices;
-  transactions: Pick<TransactionsService, "requestTransactionApproval" | "waitForTransactionSubmissionOutcome">;
+  transactions: Pick<TransactionsService, "prepareTransaction" | "submitTransaction">;
 };
 
 export type RpcRequest = {

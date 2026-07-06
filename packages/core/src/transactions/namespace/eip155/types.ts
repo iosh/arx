@@ -7,23 +7,28 @@ import type {
   BroadcastResult,
   SignedTransactionPayload,
   SubmittedTransactionInspection,
-  TransactionApprovalFinalizeContext,
-  TransactionApprovalFinalizeResult,
-  TransactionApprovalReviewContext,
   TransactionBroadcastArtifactContext,
   TransactionBroadcastContext,
-  TransactionDraftEditContext,
   TransactionFailure,
+  TransactionFinalizeSubmitContext,
+  TransactionFinalizeSubmitResult,
   TransactionPrepareContext,
   TransactionPrepareResult,
   TransactionProposalBlocker,
   TransactionProposalError,
   TransactionRecordContext,
+  TransactionReplacementRequestContext,
+  TransactionResourceKeyContext,
+  TransactionReviewContext,
   TransactionSignContext,
   TransactionSignOptions,
 } from "../types.js";
-import type { Eip155SubmittedTransaction, Eip155TransactionDraftChange } from "./transactionTypes.js";
-import type { Eip155UnsignedTransaction, Eip155UnsignedTransactionDraft } from "./unsignedTransaction.js";
+import type { Eip155SubmittedTransaction } from "./transactionTypes.js";
+import type {
+  Eip155PreparedTransaction,
+  Eip155UnsignedTransaction,
+  Eip155UnsignedTransactionDraft,
+} from "./unsignedTransaction.js";
 
 export type Eip155FeeMode = "legacy" | "eip1559" | "unknown";
 export type Eip155CallParams = {
@@ -33,19 +38,19 @@ export type Eip155CallParams = {
   data?: Hex;
 };
 
-export type Eip155PrepareResult = TransactionPrepareResult<Eip155UnsignedTransaction, Eip155UnsignedTransactionDraft>;
+export type Eip155PrepareResult = TransactionPrepareResult<Eip155PreparedTransaction, Eip155UnsignedTransactionDraft>;
 
 export type Eip155PrepareContext = Omit<TransactionPrepareContext, "namespace" | "request"> & {
   namespace: "eip155";
   request: Eip155TransactionRequest;
 };
 
-export type Eip155ApprovalFinalizeContext = Omit<
-  TransactionApprovalFinalizeContext<"eip155">,
-  "approvedPayload" | "request" | "localActiveTransactions"
+export type Eip155FinalizeSubmitContext = Omit<
+  TransactionFinalizeSubmitContext<"eip155">,
+  "preparedPayload" | "request" | "localActiveTransactions"
 > & {
   request: Eip155TransactionRequest;
-  approvedPayload: Eip155UnsignedTransaction;
+  preparedPayload: Eip155PreparedTransaction;
   localActiveTransactions: readonly {
     transactionId: string;
     status: "submitting" | "submitted";
@@ -54,7 +59,26 @@ export type Eip155ApprovalFinalizeContext = Omit<
   }[];
 };
 
-export type Eip155ApprovalFinalizeResult = TransactionApprovalFinalizeResult<"eip155">;
+export type Eip155ResourceKeyContext = Omit<TransactionResourceKeyContext<"eip155">, "preparedPayload" | "request"> & {
+  request: Eip155TransactionRequest;
+  preparedPayload: Eip155PreparedTransaction;
+};
+
+export type Eip155FinalizeSubmitResult =
+  | {
+      status: "approved";
+      approvedPayload: Eip155UnsignedTransaction;
+      conflictKey: TransactionConflictKey | null;
+    }
+  | Extract<TransactionFinalizeSubmitResult<"eip155">, { status: "blocked" | "failed" }>;
+
+export type Eip155ReplacementRequestContext = Omit<
+  TransactionReplacementRequestContext<"eip155">,
+  "targetApprovedPayload" | "targetRequest"
+> & {
+  targetRequest: Eip155TransactionRequest;
+  targetApprovedPayload: Eip155UnsignedTransaction;
+};
 
 export type Eip155BroadcastArtifactContext = Omit<
   TransactionBroadcastArtifactContext<"eip155">,
@@ -79,22 +103,10 @@ export type Eip155TrackingContext = TransactionRecordContext & {
   submitted: Eip155SubmittedTransaction;
 };
 
-export type Eip155ApprovalReviewContext = Omit<
-  TransactionApprovalReviewContext,
-  "namespace" | "request" | "reviewSnapshot"
-> & {
+export type Eip155ApprovalReviewContext = Omit<TransactionReviewContext, "namespace" | "request" | "reviewSnapshot"> & {
   namespace: "eip155";
   request: Eip155TransactionRequest;
   reviewSnapshot: Eip155UnsignedTransactionDraft | null;
-};
-
-export type Eip155DraftEditContext = Omit<TransactionDraftEditContext, "namespace" | "request" | "edit"> & {
-  namespace: "eip155";
-  request: Eip155TransactionRequest;
-  edit: {
-    namespace: "eip155";
-    changes: readonly Eip155TransactionDraftChange[];
-  };
 };
 
 export type Eip155SignerContract = {

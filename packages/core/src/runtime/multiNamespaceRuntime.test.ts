@@ -69,8 +69,33 @@ const createTestRpcModule = (namespace: string): RpcNamespaceModule => ({
 });
 
 const createTestNamespaceTransaction = (): NamespaceTransaction => ({
+  request: {
+    deriveForChain: (request, chainRef) => ({ ...request, chainRef }),
+    validateRequest: () => {},
+  },
   proposal: {
-    prepare: async () => ({ status: "ready", prepared: {} }),
+    prepare: async () => ({ status: "ready", prepared: {}, reviewSnapshot: {} }),
+    buildReview: () => null,
+    buildReplacementRequest: async (context) => context.targetRequest,
+    deriveResourceKey: () => null,
+    finalizeSubmit: async (context) => ({
+      status: "approved",
+      approvedPayload: context.preparedPayload,
+      conflictKey: null,
+    }),
+  },
+  submission: {
+    createBroadcastArtifact: async () => ({ kind: "test.raw", payload: { raw: "0x" } }),
+    broadcast: async () => ({
+      broadcastIdentity: { hash: "0xhash" },
+      submitted: { hash: "0xhash" },
+    }),
+  },
+  tracking: {
+    inspectSubmittedTransaction: async () => ({ trackingStatus: "pending", evidence: null }),
+    getInitialInspectionDelay: () => 1_000,
+    getPendingInspectionDelay: () => 1_000,
+    getRetryInspectionDelay: () => 1_000,
   },
 });
 

@@ -36,11 +36,10 @@ import {
   restoreWalletFromPrivateKey,
 } from "./actions/setup.js";
 import {
-  applyTransactionDraftEdit,
   getTransactionDetail,
   listTransactionHistory,
-  requestSendTransactionApproval,
-  rerunTransactionPrepare,
+  prepareTransaction,
+  submitTransaction,
 } from "./actions/transactions.js";
 import type { WalletApi } from "./api.js";
 import type { WalletApiContext } from "./context.js";
@@ -101,8 +100,7 @@ export const walletMethodHandlers = {
   transactions: {
     listHistory: listTransactionHistory,
     getDetail: getTransactionDetail,
-    requestSendTransactionApproval,
-    rerunPrepare: rerunTransactionPrepare,
-    applyDraftEdit: applyTransactionDraftEdit,
+    prepareTransaction,
+    submitTransaction,
   },
 } as const satisfies MethodHandlerTree<WalletApiContext, WalletApi>;

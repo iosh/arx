@@ -1,4 +1,4 @@
-import type { JsonValue } from "./json.js";
+import type { JsonObject } from "./json.js";
 import { cloneJsonValue } from "./json.js";
 
 export const TRANSACTION_TERMINAL_REASON_KINDS = [
@@ -25,7 +25,7 @@ export type TransactionTerminalReason = {
   message: string;
   namespace: string | null;
   code: string;
-  details: JsonValue | null;
+  details: JsonObject;
   retryable: boolean;
 };
 
@@ -35,7 +35,7 @@ export type BuildTransactionTerminalReasonInput = {
   message?: string;
   namespace?: string | null;
   code?: string;
-  details?: JsonValue;
+  details?: JsonObject;
   retryable?: boolean;
 };
 
@@ -62,7 +62,7 @@ export const buildTransactionTerminalReason = (
   message: input.message ?? DEFAULT_TERMINAL_REASON_MESSAGES[input.kind],
   namespace: input.namespace ?? null,
   code: input.code ?? input.kind,
-  details: input.details === undefined ? null : cloneJsonValue(input.details),
+  details: input.details === undefined ? {} : cloneJsonValue(input.details),
   retryable: input.retryable ?? false,
 });
 
@@ -71,6 +71,6 @@ export const cloneTransactionTerminalReason = (reason: TransactionTerminalReason
   message: reason.message,
   namespace: reason.namespace,
   code: reason.code,
-  details: reason.details === null ? null : cloneJsonValue(reason.details),
+  details: cloneJsonValue(reason.details),
   retryable: reason.retryable,
 });

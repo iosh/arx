@@ -22,9 +22,9 @@ export const deriveFields = (
           return {
             status: "failed",
             error: {
-              reason: "transaction.prepare.chain_id_mismatch",
+              code: "transaction.prepare.chain_id_mismatch",
               message: "Transaction chainId does not match the active chain.",
-              data: {
+              details: {
                 chainId,
                 expectedChainId,
               },

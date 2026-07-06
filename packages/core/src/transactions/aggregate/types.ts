@@ -1,5 +1,5 @@
 import type { ApprovalSource } from "../../approvals/source.js";
-import type { JsonValue } from "./json.js";
+import type { JsonObject } from "./json.js";
 import type { TransactionTerminalReason } from "./terminalReason.js";
 
 /** State of the wallet transaction shown in history and recovery. */
@@ -31,22 +31,31 @@ export type TransactionSource = ApprovalSource;
 /** Local replacement intent for a new transaction. */
 export type TransactionReplacementType = "speed_up" | "cancel";
 
+export type TransactionReplacement = {
+  transactionId: string;
+  type: TransactionReplacementType;
+};
+
 /** Chain-level mutual exclusion key, such as EIP-155 chain/account/nonce. */
 export type TransactionConflictKey = {
   kind: string;
   value: string;
 };
 
+/** Local serialization key supplied by the namespace adapter. */
+export type TransactionResourceKey = {
+  kind: string;
+  value: string;
+};
+
 /** Original dApp request or wallet intent. */
 export type TransactionRequestSnapshot = {
-  payload: JsonValue;
+  payload: JsonObject;
 };
 
 /** Final payload approved by the user and used for submission. */
 export type TransactionApprovedRequest = {
-  approvalId: string;
-  payload: JsonValue;
-  approvedAt: number;
+  payload: JsonObject;
 };
 
 /**
@@ -60,17 +69,16 @@ export type TransactionRecord = {
   chainRef: string;
   origin: string;
   source: TransactionSource;
-  requestId: string | null;
   accountId: string;
   status: TransactionStatus;
   request: TransactionRequestSnapshot;
-  approvedRequest: TransactionApprovedRequest | null;
+  approvedRequest: TransactionApprovedRequest;
   activeSubmissionId: string | null;
-  submitted: JsonValue | null;
-  receipt: JsonValue | null;
+  submitted: JsonObject | null;
+  receipt: JsonObject | null;
   conflictKey: TransactionConflictKey | null;
-  replacesTransactionId: string | null;
-  replacementType: TransactionReplacementType | null;
+  resourceKey: TransactionResourceKey | null;
+  replacement: TransactionReplacement | null;
   replacedByTransactionId: string | null;
   terminalReason: TransactionTerminalReason | null;
   createdAt: number;
@@ -99,10 +107,7 @@ export type TransactionAggregateServiceOptions = {
 };
 
 /** Local replacement intent for a newly created transaction. */
-export type CreateTransactionReplacementInput = {
-  transactionId: string;
-  type: TransactionReplacementType;
-};
+export type CreateTransactionReplacementInput = TransactionReplacement;
 
 /** Data captured when a dApp request or wallet intent becomes a transaction. */
 export type CreateTransactionInput = {
@@ -110,21 +115,16 @@ export type CreateTransactionInput = {
   chainRef: string;
   origin: string;
   source: TransactionSource;
-  requestId?: string | null;
   accountId: string;
   request: TransactionRequestSnapshot;
-  replacement?: CreateTransactionReplacementInput | null;
+  replacement: CreateTransactionReplacementInput | null;
 };
 
 /** Approved request that creates a durable wallet transaction. */
 export type CreateApprovedTransactionInput = CreateTransactionInput & {
-  approvalId: string;
-  approvedRequestPayload: JsonValue;
-  /** Null lets the aggregate allocate the first submission id. */
-  submissionId: string | null;
-  /** Null uses the aggregate clock as the approval time. */
-  approvedAt: number | null;
+  approvedRequestPayload: JsonObject;
   conflictKey: TransactionConflictKey | null;
+  resourceKey: TransactionResourceKey | null;
 };
 
 /** Terminal command for a transaction not yet accepted by the network. */
@@ -155,7 +155,7 @@ export type QueueSubmissionBroadcastInput = ActiveSubmissionInput;
 export type RecordBroadcastAcceptanceInput = {
   transactionId: string;
   submissionId: string;
-  submitted: JsonValue;
+  submitted: JsonObject;
 };
 
 /** Terminal outcome for the active submission before network acceptance. */
@@ -166,11 +166,13 @@ export type TerminalSubmissionInput = ActiveSubmissionInput & {
 /** Receipt or confirmation details owned by the namespace adapter. */
 export type RecordTransactionReceiptInput = {
   transactionId: string;
-  receipt: JsonValue;
+  receipt: JsonObject;
 };
 
 /** On-chain failure plus the adapter's terminal reason. */
-export type RecordTransactionFailedOnChainInput = RecordTransactionReceiptInput & {
+export type RecordTransactionFailedOnChainInput = {
+  transactionId: string;
+  receipt: JsonObject | null;
   reason: TransactionTerminalReason;
 };
 

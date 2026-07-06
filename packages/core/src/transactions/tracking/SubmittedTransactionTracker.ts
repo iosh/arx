@@ -3,19 +3,17 @@ import { isArxBaseError } from "../../error.js";
 import {
   buildTransactionTerminalReason,
   isTransactionStatusTerminal,
-  type JsonValue,
   type TransactionAggregate,
   TransactionAggregateNotFoundError,
   type TransactionAggregateStore,
   type TransactionConflictKey,
   type TransactionRecord,
 } from "../aggregate/index.js";
-import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
-import type { SubmittedTransactionInspection } from "../namespace/types.js";
+import type { SubmittedTransactionInspection, TransactionFailure } from "../namespace/types.js";
 import type { TransactionResourceLock } from "../TransactionResourceLock.js";
 import { buildSubmittedTransactionTrackingContext } from "./contexts.js";
-import { SubmittedTransactionTrackingInvariantError, SubmittedTransactionTrackingUnsupportedError } from "./errors.js";
+import { SubmittedTransactionTrackingInvariantError } from "./errors.js";
 
 type SubmittedTransactionTrackerDeps = {
   transactions: Pick<
@@ -50,11 +48,7 @@ export type SubmittedTransactionTrackerResult =
     }
   | {
       status: "retry_later";
-      failure: {
-        reason: string;
-        message: string;
-        data: JsonValue | null;
-      };
+      failure: TransactionFailure;
       aggregate: TransactionAggregate;
     };
 
@@ -98,21 +92,18 @@ export class SubmittedTransactionTracker {
       };
     }
 
-    const namespaceTracking = this.#requireNamespaceTracking(aggregate.record.namespace);
+    const namespaceTracking = this.#namespaces.require(aggregate.record.namespace).tracking;
     const context = buildSubmittedTransactionTrackingContext(aggregate, this.#accountAddressing);
 
     let inspection: SubmittedTransactionInspection;
     try {
       inspection = await namespaceTracking.inspectSubmittedTransaction(context);
     } catch (error) {
-      const details =
-        isArxBaseError(error) && error.details && typeof error.details === "object"
-          ? (structuredClone(error.details) as JsonValue)
-          : null;
+      const details = isArxBaseError(error) && error.details ? structuredClone(error.details) : {};
       const failure = {
-        reason: isArxBaseError(error) ? error.code : `${aggregate.record.namespace}.tracking`,
+        code: isArxBaseError(error) ? error.code : `${aggregate.record.namespace}.tracking`,
         message: error instanceof Error ? error.message : "tracking failed",
-        data: details,
+        details,
       };
 
       return {
@@ -135,10 +126,10 @@ export class SubmittedTransactionTracker {
           async () =>
             await this.#transactions.recordTransactionConfirmed({
               transactionId,
-              receipt: inspection.receipt as never,
+              receipt: inspection.receipt,
             }),
         );
-        await this.#tryReplaceOtherSubmittedTransactions(next);
+        await this.#tryReplaceConflictingSubmittedTransactions(next);
         return { status: "advanced", inspection, aggregate: next };
       }
       case "failed": {
@@ -147,36 +138,51 @@ export class SubmittedTransactionTracker {
           async () =>
             await this.#transactions.recordTransactionFailedOnChain({
               transactionId,
-              receipt: inspection.receipt as never,
+              receipt: inspection.receipt,
               reason: buildTransactionTerminalReason({
                 kind: "on_chain_failed",
                 namespace: aggregate.record.namespace,
-                code: inspection.error.reason,
+                code: inspection.error.code,
                 message: inspection.error.message,
-                details: inspection.error.data as never,
+                details: inspection.error.details,
               }),
             }),
         );
+        await this.#tryReplaceConflictingSubmittedTransactions(next);
         return { status: "advanced", inspection, aggregate: next };
       }
       case "dropped": {
-        const replacement = await this.#findConfirmedReplacementRecord(aggregate);
-        if (replacement) {
+        const localReplacement = await this.#findLocalReplacementRecord(aggregate);
+        if (localReplacement?.status === "submitted") {
+          return {
+            status: "pending",
+            inspection: {
+              trackingStatus: "pending",
+              evidence: {
+                reason: "local_replacement_pending",
+                replacementTransactionId: localReplacement.id,
+              },
+            },
+            aggregate,
+          };
+        }
+
+        if (localReplacement) {
           const next = await this.#withTrackingResourceLock(
             aggregate,
             async () =>
               await this.#transactions.recordTransactionReplaced({
                 transactionId,
-                replacedByTransactionId: replacement.id,
+                replacedByTransactionId: localReplacement.id,
                 reason: buildTransactionTerminalReason({
                   kind: "tracking_failed",
                   namespace: aggregate.record.namespace,
                   code: "replaced",
                   message: "Transaction was replaced by another local transaction.",
                   details: {
-                    replacedByTransactionId: replacement.id,
+                    replacedByTransactionId: localReplacement.id,
                     conflictKey: structuredClone(aggregate.record.conflictKey),
-                  } as JsonValue,
+                  },
                 }),
               }),
           );
@@ -193,7 +199,7 @@ export class SubmittedTransactionTracker {
                 namespace: aggregate.record.namespace,
                 code: "dropped",
                 message: "Transaction is no longer expected to confirm.",
-                details: inspection.evidence as never,
+                details: inspection.evidence ?? {},
               }),
             }),
         );
@@ -210,7 +216,7 @@ export class SubmittedTransactionTracker {
                 namespace: aggregate.record.namespace,
                 code: "expired",
                 message: "Transaction submission expired on chain.",
-                details: inspection.evidence as never,
+                details: inspection.evidence ?? {},
               }),
             }),
         );
@@ -237,32 +243,20 @@ export class SubmittedTransactionTracker {
     return aggregate;
   }
 
-  #requireNamespaceTracking(namespace: string) {
-    const tracking = this.#namespaces.require(namespace).tracking;
-    if (tracking) {
-      return tracking;
-    }
-
-    throw new SubmittedTransactionTrackingUnsupportedError({
-      namespace,
-      operation: "tracking",
-    });
-  }
-
   async #withTrackingResourceLock<T>(aggregate: TransactionAggregate, run: () => Promise<T>) {
-    return await this.#resourceLock.withKey(deriveApprovalResourceKeyFromAggregate(aggregate), run);
+    return await this.#resourceLock.withKey(aggregate.record.resourceKey, run);
   }
 
-  async #tryReplaceOtherSubmittedTransactions(confirmed: TransactionAggregate): Promise<void> {
+  async #tryReplaceConflictingSubmittedTransactions(winner: TransactionAggregate): Promise<void> {
     try {
-      await this.#replaceOtherSubmittedTransactions(confirmed);
+      await this.#replaceConflictingSubmittedTransactions(winner);
     } catch {
-      // Best effort: winner confirmation is already durable.
+      // Best effort: winner status is already durable.
     }
   }
 
-  async #replaceOtherSubmittedTransactions(confirmed: TransactionAggregate): Promise<void> {
-    const conflictKey = confirmed.record.conflictKey;
+  async #replaceConflictingSubmittedTransactions(winner: TransactionAggregate): Promise<void> {
+    const conflictKey = winner.record.conflictKey;
     if (!conflictKey) {
       return;
     }
@@ -270,7 +264,7 @@ export class SubmittedTransactionTracker {
     const candidates = await this.#transactions.findTransactionRecordsByConflictKey(conflictKey);
     const losers = candidates.filter(
       (candidate) =>
-        candidate.id !== confirmed.record.id &&
+        candidate.id !== winner.record.id &&
         candidate.conflictKey?.kind === conflictKey.kind &&
         candidate.conflictKey.value === conflictKey.value &&
         candidate.status === "submitted",
@@ -279,52 +273,57 @@ export class SubmittedTransactionTracker {
     for (const loser of losers) {
       await this.#transactions.recordTransactionReplaced({
         transactionId: loser.id,
-        replacedByTransactionId: confirmed.record.id,
+        replacedByTransactionId: winner.record.id,
         reason: buildTransactionTerminalReason({
           kind: "tracking_failed",
           namespace: loser.namespace,
           code: "replaced",
           message: "Transaction was replaced by another local transaction.",
           details: {
-            replacedByTransactionId: confirmed.record.id,
+            replacedByTransactionId: winner.record.id,
             conflictKey: structuredClone(conflictKey),
-          } as JsonValue,
+          },
         }),
       });
     }
   }
 
-  async #findConfirmedReplacementRecord(aggregate: TransactionAggregate): Promise<TransactionRecord | null> {
+  async #findLocalReplacementRecord(aggregate: TransactionAggregate): Promise<TransactionRecord | null> {
     const conflictKey = aggregate.record.conflictKey;
     if (!conflictKey) {
       return null;
     }
 
     const candidates = await this.#transactions.findTransactionRecordsByConflictKey(conflictKey);
-    return this.#selectConfirmedReplacementRecord({
+    return this.#selectLocalReplacementRecord({
       currentTransactionId: aggregate.record.id,
       conflictKey,
       candidates,
     });
   }
 
-  #selectConfirmedReplacementRecord(params: {
+  #selectLocalReplacementRecord(params: {
     currentTransactionId: string;
     conflictKey: TransactionConflictKey;
     candidates: TransactionRecord[];
   }): TransactionRecord | null {
-    const activeCandidates = params.candidates.filter(
+    const localReplacements = params.candidates.filter(
       (candidate) =>
         candidate.id !== params.currentTransactionId &&
         candidate.conflictKey?.kind === params.conflictKey.kind &&
-        candidate.conflictKey.value === params.conflictKey.value,
+        candidate.conflictKey.value === params.conflictKey.value &&
+        candidate.replacement !== null,
     );
 
-    const confirmed = activeCandidates.find((candidate) => candidate.status === "confirmed");
-    if (confirmed) {
-      return confirmed;
+    const chainConsumed = localReplacements.find(
+      (candidate) =>
+        candidate.status === "confirmed" ||
+        (candidate.status === "failed" && candidate.terminalReason?.kind === "on_chain_failed"),
+    );
+    if (chainConsumed) {
+      return chainConsumed;
     }
 
-    return null;
+    return localReplacements.find((candidate) => candidate.status === "submitted") ?? null;
   }
 }

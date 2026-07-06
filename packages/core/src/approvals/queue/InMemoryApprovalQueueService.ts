@@ -46,14 +46,6 @@ type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
   settlement: PendingApprovalSettlement;
 };
 
-const getApprovalRequestChainRef = (request: ApprovalCreateParams): ApprovalCreateParams["chainRef"] => {
-  if ("definition" in request.request) {
-    return request.request.definition.chainRef;
-  }
-
-  return request.request.chainRef;
-};
-
 const assertApprovalContext = (request: ApprovalCreateParams) => {
   const recordChain = parseChainRef(request.chainRef);
   if (recordChain.namespace !== request.namespace) {
@@ -64,32 +56,6 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
         kind: request.kind,
         namespace: request.namespace,
         chainRef: request.chainRef,
-      },
-    });
-  }
-
-  const requestChainRef = getApprovalRequestChainRef(request);
-  if (requestChainRef !== request.chainRef) {
-    throw new RpcInvalidParamsError({
-      message: "Approval request chainRef must match the approval record chainRef.",
-      details: {
-        approvalId: request.approvalId,
-        kind: request.kind,
-        recordChainRef: request.chainRef,
-        requestChainRef,
-      },
-    });
-  }
-
-  const requestChain = parseChainRef(requestChainRef);
-  if (requestChain.namespace !== request.namespace) {
-    throw new RpcInvalidParamsError({
-      message: "Approval request namespace must match the approval record namespace.",
-      details: {
-        approvalId: request.approvalId,
-        kind: request.kind,
-        namespace: request.namespace,
-        chainRef: requestChainRef,
       },
     });
   }
@@ -136,21 +102,6 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
           });
         }
       }
-    }
-  }
-
-  if ("definition" in request.request) {
-    const definitionNamespace = parseChainRef(request.request.definition.chainRef).namespace;
-    if (definitionNamespace !== request.namespace) {
-      throw new RpcInvalidParamsError({
-        message: "Add-chain approval definition namespace must match the approval record namespace.",
-        details: {
-          approvalId: request.approvalId,
-          kind: request.kind,
-          namespace: request.namespace,
-          definitionNamespace,
-        },
-      });
     }
   }
 };

@@ -1,12 +1,10 @@
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { isArxBaseError } from "../../error.js";
-import type { JsonValue, TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
+import type { TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
-import { deriveApprovalResourceKeyFromAggregate } from "../approvalResourceKeys.js";
 import { buildBroadcastArtifactContext, buildBroadcastContext } from "../broadcastContexts.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
-import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
-import type { BroadcastArtifact, BroadcastResult, NamespaceTransactionSubmission } from "../namespace/types.js";
+import type { BroadcastArtifact, BroadcastResult } from "../namespace/types.js";
 import type { TransactionResourceLock } from "../TransactionResourceLock.js";
 import {
   TransactionAcceptanceCommitError,
@@ -32,6 +30,10 @@ type TransactionSubmissionExecutorDeps = {
 export type TransactionSubmissionResult = {
   aggregate: TransactionAggregate;
   broadcastArtifact: BroadcastArtifact;
+};
+
+export type SubmitApprovedTransactionOptions = {
+  lock?: "acquire" | "held";
 };
 
 export class TransactionSubmissionExecutor {
@@ -60,15 +62,24 @@ export class TransactionSubmissionExecutor {
    *                                         \-> failed
    *                            broadcast    \-> failed
    */
-  async submitApprovedTransaction(transactionId: string): Promise<TransactionSubmissionResult> {
+  async submitApprovedTransaction(
+    transactionId: string,
+    options?: SubmitApprovedTransactionOptions,
+  ): Promise<TransactionSubmissionResult> {
+    if (options?.lock === "held") {
+      return await this.#submitLoadedApprovedTransaction(await this.#loadSubmittingAggregate(transactionId));
+    }
+
     const current = await this.#loadSubmittingAggregate(transactionId);
+    return await this.#resourceLock.withKey(current.record.resourceKey, async () => {
+      return await this.#submitLoadedApprovedTransaction(current);
+    });
+  }
+
+  async #submitLoadedApprovedTransaction(current: TransactionAggregate): Promise<TransactionSubmissionResult> {
     const submissionId = this.#requireActiveSubmissionId(current);
     const namespaceTransaction = this.#namespaces.require(current.record.namespace);
-    const submission = requireNamespaceTransactionOperation<NamespaceTransactionSubmission>({
-      namespace: current.record.namespace,
-      operation: "submission.createBroadcastArtifact",
-      value: namespaceTransaction.submission,
-    });
+    const submission = namespaceTransaction.submission;
 
     const signing = await this.#transactions.beginSubmissionSigning({
       transactionId: current.record.id,
@@ -81,7 +92,7 @@ export class TransactionSubmissionExecutor {
         buildBroadcastArtifactContext(signing, this.#accountAddressing),
       );
     } catch (error) {
-      await this.#failSubmissionWithResourceLock({
+      await this.#failSubmission({
         aggregate: current,
         submissionId,
         reason: this.#buildFailureReason({
@@ -100,16 +111,11 @@ export class TransactionSubmissionExecutor {
 
     let broadcastResult: BroadcastResult;
     try {
-      const broadcast = requireNamespaceTransactionOperation({
-        namespace: broadcasting.record.namespace,
-        operation: "submission.broadcast",
-        value: namespaceTransaction.submission?.broadcast,
-      });
-      broadcastResult = await broadcast(
+      broadcastResult = await submission.broadcast(
         buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountAddressing),
       );
     } catch (error) {
-      await this.#failSubmissionWithResourceLock({
+      await this.#failSubmission({
         aggregate: current,
         submissionId,
         reason: this.#buildFailureReason({
@@ -125,7 +131,7 @@ export class TransactionSubmissionExecutor {
       const accepted = await this.#transactions.recordBroadcastAcceptance({
         transactionId: current.record.id,
         submissionId,
-        submitted: broadcastResult.submitted as never,
+        submitted: broadcastResult.submitted,
       });
 
       return {
@@ -136,8 +142,8 @@ export class TransactionSubmissionExecutor {
       throw new TransactionAcceptanceCommitError({
         transactionId: current.record.id,
         submissionId,
-        broadcastIdentity: broadcastResult.broadcastIdentity as JsonValue,
-        submitted: broadcastResult.submitted as JsonValue,
+        broadcastIdentity: broadcastResult.broadcastIdentity,
+        submitted: broadcastResult.submitted,
         cause: error,
       });
     }
@@ -165,32 +171,25 @@ export class TransactionSubmissionExecutor {
     return submissionId;
   }
 
-  async #failSubmissionWithResourceLock(params: {
+  async #failSubmission(params: {
     aggregate: TransactionAggregate;
     submissionId: string;
     reason: TransactionTerminalReason;
   }) {
-    return await this.#resourceLock.withKey(deriveApprovalResourceKeyFromAggregate(params.aggregate), async () => {
-      return await this.#transactions.failSubmission({
-        transactionId: params.aggregate.record.id,
-        submissionId: params.submissionId,
-        reason: params.reason,
-      });
+    return await this.#transactions.failSubmission({
+      transactionId: params.aggregate.record.id,
+      submissionId: params.submissionId,
+      reason: params.reason,
     });
   }
 
   #buildFailureReason(params: { error: unknown; phase: "create_broadcast_artifact" | "broadcast"; namespace: string }) {
-    const details =
-      isArxBaseError(params.error) && params.error.details && typeof params.error.details === "object"
-        ? (structuredClone(params.error.details) as JsonValue)
-        : null;
-
     return buildTransactionTerminalReason({
       kind: params.phase === "broadcast" ? "broadcast_failed" : "signing_failed",
       namespace: params.namespace,
       code: isArxBaseError(params.error) ? params.error.code : `${params.namespace}.${params.phase}`,
       message: params.error instanceof Error ? params.error.message : `${params.phase} failed`,
-      details,
+      details: isArxBaseError(params.error) && params.error.details ? structuredClone(params.error.details) : {},
     });
   }
 }

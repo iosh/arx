@@ -1,3 +1,4 @@
+export { findBlockingActiveTransactionRecords } from "../aggregate/activeTransactionConflicts.js";
 export {
   TransactionAggregateAlreadyExistsError,
   TransactionAggregateNotFoundError,

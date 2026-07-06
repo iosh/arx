@@ -1,52 +1,52 @@
 import { type AccountId, canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { ChainRef } from "../chains/ids.js";
+import { isArxBaseError } from "../error.js";
+import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
 import type {
   CreateTransactionInput,
   CreateTransactionReplacementInput,
-  JsonValue,
+  JsonObject,
   ListTransactionHistoryQuery,
   TransactionRecord,
   TransactionReplacementType,
+  TransactionResourceKey,
   TransactionSource,
   TransactionStatus,
   TransactionTerminalReason,
 } from "./aggregate/index.js";
-import { isTransactionStatusTerminal } from "./aggregate/index.js";
+import {
+  buildTransactionTerminalReason,
+  isTransactionStatusTerminal,
+  TransactionAggregateInvariantError,
+  TransactionAggregateNotFoundError,
+} from "./aggregate/index.js";
 import { cloneJsonValue } from "./aggregate/json.js";
 import type { TransactionAggregateStore } from "./aggregate/TransactionAggregateStore.js";
+import { TransactionReplacementUnavailableError } from "./errors.js";
+import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 import type {
-  ApprovalStaleTransactionApprovalSessionResult,
-  BlockedTransactionApprovalSessionResult,
-  FailedTransactionApprovalSessionResult,
-  TransactionApprovalPrepareState,
-  TransactionApprovalSession,
-  TransactionApprovalSessionService,
-} from "./approval/index.js";
-import { TransactionApprovalSessionInvariantError } from "./approval/index.js";
-import type { TransactionProposalBlocker, TransactionProposalError } from "./namespace/types.js";
+  NamespaceTransactionProposal,
+  TransactionFinalizeSubmitResult,
+  TransactionPrepareResult,
+  TransactionProposalBlocker,
+  TransactionProposalError,
+} from "./namespace/types.js";
 import type { TransactionReviewDetails } from "./review.js";
 import type { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
-import type {
-  TransactionApprovalsChangedHandler,
-  TransactionInvalidations,
-  TransactionsChangedHandler,
-} from "./TransactionInvalidations.js";
-import type { NamespaceTransactionDraftEdit } from "./types.js";
+import type { TransactionInvalidations, TransactionsChangedHandler } from "./TransactionInvalidations.js";
+import type { TransactionResourceLock } from "./TransactionResourceLock.js";
 
-export type {
-  TransactionApprovalsChangedHandler,
-  TransactionsChangedHandler,
-} from "./TransactionInvalidations.js";
+export type { TransactionsChangedHandler } from "./TransactionInvalidations.js";
 
 export type TransactionAccount = {
   accountId: AccountId;
   address: string;
 };
 
-export type TransactionSubmittedSummary = JsonValue;
+export type TransactionSubmittedSummary = JsonObject;
 
-export type TransactionReceiptSummary = JsonValue;
+export type TransactionReceiptSummary = JsonObject;
 
 export type TransactionReplacementSummary = {
   replaces: {
@@ -75,210 +75,93 @@ export type Transaction = {
   updatedAt: number;
 };
 
-type TransactionApprovalPrepareBase = {
-  id: string;
-  draftRevision: number;
-  updatedAt: number;
-};
+export type TransactionReplacementIntent = CreateTransactionReplacementInput;
 
-export type TransactionApprovalPreparing = TransactionApprovalPrepareBase & {
-  status: "preparing";
-};
+export type PrepareTransactionInput = CreateTransactionInput;
 
-export type TransactionApprovalReady = TransactionApprovalPrepareBase & {
-  status: "ready";
-  preparedAt: number;
-  expiresAt: number | null;
-};
-
-export type TransactionApprovalBlocked = TransactionApprovalPrepareBase & {
-  status: "blocked";
-  blocker: TransactionProposalBlocker;
-  expiresAt: number | null;
-};
-
-export type TransactionApprovalFailed = TransactionApprovalPrepareBase & {
-  status: "failed";
-  error: TransactionProposalError;
-};
-
-export type TransactionApprovalPrepare =
-  | TransactionApprovalPreparing
-  | TransactionApprovalReady
-  | TransactionApprovalBlocked
-  | TransactionApprovalFailed;
-
-/** Public view of one active send-transaction approval. */
-export type TransactionApproval = {
-  approvalId: string;
+type TransactionProposalBase = {
+  proposalId: string;
   namespace: string;
   chainRef: ChainRef;
   source: TransactionSource;
   origin: string;
   account: TransactionAccount;
+  request: {
+    payload: JsonObject;
+  };
+  replacement: TransactionReplacementIntent | null;
   review: TransactionReviewDetails | null;
-  prepare: TransactionApprovalPrepare;
   createdAt: number;
-  updatedAt: number;
 };
 
-export type RequestTransactionApprovalInput = CreateTransactionInput & {
-  approvalId: string;
-  cancellation?: TransactionApprovalCancellation;
+export type TransactionReadyProposal = TransactionProposalBase & {
+  status: "ready";
+  prepared: JsonObject;
 };
 
-export type RequestTransactionApprovalResult = {
-  approval: TransactionApproval;
-  decision: Promise<TransactionApprovalDecision>;
+export type TransactionBlockedProposal = TransactionProposalBase & {
+  status: "blocked";
+  blocker: TransactionProposalBlocker;
 };
 
-export type TransactionApprovalCancellation = {
-  signal: AbortSignal;
-  reason: TransactionTerminalReason;
+export type TransactionFailedProposal = TransactionProposalBase & {
+  status: "failed";
+  error: TransactionProposalError;
 };
 
-export type UpdateApprovalDraftInput = {
-  approvalId: string;
-  edit: NamespaceTransactionDraftEdit;
-  mode?: string;
+export type TransactionProposal = TransactionReadyProposal | TransactionBlockedProposal | TransactionFailedProposal;
+
+export type SubmitTransactionInput = {
+  proposal: TransactionReadyProposal;
 };
 
-export type RerunApprovalPrepareInput = {
-  approvalId: string;
-};
+export type SubmitTransactionResult =
+  | {
+      status: "submitted";
+      transaction: Transaction;
+      submitted: TransactionSubmittedSummary;
+    }
+  | {
+      status: "terminal";
+      transaction: Transaction;
+      reason: TransactionTerminalReason;
+    };
 
-export type ApproveTransactionInput = {
-  approvalId: string;
-  expectedPrepareId: string;
-};
-
-export type ApprovedTransactionResult = {
-  status: "approved";
-  transaction: Transaction;
-};
-
-export type ApprovalStaleTransactionResult = Omit<ApprovalStaleTransactionApprovalSessionResult, "session"> & {
-  approval: TransactionApproval | null;
-};
-
-export type BlockedTransactionApprovalResult = Omit<BlockedTransactionApprovalSessionResult, "session"> & {
-  approval: TransactionApproval;
-};
-
-export type FailedTransactionApprovalResult = Omit<FailedTransactionApprovalSessionResult, "session"> & {
-  approval: TransactionApproval;
-};
-
-export type ApproveTransactionResult =
-  | ApprovedTransactionResult
-  | ApprovalStaleTransactionResult
-  | BlockedTransactionApprovalResult
-  | FailedTransactionApprovalResult;
-
-export type SubmittedTransactionResult = {
-  status: "submitted";
-  transaction: Transaction;
-};
-
-export type ApproveAndSubmitTransactionResult =
-  | SubmittedTransactionResult
-  | ApprovalStaleTransactionResult
-  | BlockedTransactionApprovalResult
-  | FailedTransactionApprovalResult;
-
-export type RejectTransactionApprovalInput = {
-  approvalId: string;
-  reason?: TransactionTerminalReason | null;
-};
-
-export type CancelTransactionApprovalInput = {
-  approvalId: string;
-  reason?: TransactionTerminalReason | null;
-};
-
-export type ApprovedTransactionApprovalDecision = {
-  status: "approved";
-  approvalId: string;
-  transaction: Transaction;
-};
-
-export type RejectedTransactionApprovalDecision = {
-  status: "rejected";
-  approvalId: string;
-  reason: TransactionTerminalReason | null;
-};
-
-export type CancelledTransactionApprovalDecision = {
-  status: "cancelled";
-  approvalId: string;
-  reason: TransactionTerminalReason | null;
-};
-
-export type TransactionApprovalDecision =
-  | ApprovedTransactionApprovalDecision
-  | RejectedTransactionApprovalDecision
-  | CancelledTransactionApprovalDecision;
-
-export type WaitForTransactionSubmissionOutcomeInput = {
+export type PrepareReplacementTransactionInput = {
   transactionId: string;
-  signal?: AbortSignal;
-};
-
-export type TransactionSubmittedOutcome = {
-  kind: "submitted";
-  transaction: Transaction;
-  submitted: TransactionSubmittedSummary;
-};
-
-export type TransactionTerminalOutcome = {
-  kind: "terminal";
-  transaction: Transaction;
-};
-
-export type TransactionSubmissionOutcome = TransactionSubmittedOutcome | TransactionTerminalOutcome;
-
-export type CreateReplacementTransactionApprovalInput = Omit<RequestTransactionApprovalInput, "replacement"> & {
-  transactionId: string;
+  type: TransactionReplacementType;
 };
 
 export type ListTransactionsQuery = ListTransactionHistoryQuery;
 
 export type WalletTransactionAccess = Pick<
   TransactionsService,
-  | "requestTransactionApproval"
-  | "rerunApprovalPrepare"
-  | "updateApprovalDraft"
-  | "getTransactionApproval"
-  | "getTransaction"
-  | "listTransactions"
-  | "approveAndSubmitTransaction"
-  | "rejectTransactionApproval"
-  | "cancelTransactionApproval"
+  "prepareTransaction" | "submitTransaction" | "prepareReplacementTransaction" | "getTransaction" | "listTransactions"
 >;
 
 export type TransactionsEvents = {
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void;
-  onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void;
+};
+
+type ActiveApprovedTransaction = {
+  transactionId: string;
+  status: "submitting" | "submitted";
+  approvedPayload: JsonObject;
+  conflictKey: TransactionRecord["conflictKey"];
 };
 
 type TransactionsServiceDeps = {
   aggregateStore: Pick<
     TransactionAggregateStore,
-    "createApprovedTransaction" | "loadTransactionAggregate" | "listTransactionHistory"
+    "createApprovedTransaction" | "failTransaction" | "loadTransactionAggregate" | "listTransactionHistory"
   >;
-  approvalSessions: Pick<
-    TransactionApprovalSessionService,
-    | "openSession"
-    | "prepareSession"
-    | "applyDraftEdit"
-    | "approveTransaction"
-    | "getSessionByApprovalId"
-    | "listSessions"
-    | "discardSessionByApprovalId"
-  >;
+  namespaces: Pick<NamespaceTransactions, "require">;
   submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
   accountAddressing: AccountAddressingByNamespace;
+  resourceLock: TransactionResourceLock;
   invalidations: TransactionInvalidations;
+  createId?: () => string;
+  now?: () => number;
 };
 
 const buildTransactionAccount = (
@@ -293,31 +176,12 @@ const buildTransactionAccount = (
   }),
 });
 
-const buildTransactionApprovalAccount = (session: TransactionApprovalSession): TransactionAccount => ({
-  accountId: session.accountId,
-  address: session.from,
-});
-
 const cloneNullableSummary = <T extends TransactionSubmittedSummary | TransactionReceiptSummary>(
   value: T | null,
 ): T | null => (value === null ? null : cloneJsonValue(value));
 
-const requireReplacementType = (record: TransactionRecord) => {
-  if (record.replacementType !== null) {
-    return record.replacementType;
-  }
-
-  throw new Error(`Transaction "${record.id}" replaces another transaction but has no replacement type.`);
-};
-
 const buildReplacementSummary = (record: TransactionRecord): TransactionReplacementSummary | null => {
-  const replaces =
-    record.replacesTransactionId === null
-      ? null
-      : {
-          transactionId: record.replacesTransactionId,
-          type: requireReplacementType(record),
-        };
+  const replaces = record.replacement === null ? null : { ...record.replacement };
   const replacedBy =
     record.replacedByTransactionId === null
       ? null
@@ -354,235 +218,190 @@ const buildTransaction = (
   updatedAt: record.updatedAt,
 });
 
-const buildPrepare = (prepare: TransactionApprovalPrepareState): TransactionApprovalPrepare => {
-  const base = {
-    id: prepare.prepareId,
-    draftRevision: prepare.draftRevision,
-    updatedAt: prepare.updatedAt,
-  };
-
-  if (prepare.status === "preparing") {
-    return {
-      ...base,
-      status: "preparing",
-    };
-  }
-
-  if (prepare.status === "ready") {
-    return {
-      ...base,
-      status: "ready",
-      preparedAt: prepare.preparedAt,
-      expiresAt: prepare.expiresAt,
-    };
-  }
-
-  if (prepare.status === "blocked") {
-    return {
-      ...base,
-      status: "blocked",
-      blocker: structuredClone(prepare.blocker),
-      expiresAt: prepare.expiresAt,
-    };
-  }
-
-  return {
-    ...base,
-    status: "failed",
-    error: structuredClone(prepare.error),
-  };
-};
-
-const buildTransactionApproval = (session: TransactionApprovalSession): TransactionApproval => ({
-  approvalId: session.approvalId,
-  namespace: session.namespace,
-  chainRef: session.chainRef,
-  source: session.source,
-  origin: session.origin,
-  account: buildTransactionApprovalAccount(session),
-  review: structuredClone(session.review),
-  prepare: buildPrepare(session.prepare),
-  createdAt: session.createdAt,
-  updatedAt: Math.max(session.draft.updatedAt, session.prepare.updatedAt),
-});
-
-type TransactionApprovalDecisionSettlement = {
-  resolve: (decision: TransactionApprovalDecision) => void;
-  cleanupCancellation: (() => void) | null;
-};
-
 export class TransactionsService {
   #aggregateStore: TransactionsServiceDeps["aggregateStore"];
-  #approvalSessions: TransactionsServiceDeps["approvalSessions"];
+  #namespaces: TransactionsServiceDeps["namespaces"];
   #submission: TransactionsServiceDeps["submission"];
   #accountAddressing: TransactionsServiceDeps["accountAddressing"];
+  #resourceLock: TransactionResourceLock;
   #invalidations: TransactionInvalidations;
-  #approvalDecisions = new Map<string, TransactionApprovalDecisionSettlement>();
+  #createId: () => string;
+  #now: () => number;
 
   constructor(deps: TransactionsServiceDeps) {
     this.#aggregateStore = deps.aggregateStore;
-    this.#approvalSessions = deps.approvalSessions;
+    this.#namespaces = deps.namespaces;
     this.#submission = deps.submission;
     this.#accountAddressing = deps.accountAddressing;
+    this.#resourceLock = deps.resourceLock;
     this.#invalidations = deps.invalidations;
+    this.#createId = deps.createId ?? (() => crypto.randomUUID());
+    this.#now = deps.now ?? Date.now;
   }
 
-  async requestTransactionApproval(input: RequestTransactionApprovalInput): Promise<RequestTransactionApprovalResult> {
-    const { approvalId, cancellation, ...reviewInput } = input;
-    this.#throwIfApprovalCancellationRequested(cancellation);
-    this.#assertApprovalIdIsAvailable(approvalId);
-    const decision = this.#openApprovalDecision(approvalId);
-    let session: TransactionApprovalSession;
+  async prepareTransaction(input: PrepareTransactionInput): Promise<TransactionProposal> {
+    const proposal = this.#requireProposal(input.namespace);
+    const request = {
+      namespace: input.namespace,
+      chainRef: input.chainRef,
+      payload: input.request.payload,
+    };
+    const account = this.#buildAccount({
+      accountId: input.accountId,
+      chainRef: input.chainRef,
+    });
+    const base = {
+      proposalId: this.#createId(),
+      namespace: input.namespace,
+      chainRef: input.chainRef,
+      source: input.source,
+      origin: input.origin,
+      account,
+      request: {
+        payload: input.request.payload,
+      },
+      replacement: input.replacement,
+      createdAt: this.#now(),
+    };
+
     try {
-      session = await this.#approvalSessions.openSession({
-        approvalId,
-        namespace: reviewInput.namespace,
-        chainRef: reviewInput.chainRef,
-        source: reviewInput.source,
-        origin: reviewInput.origin,
-        accountId: reviewInput.accountId,
-        from: canonicalChainAddressFromAccountId({
-          accountAddressing: this.#accountAddressing,
-          chainRef: reviewInput.chainRef,
-          accountId: reviewInput.accountId,
-        }),
-        requestId: reviewInput.requestId ?? null,
-        request: structuredClone(reviewInput.request),
-        replacement: reviewInput.replacement ?? null,
-      });
+      const prepareContext = {
+        namespace: input.namespace,
+        chainRef: input.chainRef,
+        origin: input.origin,
+        from: account.address,
+        request,
+      };
+
+      this.#namespaces.require(input.namespace).request.validateRequest(prepareContext);
+      const result = await proposal.prepare(prepareContext);
+      return this.#buildProposalFromPrepareResult(base, proposal, request, result);
     } catch (error) {
-      this.#approvalDecisions.delete(approvalId);
-      throw error;
+      if (!isArxBaseError(error)) {
+        throw error;
+      }
+
+      return {
+        ...base,
+        status: "failed",
+        review: null,
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details === undefined ? {} : structuredClone(error.details),
+        },
+      };
     }
-
-    try {
-      await this.#bindApprovalCancellation(approvalId, cancellation);
-    } catch (error) {
-      this.#approvalDecisions.delete(approvalId);
-      throw error;
-    }
-
-    const approval = buildTransactionApproval(session);
-    this.#notifyTransactionApprovalsChanged([approval.approvalId]);
-
-    return {
-      approval,
-      decision,
-    };
   }
 
-  async createSpeedUpReplacement(
-    input: CreateReplacementTransactionApprovalInput,
-  ): Promise<RequestTransactionApprovalResult> {
-    return await this.#requestReplacementApproval(input, "speed_up");
-  }
+  async submitTransaction(input: SubmitTransactionInput): Promise<SubmitTransactionResult> {
+    const resourceKey = this.#deriveResourceKey(input.proposal);
+    return await this.#resourceLock.withKey(resourceKey, async () => {
+      const finalized = await this.#finalizeSubmit(input.proposal);
+      if (finalized.status !== "approved") {
+        const terminal = await this.#createTerminalTransaction(input.proposal, finalized);
+        return {
+          status: "terminal",
+          transaction: this.#buildTransactionRecord(terminal.record),
+          reason: terminal.reason,
+        };
+      }
 
-  async createCancelReplacement(
-    input: CreateReplacementTransactionApprovalInput,
-  ): Promise<RequestTransactionApprovalResult> {
-    return await this.#requestReplacementApproval(input, "cancel");
-  }
-
-  async updateApprovalDraft(input: UpdateApprovalDraftInput): Promise<TransactionApproval> {
-    const edited = await this.#approvalSessions.applyDraftEdit({
-      approvalId: input.approvalId,
-      edit: input.edit,
-      ...(input.mode !== undefined ? { mode: input.mode } : {}),
-    });
-    const approval = buildTransactionApproval(edited);
-    this.#notifyTransactionApprovalsChanged([approval.approvalId]);
-    return approval;
-  }
-
-  async rerunApprovalPrepare(input: RerunApprovalPrepareInput): Promise<TransactionApproval> {
-    const prepared = await this.#approvalSessions.prepareSession({
-      approvalId: input.approvalId,
-    });
-    const approval = buildTransactionApproval(prepared);
-    this.#notifyTransactionApprovalsChanged([approval.approvalId]);
-    return approval;
-  }
-
-  async approveTransaction(input: ApproveTransactionInput): Promise<ApproveTransactionResult> {
-    const result = await this.#approvalSessions.approveTransaction({
-      approvalId: input.approvalId,
-      expectedPrepareId: input.expectedPrepareId,
-    });
-
-    this.#notifyTransactionApprovalsChanged([input.approvalId]);
-
-    if (result.status === "approved") {
-      const transaction = this.#buildTransactionRecord(result.aggregate.record);
-      this.#settleApprovalDecision(input.approvalId, {
-        status: "approved",
-        approvalId: input.approvalId,
-        transaction,
+      const aggregate = await this.#aggregateStore.createApprovedTransaction({
+        namespace: input.proposal.namespace,
+        chainRef: input.proposal.chainRef,
+        origin: input.proposal.origin,
+        source: input.proposal.source,
+        accountId: input.proposal.account.accountId,
+        request: input.proposal.request,
+        replacement: input.proposal.replacement,
+        approvedRequestPayload: finalized.approvedPayload,
+        conflictKey: finalized.conflictKey,
+        resourceKey,
       });
-      return {
-        status: "approved",
-        transaction,
-      };
-    }
+      if (aggregate.record.status !== "submitting") {
+        throw new TransactionAggregateInvariantError(
+          aggregate.record.id,
+          `Approved transaction "${aggregate.record.id}" did not enter submission.`,
+        );
+      }
 
-    if (result.status === "approval_stale") {
-      return {
-        status: "approval_stale",
-        approval: result.session === null ? null : buildTransactionApproval(result.session),
-        stale: result.stale,
-      };
-    }
-
-    if (result.status === "blocked") {
-      return {
-        status: "blocked",
-        approval: buildTransactionApproval(result.session),
-        blocker: result.blocker,
-      };
-    }
-
-    return {
-      status: "failed",
-      approval: buildTransactionApproval(result.session),
-      error: result.error,
-    };
-  }
-
-  async approveAndSubmitTransaction(input: ApproveTransactionInput): Promise<ApproveAndSubmitTransactionResult> {
-    const approved = await this.approveTransaction(input);
-    if (approved.status !== "approved") {
-      return approved;
-    }
-
-    const submitted = await this.#submission.submitApprovedTransaction(approved.transaction.id);
-    const transaction = this.#buildTransactionRecord(submitted.aggregate.record);
-    return {
-      status: "submitted",
-      transaction,
-    };
-  }
-
-  async rejectTransactionApproval(input: RejectTransactionApprovalInput): Promise<TransactionApproval | null> {
-    const discarded = this.#approvalSessions.discardSessionByApprovalId(input.approvalId);
-    const approval = discarded ? buildTransactionApproval(discarded) : null;
-    this.#notifyTransactionApprovalsChanged([input.approvalId]);
-    this.#settleApprovalDecision(input.approvalId, {
-      status: "rejected",
-      approvalId: input.approvalId,
-      reason: input.reason ?? null,
+      try {
+        const submitted = await this.#submission.submitApprovedTransaction(aggregate.record.id, { lock: "held" });
+        const transaction = this.#buildTransactionRecord(submitted.aggregate.record);
+        if (transaction.submitted === null) {
+          throw new TransactionAggregateInvariantError(
+            transaction.id,
+            `Submitted transaction "${transaction.id}" is missing submitted details.`,
+          );
+        }
+        return {
+          status: "submitted",
+          transaction,
+          submitted: transaction.submitted,
+        };
+      } catch (error) {
+        const transaction = await this.getTransaction(aggregate.record.id);
+        if (transaction === null || !isTransactionStatusTerminal(transaction.status)) {
+          throw error;
+        }
+        const reason = transaction.terminalReason;
+        if (reason === null) {
+          throw new TransactionAggregateInvariantError(
+            transaction.id,
+            `Terminal transaction "${transaction.id}" is missing a terminal reason.`,
+          );
+        }
+        return { status: "terminal", transaction, reason };
+      }
     });
-    return approval;
   }
 
-  async cancelTransactionApproval(input: CancelTransactionApprovalInput): Promise<TransactionApproval | null> {
-    const discarded = this.#approvalSessions.discardSessionByApprovalId(input.approvalId);
-    const approval = discarded ? buildTransactionApproval(discarded) : null;
-    this.#notifyTransactionApprovalsChanged([input.approvalId]);
-    this.#settleApprovalDecision(input.approvalId, {
-      status: "cancelled",
-      approvalId: input.approvalId,
-      reason: input.reason ?? null,
+  async prepareReplacementTransaction(input: PrepareReplacementTransactionInput): Promise<TransactionProposal> {
+    const { transactionId, type } = input;
+    const target = await this.#aggregateStore.loadTransactionAggregate(transactionId);
+    if (target === null) {
+      throw new TransactionAggregateNotFoundError(transactionId);
+    }
+    if (target.record.status !== "submitted") {
+      throw new TransactionReplacementUnavailableError({
+        transactionId,
+        status: target.record.status,
+      });
+    }
+
+    const namespaceProposal = this.#requireProposal(target.record.namespace);
+    const targetAccount = this.#buildAccount(target.record);
+    const replacementRequest = await namespaceProposal.buildReplacementRequest({
+      namespace: target.record.namespace,
+      chainRef: target.record.chainRef,
+      origin: target.record.origin,
+      accountId: target.record.accountId,
+      from: targetAccount.address,
+      type,
+      targetTransactionId: target.record.id,
+      targetRequest: {
+        namespace: target.record.namespace,
+        chainRef: target.record.chainRef,
+        payload: target.record.request.payload,
+      },
+      targetApprovedPayload: target.record.approvedRequest.payload,
     });
-    return approval;
+
+    return await this.prepareTransaction({
+      namespace: target.record.namespace,
+      chainRef: target.record.chainRef,
+      source: "wallet-ui",
+      origin: WALLET_UI_ORIGIN,
+      accountId: target.record.accountId,
+      request: {
+        payload: replacementRequest.payload,
+      },
+      replacement: {
+        transactionId,
+        type,
+      },
+    });
   }
 
   async getTransaction(transactionId: string): Promise<Transaction | null> {
@@ -595,216 +414,189 @@ export class TransactionsService {
     return records.map((record) => this.#buildTransactionRecord(record));
   }
 
-  async waitForTransactionSubmissionOutcome(
-    input: WaitForTransactionSubmissionOutcomeInput,
-  ): Promise<TransactionSubmissionOutcome> {
-    this.#throwIfAborted(input.signal);
-    const current = await this.getTransaction(input.transactionId);
-    if (!current) {
-      throw new Error(`Transaction "${input.transactionId}" was not found.`);
-    }
-
-    const currentResult = this.#buildTransactionSubmissionOutcome(current);
-    if (currentResult) {
-      return currentResult;
-    }
-
-    return await new Promise<TransactionSubmissionOutcome>((resolve, reject) => {
-      let settled = false;
-      let unsubscribe: (() => void) | null = null;
-      const cleanup = () => {
-        if (unsubscribe) {
-          unsubscribe();
-          unsubscribe = null;
-        }
-        input.signal?.removeEventListener("abort", abort);
-      };
-      const settle = (run: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        run();
-      };
-      const abort = () => {
-        settle(() => reject(input.signal?.reason ?? new Error("Transaction wait was aborted.")));
-      };
-
-      if (input.signal?.aborted) {
-        abort();
-        return;
-      }
-
-      input.signal?.addEventListener("abort", abort, { once: true });
-      const readOutcome = async () => {
-        try {
-          const transaction = await this.getTransaction(input.transactionId);
-          if (!transaction) {
-            throw new Error(`Transaction "${input.transactionId}" was not found.`);
-          }
-          const result = this.#buildTransactionSubmissionOutcome(transaction);
-          if (result) {
-            settle(() => resolve(result));
-          }
-        } catch (error) {
-          settle(() => reject(error));
-        }
-      };
-
-      unsubscribe = this.onTransactionsChanged((transactionIds) => {
-        if (!transactionIds.includes(input.transactionId)) {
-          return;
-        }
-
-        void readOutcome();
-      });
-      void readOutcome();
-    });
-  }
-
-  getTransactionApproval(approvalId: string): TransactionApproval | null {
-    const session = this.#approvalSessions.getSessionByApprovalId(approvalId);
-    return session === null ? null : buildTransactionApproval(session);
-  }
-
-  async listTransactionApprovals(): Promise<TransactionApproval[]> {
-    return this.#approvalSessions.listSessions().map((session) => buildTransactionApproval(session));
-  }
-
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void {
     return this.#invalidations.onTransactionsChanged(handler);
   }
 
-  onTransactionApprovalsChanged(handler: TransactionApprovalsChangedHandler): () => void {
-    return this.#invalidations.onTransactionApprovalsChanged(handler);
+  #buildProposalFromPrepareResult(
+    base: Omit<TransactionProposalBase, "review">,
+    proposal: NamespaceTransactionProposal,
+    request: { namespace: string; chainRef: string; payload: JsonObject },
+    result: TransactionPrepareResult,
+  ): TransactionProposal {
+    if (result.status === "ready") {
+      return {
+        ...base,
+        status: "ready",
+        review: this.#buildReviewDetails(base, proposal, request, result.reviewSnapshot),
+        prepared: result.prepared,
+      };
+    }
+
+    if (result.status === "blocked") {
+      return {
+        ...base,
+        status: "blocked",
+        review: this.#buildReviewDetails(base, proposal, request, result.reviewSnapshot),
+        blocker: result.blocker,
+      };
+    }
+
+    return {
+      ...base,
+      status: "failed",
+      review: this.#buildReviewDetails(base, proposal, request, result.reviewSnapshot),
+      error: result.error,
+    };
   }
 
-  async #requestReplacementApproval(
-    input: CreateReplacementTransactionApprovalInput,
-    type: CreateTransactionReplacementInput["type"],
-  ): Promise<RequestTransactionApprovalResult> {
-    const { transactionId, ...requestInput } = input;
-    return await this.requestTransactionApproval({
-      ...requestInput,
-      replacement: {
-        transactionId,
-        type,
-      },
+  #buildReviewDetails(
+    proposalBase: Pick<TransactionProposalBase, "proposalId" | "namespace" | "chainRef" | "origin" | "account">,
+    proposal: NamespaceTransactionProposal,
+    request: { namespace: string; chainRef: string; payload: JsonObject },
+    reviewSnapshot: JsonObject | null,
+  ) {
+    if (reviewSnapshot === null) {
+      return null;
+    }
+
+    return proposal.buildReview({
+      transactionId: proposalBase.proposalId,
+      namespace: proposalBase.namespace,
+      chainRef: proposalBase.chainRef,
+      origin: proposalBase.origin,
+      from: proposalBase.account.address,
+      request,
+      reviewSnapshot,
     });
   }
 
-  #assertApprovalIdIsAvailable(approvalId: string): void {
-    const session = this.#approvalSessions.getSessionByApprovalId(approvalId);
-    if (session !== null || this.#approvalDecisions.has(approvalId)) {
-      throw new TransactionApprovalSessionInvariantError(
-        approvalId,
-        `Approval "${approvalId}" already has an active transaction review.`,
-      );
-    }
+  #deriveResourceKey(proposal: TransactionReadyProposal): TransactionResourceKey | null {
+    const namespaceProposal = this.#requireProposal(proposal.namespace);
+    return namespaceProposal.deriveResourceKey({
+      transactionId: proposal.proposalId,
+      namespace: proposal.namespace,
+      chainRef: proposal.chainRef,
+      origin: proposal.origin,
+      accountId: proposal.account.accountId,
+      from: proposal.account.address,
+      request: this.#buildNamespaceRequest(proposal),
+      preparedPayload: proposal.prepared,
+      replacement: proposal.replacement,
+    });
+  }
+
+  async #finalizeSubmit(proposal: TransactionReadyProposal): Promise<TransactionFinalizeSubmitResult> {
+    const namespaceProposal = this.#requireProposal(proposal.namespace);
+    return await namespaceProposal.finalizeSubmit({
+      transactionId: proposal.proposalId,
+      namespace: proposal.namespace,
+      chainRef: proposal.chainRef,
+      origin: proposal.origin,
+      accountId: proposal.account.accountId,
+      from: proposal.account.address,
+      request: this.#buildNamespaceRequest(proposal),
+      preparedPayload: proposal.prepared,
+      replacement: proposal.replacement,
+      localActiveTransactions: await this.#listActiveApprovedTransactions(proposal),
+    });
+  }
+
+  async #createTerminalTransaction(
+    proposal: TransactionReadyProposal,
+    result: Exclude<TransactionFinalizeSubmitResult, { status: "approved" }>,
+  ): Promise<{ record: TransactionRecord; reason: TransactionTerminalReason }> {
+    const reason =
+      result.status === "blocked"
+        ? buildTransactionTerminalReason({
+            kind: "validation_failed",
+            namespace: proposal.namespace,
+            code: result.blocker.code,
+            message: result.blocker.message,
+            details: result.blocker.details,
+          })
+        : buildTransactionTerminalReason({
+            kind: "prepare_failed",
+            namespace: proposal.namespace,
+            code: result.error.code,
+            message: result.error.message,
+            details: result.error.details,
+          });
+
+    const aggregate = await this.#aggregateStore.createApprovedTransaction({
+      namespace: proposal.namespace,
+      chainRef: proposal.chainRef,
+      origin: proposal.origin,
+      source: proposal.source,
+      accountId: proposal.account.accountId,
+      request: proposal.request,
+      replacement: proposal.replacement,
+      approvedRequestPayload: proposal.prepared,
+      conflictKey: null,
+      resourceKey: this.#deriveResourceKey(proposal),
+    });
+
+    const failed = await this.#aggregateStore.failTransaction({
+      transactionId: aggregate.record.id,
+      reason,
+    });
+
+    return { record: failed.record, reason };
+  }
+
+  #buildNamespaceRequest(proposal: Pick<TransactionReadyProposal, "namespace" | "chainRef" | "request">) {
+    return {
+      namespace: proposal.namespace,
+      chainRef: proposal.chainRef,
+      payload: proposal.request.payload,
+    };
+  }
+
+  async #listActiveApprovedTransactions(
+    proposal: TransactionReadyProposal,
+  ): Promise<readonly ActiveApprovedTransaction[]> {
+    const [submittingRecords, submittedRecords] = await Promise.all([
+      this.#aggregateStore.listTransactionHistory({
+        namespace: proposal.namespace,
+        chainRef: proposal.chainRef,
+        accountId: proposal.account.accountId,
+        status: "submitting",
+      }),
+      this.#aggregateStore.listTransactionHistory({
+        namespace: proposal.namespace,
+        chainRef: proposal.chainRef,
+        accountId: proposal.account.accountId,
+        status: "submitted",
+      }),
+    ]);
+
+    const activeTransactions: ActiveApprovedTransaction[] = [];
+    const addRecords = (records: TransactionRecord[], status: ActiveApprovedTransaction["status"]) => {
+      for (const record of records) {
+        activeTransactions.push({
+          transactionId: record.id,
+          status,
+          approvedPayload: record.approvedRequest.payload,
+          conflictKey: record.conflictKey,
+        });
+      }
+    };
+
+    addRecords(submittingRecords, "submitting");
+    addRecords(submittedRecords, "submitted");
+
+    return activeTransactions;
+  }
+
+  #requireProposal(namespace: string): NamespaceTransactionProposal {
+    return this.#namespaces.require(namespace).proposal;
+  }
+
+  #buildAccount(record: Pick<TransactionRecord, "accountId" | "chainRef">): TransactionAccount {
+    return buildTransactionAccount(this.#accountAddressing, record);
   }
 
   #buildTransactionRecord(record: TransactionRecord): Transaction {
     return buildTransaction(record, this.#accountAddressing);
-  }
-
-  #buildTransactionSubmissionOutcome(transaction: Transaction): TransactionSubmissionOutcome | null {
-    if (transaction.submitted !== null) {
-      return {
-        kind: "submitted",
-        transaction,
-        submitted: transaction.submitted,
-      };
-    }
-    if (isTransactionStatusTerminal(transaction.status)) {
-      return {
-        kind: "terminal",
-        transaction,
-      };
-    }
-    return null;
-  }
-
-  #throwIfAborted(signal: AbortSignal | undefined): void {
-    if (signal?.aborted) {
-      throw signal.reason ?? new Error("Transaction wait was aborted.");
-    }
-  }
-
-  #throwIfApprovalCancellationRequested(cancellation: TransactionApprovalCancellation | undefined): void {
-    if (cancellation?.signal.aborted) {
-      throw cancellation.signal.reason ?? new Error(cancellation.reason.message);
-    }
-  }
-
-  #notifyTransactionApprovalsChanged(approvalIds: string[]): void {
-    this.#invalidations.publishTransactionApprovalsChanged(approvalIds);
-  }
-
-  async #bindApprovalCancellation(
-    approvalId: string,
-    cancellation: TransactionApprovalCancellation | undefined,
-  ): Promise<void> {
-    if (!cancellation) {
-      return;
-    }
-
-    const settlement = this.#approvalDecisions.get(approvalId);
-    if (!settlement) {
-      return;
-    }
-
-    const abort = () => {
-      void this.cancelTransactionApproval({
-        approvalId,
-        reason: cancellation.reason,
-      });
-    };
-
-    cancellation.signal.addEventListener("abort", abort, { once: true });
-    settlement.cleanupCancellation = () => {
-      cancellation.signal.removeEventListener("abort", abort);
-    };
-
-    if (cancellation.signal.aborted) {
-      await this.cancelTransactionApproval({
-        approvalId,
-        reason: cancellation.reason,
-      });
-      throw cancellation.signal.reason ?? new Error(cancellation.reason.message);
-    }
-  }
-
-  #openApprovalDecision(approvalId: string): Promise<TransactionApprovalDecision> {
-    const existing = this.#approvalDecisions.get(approvalId);
-    if (existing) {
-      throw new TransactionApprovalSessionInvariantError(
-        approvalId,
-        `Approval "${approvalId}" already has an active transaction review.`,
-      );
-    }
-
-    let resolveDecision: (decision: TransactionApprovalDecision) => void = () => {};
-    const promise = new Promise<TransactionApprovalDecision>((resolve) => {
-      resolveDecision = resolve;
-    });
-
-    this.#approvalDecisions.set(approvalId, {
-      resolve: resolveDecision,
-      cleanupCancellation: null,
-    });
-
-    return promise;
-  }
-
-  #settleApprovalDecision(approvalId: string, decision: TransactionApprovalDecision): void {
-    const settlement = this.#approvalDecisions.get(approvalId);
-    if (!settlement) {
-      return;
-    }
-
-    this.#approvalDecisions.delete(approvalId);
-    settlement.cleanupCancellation?.();
-    settlement.resolve(structuredClone(decision));
   }
 }

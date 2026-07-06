@@ -89,7 +89,6 @@ export const createProviderRequests = ({ generateId, now }: CreateProviderReques
 
   const beginRequest = (input: ProviderRequestBeginInput): ProviderRequestHandle => {
     const id = generateId();
-    const abortController = new AbortController();
     let currentRecord: ProviderRequestRecord = {
       id,
       scope: { ...input.scope },
@@ -131,7 +130,6 @@ export const createProviderRequests = ({ generateId, now }: CreateProviderReques
     const handle: ProviderRequestHandle = {
       id,
       namespace: currentRecord.namespace,
-      signal: abortController.signal,
       fulfill: () => finalize({ status: "fulfilled" }),
       reject: () => finalize({ status: "rejected" }),
       cancel: async (reason) => {
@@ -139,8 +137,6 @@ export const createProviderRequests = ({ generateId, now }: CreateProviderReques
         if (!didTransition) {
           return false;
         }
-
-        abortController.abort(createTerminalRequestError(currentRecord, { status: "cancelled", reason }));
 
         return true;
       },

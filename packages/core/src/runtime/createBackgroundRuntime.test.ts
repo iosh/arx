@@ -62,8 +62,20 @@ const DEFAULT_RPC_ACCESS_POLICY = {
 } as const;
 
 const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
+  request: {
+    deriveForChain: (request, chainRef) => ({ ...request, chainRef }),
+    validateRequest: () => {},
+  },
   proposal: {
-    prepare: async () => ({ status: "ready", prepared: {} }),
+    prepare: async () => ({ status: "ready", prepared: {}, reviewSnapshot: {} }),
+    buildReview: () => null,
+    buildReplacementRequest: async (context) => context.targetRequest,
+    deriveResourceKey: () => null,
+    finalizeSubmit: async (context) => ({
+      status: "approved",
+      approvedPayload: context.preparedPayload,
+      conflictKey: null,
+    }),
   },
   submission: {
     createBroadcastArtifact: async () => ({ kind: "test.raw", payload: { raw: "0x1111" } }),
@@ -75,6 +87,12 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
         from: context.from,
       },
     }),
+  },
+  tracking: {
+    inspectSubmittedTransaction: async () => ({ trackingStatus: "pending", evidence: null }),
+    getInitialInspectionDelay: () => 1_000,
+    getPendingInspectionDelay: () => 1_000,
+    getRetryInspectionDelay: () => 1_000,
   },
 });
 
@@ -160,7 +178,6 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
     approvals: runtime.services.approvals,
     accounts: runtime.services.accounts,
     chainViews: runtime.services.chainViews,
-    transactionApprovals: runtime.transactions,
   });
   const walletAccounts = createWalletAccounts({
     accounts: runtime.services.accounts,
@@ -517,7 +534,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("creates send transaction approvals when receipt tracking is unsupported", async () => {
+  it("prepares wallet send transactions when receipt tracking is unsupported", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -544,7 +561,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const wallet = createWalletApiForRuntime(runtime);
 
     await expect(
-      wallet.transactions.requestSendTransactionApproval({
+      wallet.transactions.prepareTransaction({
         request: {
           namespace: "eip155",
           payload: {
@@ -554,10 +571,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
       }),
     ).resolves.toMatchObject({
-      approvalId: expect.any(String),
+      status: "ready",
+      proposalId: expect.any(String),
     });
 
-    await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(1);
+    await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
     expect(runtime.services.approvals.getState().pending).toHaveLength(0);
 
     runtime.lifecycle.shutdown();
@@ -624,7 +642,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("creates send-transaction approvals from wallet transaction requests", async () => {
+  it("creates send-transaction proposals from wallet transaction requests", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -639,6 +657,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             },
           },
         ],
+      },
+      transactions: {
+        namespaces: new NamespaceTransactions([["eip155", createNamespaceTransactionWithoutTracking()]]),
       },
     });
 
@@ -649,7 +670,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const wallet = createWalletApiForRuntime(runtime);
 
-    const result = await wallet.transactions.requestSendTransactionApproval({
+    const result = await wallet.transactions.prepareTransaction({
       request: {
         namespace: "eip155",
         payload: {
@@ -660,26 +681,24 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
     await flushAsync();
 
-    expect(result).toEqual({ approvalId: expect.any(String) });
-    await expect(runtime.transactions.listTransactionApprovals()).resolves.toEqual([
-      expect.objectContaining({
-        approvalId: result.approvalId,
-        namespace: "eip155",
-        chainRef: MAINNET_CHAIN.chainRef,
-        origin: "chrome-extension://arx",
-        account: expect.objectContaining({
-          address: from,
-        }),
-        review: expect.objectContaining({
-          namespace: "eip155",
-        }),
+    expect(result).toMatchObject({
+      status: "ready",
+      proposalId: expect.any(String),
+      namespace: "eip155",
+      chainRef: MAINNET_CHAIN.chainRef,
+      origin: "chrome-extension://arx",
+      account: expect.objectContaining({
+        address: from,
       }),
-    ]);
+      review: null,
+    });
+    await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
+    expect(runtime.services.approvals.getState().pending).toHaveLength(0);
 
     runtime.lifecycle.shutdown();
   });
 
-  it("creates wallet transaction approvals across wallet api instances", async () => {
+  it("creates wallet transaction proposals across wallet api instances", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
       namespaces: {
@@ -695,6 +714,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
           },
         ],
       },
+      transactions: {
+        namespaces: new NamespaceTransactions([["eip155", createNamespaceTransactionWithoutTracking()]]),
+      },
     });
 
     await runtime.lifecycle.initialize();
@@ -704,7 +726,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const firstWallet = createWalletApiForRuntime(runtime);
 
-    await firstWallet.transactions.requestSendTransactionApproval({
+    const first = await firstWallet.transactions.prepareTransaction({
       request: {
         namespace: "eip155",
         payload: {
@@ -713,7 +735,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
       },
     });
-    await firstWallet.transactions.requestSendTransactionApproval({
+    const second = await firstWallet.transactions.prepareTransaction({
       request: {
         namespace: "eip155",
         payload: {
@@ -725,7 +747,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const secondWallet = createWalletApiForRuntime(runtime);
 
-    await secondWallet.transactions.requestSendTransactionApproval({
+    const third = await secondWallet.transactions.prepareTransaction({
       request: {
         namespace: "eip155",
         payload: {
@@ -735,12 +757,23 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    await expect(runtime.transactions.listTransactionApprovals()).resolves.toHaveLength(3);
+    expect(first).toMatchObject({ status: "ready", proposalId: expect.any(String) });
+    expect(second).toMatchObject({ status: "ready", proposalId: expect.any(String) });
+    expect(third).toMatchObject({ status: "ready", proposalId: expect.any(String) });
+    expect(
+      new Set(
+        [first, second, third]
+          .filter((proposal): proposal is typeof proposal & { proposalId: string } => proposal !== null)
+          .map((proposal) => proposal.proposalId),
+      ).size,
+    ).toBe(3);
+    await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
+    expect(runtime.services.approvals.getState().pending).toHaveLength(0);
 
     runtime.lifecycle.shutdown();
   });
 
-  it("propagates transaction approval creation errors to the UI handler", async () => {
+  it("propagates transaction prepare errors to the UI handler", async () => {
     const runtime = createTestRuntime({
       chainSeed: [MAINNET_CHAIN],
     });
@@ -750,12 +783,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.transactions, "requestTransactionApproval").mockRejectedValue(new Error("create approval failed"));
+    vi.spyOn(runtime.transactions, "prepareTransaction").mockRejectedValue(new Error("prepare failed"));
 
     const wallet = createWalletApiForRuntime(runtime);
 
     await expect(
-      wallet.transactions.requestSendTransactionApproval({
+      wallet.transactions.prepareTransaction({
         request: {
           namespace: "eip155",
           payload: {
@@ -764,7 +797,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
           },
         },
       }),
-    ).rejects.toThrow("create approval failed");
+    ).rejects.toThrow("prepare failed");
 
     runtime.lifecycle.shutdown();
   });

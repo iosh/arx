@@ -10,6 +10,7 @@ import { eip155AccountAddressing } from "../../../accounts/addressing/addressing
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
 import { EIP155_NAMESPACE } from "../../../rpc/handlers/namespaces/eip155/constants.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
+import { Eip155SigningAbortedError } from "./errors.js";
 import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
@@ -45,7 +46,7 @@ const throwIfSignAborted = (signal?: AbortSignal) => {
     throw reason;
   }
 
-  throw new Error("Transaction signing aborted.");
+  throw new Eip155SigningAbortedError();
 };
 
 const readHexQuantity = (value: HexType, label: string): bigint => {

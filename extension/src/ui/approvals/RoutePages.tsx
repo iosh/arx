@@ -32,7 +32,6 @@ export function SimpleApprovalRoutePage(params: {
       ? {
           approvalId,
           action: "approve" as const,
-          expectedPrepareId: approval.request.prepareId ?? undefined,
         }
       : {
           approvalId,

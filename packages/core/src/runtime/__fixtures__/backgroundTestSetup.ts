@@ -1,5 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
+import { ApprovalKinds } from "../../approvals/queue/types.js";
 import { buildChainAddressingByNamespace } from "../../chains/addressing.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
 import { DEFAULT_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
@@ -41,8 +42,10 @@ import type {
   TransactionsStoragePort,
 } from "../../transactions/storage/index.js";
 import {
+  findBlockingActiveTransactionRecords,
   TransactionAggregateAlreadyExistsError,
   TransactionAggregateNotFoundError,
+  TransactionConflictKeyCollisionError,
 } from "../../transactions/storage/index.js";
 import { VaultInvalidPasswordError, VaultLockedError, VaultNotInitializedError } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
@@ -134,7 +137,25 @@ export class MemoryTransactionAggregatesPort implements TransactionsStoragePort 
   }
 
   async insertApprovedTransactionAggregate(input: { aggregate: TransactionAggregate }): Promise<void> {
-    await this.insertTransactionAggregate(input.aggregate);
+    const aggregate = input.aggregate;
+    if (this.#aggregates.has(aggregate.record.id)) {
+      throw new TransactionAggregateAlreadyExistsError(aggregate.record.id);
+    }
+
+    const conflictKey = aggregate.record.conflictKey;
+    if (conflictKey) {
+      const candidates = await this.findTransactionRecordsByConflictKey(conflictKey);
+      const conflicting = findBlockingActiveTransactionRecords(aggregate.record, candidates);
+      if (conflicting.length > 0) {
+        throw new TransactionConflictKeyCollisionError({
+          transactionId: aggregate.record.id,
+          conflictKey,
+          conflictingTransactionIds: conflicting.map((record) => record.id),
+        });
+      }
+    }
+
+    this.#aggregates.set(aggregate.record.id, clone(aggregate));
   }
 
   async listTransactionHistory(query: ListTransactionHistoryQuery = {}): Promise<AggregateTransactionRecord[]> {
@@ -774,20 +795,16 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     const pending = new Set<string>();
 
     const tryApprove = async (approvalId: string) => {
-      const transactionApproval = runtime.transactions.getTransactionApproval(approvalId);
-      if (transactionApproval) {
-        if (transactionApproval.prepare.status !== "ready") {
-          return;
-        }
-
+      const record = runtime.services.approvals.get(approvalId);
+      if (record?.kind === ApprovalKinds.SendTransaction) {
         try {
-          await runtime.transactions.approveAndSubmitTransaction({
+          await runtime.services.approvals.resolve({
             approvalId,
-            expectedPrepareId: transactionApproval.prepare.id,
+            action: "approve",
           });
           pending.delete(approvalId);
         } catch {
-          // Keep pending until the transaction review becomes ready or the approval disappears.
+          // Keep pending until the approval is resolved or disappears.
         }
         return;
       }
@@ -795,20 +812,12 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       pending.delete(approvalId);
     };
 
-    const unsubscribeTransactionApprovals = runtime.transactions.onTransactionApprovalsChanged((approvalIds) => {
-      for (const approvalId of approvalIds) {
-        pending.add(approvalId);
-        void tryApprove(approvalId);
-      }
-    });
-
     const unsubscribe = runtime.services.approvals.onCreated(async ({ record }) => {
       pending.add(record.approvalId);
       await tryApprove(record.approvalId);
     });
     return () => {
       unsubscribe();
-      unsubscribeTransactionApprovals();
       pending.clear();
     };
   };

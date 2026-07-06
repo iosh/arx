@@ -23,8 +23,9 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
       return {
         status: "blocked",
         blocker: {
-          reason: "transaction.prepare.from_missing",
+          code: "transaction.prepare.from_missing",
           message: "Transaction requires a from address.",
+          details: {},
         },
         patch: prepared,
       };
@@ -47,9 +48,9 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
             return {
               status: "blocked",
               blocker: {
-                reason: "transaction.prepare.from_mismatch",
+                code: "transaction.prepare.from_mismatch",
                 message: "Transaction from address does not match the selected account.",
-                data: {
+                details: {
                   payloadFrom: requestFrom,
                   activeFrom: contextFrom,
                 },
@@ -62,9 +63,9 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
         return {
           status: "blocked",
           blocker: {
-            reason: "transaction.prepare.from_invalid",
+            code: "transaction.prepare.from_invalid",
             message: "Transaction from address is invalid for the active chain.",
-            data: {
+            details: {
               address: resolvedFrom,
               error: readErrorMessage(error),
             },
@@ -86,9 +87,9 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
           return {
             status: "blocked",
             blocker: {
-              reason: "transaction.prepare.to_invalid",
+              code: "transaction.prepare.to_invalid",
               message: "Transaction recipient address is invalid for the active chain.",
-              data: {
+              details: {
                 address: payload.to,
                 error: readErrorMessage(error),
               },

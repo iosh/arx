@@ -4,7 +4,6 @@ import { getApprovalSelectableAccounts } from "../approvals/shared.js";
 import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
 import type { WalletAccounts } from "../engine/types.js";
 import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
-import type { TransactionApproval, TransactionsService } from "../transactions/TransactionsService.js";
 import type { ApprovalDetail, ApprovalListEntry, ApprovalSendTransactionDetail } from "./types.js";
 
 export type ApprovalDetailsDeps = {
@@ -14,7 +13,6 @@ export type ApprovalDetailsDeps = {
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "findAvailableChainView" | "requireChainDefinition">;
-  transactionApprovals?: Pick<TransactionsService, "getTransactionApproval" | "listTransactionApprovals">;
 };
 
 export type ApprovalDetails = Readonly<{
@@ -37,26 +35,12 @@ const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
   createdAt: item.createdAt,
 });
 
-const toTransactionApprovalListEntry = (approval: TransactionApproval): ApprovalListEntry => ({
-  approvalId: approval.approvalId,
-  kind: ApprovalKinds.SendTransaction,
-  source: approval.source,
-  origin: approval.origin,
-  namespace: approval.namespace,
-  chainRef: approval.chainRef,
-  createdAt: approval.createdAt,
-});
-
 const assertUnreachable = (_value: never): never => {
   throw new Error("Unreachable approval kind");
 };
 
 const toDetailMeta = (record: ApprovalRecord) => {
-  const requestChainRef = getApprovalRequestChainRef(record);
-  const reviewContext = deriveApprovalReviewContext(
-    record,
-    requestChainRef ? { request: { chainRef: requestChainRef } } : undefined,
-  );
+  const reviewContext = deriveApprovalReviewContext(record);
 
   return {
     approvalId: record.approvalId,
@@ -66,24 +50,6 @@ const toDetailMeta = (record: ApprovalRecord) => {
     chainRef: reviewContext.reviewChainRef,
     createdAt: record.createdAt,
   };
-};
-
-const getApprovalRequestChainRef = (record: ApprovalRecord): string | undefined => {
-  if (isApprovalRecord(record, ApprovalKinds.AddChain)) {
-    return record.request.definition.chainRef;
-  }
-
-  if (
-    isApprovalRecord(record, ApprovalKinds.RequestAccounts) ||
-    isApprovalRecord(record, ApprovalKinds.RequestPermissions) ||
-    isApprovalRecord(record, ApprovalKinds.SignMessage) ||
-    isApprovalRecord(record, ApprovalKinds.SignTypedData) ||
-    isApprovalRecord(record, ApprovalKinds.SwitchChain)
-  ) {
-    return record.request.chainRef;
-  }
-
-  return undefined;
 };
 
 const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"]) =>
@@ -248,55 +214,31 @@ const buildStaticDetail = (
   return assertUnreachable(record);
 };
 
-const toTransactionReviewPrepare = (
-  approval: TransactionApproval,
-): ApprovalSendTransactionDetail["review"]["prepare"] => {
-  const prepare = approval.prepare;
-
-  if (prepare.status === "preparing") {
-    return { state: "preparing" };
-  }
-
-  if (prepare.status === "ready") {
-    return { state: "ready" };
-  }
-
-  if (prepare.status === "blocked") {
-    return {
-      state: "blocked",
-      blocker: prepare.blocker,
-    };
-  }
-
+const buildTransactionDetail = (
+  record: ApprovalRecord<typeof ApprovalKinds.SendTransaction>,
+): ApprovalSendTransactionDetail => {
+  const proposal = record.request.proposal;
   return {
-    state: "failed",
-    error: prepare.error,
-  };
-};
-
-const buildTransactionDetail = (approval: TransactionApproval): ApprovalSendTransactionDetail => {
-  return {
-    approvalId: approval.approvalId,
+    approvalId: record.approvalId,
     kind: ApprovalKinds.SendTransaction,
-    source: approval.source,
-    origin: approval.origin,
-    namespace: approval.namespace,
-    chainRef: approval.chainRef,
-    createdAt: approval.createdAt,
+    source: record.requester.source,
+    origin: record.origin,
+    namespace: proposal.namespace,
+    chainRef: proposal.chainRef,
+    createdAt: record.createdAt,
     actions: {
-      canApprove: approval.prepare.status === "ready",
+      canApprove: proposal.status === "ready",
       canReject: true,
     },
     request: {
-      approvalId: approval.approvalId,
-      chainRef: approval.chainRef,
-      origin: approval.origin,
-      prepareId: approval.prepare.id,
+      approvalId: record.approvalId,
+      chainRef: proposal.chainRef,
+      origin: proposal.origin,
+      proposalId: proposal.proposalId,
     },
     review: {
-      updatedAt: approval.updatedAt,
-      details: approval.review,
-      prepare: toTransactionReviewPrepare(approval),
+      details: proposal.review,
+      prepare: { state: "ready" },
     },
   };
 };
@@ -304,21 +246,10 @@ const buildTransactionDetail = (approval: TransactionApproval): ApprovalSendTran
 export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetails => {
   const listPending = async (): Promise<ApprovalListEntry[]> => {
     const pending = deps.approvals.getState().pending;
-    const transactionApprovals = deps.transactionApprovals
-      ? await deps.transactionApprovals.listTransactionApprovals()
-      : [];
-
-    return [...pending.map(toListEntry), ...transactionApprovals.map(toTransactionApprovalListEntry)].sort(
-      (left, right) => left.createdAt - right.createdAt,
-    );
+    return pending.map(toListEntry).sort((left, right) => left.createdAt - right.createdAt);
   };
 
   const getDetail = async (approvalId: string): Promise<ApprovalDetail | null> => {
-    const transactionApproval = deps.transactionApprovals?.getTransactionApproval(approvalId) ?? null;
-    if (transactionApproval) {
-      return buildTransactionDetail(transactionApproval);
-    }
-
     const record = deps.approvals.get(approvalId);
     if (!record) {
       return null;
@@ -338,6 +269,10 @@ export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetail
       isApprovalRecord(record, ApprovalKinds.AddChain)
     ) {
       return buildStaticDetail(record, deps);
+    }
+
+    if (isApprovalRecord(record, ApprovalKinds.SendTransaction)) {
+      return buildTransactionDetail(record);
     }
 
     throw new Error(`Unsupported approval kind: ${record.kind}`);

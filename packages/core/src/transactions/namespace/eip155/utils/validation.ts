@@ -18,9 +18,9 @@ export class Eip155FieldParseError extends Error {
 
   toProposalError(): TransactionProposalError {
     return {
-      reason: this.reason,
+      code: this.reason,
       message: this.message,
-      data: {
+      details: {
         field: this.field,
         value: this.value,
         error: this.parseMessage,
@@ -60,11 +60,20 @@ export const parseOptionalHexData = (value: string | undefined): Hex.Hex | null 
   try {
     Hex.assert(trimmed as Hex.Hex, { strict: false });
     if ((trimmed.length - 2) % 2 !== 0) {
-      throw new Error("hex data must have even length.");
+      throw new Eip155FieldParseError({
+        field: "data",
+        reason: "transaction.prepare.invalid_data",
+        message: "Transaction data must be 0x-prefixed even-length hex.",
+        value,
+        parseMessage: "hex data must have even length.",
+      });
     }
     Hex.toBytes(trimmed as Hex.Hex);
     return trimmed as Hex.Hex;
   } catch (error) {
+    if (error instanceof Eip155FieldParseError) {
+      throw error;
+    }
     throw new Eip155FieldParseError({
       field: "data",
       reason: "transaction.prepare.invalid_data",

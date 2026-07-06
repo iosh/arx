@@ -24,17 +24,6 @@ export type Eip155TransactionPayload = {
 /** Request payload with a resolved sender. */
 export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
 
-/** One editable field change from the approval screen. */
-export type Eip155TransactionDraftChange = {
-  field: "gas" | "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas" | "nonce";
-  value: string | null;
-};
-
-export type Eip155TransactionDraftEdit = {
-  namespace: "eip155";
-  changes: readonly Eip155TransactionDraftChange[];
-};
-
 /** Durable JSON form of the submitted transaction facts. */
 export type Eip155SubmittedTransaction = Eip155TransactionCoreFields & {
   hash: Hex;
@@ -43,6 +32,13 @@ export type Eip155SubmittedTransaction = Eip155TransactionCoreFields & {
   maxFeePerGas?: Hex | null;
   maxPriorityFeePerGas?: Hex | null;
   accessList?: Eip155TransactionAccessListEntry[];
+};
+
+export type Eip155RawTransactionArtifact = {
+  kind: "eip155.raw_transaction";
+  payload: {
+    raw: string;
+  };
 };
 
 /** JSON receipt shape kept on the transaction record. */

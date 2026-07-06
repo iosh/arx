@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../approvals/queue/types.js";
 import type { TransactionReviewDetails } from "../transactions/review.js";
-import type { TransactionApproval } from "../transactions/TransactionsService.js";
+import type { TransactionReadyProposal } from "../transactions/TransactionsService.js";
 import { createApprovalDetails } from "./approval-details.js";
 
 const CHAIN_VIEWS = {
@@ -94,41 +94,24 @@ const createRecord = <K extends ApprovalRecord["kind"]>(
   ...record,
 });
 
-const createTransactionApproval = (
-  approval: Partial<TransactionApproval> & Pick<TransactionApproval, "approvalId">,
-): TransactionApproval => ({
-  approvalId: approval.approvalId,
-  namespace: approval.namespace ?? "eip155",
-  chainRef: approval.chainRef ?? "eip155:1",
-  source: approval.source ?? "provider",
-  origin: approval.origin ?? "https://dapp.example",
-  account: approval.account ?? TRANSACTION_ACCOUNT,
-  review: approval.review ?? null,
-  prepare: approval.prepare ?? {
-    id: `prepare-${approval.approvalId}`,
-    status: "ready",
-    draftRevision: 0,
-    updatedAt: approval.updatedAt ?? approval.createdAt ?? 1,
-    preparedAt: approval.updatedAt ?? approval.createdAt ?? 1,
-    expiresAt: null,
-  },
-  createdAt: approval.createdAt ?? 1,
-  updatedAt: approval.updatedAt ?? approval.createdAt ?? 1,
+const createTransactionProposal = (
+  proposal: Partial<TransactionReadyProposal> & Pick<TransactionReadyProposal, "proposalId">,
+): TransactionReadyProposal => ({
+  proposalId: proposal.proposalId,
+  namespace: proposal.namespace ?? "eip155",
+  chainRef: proposal.chainRef ?? "eip155:1",
+  source: proposal.source ?? "provider",
+  origin: proposal.origin ?? "https://dapp.example",
+  account: proposal.account ?? TRANSACTION_ACCOUNT,
+  request: proposal.request ?? { payload: {} },
+  replacement: proposal.replacement ?? null,
+  review: proposal.review ?? TRANSACTION_REVIEW_DETAILS,
+  createdAt: proposal.createdAt ?? 1,
+  status: "ready",
+  prepared: proposal.prepared ?? {},
 });
 
-const createTransactionApprovalsStub = (input: { approvals: TransactionApproval[] }) => {
-  const approvalsById = new Map(input.approvals.map((approval) => [approval.approvalId, approval] as const));
-
-  return {
-    getTransactionApproval: (approvalId: string) => approvalsById.get(approvalId) ?? null,
-    listTransactionApprovals: async () => input.approvals,
-  };
-};
-
-const createApprovalDetailsHarness = (
-  records: ApprovalRecord[],
-  options?: { transactionApprovals?: ReturnType<typeof createTransactionApprovalsStub> },
-) => {
+const createApprovalDetailsHarness = (records: ApprovalRecord[]) => {
   const byId = new Map(records.map((record) => [record.approvalId, record] as const));
   const pending: ApprovalQueueItem[] = records.map((record) => ({
     approvalId: record.approvalId,
@@ -147,7 +130,6 @@ const createApprovalDetailsHarness = (
     },
     accounts: ACCOUNTS,
     chainViews: CHAIN_VIEWS,
-    ...(options?.transactionApprovals ? { transactionApprovals: options.transactionApprovals } : {}),
   });
 };
 
@@ -199,16 +181,22 @@ describe("createApprovalDetails", () => {
   });
 
   it("includes transaction approvals in the pending list", async () => {
-    const approvalDetails = createApprovalDetailsHarness([], {
-      transactionApprovals: createTransactionApprovalsStub({
-        approvals: [
-          createTransactionApproval({
-            approvalId: "approval-transaction",
+    const approvalDetails = createApprovalDetailsHarness([
+      createRecord({
+        approvalId: "approval-transaction",
+        kind: ApprovalKinds.SendTransaction,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 3,
+        request: {
+          proposal: createTransactionProposal({
+            proposalId: "proposal-transaction",
             createdAt: 3,
           }),
-        ],
+        },
       }),
-    });
+    ]);
 
     await expect(approvalDetails.listPending()).resolves.toEqual([
       {
@@ -224,18 +212,23 @@ describe("createApprovalDetails", () => {
   });
 
   it("projects transaction approval detail", async () => {
-    const approvalDetails = createApprovalDetailsHarness([], {
-      transactionApprovals: createTransactionApprovalsStub({
-        approvals: [
-          createTransactionApproval({
-            approvalId: "approval-transaction",
-            createdAt: 2,
-            updatedAt: 3,
+    const approvalDetails = createApprovalDetailsHarness([
+      createRecord({
+        approvalId: "approval-transaction",
+        kind: ApprovalKinds.SendTransaction,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 2,
+        request: {
+          proposal: createTransactionProposal({
+            proposalId: "proposal-transaction",
+            createdAt: 3,
             review: TRANSACTION_REVIEW_DETAILS,
           }),
-        ],
+        },
       }),
-    });
+    ]);
 
     await expect(approvalDetails.getDetail("approval-transaction")).resolves.toEqual({
       approvalId: "approval-transaction",
@@ -253,10 +246,9 @@ describe("createApprovalDetails", () => {
         approvalId: "approval-transaction",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
-        prepareId: "prepare-approval-transaction",
+        proposalId: "proposal-transaction",
       },
       review: {
-        updatedAt: 3,
         details: TRANSACTION_REVIEW_DETAILS,
         prepare: { state: "ready" },
       },

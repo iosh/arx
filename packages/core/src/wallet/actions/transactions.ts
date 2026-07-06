@@ -2,13 +2,11 @@ import type { ActiveAccountView } from "../../accounts/runtime/types.js";
 import { ChainNotSupportedError } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { PermissionDeniedError } from "../../permissions/errors.js";
-import type { JsonValue } from "../../transactions/aggregate/index.js";
 import type { ListTransactionsQuery } from "../../transactions/TransactionsService.js";
 import type { TransactionRequest, WalletTransactionRequest } from "../../transactions/types.js";
 import type {
-  ApplyTransactionDraftEditInput,
-  RequestSendTransactionApprovalInput,
-  RerunTransactionPrepareInput,
+  PrepareTransactionInput,
+  SubmitTransactionInput,
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
 } from "../api.js";
@@ -93,47 +91,29 @@ export const getTransactionDetail = async (context: WalletApiContext, input: Wal
   return await context.transactions.getTransaction(input.transactionId);
 };
 
-export const requestSendTransactionApproval = async (
-  context: WalletApiContext,
-  input: RequestSendTransactionApprovalInput,
-) => {
+export const prepareTransaction = async (context: WalletApiContext, input: PrepareTransactionInput) => {
   assertSessionUnlocked(context);
   const walletRequest = input.request;
   const chainRef = resolveWalletTransactionChainRef(context, walletRequest);
   const transactionRequest = buildTransactionRequestFromWalletRequest(walletRequest, chainRef);
   const activeAccount = resolveWalletTransactionAccount(context, transactionRequest);
 
-  const approval = await context.transactions.requestTransactionApproval({
+  return await context.transactions.prepareTransaction({
     namespace: transactionRequest.namespace,
     chainRef: transactionRequest.chainRef,
     origin: context.caller.origin,
     source: "wallet-ui",
-    requestId: context.createId(),
     accountId: activeAccount.accountId,
-    approvalId: context.createId(),
     request: {
-      payload: transactionRequest.payload as JsonValue,
+      payload: transactionRequest.payload,
     },
+    replacement: null,
   });
-
-  return { approvalId: approval.approval.approvalId };
 };
 
-export const rerunTransactionPrepare = async (context: WalletApiContext, input: RerunTransactionPrepareInput) => {
+export const submitTransaction = async (context: WalletApiContext, input: SubmitTransactionInput) => {
   assertSessionUnlocked(context);
-  await context.transactions.rerunApprovalPrepare({ approvalId: input.approvalId });
-  return null;
-};
-
-export const applyTransactionDraftEdit = async (context: WalletApiContext, input: ApplyTransactionDraftEditInput) => {
-  assertSessionUnlocked(context);
-  await context.transactions.updateApprovalDraft({
-    approvalId: input.approvalId,
-    edit: {
-      namespace: input.edit.namespace,
-      changes: [...input.edit.changes],
-    },
-    ...(input.mode !== undefined ? { mode: input.mode } : {}),
+  return await context.transactions.submitTransaction({
+    proposal: input.proposal,
   });
-  return null;
 };

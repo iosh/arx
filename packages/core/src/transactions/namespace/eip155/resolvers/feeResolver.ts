@@ -38,8 +38,9 @@ export const deriveFees = async (
     return {
       status: "failed",
       error: {
-        reason: "transaction.prepare.fee_unavailable",
+        code: "transaction.prepare.fee_unavailable",
         message: "Failed to resolve a complete fee configuration.",
+        details: {},
       },
       patch: {},
     };
@@ -67,9 +68,9 @@ export const deriveFees = async (
     return {
       status: "failed",
       error: {
-        reason: "transaction.prepare.fee_estimation_failed",
+        code: "transaction.prepare.fee_estimation_failed",
         message: "Failed to fetch fee data.",
-        data: {
+        details: {
           method: "feeOracle.suggestFees",
           error: readErrorMessage(error),
         },

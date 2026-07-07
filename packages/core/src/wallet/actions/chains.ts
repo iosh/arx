@@ -1,24 +1,19 @@
+import type { ChainRef } from "../../chains/ids.js";
+import type { WalletNetworks } from "../../engine/types.js";
 import type { SelectWalletChainInput } from "../api.js";
-import type { WalletApiContext } from "../context.js";
 
-export const getSelectedWalletChainRefForNamespace = (context: WalletApiContext, namespace: string): string => {
-  try {
-    const selectedChain = context.networks.getSelectedChainView();
-    if (selectedChain.namespace === namespace) {
-      return selectedChain.chainRef;
-    }
-  } catch {
-    // Fall back to the namespace-specific wallet chain when the global selection is not available yet.
-  }
-
-  return context.networks.getActiveChainViewForNamespace(namespace).chainRef;
+export const getSelectedWalletChainRefForNamespace = (
+  networks: Pick<WalletNetworks, "getSelectedChainRef" | "getActiveChainViewForNamespace">,
+  namespace: string,
+): ChainRef => {
+  return networks.getSelectedChainRef(namespace) ?? networks.getActiveChainViewForNamespace(namespace).chainRef;
 };
 
-export const getSelectedWalletChain = (context: WalletApiContext) => context.networks.getSelectedChainView();
-
-export const listWalletNetworks = (context: WalletApiContext) => context.networks.buildWalletNetworksSnapshot();
-
-export const selectWalletChain = async (context: WalletApiContext, input: SelectWalletChainInput) => {
-  await context.networks.selectChain(input.chainRef);
-  return context.networks.getSelectedChainView();
-};
+export const createNetworksHandlers = (networks: WalletNetworks) => ({
+  getSelectedChain: () => networks.getSelectedChainView(),
+  list: () => networks.buildWalletNetworksSnapshot(),
+  select: async (input: SelectWalletChainInput) => {
+    await networks.selectChain(input.chainRef);
+    return networks.getSelectedChainView();
+  },
+});

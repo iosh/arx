@@ -9,14 +9,13 @@ describe("method executor", () => {
         echo(input: { value: string }): Promise<string>;
       };
     };
-    type TestContext = { prefix: string };
+    const prefix = "invoke";
     const handlers = {
       sample: {
-        echo: (context: TestContext, input: { value: string }) => `${context.prefix}:${input.value}`,
+        echo: (input: { value: string }) => `${prefix}:${input.value}`,
       },
-    } as const satisfies MethodHandlerTree<TestContext, TestApi>;
+    } as const satisfies MethodHandlerTree<TestApi>;
     const executor = createMethodExecutor({
-      context: { prefix: "invoke" },
       handlers,
     });
 
@@ -33,9 +32,8 @@ describe("method executor", () => {
       setup: {
         getStatus: () => ({ availability: "uninitialized" as const }),
       },
-    } as const satisfies MethodHandlerTree<undefined, TestApi>;
+    } as const satisfies MethodHandlerTree<TestApi>;
     const executor = createMethodExecutor({
-      context: undefined,
       handlers,
     });
 

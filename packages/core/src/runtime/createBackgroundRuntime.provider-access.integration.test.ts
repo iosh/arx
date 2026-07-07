@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
+import { createApprovalDetails } from "../approvals/approvalDetails.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
 import { getChainRefNamespace } from "../chains/caip.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
@@ -17,7 +18,6 @@ import type {
   NamespaceTransactionSubmission,
   NamespaceTransactionTracking,
 } from "../transactions/namespace/types.js";
-import { createApprovalDetails } from "../wallet/approval-details.js";
 import type { CreateBackgroundRuntimeResult } from "./__fixtures__/backgroundTestSetup.js";
 import {
   createChainDefinition,

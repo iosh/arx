@@ -45,7 +45,7 @@ export type BackgroundSessionServices = {
   clearVault(): Promise<void>;
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
-  persistVaultMeta(): Promise<void>;
+  persistVaultMetaSnapshot(): Promise<void>;
   onStateChanged(listener: () => void): () => void;
 };
 
@@ -462,7 +462,7 @@ export const initSessionLayer = ({
       };
     },
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
-    persistVaultMeta: () => persistVaultMetaImmediate({ throwOnError: true }),
+    persistVaultMetaSnapshot: () => persistVaultMetaImmediate({ throwOnError: true }),
     onStateChanged: (listener) => {
       stateChangedListeners.add(listener);
       return () => {

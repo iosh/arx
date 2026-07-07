@@ -55,7 +55,6 @@ export const createWalletSession = (deps: {
     verifyPassword: (password) => session.vault.verifyPassword(password),
     getVaultMetaState: () => session.getVaultMetaState(),
     getLastPersistedVaultMeta: () => session.getLastPersistedVaultMeta(),
-    persistVaultMeta: () => session.persistVaultMeta(),
     onStateChanged: (listener) => session.onStateChanged(listener),
     onUnlocked: (listener) => session.unlock.onUnlocked(listener),
     onLocked: (listener) => session.unlock.onLocked(listener),

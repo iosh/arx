@@ -1,17 +1,123 @@
-import { deriveApprovalReviewContext } from "../approvals/chainContext.js";
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../approvals/queue/types.js";
-import { getApprovalSelectableAccounts } from "../approvals/shared.js";
+import type { AccountSelectionService } from "../accounts/runtime/types.js";
 import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
-import type { WalletAccounts } from "../engine/types.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
-import type { ApprovalDetail, ApprovalListEntry, ApprovalSendTransactionDetail } from "./types.js";
+import type { AccountId } from "../storage/records.js";
+import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
+import { deriveApprovalReviewContext } from "./chainContext.js";
+import { type ApprovalKind, ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
+import { getApprovalSelectableAccounts } from "./shared.js";
+import type { ApprovalSource } from "./source.js";
+
+export type ApprovalSelectableAccount = {
+  accountId: AccountId;
+  canonicalAddress: string;
+  displayAddress: string;
+};
+
+export type ApprovalListEntry = {
+  approvalId: string;
+  kind: ApprovalKind;
+  source: ApprovalSource;
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef;
+  createdAt: number;
+};
+
+type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
+  approvalId: string;
+  kind: K;
+  source: ApprovalSource;
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef;
+  createdAt: number;
+  actions: {
+    canApprove: boolean;
+    canReject: boolean;
+  };
+  request: Request;
+  review: Review;
+};
+
+type RequestAccountsRequest = {
+  selectableAccounts: ApprovalSelectableAccount[];
+  recommendedAccountId: AccountId | null;
+};
+
+type RequestPermissionsRequest = {
+  selectableAccounts: ApprovalSelectableAccount[];
+  recommendedAccountId: AccountId | null;
+  requestedGrants: Array<{
+    grantKind: string;
+    chainRef: ChainRef;
+  }>;
+};
+
+type SignMessageRequest = {
+  from: string;
+  message: string;
+};
+
+type SignTypedDataRequest = {
+  from: string;
+  typedData: string;
+};
+
+type SwitchChainRequest = {
+  chainRef: ChainRef;
+  chainId?: string | undefined;
+  displayName?: string | undefined;
+};
+
+type AddChainRequest = {
+  chainRef: ChainRef;
+  chainId: string;
+  displayName: string;
+  rpcUrls: string[];
+  nativeCurrency?:
+    | {
+        name: string;
+        symbol: string;
+        decimals: number;
+      }
+    | undefined;
+  blockExplorerUrl?: string | undefined;
+  isUpdate: boolean;
+};
+
+type SendTransactionRequest = {
+  approvalId: string;
+  chainRef: ChainRef;
+  origin: string;
+  proposalId: string;
+};
+
+export type ApprovalAccountSelectionDetail =
+  | ApprovalDetailBase<typeof ApprovalKinds.RequestAccounts, RequestAccountsRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.RequestPermissions, RequestPermissionsRequest, null>;
+
+export type ApprovalStaticDetail =
+  | ApprovalDetailBase<typeof ApprovalKinds.SignMessage, SignMessageRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.SignTypedData, SignTypedDataRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.SwitchChain, SwitchChainRequest, null>
+  | ApprovalDetailBase<typeof ApprovalKinds.AddChain, AddChainRequest, null>;
+
+export type ApprovalSendTransactionDetail = ApprovalDetailBase<
+  typeof ApprovalKinds.SendTransaction,
+  SendTransactionRequest,
+  SendTransactionApprovalReview
+>;
+
+export type ApprovalDetail = ApprovalAccountSelectionDetail | ApprovalStaticDetail | ApprovalSendTransactionDetail;
 
 export type ApprovalDetailsDeps = {
   approvals: {
     get(approvalId: string): ApprovalRecord | undefined;
     getState(): { pending: ApprovalQueueItem[] };
   };
-  accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "findAvailableChainView" | "requireChainDefinition">;
 };
 

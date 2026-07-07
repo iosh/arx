@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
+import { createApprovalDetails } from "../approvals/approvalDetails.js";
 import { ApprovalKinds } from "../approvals/index.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
@@ -7,8 +8,8 @@ import { createWalletAccounts, createWalletNetworks, createWalletSession } from 
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
-import { createApprovalDetails } from "../wallet/approval-details.js";
-import { createWalletApi } from "../wallet/createWalletApi.js";
+import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
+import { createWalletApi, createWalletMethodHandlers } from "../wallet/createWalletApi.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -195,23 +196,38 @@ const createWalletApiForRuntime = (runtime: ReturnType<typeof createBackgroundRu
     chainActivation: runtime.services.chainActivation,
     chainRpc: runtime.services.chainRpc,
   });
-  return createWalletApi({
-    session: walletSession,
-    accounts: walletAccounts,
-    networks: walletNetworks,
-    approvals: runtime.services.approvals,
-    approvalDetails: {
-      listPending: () => approvalDetails.listPending(),
-      getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
+  const setupWorkflow = createWalletSetupWorkflow({
+    vaultLifecycle: {
+      createVaultWithSecret: async (params) => {
+        await runtime.services.session.createVaultWithSecret(params);
+      },
+      unlock: async (params) => {
+        await runtime.services.session.unlock.unlock(params);
+      },
+      persistVaultMetaSnapshot: () => runtime.services.session.persistVaultMetaSnapshot(),
+      clearVault: () => runtime.services.session.clearVault(),
     },
+    keyring: runtime.services.keyring,
+    accounts: runtime.services.accounts,
     accountAddressing: runtime.services.accountAddressing,
-    createId: () => crypto.randomUUID(),
-    caller: {
-      origin: "chrome-extension://arx",
-    },
-    namespaceRuntime: runtime.services.namespaceRuntime,
-    transactions: runtime.transactions,
   });
+
+  return createWalletApi(
+    createWalletMethodHandlers({
+      session: walletSession,
+      accounts: walletAccounts,
+      networks: walletNetworks,
+      approvals: runtime.services.approvals,
+      approvalDetails,
+      accountAddressing: runtime.services.accountAddressing,
+      caller: {
+        origin: "chrome-extension://arx",
+      },
+      namespaceRuntime: runtime.services.namespaceRuntime,
+      transactions: runtime.transactions,
+      setupWorkflow,
+    }),
+  );
 };
 
 describe("createBackgroundRuntime (no snapshots)", () => {

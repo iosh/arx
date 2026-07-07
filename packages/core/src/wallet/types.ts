@@ -1,14 +1,13 @@
-import type { ApprovalKind, ApprovalKinds } from "../approvals/queue/types.js";
-import type { ApprovalSource } from "../approvals/source.js";
+import type { ApprovalDetail, ApprovalListEntry } from "../approvals/approvalDetails.js";
 import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { SessionStatus } from "../runtime/background/session.js";
 import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { AccountId } from "../storage/records.js";
-import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import type { SubmitTransactionResult, Transaction, TransactionProposal } from "../transactions/TransactionsService.js";
 import type { WalletApiAttentionSnapshot } from "./api.js";
 
+export type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount } from "../approvals/approvalDetails.js";
 export type { NetworksSnapshot } from "../services/runtime/chainViews/types.js";
 export type { Transaction } from "../transactions/TransactionsService.js";
 
@@ -57,109 +56,6 @@ export type BackupStatus = {
   pendingHdKeyringCount: number;
   nextHdKeyring: BackupReminder | null;
 };
-
-export type ApprovalSelectableAccount = {
-  accountId: AccountId;
-  canonicalAddress: string;
-  displayAddress: string;
-};
-
-export type ApprovalListEntry = {
-  approvalId: string;
-  kind: ApprovalKind;
-  source: ApprovalSource;
-  origin: string;
-  namespace: string;
-  chainRef: ChainRef;
-  createdAt: number;
-};
-
-type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
-  approvalId: string;
-  kind: K;
-  source: ApprovalSource;
-  origin: string;
-  namespace: string;
-  chainRef: ChainRef;
-  createdAt: number;
-  actions: {
-    canApprove: boolean;
-    canReject: boolean;
-  };
-  request: Request;
-  review: Review;
-};
-
-type RequestAccountsRequest = {
-  selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountId: AccountId | null;
-};
-
-type RequestPermissionsRequest = {
-  selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountId: AccountId | null;
-  requestedGrants: Array<{
-    grantKind: string;
-    chainRef: ChainRef;
-  }>;
-};
-
-type SignMessageRequest = {
-  from: string;
-  message: string;
-};
-
-type SignTypedDataRequest = {
-  from: string;
-  typedData: string;
-};
-
-type SwitchChainRequest = {
-  chainRef: ChainRef;
-  chainId?: string | undefined;
-  displayName?: string | undefined;
-};
-
-type AddChainRequest = {
-  chainRef: ChainRef;
-  chainId: string;
-  displayName: string;
-  rpcUrls: string[];
-  nativeCurrency?:
-    | {
-        name: string;
-        symbol: string;
-        decimals: number;
-      }
-    | undefined;
-  blockExplorerUrl?: string | undefined;
-  isUpdate: boolean;
-};
-
-type SendTransactionRequest = {
-  approvalId: string;
-  chainRef: ChainRef;
-  origin: string;
-  proposalId: string;
-};
-
-export type ApprovalAccountSelectionDetail =
-  | ApprovalDetailBase<typeof ApprovalKinds.RequestAccounts, RequestAccountsRequest, null>
-  | ApprovalDetailBase<typeof ApprovalKinds.RequestPermissions, RequestPermissionsRequest, null>;
-
-export type ApprovalStaticDetail =
-  | ApprovalDetailBase<typeof ApprovalKinds.SignMessage, SignMessageRequest, null>
-  | ApprovalDetailBase<typeof ApprovalKinds.SignTypedData, SignTypedDataRequest, null>
-  | ApprovalDetailBase<typeof ApprovalKinds.SwitchChain, SwitchChainRequest, null>
-  | ApprovalDetailBase<typeof ApprovalKinds.AddChain, AddChainRequest, null>;
-
-export type ApprovalSendTransactionDetail = ApprovalDetailBase<
-  typeof ApprovalKinds.SendTransaction,
-  SendTransactionRequest,
-  SendTransactionApprovalReview
->;
-
-export type ApprovalDetail = ApprovalAccountSelectionDetail | ApprovalStaticDetail | ApprovalSendTransactionDetail;
 
 export type ResolveApprovalResult = null;
 

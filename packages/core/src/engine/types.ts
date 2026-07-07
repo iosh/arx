@@ -74,8 +74,6 @@ import type {
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
-import type { WalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
-import type { WalletApiApprovalDetailResult, WalletApiPendingApprovalsResult } from "../wallet/types.js";
 
 export type WalletNamespaces = Readonly<{
   findManifest(namespace: string): NamespaceManifest | undefined;
@@ -143,7 +141,6 @@ export type WalletSession = Readonly<{
   verifyPassword(password: string): Promise<void>;
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
-  persistVaultMeta(): Promise<void>;
   onStateChanged(listener: () => void): () => void;
   onUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   onLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
@@ -294,16 +291,6 @@ export type WalletProvider = Readonly<{
   cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
-}>;
-
-/** Runtime-owned approval access. */
-export type WalletApprovalDetails = Readonly<{
-  listPending(): Promise<WalletApiPendingApprovalsResult>;
-  getDetail(approvalId: string): Promise<WalletApiApprovalDetailResult>;
-}>;
-
-export type WalletSetupServices = Readonly<{
-  workflow: WalletSetupWorkflow;
 }>;
 
 /**

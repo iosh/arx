@@ -3,7 +3,6 @@ import type { AccountAddressingByNamespace } from "../../accounts/addressing/add
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportPrivateKeyParams,
@@ -35,6 +34,13 @@ type SetupDraftBuilder<TResult extends SetupResult> = {
   buildDraft(): InitialKeyringDraft;
   buildResult(draft: InitialKeyringDraft): TResult;
 };
+
+export type InitialWalletVaultLifecycle = Readonly<{
+  createVaultWithSecret(params: { password: string; secret: Uint8Array }): Promise<void>;
+  unlock(params: { password: string }): Promise<void>;
+  persistVaultMetaSnapshot(): Promise<void>;
+  clearVault(): Promise<void>;
+}>;
 
 export type WalletSetupWorkflow = Readonly<{
   getStatus(): { availability: SetupAvailability };
@@ -111,7 +117,7 @@ const rollbackSelectedAccount = async (params: {
 };
 
 const commitInitialSetup = async <TResult extends SetupResult>(params: {
-  session: Pick<BackgroundSessionServices, "createVaultWithSecret" | "clearVault" | "persistVaultMeta" | "unlock">;
+  vaultLifecycle: InitialWalletVaultLifecycle;
   keyring: Pick<
     KeyringService,
     | "buildInitialHdKeyring"
@@ -141,7 +147,7 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
   let selectionWriteStarted = false;
 
   try {
-    await params.session.createVaultWithSecret({
+    await params.vaultLifecycle.createVaultWithSecret({
       password: params.password,
       secret: params.keyring.encodeInitialDraftPayload(draft),
     });
@@ -156,8 +162,8 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
       chainRef: params.chainRef,
       accountId,
     });
-    await params.session.unlock.unlock({ password: params.password });
-    await params.session.persistVaultMeta();
+    await params.vaultLifecycle.unlock({ password: params.password });
+    await params.vaultLifecycle.persistVaultMetaSnapshot();
 
     return params.draftBuilder.buildResult(draft);
   } catch (error) {
@@ -174,13 +180,13 @@ const commitInitialSetup = async <TResult extends SetupResult>(params: {
       await params.keyring.removeCommittedInitialKeyring(committedKeyringId);
     }
 
-    await params.session.clearVault();
+    await params.vaultLifecycle.clearVault();
     throw error;
   }
 };
 
 export const createWalletSetupWorkflow = (deps: {
-  session: Pick<BackgroundSessionServices, "createVaultWithSecret" | "clearVault" | "persistVaultMeta" | "unlock">;
+  vaultLifecycle: InitialWalletVaultLifecycle;
   keyring: Pick<
     KeyringService,
     | "buildInitialHdKeyring"

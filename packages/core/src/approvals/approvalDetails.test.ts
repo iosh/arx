@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../approvals/queue/types.js";
 import type { TransactionReviewDetails } from "../transactions/review.js";
 import type { TransactionReadyProposal } from "../transactions/TransactionsService.js";
-import { createApprovalDetails } from "./approval-details.js";
+import { createApprovalDetails } from "./approvalDetails.js";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
 
 const CHAIN_VIEWS = {
   getApprovalReviewChainView: ({ record, request }: { record: ApprovalRecord; request?: { chainRef?: string } }) => {
@@ -36,6 +36,16 @@ const CHAIN_VIEWS = {
           },
         }
       : null,
+  requireChainDefinition: (chainRef: string) => ({
+    chainRef,
+    displayName: `Chain ${chainRef}`,
+    shortName: null,
+    nativeCurrency: {
+      name: "Ether",
+      symbol: "ETH",
+      decimals: 18,
+    },
+  }),
 } as const;
 
 const ACCOUNTS = {

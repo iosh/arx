@@ -1,5 +1,5 @@
+export type { ApprovalDetail } from "../approvals/approvalDetails.js";
 export type { WalletApi } from "../wallet/index.js";
-export type { ApprovalDetail } from "../wallet/types.js";
 export type {
   CoreProviderApi,
   CoreRuntime,
@@ -20,7 +20,6 @@ export type {
   DappConnectionRecord,
   DappConnectionsState,
   WalletAccounts,
-  WalletApprovalDetails,
   WalletApprovals,
   WalletAttention,
   WalletBackupStatus,

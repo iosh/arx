@@ -1,8 +1,9 @@
 import type { ActiveAccountView } from "../../accounts/runtime/types.js";
 import { ChainNotSupportedError } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
+import type { WalletAccounts, WalletNetworks, WalletSession } from "../../engine/types.js";
 import { PermissionDeniedError } from "../../permissions/errors.js";
-import type { ListTransactionsQuery } from "../../transactions/TransactionsService.js";
+import type { ListTransactionsQuery, WalletTransactionAccess } from "../../transactions/TransactionsService.js";
 import type { TransactionRequest, WalletTransactionRequest } from "../../transactions/types.js";
 import type {
   PrepareTransactionInput,
@@ -10,16 +11,25 @@ import type {
   WalletApiTransactionDetailInput,
   WalletApiTransactionsInput,
 } from "../api.js";
-import type { WalletApiContext } from "../context.js";
 import { getSelectedWalletChainRefForNamespace } from "./chains.js";
 import { assertSessionUnlocked } from "./session.js";
 
+type TransactionHandlersDeps = {
+  session: Pick<WalletSession, "isUnlocked">;
+  accounts: Pick<WalletAccounts, "getActiveAccountForNamespace">;
+  networks: Pick<WalletNetworks, "getSelectedChainRef" | "getActiveChainViewForNamespace" | "findAvailableChainView">;
+  transactions: WalletTransactionAccess;
+  caller: {
+    origin: string;
+  };
+};
+
 const resolveWalletTransactionChainRef = (
-  context: WalletApiContext,
+  deps: Pick<TransactionHandlersDeps, "networks">,
   walletRequest: WalletTransactionRequest,
 ): ChainRef => {
-  const chainRef = getSelectedWalletChainRefForNamespace(context, walletRequest.namespace);
-  const chain = context.networks.findAvailableChainView({ chainRef });
+  const chainRef = getSelectedWalletChainRefForNamespace(deps.networks, walletRequest.namespace);
+  const chain = deps.networks.findAvailableChainView({ chainRef });
   if (!chain) {
     throw new ChainNotSupportedError({
       message: `Send transaction is not supported for chain "${chainRef}" yet.`,
@@ -34,8 +44,11 @@ const resolveWalletTransactionChainRef = (
   return chain.chainRef;
 };
 
-const resolveWalletTransactionAccount = (context: WalletApiContext, request: TransactionRequest): ActiveAccountView => {
-  const activeAccount = context.accounts.getActiveAccountForNamespace({
+const resolveWalletTransactionAccount = (
+  deps: Pick<TransactionHandlersDeps, "accounts">,
+  request: TransactionRequest,
+): ActiveAccountView => {
+  const activeAccount = deps.accounts.getActiveAccountForNamespace({
     namespace: request.namespace,
     chainRef: request.chainRef,
   });
@@ -83,37 +96,37 @@ const buildTransactionHistoryQuery = (input?: WalletApiTransactionsInput): ListT
   return query;
 };
 
-export const listTransactionHistory = async (context: WalletApiContext, input?: WalletApiTransactionsInput) => {
-  return await context.transactions.listTransactions(buildTransactionHistoryQuery(input));
-};
+export const createTransactionHandlers = (deps: TransactionHandlersDeps) => ({
+  listHistory: async (input?: WalletApiTransactionsInput) =>
+    await deps.transactions.listTransactions(buildTransactionHistoryQuery(input)),
 
-export const getTransactionDetail = async (context: WalletApiContext, input: WalletApiTransactionDetailInput) => {
-  return await context.transactions.getTransaction(input.transactionId);
-};
+  getDetail: async (input: WalletApiTransactionDetailInput) =>
+    await deps.transactions.getTransaction(input.transactionId),
 
-export const prepareTransaction = async (context: WalletApiContext, input: PrepareTransactionInput) => {
-  assertSessionUnlocked(context);
-  const walletRequest = input.request;
-  const chainRef = resolveWalletTransactionChainRef(context, walletRequest);
-  const transactionRequest = buildTransactionRequestFromWalletRequest(walletRequest, chainRef);
-  const activeAccount = resolveWalletTransactionAccount(context, transactionRequest);
+  prepareTransaction: async (input: PrepareTransactionInput) => {
+    assertSessionUnlocked(deps.session);
+    const walletRequest = input.request;
+    const chainRef = resolveWalletTransactionChainRef(deps, walletRequest);
+    const transactionRequest = buildTransactionRequestFromWalletRequest(walletRequest, chainRef);
+    const activeAccount = resolveWalletTransactionAccount(deps, transactionRequest);
 
-  return await context.transactions.prepareTransaction({
-    namespace: transactionRequest.namespace,
-    chainRef: transactionRequest.chainRef,
-    origin: context.caller.origin,
-    source: "wallet-ui",
-    accountId: activeAccount.accountId,
-    request: {
-      payload: transactionRequest.payload,
-    },
-    replacement: null,
-  });
-};
+    return await deps.transactions.prepareTransaction({
+      namespace: transactionRequest.namespace,
+      chainRef: transactionRequest.chainRef,
+      origin: deps.caller.origin,
+      source: "wallet-ui",
+      accountId: activeAccount.accountId,
+      request: {
+        payload: transactionRequest.payload,
+      },
+      replacement: null,
+    });
+  },
 
-export const submitTransaction = async (context: WalletApiContext, input: SubmitTransactionInput) => {
-  assertSessionUnlocked(context);
-  return await context.transactions.submitTransaction({
-    proposal: input.proposal,
-  });
-};
+  submitTransaction: async (input: SubmitTransactionInput) => {
+    assertSessionUnlocked(deps.session);
+    return await deps.transactions.submitTransaction({
+      proposal: input.proposal,
+    });
+  },
+});

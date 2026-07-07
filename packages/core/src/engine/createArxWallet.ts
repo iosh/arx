@@ -1,3 +1,4 @@
+import { createApprovalDetails } from "../approvals/approvalDetails.js";
 import { formatChainAddress } from "../chains/addressing.js";
 import { OWNER_CHANGED } from "../events/ownerChanged.js";
 import type { MethodExecutor } from "../invoke/methods.js";
@@ -26,9 +27,7 @@ import { createProviderRequests } from "../runtime/provider/providerRequests.js"
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { createTransactionServices, TransactionAggregateStore } from "../transactions/index.js";
 import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
-import { createApprovalDetails } from "../wallet/approval-details.js";
-import type { WalletApiContext } from "../wallet/context.js";
-import { createWalletApi, createWalletMethodExecutor } from "../wallet/createWalletApi.js";
+import { createWalletApi, createWalletMethodExecutor, createWalletMethodHandlers } from "../wallet/createWalletApi.js";
 import { WALLET_UI_CALLER_ORIGIN, type WalletApi, type WalletEvent } from "../wallet/index.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
@@ -75,9 +74,7 @@ type ArxWalletRuntimeCore = Readonly<{
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
   services: WalletRuntimeServices;
-  setup: {
-    workflow: ReturnType<typeof createWalletSetupWorkflow>;
-  };
+  setupWorkflow: ReturnType<typeof createWalletSetupWorkflow>;
 }>;
 
 export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
@@ -125,49 +122,7 @@ type ArxWalletRuntime = Readonly<{
 
 type WalletCreateWalletMethodExecutorOptions = Readonly<{
   origin: string;
-  createId?: () => string;
 }>;
-
-const createWalletApiContext = (
-  runtime: ArxWalletRuntimeCore,
-  approvalDetails: ReturnType<typeof createApprovalDetails>,
-  options: { createId: () => string; origin: string },
-): WalletApiContext => {
-  return {
-    session: createWalletSession({
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-    }),
-    accounts: createWalletAccounts({
-      accounts: runtime.services.accounts,
-      keyring: runtime.services.keyring,
-    }),
-    networks: createWalletNetworks({
-      walletChainSelection: runtime.services.walletChainSelection,
-      chainDefinitions: runtime.services.chainDefinitions,
-      chainRpcEndpointOverrides: runtime.services.chainRpcEndpointOverrides,
-      chainViews: runtime.services.chainViews,
-      chainActivation: runtime.services.chainActivation,
-      chainRpc: runtime.services.chainRpc,
-    }),
-    approvals: runtime.services.approvals,
-    attention: {
-      getSnapshot: () => runtime.services.attention.getSnapshot(),
-    },
-    approvalDetails: {
-      listPending: () => approvalDetails.listPending(),
-      getDetail: (approvalId) => approvalDetails.getDetail(approvalId),
-    },
-    accountAddressing: runtime.services.accountAddressing,
-    createId: options.createId,
-    caller: {
-      origin: options.origin,
-    },
-    namespaceRuntime: runtime.services.namespaceRuntime,
-    transactions: runtime.transactions,
-    setup: runtime.setup,
-  };
-};
 
 const buildStorageOptions = (
   input: CreateArxWalletInput,
@@ -440,40 +395,53 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     accountSigning: sessionScope.accountSigning,
     keyring: sessionScope.keyringService,
   };
-  const setup = {
-    workflow: createWalletSetupWorkflow({
-      session: sessionScope.sessionLayer.session,
-      keyring: sessionScope.keyringService,
-      accounts: stateServices.accounts,
-      accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
-    }),
-  };
+  const setupWorkflow = createWalletSetupWorkflow({
+    vaultLifecycle: {
+      createVaultWithSecret: async (params) => {
+        await sessionScope.sessionLayer.session.createVaultWithSecret(params);
+      },
+      unlock: async (params) => {
+        await sessionScope.sessionLayer.session.unlock.unlock(params);
+      },
+      persistVaultMetaSnapshot: () => sessionScope.sessionLayer.session.persistVaultMetaSnapshot(),
+      clearVault: () => sessionScope.sessionLayer.session.clearVault(),
+    },
+    keyring: sessionScope.keyringService,
+    accounts: stateServices.accounts,
+    accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
+  });
   const runtimeCore: ArxWalletRuntimeCore = {
     messenger: bootstrapScope.messenger,
     transactions: transactionServices.transactions,
     transactionMonitor: transactionServices.monitor,
     services,
-    setup,
+    setupWorkflow,
   };
   const provider = createWalletProvider({
     runtimeAccess: providerAccess,
     dappConnections,
   });
   const walletEvents = createWalletEvents(runtimeCore);
-  const buildWalletMethodExecutor = (options: WalletCreateWalletMethodExecutorOptions): MethodExecutor => {
-    return createWalletMethodExecutor(
-      createWalletApiContext(runtimeCore, approvalDetails, {
-        createId: options.createId ?? (() => globalThis.crypto.randomUUID()),
+  const buildWalletMethodHandlers = (options: WalletCreateWalletMethodExecutorOptions) =>
+    createWalletMethodHandlers({
+      session,
+      accounts,
+      networks,
+      approvals,
+      approvalDetails,
+      attention,
+      accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
+      caller: {
         origin: options.origin,
-      }),
-    );
+      },
+      namespaceRuntime: backgroundSupportScope.namespaceRuntime,
+      transactions: transactionServices.transactions,
+      setupWorkflow,
+    });
+  const buildWalletMethodExecutor = (options: WalletCreateWalletMethodExecutorOptions): MethodExecutor => {
+    return createWalletMethodExecutor(buildWalletMethodHandlers(options));
   };
-  const walletApi = createWalletApi(
-    createWalletApiContext(runtimeCore, approvalDetails, {
-      createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
-      origin: WALLET_UI_CALLER_ORIGIN,
-    }),
-  );
+  const walletApi = createWalletApi(buildWalletMethodHandlers({ origin: WALLET_UI_CALLER_ORIGIN }));
 
   const wallet: ArxWallet = {
     namespaces,

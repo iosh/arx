@@ -13,11 +13,11 @@ import { createRpcInternalErrorFromUnknown, RpcInvalidRequestError } from "@arx/
 import { WALLET_CHANGED_EVENT, WALLET_TARGET, type WalletEvent } from "@arx/core/wallet";
 import type { Runtime } from "webextension-polyfill";
 import {
+  createHostMethodHandlers,
   HOST_ENTRY_CHANGED_EVENT,
   HOST_TARGET,
   type HostApi,
   type HostMethods,
-  hostMethodHandlers,
   type UiEntryLaunchContext,
 } from "@/lib/host";
 import type { BackgroundRuntimeHost } from "./runtimeHost";
@@ -54,9 +54,8 @@ export const createBackgroundUiPort = (deps: {
 }): BackgroundUiPort => {
   const ports = new Set<UiPort>();
   const removePortListeners = new Map<UiPort, () => void>();
-  const hostExecutor = createMethodExecutor<HostMethods, HostApi>({
-    context: deps.host,
-    handlers: hostMethodHandlers,
+  const hostExecutor = createMethodExecutor<HostApi>({
+    handlers: createHostMethodHandlers(deps.host),
   });
   let walletEventsUnsubscribe: (() => void) | null = null;
   let startPromise: Promise<void> | null = null;

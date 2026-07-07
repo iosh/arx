@@ -1,21 +1,21 @@
 import { RpcUnsupportedMethodError } from "../rpc/errors.js";
 
-export type MethodHandler<TContext, TMethod> = TMethod extends (...args: infer TArgs) => infer TResult
+export type MethodHandler<TMethod> = TMethod extends (...args: infer TArgs) => infer TResult
   ? TArgs["length"] extends 0 | 1
-    ? (context: TContext, ...args: TArgs) => Awaited<TResult> | Promise<Awaited<TResult>>
+    ? (...args: TArgs) => Awaited<TResult> | Promise<Awaited<TResult>>
     : never
   : never;
 
-export type MethodHandlerTree<TContext, TApi extends object> = Readonly<{
+export type MethodHandlerTree<TApi extends object> = Readonly<{
   [K in keyof TApi]: TApi[K] extends (...args: infer _TArgs) => infer _TResult
-    ? MethodHandler<TContext, TApi[K]>
+    ? MethodHandler<TApi[K]>
     : TApi[K] extends object
-      ? MethodHandlerTree<TContext, TApi[K]>
+      ? MethodHandlerTree<TApi[K]>
       : never;
 }>;
 
-type MethodBinding<TContext> = {
-  handler: (context: TContext, input?: unknown) => unknown | Promise<unknown>;
+type MethodBinding = {
+  handler: (input?: unknown) => unknown | Promise<unknown>;
 };
 
 export type MethodExecutor = Readonly<{
@@ -24,10 +24,8 @@ export type MethodExecutor = Readonly<{
 
 export type MethodCall = <TResult>(path: string, input?: unknown) => Promise<TResult>;
 
-const bindMethodHandlers = <TContext, TApi extends object>(
-  handlers: MethodHandlerTree<TContext, TApi>,
-): Map<string, MethodBinding<TContext>> => {
-  const bindingsByPath = new Map<string, MethodBinding<TContext>>();
+const bindMethodHandlers = <TApi extends object>(handlers: MethodHandlerTree<TApi>): Map<string, MethodBinding> => {
+  const bindingsByPath = new Map<string, MethodBinding>();
 
   const bindNode = (node: Record<string, unknown>, segments: string[]): void => {
     for (const [key, childNode] of Object.entries(node)) {
@@ -36,7 +34,7 @@ const bindMethodHandlers = <TContext, TApi extends object>(
 
       if (typeof childNode === "function") {
         bindingsByPath.set(path, {
-          handler: childNode as (context: TContext, input?: unknown) => unknown | Promise<unknown>,
+          handler: childNode as (input?: unknown) => unknown | Promise<unknown>,
         });
         continue;
       }
@@ -69,13 +67,12 @@ const createMethodApiProxyNode = (call: MethodCall, segments: readonly string[])
 export const createMethodApiProxy = <TApi extends object>(call: MethodCall): TApi =>
   createMethodApiProxyNode(call, []) as TApi;
 
-export const createMethodExecutor = <TContext, TApi extends object>(deps: {
-  context: TContext;
-  handlers: MethodHandlerTree<TContext, TApi>;
+export const createMethodExecutor = <TApi extends object>(deps: {
+  handlers: MethodHandlerTree<TApi>;
 }): MethodExecutor => {
-  const bindingsByPath = bindMethodHandlers<TContext, TApi>(deps.handlers);
+  const bindingsByPath = bindMethodHandlers<TApi>(deps.handlers);
 
-  const requireBinding = (path: string): MethodBinding<TContext> => {
+  const requireBinding = (path: string): MethodBinding => {
     const binding = bindingsByPath.get(path);
     if (!binding) {
       throw new RpcUnsupportedMethodError({ message: `Unsupported method: ${path}` });
@@ -86,7 +83,7 @@ export const createMethodExecutor = <TContext, TApi extends object>(deps: {
   return {
     executePath: async (path, input) => {
       const binding = requireBinding(path);
-      return await binding.handler(deps.context, input);
+      return await binding.handler(input);
     },
   };
 };

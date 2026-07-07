@@ -1,5 +1,5 @@
-import type { WalletApiContext } from "../context.js";
+import type { WalletAttention } from "../../engine/types.js";
 
-export const getAttentionSnapshot = async (context: WalletApiContext) => {
-  return context.attention.getSnapshot();
-};
+export const createAttentionHandlers = (attention: Pick<WalletAttention, "getSnapshot">) => ({
+  getSnapshot: async () => attention.getSnapshot(),
+});

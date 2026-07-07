@@ -73,15 +73,16 @@ export const parseUiEntryReason = (value: string): UiEntryReason | null => {
   return UI_ENTRY_REASON_SET.has(value) ? (value as UiEntryReason) : null;
 };
 
-export const hostMethodHandlers = {
-  entry: {
-    getLaunchContext: (host, params) => host.getEntryLaunchContext(params),
-    getBootstrap: (host, params) => host.getEntryBootstrap(params),
-  },
-  onboarding: {
-    openTab: (host, params) => host.openOnboardingTab(params.reason),
-  },
-} as const satisfies MethodHandlerTree<HostMethods, HostApi>;
+export const createHostMethodHandlers = (host: HostMethods) =>
+  ({
+    entry: {
+      getLaunchContext: (params) => host.getEntryLaunchContext(params),
+      getBootstrap: (params) => host.getEntryBootstrap(params),
+    },
+    onboarding: {
+      openTab: (params) => host.openOnboardingTab(params.reason),
+    },
+  }) as const satisfies MethodHandlerTree<HostApi>;
 
 export const createHostApiClient = (call: MethodCall): HostApi => {
   return createMethodApiProxy<HostApi>(call);

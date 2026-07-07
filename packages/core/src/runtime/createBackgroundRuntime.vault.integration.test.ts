@@ -182,7 +182,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       expect(unlockedState.nextAutoLockAt).toBeGreaterThan(currentTime);
 
       currentTime += 200;
-      await first.runtime.services.session.persistVaultMeta();
+      await first.runtime.services.session.persistVaultMetaSnapshot();
 
       persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       expect(persistedMeta).not.toBeNull();
@@ -235,7 +235,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       await first.runtime.services.session.createVault({ password: "secret" });
       await first.runtime.services.session.unlock.unlock({ password: "secret" });
       await first.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
-      await first.runtime.services.session.persistVaultMeta();
+      await first.runtime.services.session.persistVaultMetaSnapshot();
 
       persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       accountsSeed = await first.accountsPort.list();

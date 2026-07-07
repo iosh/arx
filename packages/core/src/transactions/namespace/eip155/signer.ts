@@ -9,7 +9,7 @@ import { accountIdFromChainAddress } from "../../../accounts/addressing/accountI
 import { eip155AccountAddressing } from "../../../accounts/addressing/addressing.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
 import { EIP155_NAMESPACE } from "../../../rpc/handlers/namespaces/eip155/constants.js";
-import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
+import type { AccountSigningService } from "../../../keyring/accountSigning.js";
 import { Eip155SigningAbortedError } from "./errors.js";
 import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";

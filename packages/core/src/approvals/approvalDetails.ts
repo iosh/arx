@@ -1,7 +1,7 @@
 import type { AccountSelectionService } from "../accounts/runtime/types.js";
 import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
+import type { ChainViewsService } from "../chains/views/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";

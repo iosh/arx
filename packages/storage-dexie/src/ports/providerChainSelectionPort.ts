@@ -1,4 +1,4 @@
-import type { ProviderChainSelectionPort } from "@arx/core/services";
+import type { ProviderChainSelectionPort } from "@arx/core/chains";
 import type { ProviderChainSelectionRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 

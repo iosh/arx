@@ -1,3 +1,4 @@
+export * from "./attention/index.js";
 export type {
   ConfirmNewMnemonicInput,
   CreateWalletFromMnemonicInput,

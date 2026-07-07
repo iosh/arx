@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { Messenger } from "../../messenger/index.js";
-import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
 import { PermissionNotConnectedError } from "../errors.js";
 import {
   arePermissionChainStatesEqual,

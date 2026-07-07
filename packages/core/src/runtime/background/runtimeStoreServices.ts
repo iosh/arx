@@ -1,16 +1,16 @@
 import type { Messenger } from "../../messenger/index.js";
-import { createAccountsService } from "../../services/store/accounts/AccountsService.js";
-import type { AccountsPort } from "../../services/store/accounts/port.js";
-import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
-import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
-import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
-import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
-import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import type { PermissionsPort } from "../../services/store/permissions/port.js";
-import { createProviderChainSelectionService } from "../../services/store/providerChainSelection/ProviderChainSelectionService.js";
-import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
-import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
-import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
+import { createAccountsService } from "../../accounts/AccountsService.js";
+import type { AccountsPort } from "../../accounts/accountsPort.js";
+import { createChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/ChainRpcDefaultEndpointsService.js";
+import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
+import { createChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/ChainRpcEndpointOverridesService.js";
+import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
+import { createProviderChainSelectionService } from "../../chains/selection/provider/ProviderChainSelectionService.js";
+import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
+import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
+import { createWalletChainSelectionService } from "../../chains/selection/wallet/WalletChainSelectionService.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
 
 export type RuntimeStorePorts = {

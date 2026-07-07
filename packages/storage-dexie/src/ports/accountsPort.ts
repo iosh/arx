@@ -1,4 +1,4 @@
-import type { AccountsPort } from "@arx/core/services";
+import type { AccountsPort } from "@arx/core/accounts";
 import type { AccountId, AccountRecord, AccountSelectionStateRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 import { ACCOUNT_SELECTION_STATE_ID } from "../internal/ids.js";

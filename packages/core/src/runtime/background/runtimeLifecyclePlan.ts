@@ -1,4 +1,4 @@
-import type { ProviderChainSelectionService } from "../../services/store/providerChainSelection/types.js";
+import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
 import type { ChainRpcBootstrap } from "./chainRpcBootstrap.js";
 import { RuntimeHydrationError } from "./errors.js";

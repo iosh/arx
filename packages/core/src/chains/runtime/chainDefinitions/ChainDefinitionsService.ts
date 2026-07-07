@@ -1,6 +1,6 @@
 import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
-import type { ChainDefinitionsPort } from "../../../services/store/chainDefinitions/port.js";
+import type { ChainDefinitionsPort } from "./port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { getChainRefNamespace } from "../../caip.js";
 import { type ChainDefinition, isSameChainDefinition } from "../../definition.js";

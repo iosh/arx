@@ -1,4 +1,4 @@
-import type { PermissionsPort } from "@arx/core/services";
+import type { PermissionsPort } from "@arx/core/permissions";
 import type { PermissionRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 

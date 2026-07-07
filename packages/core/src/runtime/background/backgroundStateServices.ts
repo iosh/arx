@@ -11,9 +11,9 @@ import type { ChainDefinitionsService } from "../../chains/runtime/chainDefiniti
 import type { Messenger } from "../../messenger/index.js";
 import { PermissionsService } from "../../permissions/service/PermissionsService.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
-import type { AccountsService } from "../../services/store/accounts/types.js";
-import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
-import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { AccountsService } from "../../accounts/accountsTypes.js";
+import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
 
 export type BackgroundStateServiceOptions = {
   approvals?: {

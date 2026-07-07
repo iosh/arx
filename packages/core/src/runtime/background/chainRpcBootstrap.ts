@@ -6,9 +6,9 @@ import type { ChainDefinitionsService } from "../../chains/runtime/chainDefiniti
 import type {
   ChainRpcDefaultEndpointsSeed,
   ChainRpcDefaultEndpointsService,
-} from "../../services/store/chainRpcDefaultEndpoints/types.js";
-import type { ChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/types.js";
-import type { WalletChainSelectionService } from "../../services/store/walletChainSelection/types.js";
+} from "../../chains/rpc/defaultEndpoints/types.js";
+import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
+import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
 import { RuntimeHydrationError } from "./errors.js";
 

@@ -14,7 +14,7 @@ import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHi
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import type { ProviderChainSelectionChangedHandler } from "../../services/store/providerChainSelection/types.js";
+import type { ProviderChainSelectionChangedHandler } from "../../chains/selection/provider/types.js";
 import { InvalidProviderConnectionScopeError } from "./errors.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {

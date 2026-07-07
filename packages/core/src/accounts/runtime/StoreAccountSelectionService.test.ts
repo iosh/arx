@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { createMessenger } from "../../messenger/index.js";
 import { MemoryAccountsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
-import { createAccountsService } from "../../services/store/accounts/index.js";
+import { createAccountsService } from "../index.js";
 import type { AccountRecord, AccountSelectionStateRecord } from "../../storage/records.js";
 import { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
 

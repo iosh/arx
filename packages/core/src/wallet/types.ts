@@ -2,13 +2,13 @@ import type { ApprovalDetail, ApprovalListEntry } from "../approvals/approvalDet
 import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { SessionStatus } from "../runtime/background/session.js";
-import type { ChainView, NetworksSnapshot } from "../services/runtime/chainViews/types.js";
+import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { SubmitTransactionResult, Transaction, TransactionProposal } from "../transactions/TransactionsService.js";
 import type { WalletApiAttentionSnapshot } from "./api.js";
 
 export type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount } from "../approvals/approvalDetails.js";
-export type { NetworksSnapshot } from "../services/runtime/chainViews/types.js";
+export type { NetworksSnapshot } from "../chains/views/types.js";
 export type { Transaction } from "../transactions/TransactionsService.js";
 
 export type PermissionsSnapshot = {

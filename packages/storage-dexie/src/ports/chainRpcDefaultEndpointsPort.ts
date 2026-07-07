@@ -1,4 +1,4 @@
-import type { ChainRpcDefaultEndpointsPort } from "@arx/core/services";
+import type { ChainRpcDefaultEndpointsPort } from "@arx/core/chains";
 import type { ChainRpcDefaultEndpointsRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 

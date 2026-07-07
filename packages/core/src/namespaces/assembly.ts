@@ -10,7 +10,7 @@ import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClient
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { buildRpcRouting, type RpcRouting } from "../rpc/routing.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
-import type { AccountSigningService } from "../services/runtime/accountSigning.js";
+import type { AccountSigningService } from "../keyring/accountSigning.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { AnyNamespaceTransaction } from "../transactions/namespace/types.js";
 import type {

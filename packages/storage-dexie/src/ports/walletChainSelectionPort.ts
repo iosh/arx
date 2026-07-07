@@ -1,4 +1,4 @@
-import type { WalletChainSelectionPort } from "@arx/core/services";
+import type { WalletChainSelectionPort } from "@arx/core/chains";
 import type { WalletChainSelectionRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 import { WALLET_CHAIN_SELECTION_ID } from "../internal/ids.js";

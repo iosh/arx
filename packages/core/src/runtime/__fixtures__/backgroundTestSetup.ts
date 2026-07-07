@@ -14,14 +14,14 @@ import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationHint } from "../../rpc/index.js";
-import type { AccountsPort } from "../../services/store/accounts/port.js";
-import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
-import type { ChainRpcDefaultEndpointsPort } from "../../services/store/chainRpcDefaultEndpoints/port.js";
-import type { ChainRpcEndpointOverridesPort } from "../../services/store/chainRpcEndpointOverrides/port.js";
-import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import type { PermissionsPort } from "../../services/store/permissions/port.js";
-import type { ProviderChainSelectionPort } from "../../services/store/providerChainSelection/port.js";
-import type { WalletChainSelectionPort } from "../../services/store/walletChainSelection/port.js";
+import type { AccountsPort } from "../../accounts/accountsPort.js";
+import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
+import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
+import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
+import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
+import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
 import type { ChainDefinitionEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,

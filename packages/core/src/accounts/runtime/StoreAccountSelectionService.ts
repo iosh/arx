@@ -7,7 +7,7 @@ import type { AccountAddressingByNamespace } from "../../accounts/addressing/add
 import { parseChainRef } from "../../chains/caip.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountsService } from "../../services/store/accounts/types.js";
+import type { AccountsService } from "../../accounts/accountsTypes.js";
 import type { AccountId } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED } from "./topics.js";

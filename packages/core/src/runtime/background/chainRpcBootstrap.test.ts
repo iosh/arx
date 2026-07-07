@@ -9,10 +9,10 @@ import {
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
 import { createMessenger } from "../../messenger/index.js";
-import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
-import { createChainRpcDefaultEndpointsService } from "../../services/store/chainRpcDefaultEndpoints/ChainRpcDefaultEndpointsService.js";
-import { createChainRpcEndpointOverridesService } from "../../services/store/chainRpcEndpointOverrides/ChainRpcEndpointOverridesService.js";
-import { createWalletChainSelectionService } from "../../services/store/walletChainSelection/WalletChainSelectionService.js";
+import { createChainViewsService } from "../../chains/views/index.js";
+import { createChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/ChainRpcDefaultEndpointsService.js";
+import { createChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/ChainRpcEndpointOverridesService.js";
+import { createWalletChainSelectionService } from "../../chains/selection/wallet/WalletChainSelectionService.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type { WalletChainSelectionRecord } from "../../storage/records.js";
 import {

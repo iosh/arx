@@ -1,4 +1,4 @@
-import type { ChainDefinitionsPort } from "@arx/core/services";
+import type { ChainDefinitionsPort } from "@arx/core/chains";
 import type { ChainDefinitionEntity } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 

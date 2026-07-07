@@ -10,7 +10,7 @@ import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import { NamespaceChainActivationReasons } from "../services/runtime/chainActivation/types.js";
+import { NamespaceChainActivationReasons } from "../chains/activation/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransaction,

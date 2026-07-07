@@ -1,4 +1,4 @@
-import type { AttentionService } from "../../services/runtime/attention/types.js";
+import type { AttentionService } from "../../wallet/attention/types.js";
 import type { WalletAttention } from "../types.js";
 
 // Ephemeral prompts outside the approvals flow.

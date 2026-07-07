@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMessenger } from "../../messenger/index.js";
-import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
 import type { PermissionRecord } from "../../storage/records.js";
 import { PermissionsService } from "./PermissionsService.js";
 

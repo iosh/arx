@@ -1,4 +1,4 @@
-import type { KeyringMetasPort } from "@arx/core/services";
+import type { KeyringMetasPort } from "@arx/core/keyring";
 import type { KeyringMetaRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 export class DexieKeyringMetasPort implements KeyringMetasPort {

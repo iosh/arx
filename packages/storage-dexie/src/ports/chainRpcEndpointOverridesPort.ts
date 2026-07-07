@@ -1,4 +1,4 @@
-import type { ChainRpcEndpointOverridesPort } from "@arx/core/services";
+import type { ChainRpcEndpointOverridesPort } from "@arx/core/chains";
 import type { ChainRpcEndpointOverrideRecord } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 

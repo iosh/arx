@@ -1,5 +1,5 @@
 import { ApprovalKinds } from "../../../../approvals/index.js";
-import { NamespaceChainActivationReasons } from "../../../../services/runtime/chainActivation/types.js";
+import { NamespaceChainActivationReasons } from "../../../../chains/activation/types.js";
 import * as Hex from "../../../../utils/hex.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";

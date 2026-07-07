@@ -25,8 +25,7 @@
     "./transactions/storage": "./src/transactions/storage/index.ts",
     "./invoke": "./src/invoke/index.ts",
     "./wallet": "./src/wallet/index.ts",
-    "./keyring": "./src/keyring/index.ts",
-    "./services": "./src/services/index.ts"
+    "./keyring": "./src/keyring/index.ts"
   },
   "dependencies": {
     "@metamask/utils": "11.8.0",

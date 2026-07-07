@@ -1,8 +1,8 @@
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountsService } from "../../services/index.js";
-import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
+import type { AccountsService } from "../../accounts/index.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { CreateVaultParams, VaultEnvelope, VaultService } from "../../vault/types.js";

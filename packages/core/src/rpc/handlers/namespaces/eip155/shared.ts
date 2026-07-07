@@ -6,7 +6,7 @@ import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../
 import type {
   PermissionViewsService,
   PermittedAccountView,
-} from "../../../../services/runtime/permissionViews/types.js";
+} from "../../../../permissions/views/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
 import { RpcInvalidRequestError } from "../../../errors.js";
 import {

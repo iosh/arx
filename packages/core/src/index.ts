@@ -24,10 +24,6 @@ export * from "./permissions/index.js";
 export type { RpcHandlerDeps } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
-export * from "./services/runtime/attention/index.js";
-export * from "./services/runtime/chainActivation/index.js";
-export * from "./services/runtime/chainViews/index.js";
-export * from "./services/runtime/permissionViews/index.js";
 export type {
   AccountNamespace,
   AccountRecord,

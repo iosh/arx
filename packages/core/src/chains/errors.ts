@@ -52,18 +52,19 @@ export class ChainNotAvailableError extends ArxBaseError {
 
 export type ChainRpcAccessConfigInput = ErrorCause & {
   chainRef: string;
-  reason: "duplicate" | "empty_endpoints";
+  reason: "duplicate" | "empty_endpoints" | "missing_endpoints";
 };
 
 export class ChainRpcAccessConfigError extends ArxBaseError {
   static readonly code = "chain.rpc_access_config_invalid";
 
   constructor(params: ChainRpcAccessConfigInput) {
-    const message =
-      params.reason === "duplicate"
-        ? "Duplicate chain RPC access configuration."
-        : "Chain RPC access requires at least one endpoint.";
-    super(message, {
+    const messageByReason = {
+      duplicate: "Duplicate chain RPC access configuration.",
+      empty_endpoints: "Chain RPC access requires at least one endpoint.",
+      missing_endpoints: "Chain RPC access requires configured endpoints.",
+    } satisfies Record<ChainRpcAccessConfigInput["reason"], string>;
+    super(messageByReason[params.reason], {
       code: ChainRpcAccessConfigError.code,
       details: { chainRef: params.chainRef, reason: params.reason },
       cause: params.cause,

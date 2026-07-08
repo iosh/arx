@@ -2,16 +2,16 @@ import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
+import type { ChainActivationService } from "../../chains/activation/types.js";
 import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
 import type { ChainRef } from "../../chains/ids.js";
+import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
+import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
 import type { NamespaceRuntimeServices } from "../../namespaces/index.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
-import type { ChainActivationService } from "../../chains/activation/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
-import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
-import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
@@ -30,8 +30,6 @@ export {
 } from "../executionContext.js";
 
 export type RpcHandlerDeps = {
-  createId: () => string;
-  now: () => number;
   chainRpc: ChainRpcReader;
   walletChainSelection: WalletChainSelectionService;
   accounts: AccountSelectionService;

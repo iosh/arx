@@ -174,6 +174,6 @@ export type ApprovalQueueService = {
 
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 
-  cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
-  cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): Promise<number>;
+  cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): void;
+  cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): number;
 };

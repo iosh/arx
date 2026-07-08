@@ -1,9 +1,9 @@
+import type { ChainActivationService } from "../../chains/activation/types.js";
+import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
-import type { ChainActivationService } from "../../chains/activation/types.js";
-import type { ChainViewsService } from "../../chains/views/types.js";
-import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
 import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
+import type { ChainViewsService } from "../../chains/views/types.js";
 import type { WalletNetworks } from "../types.js";
 
 // Selected namespace, supported chains, and chain RPC controls.

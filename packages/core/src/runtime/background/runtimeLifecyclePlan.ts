@@ -9,7 +9,6 @@ import type { SessionLayerResult } from "./session.js";
 export type BackgroundLifecycleHandle = {
   initialize(): Promise<void>;
   start(): void;
-  shutdown(): void;
   getIsInitialized(): boolean;
 };
 
@@ -57,7 +56,6 @@ export const createBackgroundRuntimeLifecycle = ({
   transactionRestartRecovery,
   chainRpcBootstrap,
   sessionLayer,
-  logger,
 }: {
   runtimeLifecycle: RuntimeLifecycle;
   stateServices: BackgroundStateServices;
@@ -69,7 +67,6 @@ export const createBackgroundRuntimeLifecycle = ({
   transactionRestartRecovery?: "run" | "skip";
   chainRpcBootstrap: ChainRpcBootstrap;
   sessionLayer: SessionLayerResult;
-  logger: (message: string, error?: unknown) => void;
 }): BackgroundLifecycleHandle => {
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
@@ -77,6 +74,7 @@ export const createBackgroundRuntimeLifecycle = ({
       await hydrateCriticalStorage("chains", "chainDefinitions", () => stateServices.chainDefinitions.whenReady());
       await hydrateCriticalStorage("accounts", "accounts", () => stateServices.accounts.whenReady?.());
       await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
+      await hydrateCriticalStorage("keyring", "runtimeKeyrings", () => sessionLayer.attachKeyring());
       if (hydrationEnabled) {
         await hydrateCriticalStorage("chains", "providerChainSelection", () => providerChainSelection.loadAll());
       }
@@ -119,11 +117,11 @@ export const createBackgroundRuntimeLifecycle = ({
 
   const chainRpcBootstrapPlugin: RuntimePlugin = {
     name: "chainRpcBootstrap",
-    initialize: () => chainRpcBootstrap.loadPreferences(),
+    initialize: () => chainRpcBootstrap.loadStoredChainState(),
     hydrate: async () => {
-      chainRpcBootstrap.requestSync();
+      chainRpcBootstrap.refreshChainRpcAccesses();
     },
-    afterHydration: () => chainRpcBootstrap.flushPendingSync(),
+    afterHydration: () => chainRpcBootstrap.cleanStoredChainState(),
     start: () => chainRpcBootstrap.start(),
   };
 
@@ -131,22 +129,6 @@ export const createBackgroundRuntimeLifecycle = ({
     name: "sessionLayer",
     hydrate: () => sessionLayer.hydrateVaultMeta(),
     start: () => sessionLayer.attachSessionListeners(),
-    destroy: () => {
-      sessionLayer.cleanupVaultPersistTimer();
-      sessionLayer.detachSessionListeners();
-      sessionLayer.destroySessionLayer();
-    },
-  };
-
-  const accountSelectionServicePlugin: RuntimePlugin = {
-    name: "accountSelectionService",
-    destroy: () => {
-      try {
-        stateServices.accounts.destroy?.();
-      } catch (error) {
-        logger("lifecycle: failed to destroy account selection service", error);
-      }
-    },
   };
 
   const initializeOrder =
@@ -156,7 +138,6 @@ export const createBackgroundRuntimeLifecycle = ({
   const hydrateOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
   const afterHydrationOrder = [chainRpcBootstrapPlugin] as const;
   const startOrder = [chainRpcBootstrapPlugin, sessionPlugin] as const;
-  const destroyOrder = [sessionPlugin, accountSelectionServicePlugin] as const;
 
   return {
     initialize: async () =>
@@ -170,16 +151,6 @@ export const createBackgroundRuntimeLifecycle = ({
     start: () =>
       runtimeLifecycle.start(() => {
         startPlugins([...startOrder]);
-      }),
-    shutdown: () =>
-      runtimeLifecycle.destroy(() => {
-        for (const plugin of destroyOrder) {
-          try {
-            plugin.destroy?.();
-          } catch {
-            // best-effort
-          }
-        }
       }),
     getIsInitialized: () => runtimeLifecycle.getIsInitialized(),
   };

@@ -1,13 +1,14 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
+import { ChainRpcAccessConfigError } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { assertNonEmptyRpcEndpoints } from "../../chains/rpc/config.js";
-import type { ChainRpcAccess, ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
-import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import type {
   ChainRpcDefaultEndpointsSeed,
   ChainRpcDefaultEndpointsService,
 } from "../../chains/rpc/defaultEndpoints/types.js";
 import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
+import type { ChainRpcAccess, ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
+import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
 import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
 import { RuntimeHydrationError } from "./errors.js";
@@ -21,15 +22,14 @@ export type CreateChainRpcBootstrapOptions = {
   endpointOverrides: ChainRpcEndpointOverridesService;
   selectionDefaults: RuntimeWalletChainSelectionDefaults;
   hydrationEnabled: boolean;
-  logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
   getRegisteredNamespaces: () => ReadonlySet<string>;
 };
 
 export type ChainRpcBootstrap = {
-  loadPreferences(): Promise<void>;
-  requestSync(): void;
-  flushPendingSync(): Promise<void>;
+  loadStoredChainState(): Promise<void>;
+  refreshChainRpcAccesses(): void;
+  cleanStoredChainState(): Promise<void>;
   start(): void;
 };
 
@@ -43,7 +43,6 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
     endpointOverrides,
     selectionDefaults,
     hydrationEnabled,
-    logger,
     getIsHydrating,
     getRegisteredNamespaces,
   } = opts;
@@ -51,9 +50,6 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   let selectionLoaded = !hydrationEnabled;
   let defaultEndpointsLoaded = !hydrationEnabled;
   let endpointOverridesLoaded = !hydrationEnabled;
-  let pendingSync = false;
-
-  let syncInFlight: Promise<void> | null = null;
 
   const listChainDefinitionsForRegisteredNamespaces = () =>
     chainDefinitions.getState().chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace));
@@ -73,8 +69,7 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
       const endpoints =
         endpointOverrides.readEndpointOverride(entry.chainRef) ?? defaultEndpoints.readDefaultEndpoints(entry.chainRef);
       if (!endpoints) {
-        logger(`chainRpc: missing default RPC endpoints for "${entry.chainRef}"`);
-        continue;
+        throw new ChainRpcAccessConfigError({ chainRef: entry.chainRef, reason: "missing_endpoints" });
       }
 
       accesses.push({
@@ -164,35 +159,21 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
       return;
     }
 
-    try {
-      await selection.update({
-        ...(shouldPersistNamespace ? { selectedNamespace } : {}),
-        ...(shouldPersistChainRefs ? { chainRefByNamespace } : {}),
-      });
-    } catch (error) {
-      logger("selection: failed to persist corrected selection", error);
-    }
+    await selection.update({
+      ...(shouldPersistNamespace ? { selectedNamespace } : {}),
+      ...(shouldPersistChainRefs ? { chainRefByNamespace } : {}),
+    });
   };
 
   const pruneUnavailableEndpointOverrides = async (availableChainRefs: Set<ChainRef>) => {
-    let records: Awaited<ReturnType<ChainRpcEndpointOverridesService["getAll"]>>;
-    try {
-      records = await endpointOverrides.getAll();
-    } catch (error) {
-      logger("chainRpc: failed to read endpoint overrides for pruning", error);
-      return;
-    }
+    const records = await endpointOverrides.getAll();
 
     for (const record of records) {
       if (availableChainRefs.has(record.chainRef)) {
         continue;
       }
 
-      try {
-        await endpointOverrides.clearEndpointOverride(record.chainRef);
-      } catch (error) {
-        logger(`chainRpc: failed to clear unavailable endpoint override "${record.chainRef}"`, error);
-      }
+      await endpointOverrides.clearEndpointOverride(record.chainRef);
     }
   };
 
@@ -244,69 +225,42 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
     }
   };
 
-  const syncOnce = async () => {
-    if (!selectionLoaded || !defaultEndpointsLoaded || !endpointOverridesLoaded) {
-      await loadPersistedState();
+  const refreshChainRpcAccesses = () => {
+    const accesses = readSupportedChainRpcAccesses();
+    chainRpcAccessUpdater.replaceAccesses(accesses);
+  };
+
+  const cleanStoredChainState = async () => {
+    if (getIsHydrating()) {
+      return;
     }
 
-    await defaultEndpoints.replaceDefaultEndpoints(buildDefaultEndpointReplacementSeeds());
-
     const accesses = readSupportedChainRpcAccesses();
+    const availableChainRefs = new Set(accesses.map((access) => access.chainRef));
     if (accesses.length === 0) {
+      await pruneUnavailableEndpointOverrides(availableChainRefs);
       return;
     }
 
     const nextChainRefByNamespace = resolveChainRefByNamespace(accesses);
     const nextSelectedNamespace = selectNamespace(accesses, nextChainRefByNamespace);
-    chainRpcAccessUpdater.replaceAccesses(accesses);
 
-    if (!getIsHydrating()) {
-      await persistSelectionIfNeeded(nextSelectedNamespace, nextChainRefByNamespace);
-      await pruneUnavailableEndpointOverrides(new Set(accesses.map((access) => access.chainRef)));
-    }
-  };
-
-  const requestSync = () => {
-    pendingSync = true;
-    if (getIsHydrating() || syncInFlight) {
-      return;
-    }
-
-    syncInFlight = (async () => {
-      try {
-        while (pendingSync && !getIsHydrating()) {
-          pendingSync = false;
-          await syncOnce();
-        }
-      } catch (error) {
-        logger("chainRpc: failed to sync supported chains", error);
-      } finally {
-        syncInFlight = null;
-      }
-    })();
+    await persistSelectionIfNeeded(nextSelectedNamespace, nextChainRefByNamespace);
+    await pruneUnavailableEndpointOverrides(availableChainRefs);
   };
 
   let listenersAttached = false;
   const attachListeners = () => {
     if (listenersAttached) return;
     listenersAttached = true;
-    chainDefinitions.onStateChanged(() => requestSync());
-    defaultEndpoints.subscribeChanged(() => requestSync());
-    endpointOverrides.subscribeChanged(() => requestSync());
+    chainDefinitions.onStateChanged(() => refreshChainRpcAccesses());
+    defaultEndpoints.subscribeChanged(() => refreshChainRpcAccesses());
+    endpointOverrides.subscribeChanged(() => refreshChainRpcAccesses());
   };
 
-  const loadPreferences = async () => {
+  const loadStoredChainState = async () => {
     await loadPersistedState();
-  };
-
-  const flushPendingSync = async () => {
-    if (pendingSync && !syncInFlight && !getIsHydrating()) {
-      requestSync();
-    }
-
-    if (syncInFlight) {
-      await syncInFlight;
-    }
+    await defaultEndpoints.replaceDefaultEndpoints(buildDefaultEndpointReplacementSeeds());
   };
 
   const start = () => {
@@ -314,9 +268,9 @@ export const createChainRpcBootstrap = (opts: CreateChainRpcBootstrapOptions): C
   };
 
   return {
-    loadPreferences,
-    requestSync,
-    flushPendingSync,
+    loadStoredChainState,
+    refreshChainRpcAccesses,
+    cleanStoredChainState,
     start,
   };
 };

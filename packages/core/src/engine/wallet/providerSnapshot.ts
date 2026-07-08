@@ -1,8 +1,8 @@
 import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import { ChainNotAvailableError, ChainNotSupportedError } from "../../chains/errors.js";
-import type { ProviderRuntimeConnectionQuery, ProviderRuntimeSnapshot } from "../../runtime/provider/types.js";
-import type { ChainViewsService } from "../../chains/views/types.js";
 import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
+import type { ChainViewsService } from "../../chains/views/types.js";
+import type { ProviderRuntimeConnectionQuery, ProviderRuntimeSnapshot } from "../../runtime/provider/types.js";
 
 export type ProviderChainResolutionDeps = {
   chainViews: Pick<ChainViewsService, "findAvailableChainView">;

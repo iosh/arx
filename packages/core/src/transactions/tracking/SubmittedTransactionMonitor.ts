@@ -77,7 +77,7 @@ export class SubmittedTransactionMonitor {
     this.#tracker = deps.tracker;
   }
 
-  async refresh(input: { now?: number; transactionIds?: readonly string[] } = {}): Promise<void> {
+  async refresh(input: { transactionIds?: readonly string[] } = {}): Promise<void> {
     if (this.#runDuePromise) {
       this.#markDirty(input.transactionIds);
       return;
@@ -86,8 +86,8 @@ export class SubmittedTransactionMonitor {
     await this.#refreshNow(input);
   }
 
-  async #refreshNow(input: { now?: number; transactionIds?: readonly string[] } = {}): Promise<void> {
-    const now = input.now ?? Date.now();
+  async #refreshNow(input: { transactionIds?: readonly string[] } = {}): Promise<void> {
+    const now = Date.now();
     if (input.transactionIds) {
       for (const transactionId of input.transactionIds) {
         await this.#refreshTransaction(transactionId, now);
@@ -109,12 +109,12 @@ export class SubmittedTransactionMonitor {
     this.#emitWakeChangedIfNeeded();
   }
 
-  runDue(input: { now?: number } = {}): Promise<SubmittedTransactionMonitorRunResult> {
+  runDue(): Promise<SubmittedTransactionMonitorRunResult> {
     if (this.#runDuePromise) {
       return this.#runDuePromise;
     }
 
-    this.#runDuePromise = this.#runDueExclusive(input.now ?? Date.now());
+    this.#runDuePromise = this.#runDueExclusive(Date.now());
     return this.#runDuePromise;
   }
 
@@ -143,7 +143,7 @@ export class SubmittedTransactionMonitor {
         const transactionIds = this.#dirtyAll ? undefined : Array.from(this.#dirtyTransactionIds);
         this.#dirtyAll = false;
         this.#dirtyTransactionIds.clear();
-        await this.#refreshNow({ now, ...(transactionIds ? { transactionIds } : {}) });
+        await this.#refreshNow({ ...(transactionIds ? { transactionIds } : {}) });
       }
 
       result.nextWakeAt = this.getNextWakeAt();

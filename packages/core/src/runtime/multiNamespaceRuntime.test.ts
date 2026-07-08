@@ -179,6 +179,5 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
 
     expect(runtime.services.chainViews.getActiveChainViewForNamespace("solana").chainRef).toBe(SOLANA_CHAIN.chainRef);
     expect(runtime.services.namespaceRuntime.ui.getNativeBalance).toEqual(expect.any(Function));
-    runtime.lifecycle.shutdown();
   });
 });

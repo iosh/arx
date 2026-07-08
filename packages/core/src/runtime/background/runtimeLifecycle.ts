@@ -1,20 +1,16 @@
 export type RuntimeLifecycle = {
   getIsHydrating(): boolean;
   getIsInitialized(): boolean;
-  getIsDestroyed(): boolean;
   initialize(run: () => Promise<void>): Promise<void>;
   start(run: () => void): void;
-  destroy(run: () => void): void;
   withHydration<T>(run: () => Promise<T>): Promise<T>;
 };
 
 export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
-  let destroyed = false;
   let initialized = false;
   let initializePromise: Promise<void> | null = null;
   let hydrationDepth = 0;
 
-  const getIsDestroyed = () => destroyed;
   const getIsHydrating = () => hydrationDepth > 0;
   const getIsInitialized = () => initialized;
 
@@ -28,7 +24,7 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
   };
 
   const initialize = async (run: () => Promise<void>) => {
-    if (initialized || destroyed) {
+    if (initialized) {
       return;
     }
 
@@ -50,10 +46,6 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
   };
 
   const start = (run: () => void) => {
-    if (destroyed) {
-      throw new Error(`${label} lifecycle cannot start after destroy()`);
-    }
-
     if (!initialized) {
       throw new Error(`${label}.lifecycle.initialize() must complete before start()`);
     }
@@ -61,22 +53,11 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
     run();
   };
 
-  const destroy = (run: () => void) => {
-    if (destroyed) {
-      return;
-    }
-
-    destroyed = true;
-    run();
-  };
-
   return {
     getIsHydrating,
     getIsInitialized,
-    getIsDestroyed,
     initialize,
     start,
-    destroy,
     withHydration,
   };
 };

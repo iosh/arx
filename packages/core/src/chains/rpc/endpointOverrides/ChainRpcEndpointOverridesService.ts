@@ -1,10 +1,10 @@
-import type { RpcEndpoint } from "../../definition.js";
-import type { ChainRef } from "../../ids.js";
-import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../config.js";
 import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../../../utils/serialQueue.js";
+import type { RpcEndpoint } from "../../definition.js";
+import type { ChainRef } from "../../ids.js";
+import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../config.js";
 import type { ChainRpcEndpointOverridesPort } from "./port.js";
 import { CHAIN_RPC_ENDPOINT_OVERRIDES_STORE_CHANGED } from "./topics.js";
 import type { ChainRpcEndpointOverridesChangedPayload, ChainRpcEndpointOverridesService } from "./types.js";
@@ -15,15 +15,12 @@ const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] 
 export type CreateChainRpcEndpointOverridesServiceOptions = {
   messenger: Messenger;
   port: ChainRpcEndpointOverridesPort;
-  now?: () => number;
 };
 
 export const createChainRpcEndpointOverridesService = ({
   messenger,
   port,
-  now,
 }: CreateChainRpcEndpointOverridesServiceOptions): ChainRpcEndpointOverridesService => {
-  const clock = now ?? Date.now;
   const run = createSerialQueue();
   const cache = new Map<ChainRef, ChainRpcEndpointOverrideRecord>();
 
@@ -80,7 +77,7 @@ export const createChainRpcEndpointOverridesService = ({
       const next: ChainRpcEndpointOverrideRecord = {
         chainRef,
         rpcEndpoints,
-        updatedAt: clock(),
+        updatedAt: Date.now(),
       };
 
       await port.upsert(next);

@@ -1,4 +1,3 @@
-export * from "./attention/index.js";
 export type {
   ConfirmNewMnemonicInput,
   CreateWalletFromMnemonicInput,
@@ -39,6 +38,7 @@ export {
   WALLET_TARGET,
   WALLET_UI_CALLER_ORIGIN,
 } from "./api.js";
+export * from "./attention/index.js";
 export type { WalletMethodExecutor } from "./createWalletApi.js";
 export {
   createWalletApi,

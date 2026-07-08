@@ -1,6 +1,6 @@
-import type { ChainRef } from "../../ids.js";
 import type { Unsubscribe } from "../../../messenger/index.js";
 import type { WalletChainSelectionRecord } from "../../../storage/records.js";
+import type { ChainRef } from "../../ids.js";
 
 export type WalletChainSelectionChangedPayload = {
   previous: WalletChainSelectionRecord | null;

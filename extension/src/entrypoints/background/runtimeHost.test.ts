@@ -47,7 +47,6 @@ vi.mock("webextension-polyfill", () => ({
 }));
 
 const makeRuntime = () => {
-  const shutdown = vi.fn(async () => {});
   const walletExecutor: MethodExecutor = {
     executePath: vi.fn(async () => null),
   };
@@ -106,11 +105,9 @@ const makeRuntime = () => {
       provider,
       createWalletMethodExecutor,
       subscribeWalletEvents,
-      shutdown,
     },
     createWalletMethodExecutor,
     subscribeWalletEvents,
-    shutdown,
     listPendingApprovals,
     getApprovalDetail,
     dismissApproval,

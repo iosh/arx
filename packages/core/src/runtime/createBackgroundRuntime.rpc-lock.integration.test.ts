@@ -61,7 +61,6 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       });
     } finally {
       getClient.mockRestore();
-      harness.destroy();
     }
   });
 
@@ -87,7 +86,6 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(getClient).not.toHaveBeenCalled();
     } finally {
       getClient.mockRestore();
-      harness.destroy();
     }
   });
 
@@ -157,7 +155,6 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(approval).toHaveBeenCalledTimes(1);
     } finally {
       approval.mockRestore();
-      harness.destroy();
     }
   });
 });

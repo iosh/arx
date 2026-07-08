@@ -39,11 +39,6 @@ export type UnlockServiceOptions = {
   messenger: Messenger;
   vault: UnlockVaultPort;
   autoLockDurationMs?: number;
-  now?: () => number;
-  timers?: {
-    setTimeout?: typeof setTimeout;
-    clearTimeout?: typeof clearTimeout;
-  };
 };
 
 export interface UnlockService {

@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import type { RpcEndpoint } from "../../definition.js";
-import type { ChainRef } from "../../ids.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
+import type { RpcEndpoint } from "../../definition.js";
+import type { ChainRef } from "../../ids.js";
 import { createChainRpcDefaultEndpointsService } from "./ChainRpcDefaultEndpointsService.js";
 import type { ChainRpcDefaultEndpointsPort } from "./port.js";
 
@@ -56,13 +56,19 @@ const createMemoryPort = (seed: ChainRpcDefaultEndpointsRecord[] = []): MemoryCh
 };
 
 const endpoint = (url: string): RpcEndpoint => ({ url, type: "public" });
-const createService = (params: { port: ChainRpcDefaultEndpointsPort; now?: () => number }) =>
+const createService = (params: { port: ChainRpcDefaultEndpointsPort }) =>
   createChainRpcDefaultEndpointsService({ messenger: createMessenger(), ...params });
 
 describe("ChainRpcDefaultEndpointsService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("persists default RPC endpoints and serves detached cached endpoints", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const port = createMemoryPort();
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 
@@ -91,6 +97,8 @@ describe("ChainRpcDefaultEndpointsService", () => {
   });
 
   it("replaces the bundle default access set without pruning request endpoints", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const mainnet = {
       chainRef: "eip155:1",
       rpcEndpoints: [endpoint("https://rpc.mainnet.example")],
@@ -104,7 +112,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
       updatedAt: 200,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([mainnet, solana]);
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 
@@ -173,7 +181,7 @@ describe("ChainRpcDefaultEndpointsService", () => {
       updatedAt: 100,
     } satisfies ChainRpcDefaultEndpointsRecord;
     const port = createMemoryPort([record]);
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
     const listener = vi.fn();
     service.subscribeChanged(listener);
 

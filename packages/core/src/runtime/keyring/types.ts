@@ -5,12 +5,9 @@ import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../storage/
 import type { VaultService } from "../../vault/types.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 
-// Service dependencies
 export type KeyringServiceOptions = {
-  now: () => number;
-  uuid: () => string;
   vault: Pick<VaultService, "exportSecret" | "getStatus" | "verifyPassword">;
-  unlock: Pick<UnlockService, "onUnlocked" | "onLocked" | "isUnlocked">;
+  unlock: Pick<UnlockService, "onLocked" | "isUnlocked">;
   keyringMetas: {
     get(id: KeyringMetaRecord["id"]): Promise<KeyringMetaRecord | null>;
     list(): Promise<KeyringMetaRecord[]>;
@@ -25,7 +22,6 @@ export type KeyringServiceOptions = {
     removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
   };
   namespaces: NamespaceConfig[];
-  logger?: (message: string, error?: unknown) => void;
   // Called when vault unlock succeeds but persisted runtime keyrings cannot be fully materialized.
   // Callers can fail closed here, for example by relocking the session.
   onHydrationError?: (error: unknown) => void | Promise<void>;

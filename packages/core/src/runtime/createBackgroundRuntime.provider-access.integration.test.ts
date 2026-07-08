@@ -3,6 +3,7 @@ import { accountIdFromChainAddress } from "../accounts/addressing/accountId.js";
 import type { NamespaceAccountAddressing } from "../accounts/addressing/addressing.js";
 import { createApprovalDetails } from "../approvals/approvalDetails.js";
 import { ApprovalKinds } from "../approvals/queue/types.js";
+import { NamespaceChainActivationReasons } from "../chains/activation/types.js";
 import { getChainRefNamespace } from "../chains/caip.js";
 import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
@@ -10,7 +11,6 @@ import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import { NamespaceChainActivationReasons } from "../chains/activation/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransaction,
@@ -383,35 +383,31 @@ describe("createBackgroundRuntime provider access", () => {
   it("builds namespace-scoped snapshots and hides permitted accounts while locked", async () => {
     const background = await setupBackground();
 
-    try {
-      await background.runtime.providerAccess.activateConnectionScope({
+    await background.runtime.providerAccess.activateConnectionScope({
+      origin: ORIGIN,
+      namespace: "eip155",
+    });
+
+    const snapshot = background.runtime.providerAccess.buildSnapshot({
+      origin: ORIGIN,
+      namespace: "eip155",
+    });
+
+    expect(snapshot).toEqual({
+      namespace: "eip155",
+      chain: {
+        chainId: "0x1",
+        chainRef: "eip155:1",
+      },
+      isUnlocked: false,
+    });
+
+    await expect(
+      background.runtime.providerAccess.listPermittedAccounts({
         origin: ORIGIN,
-        namespace: "eip155",
-      });
-
-      const snapshot = background.runtime.providerAccess.buildSnapshot({
-        origin: ORIGIN,
-        namespace: "eip155",
-      });
-
-      expect(snapshot).toEqual({
-        namespace: "eip155",
-        chain: {
-          chainId: "0x1",
-          chainRef: "eip155:1",
-        },
-        isUnlocked: false,
-      });
-
-      await expect(
-        background.runtime.providerAccess.listPermittedAccounts({
-          origin: ORIGIN,
-          chainRef: snapshot.chain.chainRef,
-        }),
-      ).resolves.toEqual([]);
-    } finally {
-      background.destroy();
-    }
+        chainRef: snapshot.chain.chainRef,
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("clears stale provider chain selection before defaulting to the active chain", async () => {
@@ -426,22 +422,18 @@ describe("createBackgroundRuntime provider access", () => {
       ],
     });
 
-    try {
-      const state = await background.runtime.providerAccess.activateConnectionScope({
-        origin: ORIGIN,
-        namespace: "eip155",
-      });
+    const state = await background.runtime.providerAccess.activateConnectionScope({
+      origin: ORIGIN,
+      namespace: "eip155",
+    });
 
-      expect(state.snapshot.chain.chainRef).toBe("eip155:1");
-      expect(background.providerChainSelectionPort.removed).toEqual([{ origin: ORIGIN, namespace: "eip155" }]);
-      await expect(
-        background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
-      ).resolves.toMatchObject({
-        chainRef: "eip155:1",
-      });
-    } finally {
-      background.destroy();
-    }
+    expect(state.snapshot.chain.chainRef).toBe("eip155:1");
+    expect(background.providerChainSelectionPort.removed).toEqual([{ origin: ORIGIN, namespace: "eip155" }]);
+    await expect(
+      background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
+    ).resolves.toMatchObject({
+      chainRef: "eip155:1",
+    });
   });
 
   it("initializes provider chain selection on connection activation, not provider request execution", async () => {
@@ -455,100 +447,92 @@ describe("createBackgroundRuntime provider access", () => {
       },
     });
 
-    try {
-      await expect(
-        background.runtime.providerAccess.request({
-          scope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: "port-1",
-            sessionId: "session-1",
-          },
-          namespace: "eip155",
-          request: {
-            id: "rpc-before-activation",
-            jsonrpc: "2.0",
-            method: "eth_chainId",
-          },
-        }),
-      ).resolves.toMatchObject({
-        id: "rpc-before-activation",
-        jsonrpc: "2.0",
-        error: {
-          kind: "ArxError",
-          code: "chain.not_supported",
+    await expect(
+      background.runtime.providerAccess.request({
+        scope: {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "session-1",
         },
-      });
-      expect(background.providerChainSelectionPort.saved).toEqual([]);
-      await expect(
-        background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
-      ).resolves.toBeNull();
-
-      const state = await background.runtime.providerAccess.activateConnectionScope({
-        origin: ORIGIN,
         namespace: "eip155",
-      });
+        request: {
+          id: "rpc-before-activation",
+          jsonrpc: "2.0",
+          method: "eth_chainId",
+        },
+      }),
+    ).resolves.toMatchObject({
+      id: "rpc-before-activation",
+      jsonrpc: "2.0",
+      error: {
+        kind: "ArxError",
+        code: "chain.not_supported",
+      },
+    });
+    expect(background.providerChainSelectionPort.saved).toEqual([]);
+    await expect(
+      background.providerChainSelectionPort.get({ origin: ORIGIN, namespace: "eip155" }),
+    ).resolves.toBeNull();
 
-      expect(state.snapshot.chain.chainRef).toBe(EIP155_ALT_CHAIN.chainRef);
-      expect(background.providerChainSelectionPort.saved).toHaveLength(1);
-      expect(background.providerChainSelectionPort.saved[0]).toMatchObject({
-        origin: ORIGIN,
-        namespace: "eip155",
-        chainRef: EIP155_ALT_CHAIN.chainRef,
-      });
-    } finally {
-      background.destroy();
-    }
+    const state = await background.runtime.providerAccess.activateConnectionScope({
+      origin: ORIGIN,
+      namespace: "eip155",
+    });
+
+    expect(state.snapshot.chain.chainRef).toBe(EIP155_ALT_CHAIN.chainRef);
+    expect(background.providerChainSelectionPort.saved).toHaveLength(1);
+    expect(background.providerChainSelectionPort.saved[0]).toMatchObject({
+      origin: ORIGIN,
+      namespace: "eip155",
+      chainRef: EIP155_ALT_CHAIN.chainRef,
+    });
   });
 
   it("builds handshake connection state from one unlock snapshot", async () => {
     const background = await setupBackground();
 
-    try {
-      const lockedState = await background.runtime.providerAccess.activateConnectionScope({
+    const lockedState = await background.runtime.providerAccess.activateConnectionScope({
+      namespace: "eip155",
+      origin: ORIGIN,
+    });
+    expect(lockedState).toEqual({
+      snapshot: {
         namespace: "eip155",
-        origin: ORIGIN,
-      });
-      expect(lockedState).toEqual({
-        snapshot: {
-          namespace: "eip155",
-          chain: {
-            chainId: "0x1",
-            chainRef: "eip155:1",
-          },
-          isUnlocked: false,
+        chain: {
+          chainId: "0x1",
+          chainRef: "eip155:1",
         },
-        accounts: [],
-      });
+        isUnlocked: false,
+      },
+      accounts: [],
+    });
 
-      await initializeUnlockedSession(background.runtime);
-      const { chain, address } = await deriveActiveAccount(background.runtime);
+    await initializeUnlockedSession(background.runtime);
+    const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: getChainRefNamespace(chain.chainRef),
-        chains: [
-          {
-            chainRef: chain.chainRef,
-            accountIds: [
-              accountIdFromChainAddress({
-                chainRef: chain.chainRef,
-                address,
-                accountAddressing: background.runtime.services.accountAddressing,
-              }),
-            ],
-          },
-        ],
-      });
+    await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
+      namespace: getChainRefNamespace(chain.chainRef),
+      chains: [
+        {
+          chainRef: chain.chainRef,
+          accountIds: [
+            accountIdFromChainAddress({
+              chainRef: chain.chainRef,
+              address,
+              accountAddressing: background.runtime.services.accountAddressing,
+            }),
+          ],
+        },
+      ],
+    });
 
-      const unlockedState = await background.runtime.providerAccess.buildConnectionState({
-        namespace: getChainRefNamespace(chain.chainRef),
-        origin: ORIGIN,
-      });
-      expect(unlockedState.snapshot.isUnlocked).toBe(true);
-      expect(unlockedState.accounts.map((value) => value.toLowerCase())).toEqual([address.toLowerCase()]);
-    } finally {
-      background.destroy();
-    }
+    const unlockedState = await background.runtime.providerAccess.buildConnectionState({
+      namespace: getChainRefNamespace(chain.chainRef),
+      origin: ORIGIN,
+    });
+    expect(unlockedState.snapshot.isUnlocked).toBe(true);
+    expect(unlockedState.accounts.map((value) => value.toLowerCase())).toEqual([address.toLowerCase()]);
   });
 
   it("emits provider connection state changes only for the selected origin and namespace", async () => {
@@ -593,7 +577,6 @@ describe("createBackgroundRuntime provider access", () => {
       });
     } finally {
       events.unsubscribe();
-      background.destroy();
     }
   });
 
@@ -628,7 +611,6 @@ describe("createBackgroundRuntime provider access", () => {
       });
     } finally {
       events.unsubscribe();
-      background.destroy();
     }
   });
 
@@ -665,165 +647,150 @@ describe("createBackgroundRuntime provider access", () => {
       });
     } finally {
       events.unsubscribe();
-      background.destroy();
     }
   });
 
   it("formats permitted accounts for an unlocked authorized origin and re-checks lock state on each call", async () => {
     const background = await setupBackground();
 
-    try {
-      await initializeUnlockedSession(background.runtime);
-      const { chain, address } = await deriveActiveAccount(background.runtime);
-      await background.runtime.providerAccess.activateConnectionScope({
+    await initializeUnlockedSession(background.runtime);
+    const { chain, address } = await deriveActiveAccount(background.runtime);
+    await background.runtime.providerAccess.activateConnectionScope({
+      origin: ORIGIN,
+      namespace: getChainRefNamespace(chain.chainRef),
+    });
+    const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot({
+      origin: ORIGIN,
+      namespace: getChainRefNamespace(chain.chainRef),
+    });
+
+    await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
+      namespace: getChainRefNamespace(chain.chainRef),
+      chains: [
+        {
+          chainRef: chain.chainRef,
+          accountIds: [
+            accountIdFromChainAddress({
+              chainRef: chain.chainRef,
+              address,
+              accountAddressing: background.runtime.services.accountAddressing,
+            }),
+          ],
+        },
+      ],
+    });
+
+    const accounts = await background.runtime.providerAccess.listPermittedAccounts({
+      origin: ORIGIN,
+      chainRef: chain.chainRef,
+    });
+    expect(accounts.map((value) => value.toLowerCase())).toEqual([address.toLowerCase()]);
+
+    background.runtime.services.session.unlock.lock("manual");
+
+    await expect(
+      background.runtime.providerAccess.listPermittedAccounts({
         origin: ORIGIN,
-        namespace: getChainRefNamespace(chain.chainRef),
-      });
-      const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot({
-        origin: ORIGIN,
-        namespace: getChainRefNamespace(chain.chainRef),
-      });
-
-      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: getChainRefNamespace(chain.chainRef),
-        chains: [
-          {
-            chainRef: chain.chainRef,
-            accountIds: [
-              accountIdFromChainAddress({
-                chainRef: chain.chainRef,
-                address,
-                accountAddressing: background.runtime.services.accountAddressing,
-              }),
-            ],
-          },
-        ],
-      });
-
-      const accounts = await background.runtime.providerAccess.listPermittedAccounts({
-        origin: ORIGIN,
-        chainRef: chain.chainRef,
-      });
-      expect(accounts.map((value) => value.toLowerCase())).toEqual([address.toLowerCase()]);
-
-      background.runtime.services.session.unlock.lock("manual");
-
-      await expect(
-        background.runtime.providerAccess.listPermittedAccounts({
-          origin: ORIGIN,
-          chainRef: unlockedSnapshot.chain.chainRef,
-        }),
-      ).resolves.toEqual([]);
-    } finally {
-      background.destroy();
-    }
+        chainRef: unlockedSnapshot.chain.chainRef,
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("dispatches provider requests through the runtime pipeline", async () => {
     const background = await setupBackground();
 
-    try {
-      await initializeUnlockedSession(background.runtime);
-      const { chain, address } = await deriveActiveAccount(background.runtime);
+    await initializeUnlockedSession(background.runtime);
+    const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: getChainRefNamespace(chain.chainRef),
-        chains: [
-          {
-            chainRef: chain.chainRef,
-            accountIds: [
-              accountIdFromChainAddress({
-                chainRef: chain.chainRef,
-                address,
-                accountAddressing: background.runtime.services.accountAddressing,
-              }),
-            ],
-          },
-        ],
-      });
-      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
+    await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
+      namespace: getChainRefNamespace(chain.chainRef),
+      chains: [
+        {
+          chainRef: chain.chainRef,
+          accountIds: [
+            accountIdFromChainAddress({
+              chainRef: chain.chainRef,
+              address,
+              accountAddressing: background.runtime.services.accountAddressing,
+            }),
+          ],
+        },
+      ],
+    });
+    await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
 
-      const response = await requestProviderRpc(background.runtime, {
-        id: "rpc-1",
-        method: "eth_accounts",
-        namespace: getChainRefNamespace(chain.chainRef),
-      });
+    const response = await requestProviderRpc(background.runtime, {
+      id: "rpc-1",
+      method: "eth_accounts",
+      namespace: getChainRefNamespace(chain.chainRef),
+    });
 
-      expect(response).toMatchObject({
-        id: "rpc-1",
-        jsonrpc: "2.0",
-      });
-      expect(
-        "result" in response && Array.isArray(response.result)
-          ? response.result.map((value) => String(value).toLowerCase())
-          : [],
-      ).toEqual([address.toLowerCase()]);
+    expect(response).toMatchObject({
+      id: "rpc-1",
+      jsonrpc: "2.0",
+    });
+    expect(
+      "result" in response && Array.isArray(response.result)
+        ? response.result.map((value) => String(value).toLowerCase())
+        : [],
+    ).toEqual([address.toLowerCase()]);
 
-      const connection = background.runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
-        chainRef: chain.chainRef,
-      });
-      expect(connection.isAuthorized).toBe(true);
-      expect(connection.accounts.map((account) => account.displayAddress.toLowerCase())).toContain(
-        address.toLowerCase(),
-      );
-    } finally {
-      background.destroy();
-    }
+    const connection = background.runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
+      chainRef: chain.chainRef,
+    });
+    expect(connection.isAuthorized).toBe(true);
+    expect(connection.accounts.map((account) => account.displayAddress.toLowerCase())).toContain(address.toLowerCase());
   });
 
   it("cancels provider-scoped approvals via session scope", async () => {
     const background = await setupBackground();
 
-    try {
-      await initializeUnlockedSession(background.runtime);
-      const { chain } = await deriveActiveAccount(background.runtime);
-      await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
+    await initializeUnlockedSession(background.runtime);
+    const { chain } = await deriveActiveAccount(background.runtime);
+    await activateProviderConnectionScope(background.runtime, { namespace: getChainRefNamespace(chain.chainRef) });
 
-      let approvalCreatedResolve: (() => void) | null = null;
-      let capturedApprovalRequesterId: string | null = null;
-      const approvalCreated = new Promise<void>((resolve) => {
-        approvalCreatedResolve = resolve;
-      });
-      const unsubscribe = background.runtime.services.approvals.onCreated(({ record }) => {
-        capturedApprovalRequesterId = record.requester.requestId ?? null;
-        approvalCreatedResolve?.();
-      });
+    let approvalCreatedResolve: (() => void) | null = null;
+    let capturedApprovalRequesterId: string | null = null;
+    const approvalCreated = new Promise<void>((resolve) => {
+      approvalCreatedResolve = resolve;
+    });
+    const unsubscribe = background.runtime.services.approvals.onCreated(({ record }) => {
+      capturedApprovalRequesterId = record.requester.requestId ?? null;
+      approvalCreatedResolve?.();
+    });
 
-      const pendingResponse = requestProviderRpc(background.runtime, {
-        id: "rpc-2",
-        method: "eth_requestAccounts",
-        namespace: getChainRefNamespace(chain.chainRef),
-      });
+    const pendingResponse = requestProviderRpc(background.runtime, {
+      id: "rpc-2",
+      method: "eth_requestAccounts",
+      namespace: getChainRefNamespace(chain.chainRef),
+    });
 
-      await approvalCreated;
-      await flushAsync();
-      expect(background.runtime.services.approvals.getState().pending).toHaveLength(1);
-      expect(capturedApprovalRequesterId).toBeTruthy();
-      expect(capturedApprovalRequesterId).not.toBe("rpc-2");
+    await approvalCreated;
+    await flushAsync();
+    expect(background.runtime.services.approvals.getState().pending).toHaveLength(1);
+    expect(capturedApprovalRequesterId).toBeTruthy();
+    expect(capturedApprovalRequesterId).not.toBe("rpc-2");
 
-      await expect(
-        background.runtime.providerAccess.cancelRequestScope({
-          transport: "provider",
-          origin: ORIGIN,
-          portId: "port-1",
-          sessionId: "session-1",
-        }),
-      ).resolves.toBe(1);
+    await expect(
+      background.runtime.providerAccess.cancelRequestScope({
+        transport: "provider",
+        origin: ORIGIN,
+        portId: "port-1",
+        sessionId: "session-1",
+      }),
+    ).resolves.toBe(1);
 
-      await expect(pendingResponse).resolves.toMatchObject({
-        id: "rpc-2",
-        jsonrpc: "2.0",
-        error: {
-          kind: "ArxError",
-          code: "global.transport.disconnected",
-        },
-      });
-      expect(background.runtime.services.approvals.getState().pending).toHaveLength(0);
+    await expect(pendingResponse).resolves.toMatchObject({
+      id: "rpc-2",
+      jsonrpc: "2.0",
+      error: {
+        kind: "ArxError",
+        code: "global.transport.disconnected",
+      },
+    });
+    expect(background.runtime.services.approvals.getState().pending).toHaveLength(0);
 
-      unsubscribe();
-    } finally {
-      background.destroy();
-    }
+    unsubscribe();
   });
 
   it("cancels eth_sendTransaction approvals together with the provider request scope", async () => {
@@ -848,81 +815,77 @@ describe("createBackgroundRuntime provider access", () => {
       persistDebounceMs: 0,
     });
 
-    try {
-      await initializeUnlockedSession(background.runtime);
-      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+    await initializeUnlockedSession(background.runtime);
+    const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
-        namespace: getChainRefNamespace(activeChain.chainRef),
-        chains: [
-          {
-            chainRef: activeChain.chainRef,
-            accountIds: [
-              accountIdFromChainAddress({
-                chainRef: activeChain.chainRef,
-                address,
-                accountAddressing: background.runtime.services.accountAddressing,
-              }),
-            ],
-          },
-        ],
-      });
-      await activateProviderConnectionScope(background.runtime, {
-        namespace: getChainRefNamespace(activeChain.chainRef),
-      });
-
-      let capturedApprovalId: string | null = null;
-      const approvalCreated = new Promise<void>((resolve) => {
-        const unsubscribeApprovalChange = background.runtime.services.approvals.onCreated(({ record }) => {
-          if (record.kind !== ApprovalKinds.SendTransaction) {
-            return;
-          }
-          capturedApprovalId = record.approvalId;
-          unsubscribeApprovalChange();
-          resolve();
-        });
-      });
-
-      const pendingResponse = requestProviderRpc(background.runtime, {
-        id: "rpc-3",
-        method: "eth_sendTransaction",
-        namespace: getChainRefNamespace(activeChain.chainRef),
-        params: [
-          {
-            from: address,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-          },
-        ],
-      });
-
-      await approvalCreated;
-      await flushAsync();
-      expect(capturedApprovalId).toBeTruthy();
-      expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeTruthy();
-
-      await expect(
-        background.runtime.providerAccess.cancelRequestScope({
-          transport: "provider",
-          origin: ORIGIN,
-          portId: "port-1",
-          sessionId: "session-1",
-        }),
-      ).resolves.toBe(1);
-
-      await expect(pendingResponse).resolves.toMatchObject({
-        id: "rpc-3",
-        jsonrpc: "2.0",
-        error: {
-          kind: "ArxError",
-          code: "global.transport.disconnected",
+    await background.runtime.services.permissions.grantAuthorization(ORIGIN, {
+      namespace: getChainRefNamespace(activeChain.chainRef),
+      chains: [
+        {
+          chainRef: activeChain.chainRef,
+          accountIds: [
+            accountIdFromChainAddress({
+              chainRef: activeChain.chainRef,
+              address,
+              accountAddressing: background.runtime.services.accountAddressing,
+            }),
+          ],
         },
+      ],
+    });
+    await activateProviderConnectionScope(background.runtime, {
+      namespace: getChainRefNamespace(activeChain.chainRef),
+    });
+
+    let capturedApprovalId: string | null = null;
+    const approvalCreated = new Promise<void>((resolve) => {
+      const unsubscribeApprovalChange = background.runtime.services.approvals.onCreated(({ record }) => {
+        if (record.kind !== ApprovalKinds.SendTransaction) {
+          return;
+        }
+        capturedApprovalId = record.approvalId;
+        unsubscribeApprovalChange();
+        resolve();
       });
-      expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeUndefined();
-      await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([]);
-    } finally {
-      background.destroy();
-    }
+    });
+
+    const pendingResponse = requestProviderRpc(background.runtime, {
+      id: "rpc-3",
+      method: "eth_sendTransaction",
+      namespace: getChainRefNamespace(activeChain.chainRef),
+      params: [
+        {
+          from: address,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+        },
+      ],
+    });
+
+    await approvalCreated;
+    await flushAsync();
+    expect(capturedApprovalId).toBeTruthy();
+    expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeTruthy();
+
+    await expect(
+      background.runtime.providerAccess.cancelRequestScope({
+        transport: "provider",
+        origin: ORIGIN,
+        portId: "port-1",
+        sessionId: "session-1",
+      }),
+    ).resolves.toBe(1);
+
+    await expect(pendingResponse).resolves.toMatchObject({
+      id: "rpc-3",
+      jsonrpc: "2.0",
+      error: {
+        kind: "ArxError",
+        code: "global.transport.disconnected",
+      },
+    });
+    expect(background.runtime.services.approvals.get(capturedApprovalId ?? "")).toBeUndefined();
+    await expect(background.runtime.transactions.listTransactions()).resolves.toEqual([]);
   });
 
   it("exposes eth_sendTransaction approval detail and completes after ready approval", async () => {
@@ -978,66 +941,62 @@ describe("createBackgroundRuntime provider access", () => {
       });
     });
 
-    try {
-      await initializeUnlockedSession(background.runtime);
-      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
-      await grantProviderPermission(background.runtime, {
-        origin: ORIGIN,
-        chainRef: activeChain.chainRef,
-        address,
-      });
-      await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
+    await initializeUnlockedSession(background.runtime);
+    const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+    await grantProviderPermission(background.runtime, {
+      origin: ORIGIN,
+      chainRef: activeChain.chainRef,
+      address,
+    });
+    await activateProviderConnectionScope(background.runtime, { namespace: activeChain.namespace });
 
-      const pendingResponse = requestProviderRpc(background.runtime, {
-        id: "rpc-send-ready",
-        method: "eth_sendTransaction",
-        namespace: activeChain.namespace,
-        params: [
-          {
-            from: address,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-          },
-        ],
-      });
-
-      await approvalCreated;
-      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
-
-      const readApprovals = createApprovalReader(background.runtime);
-      expect(capturedApprovalId).toBeTruthy();
-      await expect(readApprovals.getDetail(capturedApprovalId ?? "")).resolves.toMatchObject({
-        kind: ApprovalKinds.SendTransaction,
-        actions: {
-          canApprove: true,
+    const pendingResponse = requestProviderRpc(background.runtime, {
+      id: "rpc-send-ready",
+      method: "eth_sendTransaction",
+      namespace: activeChain.namespace,
+      params: [
+        {
+          from: address,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
         },
-        review: {
-          prepare: {
-            state: "ready",
-          },
+      ],
+    });
+
+    await approvalCreated;
+    await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
+
+    const readApprovals = createApprovalReader(background.runtime);
+    expect(capturedApprovalId).toBeTruthy();
+    await expect(readApprovals.getDetail(capturedApprovalId ?? "")).resolves.toMatchObject({
+      kind: ApprovalKinds.SendTransaction,
+      actions: {
+        canApprove: true,
+      },
+      review: {
+        prepare: {
+          state: "ready",
         },
-      });
+      },
+    });
 
-      const approval = background.runtime.services.approvals.get(capturedApprovalId ?? "");
-      if (!approval) {
-        throw new Error("Missing transaction approval.");
-      }
-
-      await background.runtime.services.approvals.resolve({
-        approvalId: capturedApprovalId ?? "",
-        action: "approve",
-      });
-
-      await expect(pendingResponse).resolves.toMatchObject({
-        id: "rpc-send-ready",
-        jsonrpc: "2.0",
-        result: txHash,
-      });
-      expect(createBroadcastArtifact).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-    } finally {
-      background.destroy();
+    const approval = background.runtime.services.approvals.get(capturedApprovalId ?? "");
+    if (!approval) {
+      throw new Error("Missing transaction approval.");
     }
+
+    await background.runtime.services.approvals.resolve({
+      approvalId: capturedApprovalId ?? "",
+      action: "approve",
+    });
+
+    await expect(pendingResponse).resolves.toMatchObject({
+      id: "rpc-send-ready",
+      jsonrpc: "2.0",
+      result: txHash,
+    });
+    expect(createBroadcastArtifact).toHaveBeenCalledTimes(1);
+    expect(broadcastTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("keeps eth_sendTransaction lifecycle running when the provider scope is lost during broadcast", async () => {
@@ -1136,7 +1095,6 @@ describe("createBackgroundRuntime provider access", () => {
     } finally {
       releaseBroadcast();
       unsubscribeAutoApproval();
-      background.destroy();
     }
   });
 
@@ -1240,7 +1198,6 @@ describe("createBackgroundRuntime provider access", () => {
     } finally {
       releaseSign();
       unsubscribeAutoApproval();
-      background.destroy();
     }
   });
 
@@ -1317,30 +1274,25 @@ describe("createBackgroundRuntime provider access", () => {
       ]);
     } finally {
       unsubscribeAutoApproval();
-      background.destroy();
     }
   });
 
   it("returns internal core error envelopes when provider requests fail", async () => {
     const runtime = await setupNamespaceAwareProviderRuntime();
 
-    try {
-      await expect(
-        requestProviderRpc(runtime, {
-          id: "rpc-sol-1",
-          method: "sol_getBalance",
-          namespace: "solana",
-        }),
-      ).resolves.toEqual({
+    await expect(
+      requestProviderRpc(runtime, {
         id: "rpc-sol-1",
-        jsonrpc: "2.0",
-        error: {
-          kind: "ArxError",
-          code: "chain.not_supported",
-        },
-      });
-    } finally {
-      runtime.lifecycle.shutdown();
-    }
+        method: "sol_getBalance",
+        namespace: "solana",
+      }),
+    ).resolves.toEqual({
+      id: "rpc-sol-1",
+      jsonrpc: "2.0",
+      error: {
+        kind: "ArxError",
+        code: "chain.not_supported",
+      },
+    });
   });
 });

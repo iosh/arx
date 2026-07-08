@@ -16,7 +16,6 @@ export type PopupOpenResult = { activationPath: "create" | "focus" | "debounced"
 
 type PopupActivatorDeps = {
   browser?: typeof browserDefault;
-  now?: () => number;
   cooldownMs?: number;
   popupPath?: string;
   size?: { width: number; height: number };
@@ -31,7 +30,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
     return resolvedBrowser;
   };
 
-  const now = deps.now ?? (() => Date.now());
   const cooldownMs = deps.cooldownMs ?? 500;
   const popupPath = deps.popupPath ?? "popup.html";
   const size = deps.size ?? ARX_UI_INNER_SIZE;
@@ -45,7 +43,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
 
     inFlight = (async (): Promise<PopupOpenResult> => {
       const browser = await getBrowser();
-      const ts = now();
+      const ts = Date.now();
 
       // Debounce rapid calls within cooldown window.
       if (lastAttemptAt !== null && ts - lastAttemptAt < cooldownMs) {
@@ -79,20 +77,17 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
         return { activationPath: "focus", windowId: cachedWindowId };
       }
 
-      // Fallback: scan popup windows for matching popup.html tab URL.
-      try {
-        const windows = await browser.windows.getAll({
-          populate: true,
-          windowTypes: ["popup"],
-        });
-        for (const win of windows ?? []) {
-          if (win?.tabs?.some((tab) => isSamePopup(tab?.url)) && win?.id) {
-            cachedWindowId = win.id;
-            await browser.windows.update(win.id, { focused: true });
-            return { activationPath: "focus", windowId: win.id };
-          }
+      const windows = await browser.windows.getAll({
+        populate: true,
+        windowTypes: ["popup"],
+      });
+      for (const win of windows ?? []) {
+        if (win?.tabs?.some((tab) => isSamePopup(tab?.url)) && win?.id) {
+          cachedWindowId = win.id;
+          await browser.windows.update(win.id, { focused: true });
+          return { activationPath: "focus", windowId: win.id };
         }
-      } catch {}
+      }
 
       const created = await browser.windows.create({
         type: "popup",

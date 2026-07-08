@@ -14,12 +14,6 @@ import type { CoreStoragePorts, WalletProviderConnectionState } from "./types.js
 
 export type CoreUnsubscribe = () => void;
 
-export type CoreRuntimeEnvironment = Readonly<{
-  now?: () => number;
-  createId?: () => string;
-  logger?: (message: string, error?: unknown) => void;
-}>;
-
 export type CoreRuntimeBootOptions = Readonly<{
   hydrate?: boolean;
   transactionRestartRecovery?: "run" | "skip";
@@ -32,7 +26,6 @@ export type CreateCoreRuntimeInput = Readonly<{
     manifests: readonly NamespaceManifest[];
   }>;
   storage: CoreStorageInput;
-  environment?: CoreRuntimeEnvironment;
   boot?: CoreRuntimeBootOptions;
 }>;
 
@@ -54,6 +47,6 @@ export type CoreRuntime = Readonly<{
 }>;
 
 type AssertNever<T extends never> = T;
-type CoreRuntimeInternalKey = "services" | "rpc" | "messenger" | "lifecycle" | "shutdown";
+type CoreRuntimeInternalKey = "services" | "rpc" | "messenger" | "lifecycle";
 
 type _CoreRuntimeDoesNotExposeInternalKeys = AssertNever<Extract<keyof CoreRuntime, CoreRuntimeInternalKey>>;

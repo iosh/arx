@@ -33,7 +33,6 @@ type CreateInMemoryApprovalQueueServiceOptions = {
   messenger: Messenger;
   autoRejectMessage?: string;
   ttlMs?: number;
-  logger?: (message: string, error?: unknown) => void;
 };
 
 type PendingApprovalSettlement = {
@@ -122,18 +121,16 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   #messenger: Messenger;
   #autoRejectMessage: string;
   #ttlMs: number;
-  #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: ApprovalState = { pending: [] };
   #records: Map<string, ApprovalRecord> = new Map();
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-  constructor({ messenger, autoRejectMessage, ttlMs, logger }: CreateInMemoryApprovalQueueServiceOptions) {
+  constructor({ messenger, autoRejectMessage, ttlMs }: CreateInMemoryApprovalQueueServiceOptions) {
     this.#messenger = messenger;
     this.#autoRejectMessage = autoRejectMessage ?? "User rejected the request.";
     this.#ttlMs = ttlMs ?? 5 * 60_000;
-    this.#logger = logger;
   }
 
   getState(): ApprovalState {
@@ -203,7 +200,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     this.#timeouts.set(
       record.approvalId,
       setTimeout(() => {
-        void this.cancel({ approvalId: record.approvalId, reason: "timeout" });
+        this.cancel({ approvalId: record.approvalId, reason: "timeout" });
       }, this.#ttlMs),
     );
 
@@ -254,7 +251,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     return { approvalId: input.approvalId, status: "approved", terminalReason: "user_approve", decision };
   }
 
-  async cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void> {
+  cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): void {
     const entry = this.#takePendingApproval(input.approvalId);
     if (!entry) {
       return;
@@ -279,13 +276,13 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     });
   }
 
-  async cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): Promise<number> {
+  cancelScope(scope: ApprovalScope, reason: ApprovalTerminalReason): number {
     const approvalIds = [...this.#pending.values()]
       .filter((entry) => isSameApprovalScope(entry.record.scope, scope))
       .map((entry) => entry.record.approvalId);
 
     for (const approvalId of approvalIds) {
-      await this.cancel({ approvalId, reason });
+      this.cancel({ approvalId, reason });
     }
 
     return approvalIds.length;
@@ -351,11 +348,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   }
 
   #rejectPendingApproval(entry: PendingApproval, error: Error): void {
-    try {
-      entry.settlement.reject(error);
-    } catch (rejectError) {
-      this.#logger?.("approvals: failed to reject approval handle", rejectError);
-    }
+    entry.settlement.reject(error);
   }
 
   #recordMeta(record?: ApprovalRecord) {

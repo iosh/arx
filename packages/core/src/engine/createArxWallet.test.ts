@@ -110,202 +110,184 @@ describe("createArxWallet", () => {
     });
     const runtime = await createWalletRuntime({ walletChainSelectionPort });
 
-    try {
-      const { wallet } = runtime;
-      await flushAsync();
-      const eip155Manifest = wallet.namespaces.requireManifest("eip155");
+    const { wallet } = runtime;
+    await flushAsync();
+    const eip155Manifest = wallet.namespaces.requireManifest("eip155");
 
-      expect(wallet.namespaces.listNamespaces()).toEqual(["eip155"]);
-      expect(eip155Manifest.namespace).toBe("eip155");
-      expect(eip155Manifest.core.chainSeeds?.length).toBeGreaterThan(0);
-      expect(eip155Manifest.runtime.createSigner).toBeTypeOf("function");
-      expect(wallet.session.getStatus().status).toBe("uninitialized");
-      expect(wallet.accounts.getWalletSetupState()).toEqual({
-        totalAccountCount: 0,
-        hasOwnedAccounts: false,
-      });
-      expect(wallet.approvals.getState()).toEqual({ pending: [] });
-      expect(wallet.networks.getSelectedNamespace()).toBe("eip155");
-      expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
-      expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      expect(wallet.networks.getSelectedChainView()).toMatchObject({
-        namespace: "eip155",
-        chainRef: "eip155:1",
-      });
+    expect(wallet.namespaces.listNamespaces()).toEqual(["eip155"]);
+    expect(eip155Manifest.namespace).toBe("eip155");
+    expect(eip155Manifest.core.chainSeeds?.length).toBeGreaterThan(0);
+    expect(eip155Manifest.runtime.createSigner).toBeTypeOf("function");
+    expect(wallet.session.getStatus().status).toBe("uninitialized");
+    expect(wallet.accounts.getWalletSetupState()).toEqual({
+      totalAccountCount: 0,
+      hasOwnedAccounts: false,
+    });
+    expect(wallet.approvals.getState()).toEqual({ pending: [] });
+    expect(wallet.networks.getSelectedNamespace()).toBe("eip155");
+    expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
+    expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
+    expect(wallet.networks.getSelectedChainView()).toMatchObject({
+      namespace: "eip155",
+      chainRef: "eip155:1",
+    });
 
-      const correctedSelection = walletChainSelectionPort.saved.at(-1);
-      expect(correctedSelection).toEqual({
-        id: "wallet-chain-selection",
-        selectedNamespace: "eip155",
-        chainRefByNamespace: {
-          eip155: "eip155:1",
-        },
-        updatedAt: expect.any(Number),
-      });
-    } finally {
-      await runtime.shutdown();
-    }
+    const correctedSelection = walletChainSelectionPort.saved.at(-1);
+    expect(correctedSelection).toEqual({
+      id: "wallet-chain-selection",
+      selectedNamespace: "eip155",
+      chainRefByNamespace: {
+        eip155: "eip155:1",
+      },
+      updatedAt: expect.any(Number),
+    });
   });
 
   it("exposes accounts owner methods for keyring mutations and backup/setup projections", async () => {
     const runtime = await createWalletRuntime();
 
-    try {
-      const { wallet } = runtime;
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
+    const { wallet } = runtime;
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      const created = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC, alias: "Primary wallet" });
-      const derived = await wallet.accounts.deriveAccount(created.keyringId);
+    const created = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC, alias: "Primary wallet" });
+    const derived = await wallet.accounts.deriveAccount(created.keyringId);
 
-      expect(wallet.accounts.getWalletSetupState()).toEqual({
-        totalAccountCount: 2,
-        hasOwnedAccounts: true,
-      });
-      expect(wallet.accounts.getBackupStatus()).toEqual({
-        pendingHdKeyringCount: 1,
-        nextHdKeyring: {
-          keyringId: created.keyringId,
+    expect(wallet.accounts.getWalletSetupState()).toEqual({
+      totalAccountCount: 2,
+      hasOwnedAccounts: true,
+    });
+    expect(wallet.accounts.getBackupStatus()).toEqual({
+      pendingHdKeyringCount: 1,
+      nextHdKeyring: {
+        keyringId: created.keyringId,
+        alias: "Primary wallet",
+      },
+    });
+    expect(wallet.accounts.getKeyrings()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created.keyringId,
+          type: "hd",
           alias: "Primary wallet",
-        },
-      });
-      expect(wallet.accounts.getKeyrings()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: created.keyringId,
-            type: "hd",
-            alias: "Primary wallet",
-            needsBackup: true,
-          }),
-        ]),
-      );
-      expect(wallet.accounts.getAccountsByKeyring(created.keyringId).map((account) => account.accountId)).toHaveLength(
-        2,
-      );
+          needsBackup: true,
+        }),
+      ]),
+    );
+    expect(wallet.accounts.getAccountsByKeyring(created.keyringId).map((account) => account.accountId)).toHaveLength(2);
 
-      await wallet.accounts.markBackedUp(created.keyringId);
-      expect(wallet.accounts.getBackupStatus()).toEqual({
-        pendingHdKeyringCount: 0,
-        nextHdKeyring: null,
-      });
+    await wallet.accounts.markBackedUp(created.keyringId);
+    expect(wallet.accounts.getBackupStatus()).toEqual({
+      pendingHdKeyringCount: 0,
+      nextHdKeyring: null,
+    });
 
-      const ownedAccounts = wallet.accounts.listOwnedForNamespace({
-        namespace: EIP155_NAMESPACE,
-        chainRef: EIP155_CHAIN_REF,
-      });
-      expect(ownedAccounts.map((account) => account.displayAddress.toLowerCase())).toEqual(
-        expect.arrayContaining([created.address.toLowerCase(), derived.address.toLowerCase()]),
-      );
-    } finally {
-      await runtime.shutdown();
-    }
+    const ownedAccounts = wallet.accounts.listOwnedForNamespace({
+      namespace: EIP155_NAMESPACE,
+      chainRef: EIP155_CHAIN_REF,
+    });
+    expect(ownedAccounts.map((account) => account.displayAddress.toLowerCase())).toEqual(
+      expect.arrayContaining([created.address.toLowerCase(), derived.address.toLowerCase()]),
+    );
   });
 
   it("keeps approvals pending while locked and resolves them through the approvals owner after unlock", async () => {
     const runtime = await createWalletRuntime();
 
-    try {
-      const { wallet } = runtime;
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
+    const { wallet } = runtime;
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
-      wallet.session.lock("manual");
+    const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+    wallet.session.lock("manual");
 
-      const approvalId = "approval-sign-message";
-      const handle = wallet.approvals.create(
-        {
+    const approvalId = "approval-sign-message";
+    const handle = wallet.approvals.create(
+      {
+        approvalId,
+        kind: ApprovalKinds.SignMessage,
+        origin: ORIGIN,
+        namespace: EIP155_NAMESPACE,
+        chainRef: EIP155_CHAIN_REF,
+        scope: {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "session-1",
+        },
+        createdAt: 1_000,
+        request: {
+          chainRef: EIP155_CHAIN_REF,
+          from: address,
+          message: "0x68656c6c6f",
+        },
+      },
+      {
+        origin: ORIGIN,
+        source: "provider",
+        requestId: "request-1",
+      },
+    );
+
+    expect(wallet.approvals.getState()).toEqual({
+      pending: [
+        expect.objectContaining({
           approvalId,
           kind: ApprovalKinds.SignMessage,
-          origin: ORIGIN,
-          namespace: EIP155_NAMESPACE,
-          chainRef: EIP155_CHAIN_REF,
-          scope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: "port-1",
-            sessionId: "session-1",
-          },
-          createdAt: 1_000,
-          request: {
-            chainRef: EIP155_CHAIN_REF,
-            from: address,
-            message: "0x68656c6c6f",
-          },
-        },
-        {
-          origin: ORIGIN,
-          source: "provider",
-          requestId: "request-1",
-        },
-      );
-
-      expect(wallet.approvals.getState()).toEqual({
-        pending: [
-          expect.objectContaining({
-            approvalId,
-            kind: ApprovalKinds.SignMessage,
-          }),
-        ],
-      });
-      await wallet.session.unlock({ password: PASSWORD });
-      await expect(wallet.approvals.resolve({ approvalId, action: "approve" })).resolves.toMatchObject({
-        approvalId,
-        status: "approved",
-        terminalReason: "user_approve",
-      });
-      await expect(handle.settled).resolves.toBeUndefined();
-      expect(wallet.approvals.getState()).toEqual({ pending: [] });
-    } finally {
-      await runtime.shutdown();
-    }
+        }),
+      ],
+    });
+    await wallet.session.unlock({ password: PASSWORD });
+    await expect(wallet.approvals.resolve({ approvalId, action: "approve" })).resolves.toMatchObject({
+      approvalId,
+      status: "approved",
+      terminalReason: "user_approve",
+    });
+    await expect(handle.settled).resolves.toBeUndefined();
+    expect(wallet.approvals.getState()).toEqual({ pending: [] });
   });
 
   it("dismisses pending approvals through the wallet API with user-dismissed semantics", async () => {
     const runtime = await createWalletRuntime();
 
-    try {
-      const { walletApi, wallet } = runtime;
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
+    const { walletApi, wallet } = runtime;
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
-      const approvalId = "approval-dismiss-sign-message";
-      const handle = wallet.approvals.create(
-        {
-          approvalId,
-          kind: ApprovalKinds.SignMessage,
+    const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+    const approvalId = "approval-dismiss-sign-message";
+    const handle = wallet.approvals.create(
+      {
+        approvalId,
+        kind: ApprovalKinds.SignMessage,
+        origin: ORIGIN,
+        namespace: EIP155_NAMESPACE,
+        chainRef: EIP155_CHAIN_REF,
+        scope: {
+          transport: "provider",
           origin: ORIGIN,
-          namespace: EIP155_NAMESPACE,
+          portId: "port-1",
+          sessionId: "session-1",
+        },
+        createdAt: 2_000,
+        request: {
           chainRef: EIP155_CHAIN_REF,
-          scope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: "port-1",
-            sessionId: "session-1",
-          },
-          createdAt: 2_000,
-          request: {
-            chainRef: EIP155_CHAIN_REF,
-            from: address,
-            message: "0x68656c6c6f",
-          },
+          from: address,
+          message: "0x68656c6c6f",
         },
-        {
-          origin: ORIGIN,
-          source: "provider",
-          requestId: "request-dismiss-1",
-        },
-      );
+      },
+      {
+        origin: ORIGIN,
+        source: "provider",
+        requestId: "request-dismiss-1",
+      },
+    );
 
-      await expect(walletApi.approvals.dismiss({ approvalId })).resolves.toBeNull();
-      await expect(handle.settled).rejects.toMatchObject({
-        code: "approval.user_dismissed",
-      });
-      expect(wallet.approvals.getState()).toEqual({ pending: [] });
-    } finally {
-      await runtime.shutdown();
-    }
+    await expect(walletApi.approvals.dismiss({ approvalId })).resolves.toBeNull();
+    await expect(handle.settled).rejects.toMatchObject({
+      code: "approval.user_dismissed",
+    });
+    expect(wallet.approvals.getState()).toEqual({ pending: [] });
   });
 
   it("rejects empty namespace manifests", async () => {
@@ -326,103 +308,87 @@ describe("createArxWallet", () => {
       permissionsPort: createSeededPermissionsPort(),
     });
 
-    try {
-      const { wallet } = runtime;
-      const provider = wallet.createProvider();
-      const permissionSnapshot = runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
-        chainRef: EIP155_CHAIN_REF,
-      });
-      expect(permissionSnapshot.isAuthorized).toBe(true);
-      expect(permissionSnapshot.accounts).toHaveLength(1);
-      expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      await expect(
-        provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
-      ).resolves.toMatchObject({
-        snapshot: {
-          namespace: EIP155_NAMESPACE,
-          chain: {
-            chainId: "0x1",
-            chainRef: EIP155_CHAIN_REF,
-          },
-          isUnlocked: false,
-        },
-        accounts: [],
-      });
-      expect(wallet.dappConnections.getState().count).toBe(1);
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-          accounts: [],
-        },
-      );
-
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-
-      await expect(
-        provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
-      ).resolves.toMatchObject({
-        accounts: [expect.any(String)],
-        snapshot: {
-          chain: { chainRef: EIP155_CHAIN_REF },
-        },
-      });
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-        },
-      );
-      expect(wallet.dappConnections.getState().count).toBe(1);
-
-      await wallet.permissions.revokeOriginPermissions(ORIGIN);
-      await flushAsync();
-      expect(wallet.dappConnections.getState().count).toBe(1);
-      expect(
-        runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
-      ).toBe(false);
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-          accounts: [],
-        },
-      );
-
-      await wallet.permissions.grantAuthorization(ORIGIN, {
+    const { wallet } = runtime;
+    const provider = wallet.createProvider();
+    const permissionSnapshot = runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
+      chainRef: EIP155_CHAIN_REF,
+    });
+    expect(permissionSnapshot.isAuthorized).toBe(true);
+    expect(permissionSnapshot.accounts).toHaveLength(1);
+    expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
+    await expect(
+      provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
+    ).resolves.toMatchObject({
+      snapshot: {
         namespace: EIP155_NAMESPACE,
-        chains: [{ chainRef: EIP155_CHAIN_REF, accountIds: [ACCOUNT_ID] }],
-      });
-      await flushAsync();
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-          accounts: [expect.any(String)],
+        chain: {
+          chainId: "0x1",
+          chainRef: EIP155_CHAIN_REF,
         },
-      );
-      expect(wallet.dappConnections.getState().count).toBe(1);
+        isUnlocked: false,
+      },
+      accounts: [],
+    });
+    expect(wallet.dappConnections.getState().count).toBe(1);
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+      accounts: [],
+    });
 
-      wallet.session.lock("manual");
-      await flushAsync();
-      expect(wallet.dappConnections.getState().count).toBe(1);
-      expect(
-        runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
-      ).toBe(true);
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-          accounts: [],
-        },
-      );
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(wallet.dappConnections.getState().count).toBe(0);
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: false,
-        },
-      );
-    } finally {
-      await runtime.shutdown();
-    }
+    await expect(
+      provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE }),
+    ).resolves.toMatchObject({
+      accounts: [expect.any(String)],
+      snapshot: {
+        chain: { chainRef: EIP155_CHAIN_REF },
+      },
+    });
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+    });
+    expect(wallet.dappConnections.getState().count).toBe(1);
+
+    await wallet.permissions.revokeOriginPermissions(ORIGIN);
+    await flushAsync();
+    expect(wallet.dappConnections.getState().count).toBe(1);
+    expect(
+      runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
+    ).toBe(false);
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+      accounts: [],
+    });
+
+    await wallet.permissions.grantAuthorization(ORIGIN, {
+      namespace: EIP155_NAMESPACE,
+      chains: [{ chainRef: EIP155_CHAIN_REF, accountIds: [ACCOUNT_ID] }],
+    });
+    await flushAsync();
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+      accounts: [expect.any(String)],
+    });
+    expect(wallet.dappConnections.getState().count).toBe(1);
+
+    wallet.session.lock("manual");
+    await flushAsync();
+    expect(wallet.dappConnections.getState().count).toBe(1);
+    expect(
+      runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
+    ).toBe(true);
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+      accounts: [],
+    });
+
+    provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+    expect(wallet.dappConnections.getState().count).toBe(0);
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: false,
+    });
   });
 
   it("creates provider contracts with active connection scope state", async () => {
@@ -431,33 +397,25 @@ describe("createArxWallet", () => {
       permissionsPort: createSeededPermissionsPort(),
     });
 
-    try {
-      const { wallet } = runtime;
-      const provider = wallet.createProvider();
+    const { wallet } = runtime;
+    const provider = wallet.createProvider();
 
-      expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
+    expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
 
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      const activated = await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(activated.accounts).toHaveLength(1);
-      expect(activated.snapshot.chain.chainRef).toBe(EIP155_CHAIN_REF);
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: true,
-        },
-      );
+    const activated = await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+    expect(activated.accounts).toHaveLength(1);
+    expect(activated.snapshot.chain.chainRef).toBe(EIP155_CHAIN_REF);
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: true,
+    });
 
-      provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject(
-        {
-          connected: false,
-        },
-      );
-    } finally {
-      await runtime.shutdown();
-    }
+    provider.deactivateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+    await expect(provider.getConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).resolves.toMatchObject({
+      connected: false,
+    });
   });
 
   it("exposes focused wallet owner projections for session, network, account, and attention state", async () => {
@@ -465,43 +423,39 @@ describe("createArxWallet", () => {
       accountsPort: createSeededAccountsPort(),
     });
 
-    try {
-      const { wallet } = runtime;
-      wallet.attention.requestAttention({
-        reason: "unlock_required",
-        origin: ORIGIN,
-        method: "eth_requestAccounts",
+    const { wallet } = runtime;
+    wallet.attention.requestAttention({
+      reason: "unlock_required",
+      origin: ORIGIN,
+      method: "eth_requestAccounts",
+      namespace: EIP155_NAMESPACE,
+      chainRef: EIP155_CHAIN_REF,
+    });
+
+    expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
+    expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
+    expect(wallet.accounts.getWalletSetupState()).toEqual({
+      totalAccountCount: 1,
+      hasOwnedAccounts: true,
+    });
+    expect(
+      wallet.accounts.getActiveAccountForNamespace({
         namespace: EIP155_NAMESPACE,
         chainRef: EIP155_CHAIN_REF,
-      });
+      }),
+    ).toMatchObject({ accountId: ACCOUNT_ID });
+    expect(wallet.networks.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
+    expect(wallet.networks.getSelectedChainView().chainRef).toBe(EIP155_CHAIN_REF);
 
-      expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: false, isUnlocked: false });
-      expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
-      expect(wallet.accounts.getWalletSetupState()).toEqual({
-        totalAccountCount: 1,
-        hasOwnedAccounts: true,
-      });
-      expect(
-        wallet.accounts.getActiveAccountForNamespace({
-          namespace: EIP155_NAMESPACE,
-          chainRef: EIP155_CHAIN_REF,
-        }),
-      ).toMatchObject({ accountId: ACCOUNT_ID });
-      expect(wallet.networks.getSelectedNamespace()).toBe(EIP155_NAMESPACE);
-      expect(wallet.networks.getSelectedChainView().chainRef).toBe(EIP155_CHAIN_REF);
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
 
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-
-      expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: true, isUnlocked: true });
-      expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
-      expect(wallet.accounts.getWalletSetupState()).toEqual({
-        totalAccountCount: 1,
-        hasOwnedAccounts: true,
-      });
-    } finally {
-      await runtime.shutdown();
-    }
+    expect(wallet.session.getStatus()).toMatchObject({ vaultInitialized: true, isUnlocked: true });
+    expect(wallet.attention.getSnapshot()).toMatchObject({ count: 1 });
+    expect(wallet.accounts.getWalletSetupState()).toEqual({
+      totalAccountCount: 1,
+      hasOwnedAccounts: true,
+    });
   });
 
   it("does not persist dappConnections across restart", async () => {
@@ -512,30 +466,22 @@ describe("createArxWallet", () => {
       permissionsPort,
     });
 
-    try {
-      const { wallet } = runtime;
-      const provider = wallet.createProvider();
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-      await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      expect(wallet.dappConnections.getState().count).toBe(1);
-    } finally {
-      await runtime.shutdown();
-    }
+    const { wallet } = runtime;
+    const provider = wallet.createProvider();
+    await wallet.session.createVault({ password: PASSWORD });
+    await wallet.session.unlock({ password: PASSWORD });
+    await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+    expect(wallet.dappConnections.getState().count).toBe(1);
 
     const reopened = await createWalletRuntime({
       accountsPort,
       permissionsPort,
     });
 
-    try {
-      expect(reopened.wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
-      expect(
-        reopened.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
-      ).toBe(true);
-    } finally {
-      await reopened.shutdown();
-    }
+    expect(reopened.wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
+    expect(
+      reopened.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
+    ).toBe(true);
   });
 
   it("exposes engine-owned provider and wallet API contracts", async () => {
@@ -544,51 +490,47 @@ describe("createArxWallet", () => {
       permissionsPort: createSeededPermissionsPort(),
     });
 
-    try {
-      const { wallet, walletApi } = runtime;
-      const provider = wallet.createProvider();
+    const { wallet, walletApi } = runtime;
+    const provider = wallet.createProvider();
 
-      await wallet.session.createVault({ password: PASSWORD });
-      await expect(walletApi.session.getStatus()).resolves.toMatchObject({
-        vaultInitialized: true,
-        isUnlocked: false,
-      });
-      await expect(walletApi.session.unlock({ password: PASSWORD })).resolves.toMatchObject({
-        status: "unlocked",
-      });
-      await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
-      wallet.session.lock("manual");
+    await wallet.session.createVault({ password: PASSWORD });
+    await expect(walletApi.session.getStatus()).resolves.toMatchObject({
+      vaultInitialized: true,
+      isUnlocked: false,
+    });
+    await expect(walletApi.session.unlock({ password: PASSWORD })).resolves.toMatchObject({
+      status: "unlocked",
+    });
+    await provider.activateConnectionScope({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+    wallet.session.lock("manual");
 
-      await expect(walletApi.session.getStatus()).resolves.toMatchObject({ isUnlocked: false });
-      await expect(walletApi.accounts.listCurrentChain()).resolves.toMatchObject({
-        totalCount: 1,
-        active: {
-          accountId: ACCOUNT_ID,
+    await expect(walletApi.session.getStatus()).resolves.toMatchObject({ isUnlocked: false });
+    await expect(walletApi.accounts.listCurrentChain()).resolves.toMatchObject({
+      totalCount: 1,
+      active: {
+        accountId: ACCOUNT_ID,
+      },
+      list: [expect.objectContaining({ accountId: ACCOUNT_ID })],
+    });
+    await expect(
+      provider.request({
+        scope: {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: PROVIDER_PORT_ID,
+          sessionId: PROVIDER_SESSION_ID,
         },
-        list: [expect.objectContaining({ accountId: ACCOUNT_ID })],
-      });
-      await expect(
-        provider.request({
-          scope: {
-            transport: "provider",
-            origin: ORIGIN,
-            portId: PROVIDER_PORT_ID,
-            sessionId: PROVIDER_SESSION_ID,
-          },
-          namespace: EIP155_NAMESPACE,
-          request: {
-            id: "rpc-accounts-locked",
-            jsonrpc: "2.0",
-            method: "eth_accounts",
-          },
-        }),
-      ).resolves.toMatchObject({
-        id: "rpc-accounts-locked",
-        jsonrpc: "2.0",
-        result: [],
-      });
-    } finally {
-      await runtime.shutdown();
-    }
+        namespace: EIP155_NAMESPACE,
+        request: {
+          id: "rpc-accounts-locked",
+          jsonrpc: "2.0",
+          method: "eth_accounts",
+        },
+      }),
+    ).resolves.toMatchObject({
+      id: "rpc-accounts-locked",
+      jsonrpc: "2.0",
+      result: [],
+    });
   });
 });

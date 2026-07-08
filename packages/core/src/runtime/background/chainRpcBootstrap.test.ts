@@ -1,18 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getChainRefNamespace } from "../../chains/caip.js";
-import {
-  type ChainDefinition,
-  type ChainDefinitionSeed,
-  cloneChainDefinition,
-  type RpcEndpoint,
-} from "../../chains/definition.js";
+import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../../chains/definition.js";
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
-import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
-import { createMessenger } from "../../messenger/index.js";
-import { createChainViewsService } from "../../chains/views/index.js";
 import { createChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/ChainRpcDefaultEndpointsService.js";
 import { createChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/ChainRpcEndpointOverridesService.js";
+import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
 import { createWalletChainSelectionService } from "../../chains/selection/wallet/WalletChainSelectionService.js";
+import { createChainViewsService } from "../../chains/views/index.js";
+import { createMessenger } from "../../messenger/index.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type { WalletChainSelectionRecord } from "../../storage/records.js";
 import {
@@ -50,11 +45,6 @@ const SOLANA_CHAIN: TestChain = {
 
 const EIP155_NAMESPACE = "eip155";
 const SOLANA_NAMESPACE = "solana";
-
-const toDefinitionSeed = (chain: TestChain): ChainDefinitionSeed<RpcEndpoint> => ({
-  definition: cloneChainDefinition(chain),
-  defaultRpcEndpoints: [...chain.defaultRpcEndpoints],
-});
 
 const toDefaultEndpointSeed = (chain: TestChain) => ({
   chainRef: chain.chainRef,
@@ -148,7 +138,13 @@ const createChainDefinitions = async (params: { builtin?: TestChain[]; custom?: 
 };
 
 describe("chainRpcBootstrap", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("mounts only registered namespace chains, applies custom RPC, and repairs stored selection", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const chainRpc = createChainRpcService();
     const chainDefinitions = await createChainDefinitions({
       builtin: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN],
@@ -197,14 +193,13 @@ describe("chainRpcBootstrap", () => {
         chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
-      logger: () => {},
       getIsHydrating: () => false,
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
 
-    await bootstrap.loadPreferences();
-    bootstrap.requestSync();
-    await bootstrap.flushPendingSync();
+    await bootstrap.loadStoredChainState();
+    bootstrap.refreshChainRpcAccesses();
+    await bootstrap.cleanStoredChainState();
 
     expect(chainRpc.listChainRefs()).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(chainRpc.getEndpoints(ALT_CHAIN.chainRef)[0].url).toBe("https://rpc.optimism.custom.example");
@@ -250,7 +245,6 @@ describe("chainRpcBootstrap", () => {
         chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
-      logger: () => {},
       getIsHydrating: () => false,
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
@@ -260,13 +254,13 @@ describe("chainRpcBootstrap", () => {
       selection,
     });
 
-    await bootstrap.loadPreferences();
-    bootstrap.requestSync();
-    await bootstrap.flushPendingSync();
+    await bootstrap.loadStoredChainState();
+    bootstrap.refreshChainRpcAccesses();
+    await bootstrap.cleanStoredChainState();
     bootstrap.start();
 
     await chainDefinitions.removeCustomChain(MAINNET_CHAIN.chainRef);
-    await bootstrap.flushPendingSync();
+    await bootstrap.cleanStoredChainState();
 
     expect(chainRpc.listChainRefs()).toEqual([ALT_CHAIN.chainRef]);
     expect(chainViews.getSelectedChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
@@ -275,6 +269,8 @@ describe("chainRpcBootstrap", () => {
   });
 
   it("repairs the selected namespace chain using the resolved active chain for the same namespace", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const chainRpc = createChainRpcService();
     const chainDefinitions = await createChainDefinitions({
       custom: [ALT_CHAIN],
@@ -300,14 +296,13 @@ describe("chainRpcBootstrap", () => {
         chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
-      logger: () => {},
       getIsHydrating: () => false,
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
 
-    await bootstrap.loadPreferences();
-    bootstrap.requestSync();
-    await bootstrap.flushPendingSync();
+    await bootstrap.loadStoredChainState();
+    bootstrap.refreshChainRpcAccesses();
+    await bootstrap.cleanStoredChainState();
 
     expect(chainRpc.listChainRefs()).toEqual([ALT_CHAIN.chainRef]);
     await expect(selectionPort.get()).resolves.toEqual({
@@ -316,53 +311,5 @@ describe("chainRpcBootstrap", () => {
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: 1_000,
     });
-  });
-
-  it("flushes a sync requested during hydration after hydration ends", async () => {
-    let isHydrating = true;
-    const chainRpc = createChainRpcService();
-    const chainDefinitions = await createChainDefinitions({
-      builtin: [MAINNET_CHAIN],
-    });
-    const { service: selection } = createSelectionService(null);
-    const { service: chainRpcDefaultEndpoints } = createChainRpcDefaultEndpoints();
-    const { service: chainRpcEndpointOverrides } = createChainRpcEndpointOverrides();
-
-    const bootstrap = createChainRpcBootstrap({
-      chainRpcAccessUpdater: chainRpc,
-      chainDefinitions,
-      selection,
-      defaultEndpoints: chainRpcDefaultEndpoints,
-      defaultEndpointSeeds: [toDefinitionSeed(MAINNET_CHAIN)].flatMap((seed) =>
-        seed.defaultRpcEndpoints
-          ? [
-              {
-                chainRef: seed.definition.chainRef,
-                rpcEndpoints: seed.defaultRpcEndpoints,
-                source: "bundle",
-              },
-            ]
-          : [],
-      ),
-      endpointOverrides: chainRpcEndpointOverrides,
-      selectionDefaults: {
-        selectedNamespace: EIP155_NAMESPACE,
-        chainRefByNamespace: { [EIP155_NAMESPACE]: MAINNET_CHAIN.chainRef },
-      },
-      hydrationEnabled: true,
-      logger: () => {},
-      getIsHydrating: () => isHydrating,
-      getRegisteredNamespaces: () => new Set(["eip155"]),
-    });
-
-    await bootstrap.loadPreferences();
-    bootstrap.requestSync();
-    await bootstrap.flushPendingSync();
-    expect(chainRpc.listChainRefs()).toEqual([]);
-
-    isHydrating = false;
-    await bootstrap.flushPendingSync();
-
-    expect(chainRpc.listChainRefs()).toEqual([MAINNET_CHAIN.chainRef]);
   });
 });

@@ -168,7 +168,7 @@ describe("InMemoryApprovalQueueService", () => {
     const targetHandle = queue.create(target, requester);
     const siblingHandle = queue.create(sibling, requester);
 
-    await expect(queue.cancelScope(scope, "caller_disconnected")).resolves.toBe(1);
+    expect(queue.cancelScope(scope, "caller_disconnected")).toBe(1);
 
     await expect(targetHandle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
     expect(queue.getState().pending.map((item) => item.approvalId)).toEqual([sibling.approvalId]);

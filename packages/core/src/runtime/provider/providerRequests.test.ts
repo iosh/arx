@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProviderRequests } from "./providerRequests.js";
 
 const REQUEST_SCOPE = {
@@ -8,13 +8,34 @@ const REQUEST_SCOPE = {
   sessionId: "11111111-1111-4111-8111-111111111111",
 };
 
+type RandomUuid = ReturnType<typeof crypto.randomUUID>;
+
+const REQUEST_1 = "00000000-0000-4000-8000-000000000001" as RandomUuid;
+const REQUEST_2 = "00000000-0000-4000-8000-000000000002" as RandomUuid;
+const REQUEST_5 = "00000000-0000-4000-8000-000000000005" as RandomUuid;
+const REQUEST_A = "00000000-0000-4000-8000-00000000000a" as RandomUuid;
+const REQUEST_B = "00000000-0000-4000-8000-00000000000b" as RandomUuid;
+
+const mockRandomUUID = (ids: RandomUuid[]) => {
+  const generatedIds = [...ids];
+  vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
+    const id = generatedIds.shift();
+    if (!id) {
+      throw new Error("Unexpected randomUUID call");
+    }
+    return id;
+  });
+};
+
 describe("createProviderRequests", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("cancels only the matched request scope", async () => {
-    const generatedIds = ["request-1", "request-2"];
-    const providerRequests = createProviderRequests({
-      generateId: () => generatedIds.shift() ?? "unexpected-request-id",
-      now: () => 100,
-    });
+    mockRandomUUID([REQUEST_1, REQUEST_2]);
+    const providerRequests = createProviderRequests();
 
     const targetHandle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
@@ -31,8 +52,8 @@ describe("createProviderRequests", () => {
 
     await expect(providerRequests.cancelScope(REQUEST_SCOPE, "caller_disconnected")).resolves.toBe(1);
 
-    expect(providerRequests.has("request-1")).toBe(false);
-    expect(providerRequests.has("request-2")).toBe(true);
+    expect(providerRequests.has(REQUEST_1)).toBe(false);
+    expect(providerRequests.has(REQUEST_2)).toBe(true);
     expect(targetHandle.getTerminalError()).toMatchObject({
       code: "global.transport.disconnected",
     });
@@ -40,10 +61,8 @@ describe("createProviderRequests", () => {
   });
 
   it("turns late completion into a no-op after the request scope was cancelled", async () => {
-    const providerRequests = createProviderRequests({
-      generateId: () => "request-2",
-      now: () => 200,
-    });
+    mockRandomUUID([REQUEST_2]);
+    const providerRequests = createProviderRequests();
 
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
@@ -62,10 +81,8 @@ describe("createProviderRequests", () => {
   });
 
   it("keeps a cancelled request terminal even if completion arrives later", async () => {
-    const providerRequests = createProviderRequests({
-      generateId: () => "request-5",
-      now: () => 500,
-    });
+    mockRandomUUID([REQUEST_5]);
+    const providerRequests = createProviderRequests();
 
     const handle = providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
@@ -80,22 +97,22 @@ describe("createProviderRequests", () => {
     expect(handle.getTerminalError()).toMatchObject({
       code: "global.transport.disconnected",
     });
-    expect(providerRequests.has("request-5")).toBe(false);
+    expect(providerRequests.has(REQUEST_5)).toBe(false);
   });
 
   it("keeps listPending in createdAt order", () => {
-    const generatedIds = ["request-b", "request-a"];
-    const providerRequests = createProviderRequests({
-      generateId: () => generatedIds.shift() ?? "unexpected-id",
-      now: vi.fn().mockReturnValueOnce(200).mockReturnValueOnce(100),
-    });
+    vi.useFakeTimers();
+    mockRandomUUID([REQUEST_B, REQUEST_A]);
+    const providerRequests = createProviderRequests();
 
+    vi.setSystemTime(200);
     providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-b",
       namespace: "eip155",
       method: "personal_sign",
     });
+    vi.setSystemTime(100);
     providerRequests.beginRequest({
       scope: REQUEST_SCOPE,
       rpcId: "rpc-a",
@@ -103,6 +120,6 @@ describe("createProviderRequests", () => {
       method: "eth_chainId",
     });
 
-    expect(providerRequests.listPending().map((record) => record.id)).toEqual(["request-a", "request-b"]);
+    expect(providerRequests.listPending().map((record) => record.id)).toEqual([REQUEST_A, REQUEST_B]);
   });
 });

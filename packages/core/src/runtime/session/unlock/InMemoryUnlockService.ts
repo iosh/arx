@@ -56,19 +56,11 @@ export class InMemoryUnlockService implements UnlockService {
   #vault: UnlockServiceOptions["vault"];
   #state: SessionLockState;
   #timerId: TimerId | null = null;
-  #now: () => number;
-  #setTimeout: typeof setTimeout;
-  #clearTimeout: typeof clearTimeout;
   #lastPublishedState: SessionLockState | null = null;
 
   constructor(options: UnlockServiceOptions) {
     this.#messenger = options.messenger;
     this.#vault = options.vault;
-    this.#now = options.now ?? (() => Date.now());
-    // Bind native timer functions to globalThis to preserve correct `this` context
-    // Without binding, calling `setTimeout` directly causes "Illegal invocation"
-    this.#setTimeout = options.timers?.setTimeout ?? globalThis.setTimeout.bind(globalThis);
-    this.#clearTimeout = options.timers?.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
 
     const initialTimeout = assertPositiveNumber(
       options.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_MS,
@@ -76,7 +68,7 @@ export class InMemoryUnlockService implements UnlockService {
     );
     const vaultStatus = this.#vault.getStatus();
     if (vaultStatus === "unlocked") {
-      const timestamp = this.#now();
+      const timestamp = Date.now();
       this.#state = {
         status: "unlocked",
         unlockedAt: timestamp,
@@ -104,7 +96,7 @@ export class InMemoryUnlockService implements UnlockService {
   async unlock(params: UnlockParams): Promise<void> {
     await this.#vault.unlock(params);
 
-    const timestamp = this.#now();
+    const timestamp = Date.now();
     const autoLockDurationMs = this.#state.autoLockDurationMs;
     this.#state = {
       status: "unlocked",
@@ -124,7 +116,7 @@ export class InMemoryUnlockService implements UnlockService {
     this.#clearAutoLockTimer();
     this.#vault.lock();
 
-    const timestamp = this.#now();
+    const timestamp = Date.now();
     const vaultStatus = this.#vault.getStatus();
     if (vaultStatus === "unlocked") {
       throw new SessionLockInvariantError({
@@ -150,7 +142,7 @@ export class InMemoryUnlockService implements UnlockService {
         return this.getState();
       }
 
-      const timestamp = this.#now();
+      const timestamp = Date.now();
       this.#state = {
         status: "unlocked",
         unlockedAt: timestamp,
@@ -230,10 +222,10 @@ export class InMemoryUnlockService implements UnlockService {
     this.#messenger.publish(OWNER_CHANGED, { topic: "session", change: "state" });
   }
 
-  #armAutoLockTimer(timeout: number, timestamp = this.#now()) {
+  #armAutoLockTimer(timeout: number, timestamp = Date.now()) {
     this.#clearAutoLockTimer();
     const deadline = timestamp + timeout;
-    this.#timerId = this.#setTimeout(() => {
+    this.#timerId = setTimeout(() => {
       this.#timerId = null;
       this.lock("timeout");
     }, timeout);
@@ -242,7 +234,7 @@ export class InMemoryUnlockService implements UnlockService {
 
   #clearAutoLockTimer() {
     if (this.#timerId !== null) {
-      this.#clearTimeout(this.#timerId);
+      clearTimeout(this.#timerId);
       this.#timerId = null;
     }
   }

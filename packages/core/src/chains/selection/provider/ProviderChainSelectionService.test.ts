@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../../messenger/index.js";
 import type { ProviderChainSelectionRecord } from "../../../storage/records.js";
 import { createProviderChainSelectionService } from "./ProviderChainSelectionService.js";
@@ -68,13 +68,17 @@ const createMemoryPort = (): MemoryProviderChainSelectionPort => {
   };
 };
 
-const createService = (params: { port: ProviderChainSelectionPort; now?: () => number }) =>
+const createService = (params: { port: ProviderChainSelectionPort }) =>
   createProviderChainSelectionService({ messenger: createMessenger(), ...params });
 
 describe("ProviderChainSelectionService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("rejects empty and whitespace-padded origins", async () => {
     const port = createMemoryPort();
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
 
     await expect(
       service.setSelectedChainRef({
@@ -103,7 +107,7 @@ describe("ProviderChainSelectionService", () => {
 
   it("rejects empty namespaces", async () => {
     const port = createMemoryPort();
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
 
     await expect(
       service.setSelectedChainRef({
@@ -120,8 +124,10 @@ describe("ProviderChainSelectionService", () => {
   });
 
   it("uses the exact origin and a trimmed namespace key", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const port = createMemoryPort();
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
 
     await service.setSelectedChainRef({
       origin: "https://dapp.example",
@@ -142,7 +148,7 @@ describe("ProviderChainSelectionService", () => {
 
   it("rejects chainRefs outside the selected namespace", async () => {
     const port = createMemoryPort();
-    const service = createService({ port, now: () => 1_000 });
+    const service = createService({ port });
 
     await expect(
       service.setSelectedChainRef({
@@ -171,7 +177,7 @@ describe("ProviderChainSelectionService", () => {
       chainRef: "eip155:10",
       updatedAt: 2_000,
     });
-    const service = createService({ port, now: () => 3_000 });
+    const service = createService({ port });
     const changed: unknown[] = [];
     service.subscribeChanged((payload) => changed.push(payload));
 

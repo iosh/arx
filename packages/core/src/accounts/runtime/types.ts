@@ -56,5 +56,4 @@ export type AccountSelectionService = {
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;
 
   whenReady?: () => Promise<void>;
-  destroy?: () => void;
 };

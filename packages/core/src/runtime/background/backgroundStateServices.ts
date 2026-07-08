@@ -1,3 +1,4 @@
+import type { AccountsService } from "../../accounts/accountsTypes.js";
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import { StoreAccountSelectionService } from "../../accounts/runtime/StoreAccountSelectionService.js";
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
@@ -7,25 +8,21 @@ import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.j
 import { ChainRpcService } from "../../chains/rpc/ChainRpcService.js";
 import type { ChainRpcAccessUpdater, ChainRpcReader } from "../../chains/rpc/types.js";
 import { InMemoryChainDefinitionsService } from "../../chains/runtime/chainDefinitions/ChainDefinitionsService.js";
+import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
 import type { ChainDefinitionsService } from "../../chains/runtime/chainDefinitions/types.js";
 import type { Messenger } from "../../messenger/index.js";
 import { PermissionsService } from "../../permissions/service/PermissionsService.js";
-import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
-import type { AccountsService } from "../../accounts/accountsTypes.js";
-import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
 import type { PermissionsPort } from "../../permissions/service/port.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 
 export type BackgroundStateServiceOptions = {
   approvals?: {
     autoRejectMessage?: string;
     ttlMs?: number;
-    logger?: (message: string, error?: unknown) => void;
   };
   chainDefinitions: {
     port: ChainDefinitionsPort;
     seed?: ChainDefinitionSeed<RpcEndpoint>[];
-    now?: () => number;
-    logger?: (message: string, error?: unknown) => void;
   };
 };
 
@@ -79,7 +76,6 @@ export const initBackgroundStateServices = ({
       ? { autoRejectMessage: approvalOptions.autoRejectMessage }
       : {}),
     ...(approvalOptions?.ttlMs !== undefined ? { ttlMs: approvalOptions.ttlMs } : {}),
-    ...(approvalOptions?.logger !== undefined ? { logger: approvalOptions.logger } : {}),
   });
 
   const permissionsService = new PermissionsService({
@@ -92,8 +88,6 @@ export const initBackgroundStateServices = ({
     messenger,
     port: chainDefinitionsOptions.port,
     seed: chainDefinitionSeed,
-    ...(chainDefinitionsOptions.now ? { now: chainDefinitionsOptions.now } : {}),
-    ...(chainDefinitionsOptions.logger ? { logger: chainDefinitionsOptions.logger } : {}),
   });
   const stateServices: BackgroundStateServices = {
     chainRpc: chainRpcService,

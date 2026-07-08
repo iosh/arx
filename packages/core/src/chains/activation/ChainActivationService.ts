@@ -1,8 +1,8 @@
+import { RpcInvalidParamsError } from "../../rpc/errors.js";
 import { parseChainRef } from "../caip.js";
 import { ChainNotAvailableError, ChainNotCompatibleError, ChainNotSupportedError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
 import type { ChainRpcReader } from "../rpc/types.js";
-import { RpcInvalidParamsError } from "../../rpc/errors.js";
 import type { ProviderChainSelectionService } from "../selection/provider/types.js";
 import type { WalletChainSelectionService } from "../selection/wallet/types.js";
 import type { ActivateNamespaceChainParams, ChainActivationService, SelectProviderChainParams } from "./types.js";
@@ -11,7 +11,6 @@ export type CreateChainActivationServiceOptions = {
   chainRpc: Pick<ChainRpcReader, "hasEndpoints">;
   walletChainSelection: Pick<WalletChainSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
   providerChainSelection: Pick<ProviderChainSelectionService, "setSelectedChainRef">;
-  logger?: (message: string, error?: unknown) => void;
 };
 
 export const createChainActivationService = ({

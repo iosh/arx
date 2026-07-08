@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../messenger/index.js";
 import { InMemoryAttentionService } from "./InMemoryAttentionService.js";
 import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED } from "./topics.js";
 
 const setup = (opts?: { maxQueueSize?: number }) => {
-  let t = 1_000;
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
   const messenger = createMessenger();
   const requested: unknown[] = [];
   const stateChanged: unknown[] = [];
@@ -12,7 +13,6 @@ const setup = (opts?: { maxQueueSize?: number }) => {
   messenger.subscribe(ATTENTION_STATE_CHANGED, (p) => stateChanged.push(p));
   const service = new InMemoryAttentionService({
     messenger,
-    now: () => t,
     ...(opts?.maxQueueSize !== undefined ? { maxQueueSize: opts.maxQueueSize } : {}),
   });
   return {
@@ -20,12 +20,16 @@ const setup = (opts?: { maxQueueSize?: number }) => {
     requested,
     stateChanged,
     setTime: (next: number) => {
-      t = next;
+      vi.setSystemTime(next);
     },
   };
 };
 
 describe("InMemoryAttentionService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("publishes requested + stateChanged when enqueued", () => {
     const { service, requested, stateChanged } = setup();
     const res = service.requestAttention({

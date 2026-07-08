@@ -1,8 +1,8 @@
 import type { ApprovalDetail, ApprovalListEntry } from "../approvals/approvalDetails.js";
 import type { NativeCurrency } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { SessionStatus } from "../runtime/background/session.js";
 import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
+import type { SessionStatus } from "../runtime/background/session.js";
 import type { AccountId } from "../storage/records.js";
 import type { SubmitTransactionResult, Transaction, TransactionProposal } from "../transactions/TransactionsService.js";
 import type { WalletApiAttentionSnapshot } from "./api.js";

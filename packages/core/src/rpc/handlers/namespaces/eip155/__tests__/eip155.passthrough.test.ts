@@ -32,7 +32,6 @@ describe("eip155 passthrough executor", () => {
       });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.shutdown();
     }
   });
 
@@ -55,7 +54,6 @@ describe("eip155 passthrough executor", () => {
       expect(getClient).not.toHaveBeenCalled();
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.shutdown();
     }
   });
 
@@ -79,7 +77,6 @@ describe("eip155 passthrough executor", () => {
       ).rejects.toMatchObject({ code: -32000, message: "execution reverted" });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.shutdown();
     }
   });
 
@@ -105,7 +102,6 @@ describe("eip155 passthrough executor", () => {
       });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.shutdown();
     }
   });
 });

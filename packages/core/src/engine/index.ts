@@ -4,7 +4,6 @@ export type {
   CoreProviderApi,
   CoreRuntime,
   CoreRuntimeBootOptions,
-  CoreRuntimeEnvironment,
   CoreStorageInput,
   CoreUnsubscribe,
   CreateCoreRuntimeInput,

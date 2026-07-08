@@ -28,7 +28,6 @@ export type BackgroundRuntimeHost = {
   getOrInitWalletMethodExecutor: () => Promise<MethodExecutor>;
   subscribeWalletEvents: (listener: (event: WalletEvent) => void) => Promise<() => void>;
   getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
-  shutdown: () => Promise<void>;
 };
 
 export type BackgroundUnlockAttentionRequestedPayload = WalletApiAttentionSnapshot["queue"][number] & {
@@ -50,7 +49,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
   let provider: CoreProviderApi | null = null;
   let walletMethodExecutor: MethodExecutor | null = null;
-  let runtimeGeneration = 0;
 
   const initializeRuntime = async () => {
     await getOrInitRuntimeCache();
@@ -59,8 +57,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const getOrInitRuntimeCache = async (): Promise<BackgroundRuntimeCache> => {
     if (runtimeCache) return runtimeCache;
     if (runtimeCachePromise) return runtimeCachePromise;
-
-    const bootGeneration = runtimeGeneration;
 
     runtimeCachePromise = (async () => {
       const storage = getExtensionStorage();
@@ -77,11 +73,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
           },
         },
       });
-
-      if (bootGeneration !== runtimeGeneration) {
-        await runtime.shutdown();
-        throw new Error("Background runtime host was reset during boot");
-      }
 
       const core = createCoreRuntimeFromArxWalletRuntime(runtime);
       const next: BackgroundRuntimeCache = { core, runtime };
@@ -123,12 +114,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       return provider;
     }
 
-    const providerGeneration = runtimeGeneration;
     const active = await getOrInitRuntimeCache();
-    if (providerGeneration !== runtimeGeneration) {
-      throw new Error("Background runtime host was reset during provider bootstrap");
-    }
-
     provider = active.core.provider;
     return provider;
   };
@@ -171,33 +157,6 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     };
   };
 
-  const shutdown = async () => {
-    runtimeGeneration += 1;
-    provider = null;
-    walletMethodExecutor = null;
-    const activeRuntime = runtimeCache?.runtime ?? null;
-    const pendingRuntimeCachePromise = runtimeCachePromise;
-    runtimeCache = null;
-    runtimeCachePromise = null;
-
-    if (activeRuntime) {
-      await activeRuntime.shutdown();
-      return;
-    }
-
-    if (!pendingRuntimeCachePromise) {
-      return;
-    }
-
-    try {
-      await pendingRuntimeCachePromise;
-    } catch {
-      // Boot failed or was interrupted while shutting down. Nothing else to do.
-    } finally {
-      runtimeCache = null;
-    }
-  };
-
   return {
     initializeRuntime,
     getCoreReady,
@@ -205,6 +164,5 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     getOrInitWalletMethodExecutor,
     subscribeWalletEvents,
     getOrInitUiEntryAccess,
-    shutdown,
   };
 };

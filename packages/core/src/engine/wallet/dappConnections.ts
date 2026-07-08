@@ -19,12 +19,8 @@ export type WalletDappConnectionsController = WalletDappConnections & DappConnec
 
 const WALLET_DAPP_CONNECTIONS_STATE_CHANGED = eventTopic<DappConnectionsState>("wallet:dappConnections:stateChanged");
 
-export const createWalletDappConnections = (deps: {
-  messenger: Messenger;
-  now?: () => number;
-}): WalletDappConnectionsController => {
+export const createWalletDappConnections = (deps: { messenger: Messenger }): WalletDappConnectionsController => {
   const { messenger } = deps;
-  const { now = Date.now } = deps;
   const connections = new Map<string, Map<string, DappConnectionsRecord>>();
 
   const readConnectionRecord = (origin: string, namespace: string): DappConnectionsRecord | null =>
@@ -93,7 +89,7 @@ export const createWalletDappConnections = (deps: {
     state: ProviderRuntimeConnectionState,
   ): DappConnectionRecord | null => {
     const existing = readConnectionRecord(scope.origin, scope.namespace);
-    const at = now();
+    const at = Date.now();
     if (existing?.chainRef === state.snapshot.chain.chainRef) {
       return toConnectionRecord(existing);
     }

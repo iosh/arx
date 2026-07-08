@@ -19,7 +19,6 @@ import type {
   TerminalSubmissionInput,
   TerminalTransactionInput,
   TransactionAggregate,
-  TransactionAggregateServiceOptions,
   TransactionConflictKey,
   TransactionRecord,
   TransactionRestartAction,
@@ -27,8 +26,6 @@ import type {
 
 type TransactionAggregateStoreDeps = {
   transactionsPort: TransactionsStoragePort;
-  now?: () => number;
-  createId?: () => string;
 };
 
 const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate => structuredClone(aggregate);
@@ -39,14 +36,7 @@ export class TransactionAggregateStore {
 
   constructor(deps: TransactionAggregateStoreDeps) {
     this.#transactionsPort = deps.transactionsPort;
-    const serviceOptions: TransactionAggregateServiceOptions = {};
-    if (deps.now !== undefined) {
-      serviceOptions.now = deps.now;
-    }
-    if (deps.createId !== undefined) {
-      serviceOptions.createId = deps.createId;
-    }
-    this.#service = new TransactionAggregateService(serviceOptions);
+    this.#service = new TransactionAggregateService();
   }
 
   async loadTransactionAggregate(transactionId: string): Promise<TransactionAggregate | null> {

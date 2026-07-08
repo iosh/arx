@@ -3,7 +3,6 @@ import type { ChainRef } from "../chains/ids.js";
 import type { OwnerChangedEvent } from "../events/ownerChanged.js";
 import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
 import type { SessionLockState } from "../runtime/session/unlock/types.js";
-import type { AttentionReason } from "../wallet/attention/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { TransactionStatus } from "../transactions/aggregate/index.js";
 import type {
@@ -12,6 +11,7 @@ import type {
   TransactionReadyProposal,
   WalletTransactionRequest,
 } from "../transactions/index.js";
+import type { AttentionReason } from "../wallet/attention/types.js";
 import type {
   WalletApiAccountsByKeyringResult,
   WalletApiAccountsForCurrentChainResult,

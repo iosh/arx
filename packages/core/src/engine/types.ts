@@ -1,3 +1,4 @@
+import type { AccountsPort } from "../accounts/accountsPort.js";
 import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/runtime/types.js";
 import type {
   ApprovalCreatedEvent,
@@ -12,15 +13,26 @@ import type {
   ApprovalResolveResult,
   ApprovalState,
 } from "../approvals/queue/types.js";
+import type { ActivateNamespaceChainParams } from "../chains/activation/types.js";
 import type { ChainDefinition, RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
+import type { ChainRpcDefaultEndpointsPort } from "../chains/rpc/defaultEndpoints/port.js";
+import type { ChainRpcEndpointOverridesPort } from "../chains/rpc/endpointOverrides/port.js";
+import type { ChainRpcEndpointOverridesChangedHandler } from "../chains/rpc/endpointOverrides/types.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
+import type { ChainDefinitionsPort } from "../chains/runtime/chainDefinitions/port.js";
 import type {
   ChainDefinitionsUpdate,
   ChainDefinitionsUpsertCustomOptions,
   ChainDefinitionsUpsertCustomResult,
 } from "../chains/runtime/chainDefinitions/types.js";
+import type { ProviderChainSelectionPort } from "../chains/selection/provider/port.js";
+import type { WalletChainSelectionPort } from "../chains/selection/wallet/port.js";
+import type { WalletChainSelectionChangedHandler } from "../chains/selection/wallet/types.js";
+import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
+import type { KeyringMetasPort } from "../keyring/keyringMetasPort.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
+import type { PermissionsPort } from "../permissions/service/port.js";
 import type {
   PermissionAuthorization,
   PermissionsEvents,
@@ -51,19 +63,6 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "../runtime/session/unlock/types.js";
-import type { AttentionService } from "../wallet/attention/types.js";
-import type { ActivateNamespaceChainParams } from "../chains/activation/types.js";
-import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
-import type { AccountsPort } from "../accounts/accountsPort.js";
-import type { ChainDefinitionsPort } from "../chains/runtime/chainDefinitions/port.js";
-import type { ChainRpcDefaultEndpointsPort } from "../chains/rpc/defaultEndpoints/port.js";
-import type { ChainRpcEndpointOverridesPort } from "../chains/rpc/endpointOverrides/port.js";
-import type { ChainRpcEndpointOverridesChangedHandler } from "../chains/rpc/endpointOverrides/types.js";
-import type { KeyringMetasPort } from "../keyring/keyringMetasPort.js";
-import type { PermissionsPort } from "../permissions/service/port.js";
-import type { ProviderChainSelectionPort } from "../chains/selection/provider/port.js";
-import type { WalletChainSelectionPort } from "../chains/selection/wallet/port.js";
-import type { WalletChainSelectionChangedHandler } from "../chains/selection/wallet/types.js";
 import type {
   AccountRecord,
   ChainDefinitionEntity,
@@ -74,6 +73,7 @@ import type {
 import type { WalletChainSelectionRecord } from "../storage/records.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
+import type { AttentionService } from "../wallet/attention/types.js";
 
 export type WalletNamespaces = Readonly<{
   findManifest(namespace: string): NamespaceManifest | undefined;
@@ -112,14 +112,6 @@ export type CreateArxWalletInput = Readonly<{
     ports: CoreStoragePorts;
     /** Whether to hydrate persisted state. */
     hydrate?: boolean;
-  }>;
-  env?: Readonly<{
-    /** Clock override. */
-    now?: () => number;
-    /** Logger hook. */
-    logger?: (message: string, error?: unknown) => void;
-    /** UUID source override. */
-    randomUuid?: () => string;
   }>;
 }>;
 

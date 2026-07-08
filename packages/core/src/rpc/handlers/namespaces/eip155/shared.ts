@@ -3,10 +3,7 @@ import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../..
 import { parseChainRef } from "../../../../chains/caip.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
-import type {
-  PermissionViewsService,
-  PermittedAccountView,
-} from "../../../../permissions/views/types.js";
+import type { PermissionViewsService, PermittedAccountView } from "../../../../permissions/views/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
 import { RpcInvalidRequestError } from "../../../errors.js";
 import {
@@ -41,8 +38,6 @@ export const requireProviderRequestHandle = (executionContext: RpcExecutionConte
 
 export const requestProviderApproval = <K extends ApprovalKind>(args: {
   deps: {
-    createId: () => string;
-    now: () => number;
     approvals: Pick<ApprovalQueueService, "create">;
   };
   executionContext: RpcExecutionContext;
@@ -56,7 +51,7 @@ export const requestProviderApproval = <K extends ApprovalKind>(args: {
 
   return args.deps.approvals.create(
     {
-      approvalId: args.deps.createId(),
+      approvalId: crypto.randomUUID(),
       kind: args.kind,
       origin: requestContext.origin,
       namespace: chain.namespace,
@@ -68,7 +63,7 @@ export const requestProviderApproval = <K extends ApprovalKind>(args: {
         sessionId: requestContext.sessionId,
       },
       request: args.request,
-      createdAt: args.deps.now(),
+      createdAt: Date.now(),
     },
     {
       origin: requestContext.origin,

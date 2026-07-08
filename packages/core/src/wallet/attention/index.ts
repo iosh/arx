@@ -15,7 +15,6 @@ export type {
 
 export const createAttentionService = (opts: {
   messenger: Messenger;
-  now?: () => number;
   defaultTtlMs?: number;
   maxQueueSize?: number;
 }): AttentionService => {

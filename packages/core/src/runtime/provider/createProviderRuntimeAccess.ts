@@ -1,5 +1,6 @@
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainRef } from "../../chains/ids.js";
+import type { ProviderChainSelectionChangedHandler } from "../../chains/selection/provider/types.js";
 import { isArxBaseError } from "../../error.js";
 import { eventTopic, type Messenger } from "../../messenger/index.js";
 import { PermissionNotConnectedError } from "../../permissions/errors.js";
@@ -14,7 +15,6 @@ import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHi
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
 import { SessionLockedError } from "../../runtime/session/errors.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
-import type { ProviderChainSelectionChangedHandler } from "../../chains/selection/provider/types.js";
 import { InvalidProviderConnectionScopeError } from "./errors.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
@@ -87,7 +87,6 @@ type ProviderRuntimeAccessDeps = {
   subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
   subscribeAccountsStateChanged: (listener: () => void) => () => void;
   subscribePermissionsStateChanged: (listener: () => void) => () => void;
-  logger?: (message: string, error?: unknown) => void;
 };
 
 type BegunProviderRuntimeRequest = {
@@ -209,7 +208,6 @@ export const createProviderRuntimeAccess = ({
   subscribeProviderChainSelectionChanged,
   subscribeAccountsStateChanged,
   subscribePermissionsStateChanged,
-  logger,
 }: ProviderRuntimeAccessDeps): ProviderRuntimeAccess => {
   type ActiveConnectionScopeState = {
     scope: ProviderConnectionScope;
@@ -217,7 +215,6 @@ export const createProviderRuntimeAccess = ({
   };
 
   const activeScopesByOrigin = new Map<string, Map<string, ActiveConnectionScopeState>>();
-  let connectionStateReconcileQueue: Promise<void> = Promise.resolve();
 
   const buildSnapshotForScope = (input: ProviderConnectionScope, isUnlocked: boolean): ProviderRuntimeSnapshot => {
     const { namespace } = input;
@@ -335,11 +332,7 @@ export const createProviderRuntimeAccess = ({
       return;
     }
 
-    try {
-      requestUnlockAttention(args);
-    } catch {
-      // best-effort
-    }
+    requestUnlockAttention(args);
   };
 
   const applyAccessPolicy = (args: {
@@ -586,13 +579,13 @@ export const createProviderRuntimeAccess = ({
     return readConnectionStateForScope(parseProviderConnectionScope({ origin, namespace }));
   };
 
-  const reconcileConnectionScope = async (scope: ProviderConnectionScope) => {
+  const reconcileConnectionScope = (scope: ProviderConnectionScope) => {
     const activeState = getActiveScopeState(scope);
     if (!activeState) {
       return;
     }
 
-    const next = await readConnectionStateForScope(scope);
+    const next = readConnectionStateForScope(scope);
     setActiveScopeState(scope, next);
     const change = deriveProviderConnectionStateChange({
       scope,
@@ -610,30 +603,14 @@ export const createProviderRuntimeAccess = ({
     }
   };
 
-  const enqueueConnectionScopeReconcile = (
-    label: string,
-    loadScopes: () => ProviderConnectionScope[],
-  ): Promise<void> => {
-    connectionStateReconcileQueue = connectionStateReconcileQueue
-      .then(async () => {
-        const scopes = loadScopes();
-        for (const scope of scopes) {
-          try {
-            await reconcileConnectionScope(scope);
-          } catch (error) {
-            logger?.(`provider connection state reconcile failed for ${scope.origin} ${scope.namespace}`, error);
-          }
-        }
-      })
-      .catch((error) => {
-        logger?.(`provider connection state reconcile failed: ${label}`, error);
-      });
-
-    return connectionStateReconcileQueue;
+  const enqueueConnectionScopeReconcile = (loadScopes: () => ProviderConnectionScope[]): void => {
+    const scopes = loadScopes();
+    for (const scope of scopes) {
+      reconcileConnectionScope(scope);
+    }
   };
 
-  const reconcileAllActiveConnectionScopes = (label: string) =>
-    enqueueConnectionScopeReconcile(label, listActiveConnectionScopes);
+  const reconcileAllActiveConnectionScopes = () => enqueueConnectionScopeReconcile(listActiveConnectionScopes);
 
   const activateConnectionScope = async (input: ProviderConnectionScope): Promise<ProviderRuntimeConnectionState> => {
     const scope = parseProviderConnectionScope(input);
@@ -659,39 +636,37 @@ export const createProviderRuntimeAccess = ({
   };
 
   subscribeProviderChainSelectionChanged((payload) => {
-    void enqueueConnectionScopeReconcile("provider_chain_selection_changed", () =>
+    enqueueConnectionScopeReconcile(() =>
       selectActiveConnectionScopes((scope) => scope.origin === payload.origin && scope.namespace === payload.namespace),
     );
   });
   subscribeChainRpcStateChanged(() => {
-    void reconcileAllActiveConnectionScopes("chain_rpc_state_changed");
+    reconcileAllActiveConnectionScopes();
   });
   subscribeSessionUnlocked(() => {
-    void reconcileAllActiveConnectionScopes("session_unlocked");
+    reconcileAllActiveConnectionScopes();
   });
   subscribeSessionLocked(() => {
-    void reconcileAllActiveConnectionScopes("session_locked");
+    reconcileAllActiveConnectionScopes();
   });
   subscribeAccountsStateChanged(() => {
-    void reconcileAllActiveConnectionScopes("accounts_state_changed");
+    reconcileAllActiveConnectionScopes();
   });
   subscribePermissionsStateChanged(() => {
-    void reconcileAllActiveConnectionScopes("permissions_state_changed");
+    reconcileAllActiveConnectionScopes();
   });
 
   const cancelRequestScope = async (input: ProviderRuntimeRequestScope) => {
-    const [requestCount] = await Promise.all([
-      providerRequests.cancelScope(input, "caller_disconnected"),
-      approvals.cancelScope(
-        {
-          transport: "provider",
-          origin: input.origin,
-          portId: input.portId,
-          sessionId: input.sessionId,
-        },
-        "caller_disconnected",
-      ),
-    ]);
+    const requestCount = await providerRequests.cancelScope(input, "caller_disconnected");
+    approvals.cancelScope(
+      {
+        transport: "provider",
+        origin: input.origin,
+        portId: input.portId,
+        sessionId: input.sessionId,
+      },
+      "caller_disconnected",
+    );
     return requestCount;
   };
 

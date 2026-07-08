@@ -4,7 +4,6 @@ export type RuntimePlugin = {
   hydrate?: () => Promise<void>;
   afterHydration?: () => Promise<void>;
   start?: () => void;
-  destroy?: () => void;
 };
 
 export const runPluginHooks = async (
@@ -21,15 +20,5 @@ export const runPluginHooks = async (
 export const startPlugins = (plugins: RuntimePlugin[]) => {
   for (const plugin of plugins) {
     plugin.start?.();
-  }
-};
-
-export const destroyPlugins = (plugins: RuntimePlugin[]) => {
-  for (const plugin of [...plugins].reverse()) {
-    try {
-      plugin.destroy?.();
-    } catch {
-      // best-effort
-    }
   }
 };

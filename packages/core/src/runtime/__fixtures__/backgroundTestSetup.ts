@@ -1,4 +1,5 @@
 import type { JsonRpcParams } from "@metamask/utils";
+import type { AccountsPort } from "../../accounts/accountsPort.js";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { ApprovalKinds } from "../../approvals/queue/types.js";
 import { buildChainAddressingByNamespace } from "../../chains/addressing.js";
@@ -12,16 +13,15 @@ import {
 } from "../../chains/definition.js";
 import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
-import type { RpcInvocationHint } from "../../rpc/index.js";
-import type { AccountsPort } from "../../accounts/accountsPort.js";
-import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
-import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
-import type { PermissionsPort } from "../../permissions/service/port.js";
+import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
 import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
 import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
+import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
+import type { PermissionsPort } from "../../permissions/service/port.js";
+import type { RpcInvocationHint } from "../../rpc/index.js";
 import type { ChainDefinitionEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import type {
   AccountRecord,
@@ -61,12 +61,6 @@ export const TEST_RECEIPT_MAX_DELAY = 30_000;
 export const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
 export const TEST_ACCOUNT_CODECS = buildAccountAddressingByNamespace([eip155AccountAddressing]);
 export const TEST_CHAIN_ADDRESS_CODECS = buildChainAddressingByNamespace([eip155ChainAddressing]);
-
-// Utility types
-export type RpcTimers = {
-  setTimeout?: typeof setTimeout;
-  clearTimeout?: typeof clearTimeout;
-};
 
 export type CreateBackgroundRuntimeResult = ReturnType<typeof createBackgroundRuntime>;
 
@@ -677,7 +671,6 @@ export type TestBackgroundContext = {
   chainRpcEndpointOverridesPort: MemoryChainRpcEndpointOverridesPort;
   vaultMetaPort: MemoryVaultMetaPort;
   transactionAggregatesPort: MemoryTransactionAggregatesPort;
-  destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
 };
 
@@ -697,12 +690,9 @@ export type SetupBackgroundOptions = {
   transactionAggregatesPort?: MemoryTransactionAggregatesPort;
   chainDefinitionsPort?: MemoryChainDefinitionsPort;
   autoLockDurationMs?: number;
-  now?: () => number;
-  timers?: RpcTimers;
   vault?: VaultService | (() => VaultService);
   persistDebounceMs?: number;
   transactions?: CreateBackgroundRuntimeOptions["transactions"];
-  storageLogger?: (message: string, error: unknown) => void;
   rpcAccessPolicy?: CreateBackgroundRuntimeOptions["rpcAccessPolicy"];
 };
 
@@ -728,20 +718,14 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   const storageOptions: NonNullable<CreateBackgroundRuntimeOptions["storage"]> = {
     vaultMetaPort,
-    ...(options.now ? { now: options.now } : {}),
-    ...(options.storageLogger ? { logger: options.storageLogger } : {}),
   };
 
   const needsSessionOptions =
-    options.autoLockDurationMs !== undefined ||
-    options.timers !== undefined ||
-    options.vault !== undefined ||
-    options.persistDebounceMs !== undefined;
+    options.autoLockDurationMs !== undefined || options.vault !== undefined || options.persistDebounceMs !== undefined;
 
   const sessionOptions: CreateBackgroundRuntimeOptions["session"] | undefined = needsSessionOptions
     ? {
         ...(options.autoLockDurationMs !== undefined ? { autoLockDurationMs: options.autoLockDurationMs } : {}),
-        ...(options.timers ? { timers: options.timers } : {}),
         ...(options.vault ? { vault: options.vault } : {}),
         ...(options.persistDebounceMs !== undefined ? { persistDebounceMs: options.persistDebounceMs } : {}),
       }
@@ -834,9 +818,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     vaultMetaPort,
     transactionAggregatesPort,
     enableAutoApproval,
-    destroy: () => {
-      runtime.lifecycle.shutdown();
-    },
   };
 };
 

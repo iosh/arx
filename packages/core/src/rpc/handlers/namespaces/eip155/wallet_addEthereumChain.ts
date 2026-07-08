@@ -96,8 +96,8 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       },
     });
     await approval.settled;
-    await deps.chainDefinitions.upsertCustomChain(definition, { createdByOrigin: context.origin });
     await deps.chainRpcDefaultEndpoints?.setDefaultEndpoints(definition.chainRef, defaultRpcEndpoints, "request");
+    await deps.chainDefinitions.upsertCustomChain(definition, { createdByOrigin: context.origin });
 
     return null;
   },

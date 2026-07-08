@@ -1,11 +1,11 @@
 import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
-import type { ChainDefinitionsPort } from "./port.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { getChainRefNamespace } from "../../caip.js";
 import { type ChainDefinition, isSameChainDefinition } from "../../definition.js";
 import { ChainDefinitionConflictError } from "../../errors.js";
 import type { ChainRef } from "../../ids.js";
+import type { ChainDefinitionsPort } from "./port.js";
 import {
   cloneChainDefinitionEntity,
   cloneChainDefinitionsState,
@@ -24,8 +24,6 @@ import type {
 type ChainDefinitionsServiceOptions = {
   messenger: Messenger;
   port: ChainDefinitionsPort;
-  now?: () => number;
-  logger?: (message: string, error?: unknown) => void;
   seed?: readonly ChainDefinition[];
   schemaVersion?: number;
 };
@@ -37,24 +35,13 @@ type ReconcileOptions = {
 export class InMemoryChainDefinitionsService implements ChainDefinitionsService {
   #messenger: Messenger;
   #port: ChainDefinitionsPort;
-  #now: () => number;
-  #logger: (message: string, error?: unknown) => void;
   #defaultSchemaVersion: number;
   #chains = new Map<ChainRef, ChainDefinitionEntity>();
   #ready: Promise<void>;
 
-  constructor({
-    messenger,
-    port,
-    now = Date.now,
-    logger = () => {},
-    seed = [],
-    schemaVersion,
-  }: ChainDefinitionsServiceOptions) {
+  constructor({ messenger, port, seed = [], schemaVersion }: ChainDefinitionsServiceOptions) {
     this.#messenger = messenger;
     this.#port = port;
-    this.#now = now;
-    this.#logger = logger;
     this.#defaultSchemaVersion = schemaVersion ?? CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION;
     this.#ready = this.#initialize(seed);
   }
@@ -122,23 +109,18 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
   }
 
   async #initialize(seed: readonly ChainDefinition[]): Promise<void> {
-    try {
-      const persisted = await this.#port.getAll();
+    const persisted = await this.#port.getAll();
 
-      for (const entity of persisted) {
-        this.#chains.set(entity.chainRef, entity);
-      }
+    for (const entity of persisted) {
+      this.#chains.set(entity.chainRef, entity);
+    }
 
-      if (seed.length > 0) {
-        await this.#reconcileBuiltinChains(seed, { publish: false });
-      }
+    if (seed.length > 0) {
+      await this.#reconcileBuiltinChains(seed, { publish: false });
+    }
 
-      if (this.#chains.size > 0) {
-        this.#publishState();
-      }
-    } catch (error) {
-      this.#logger("[chainDefinitions] failed to initialize registry", error);
-      throw error;
+    if (this.#chains.size > 0) {
+      this.#publishState();
     }
   }
 
@@ -169,7 +151,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
         namespace: getChainRefNamespace(storedDefinition.chainRef),
         definition: storedDefinition,
         schemaVersion: this.#defaultSchemaVersion,
-        updatedAt: this.#now(),
+        updatedAt: Date.now(),
         source: "builtin",
       });
       nextEntries.set(next.chainRef, next);
@@ -245,7 +227,7 @@ export class InMemoryChainDefinitionsService implements ChainDefinitionsService 
       namespace: getChainRefNamespace(storedDefinition.chainRef),
       definition: storedDefinition,
       schemaVersion,
-      updatedAt: options?.updatedAt ?? this.#now(),
+      updatedAt: options?.updatedAt ?? Date.now(),
       source: "custom",
       ...(createdByOrigin ? { createdByOrigin } : {}),
     });

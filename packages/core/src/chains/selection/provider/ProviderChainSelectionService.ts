@@ -1,8 +1,8 @@
-import { assertNamespace } from "../../caip.js";
-import type { ChainRef } from "../../ids.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ProviderChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../../../utils/serialQueue.js";
+import { assertNamespace } from "../../caip.js";
+import type { ChainRef } from "../../ids.js";
 import { ProviderChainSelectionInvalidKeyError } from "./errors.js";
 import type { ProviderChainSelectionPort } from "./port.js";
 import { PROVIDER_CHAIN_SELECTION_STORE_CHANGED } from "./topics.js";
@@ -11,7 +11,6 @@ import type { ProviderChainSelectionKey, ProviderChainSelectionService } from ".
 export type CreateProviderChainSelectionServiceOptions = {
   messenger: Messenger;
   port: ProviderChainSelectionPort;
-  now?: () => number;
 };
 
 const parseOrigin = (origin: string): string => {
@@ -39,9 +38,7 @@ const cloneRecord = (record: ProviderChainSelectionRecord): ProviderChainSelecti
 export const createProviderChainSelectionService = ({
   messenger,
   port,
-  now,
 }: CreateProviderChainSelectionServiceOptions): ProviderChainSelectionService => {
-  const clock = now ?? Date.now;
   const run = createSerialQueue();
   const cache = new Map<string, Map<string, ProviderChainSelectionRecord>>();
 
@@ -114,7 +111,7 @@ export const createProviderChainSelectionService = ({
       const next: ProviderChainSelectionRecord = {
         ...key,
         chainRef: params.chainRef,
-        updatedAt: clock(),
+        updatedAt: Date.now(),
       };
 
       if (previous?.chainRef === next.chainRef) {

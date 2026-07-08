@@ -1,7 +1,7 @@
 import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import { KeyringDuplicateAccountError, KeyringSecretUnavailableError } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../runtime/session/unlock/types.js";
+import type { UnlockLockedPayload } from "../../runtime/session/unlock/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import { decodePayload, encodePayload } from "./keyring-utils.js";
 import type { NamespaceConfig } from "./namespaces.js";
@@ -53,7 +53,6 @@ export class RuntimeKeyringState {
 
   #subscriptions: Array<() => void> = [];
   #hydrationPromise: Promise<void> | null = null;
-  #lastHydration: Promise<void> | null = null;
   #epoch = 0;
 
   constructor(options: KeyringServiceOptions) {
@@ -67,14 +66,11 @@ export class RuntimeKeyringState {
   }
 
   async attach() {
-    if (this.#subscriptions.length > 0) {
-      return;
+    if (this.#subscriptions.length === 0) {
+      this.#subscriptions.push(this.#options.unlock.onLocked((payload) => this.#handleLocked(payload)));
     }
 
-    this.#subscriptions.push(this.#options.unlock.onUnlocked((payload) => this.#handleUnlocked(payload)));
-    this.#subscriptions.push(this.#options.unlock.onLocked((payload) => this.#handleLocked(payload)));
-
-    if (this.#options.unlock.isUnlocked()) {
+    if (this.#options.vault.getStatus() === "unlocked") {
       await this.#hydrate();
     }
   }
@@ -82,15 +78,10 @@ export class RuntimeKeyringState {
   detach() {
     this.#epoch += 1;
     this.#hydrationPromise = null;
-    this.#lastHydration = null;
 
-    this.#subscriptions.splice(0).forEach((unsubscribe) => {
-      try {
-        unsubscribe();
-      } catch (error) {
-        this.#options.logger?.("keyring: failed to remove unlock subscription", error);
-      }
-    });
+    for (const unsubscribe of this.#subscriptions.splice(0)) {
+      unsubscribe();
+    }
 
     this.#clearRuntimeState();
     this.#payload = { keyrings: [] };
@@ -98,7 +89,7 @@ export class RuntimeKeyringState {
   }
 
   async waitForReady(): Promise<void> {
-    const hydration = this.#hydrationPromise ?? this.#lastHydration;
+    const hydration = this.#hydrationPromise;
     if (!hydration) {
       return;
     }
@@ -177,15 +168,18 @@ export class RuntimeKeyringState {
     return this.#addressIndex.has(accountId);
   }
 
-  async commitPersistedKeyring(params: {
-    keyringId: string;
-    kind: RuntimeKeyring["kind"];
-    namespace: string;
-    instance: HierarchicalDeterministicKeyring | SimpleKeyring;
-    meta: KeyringMetaRecord;
-    accounts: AccountRecord[];
-    payloadEntry: VaultKeyringEntry;
-  }): Promise<void> {
+  async commitPersistedKeyring(
+    params: {
+      keyringId: string;
+      kind: RuntimeKeyring["kind"];
+      namespace: string;
+      instance: HierarchicalDeterministicKeyring | SimpleKeyring;
+      meta: KeyringMetaRecord;
+      accounts: AccountRecord[];
+      payloadEntry: VaultKeyringEntry;
+    },
+    options: { notifyPayloadUpdated?: boolean } = {},
+  ): Promise<void> {
     this.#keyrings.set(params.keyringId, {
       id: params.keyringId,
       kind: params.kind,
@@ -206,7 +200,9 @@ export class RuntimeKeyringState {
     };
 
     this.#reindexHydratedAccounts();
-    await this.#notifyPayloadUpdated();
+    if (options.notifyPayloadUpdated !== false) {
+      await this.#notifyPayloadUpdated();
+    }
     this.#notifyStateChanged();
   }
 
@@ -227,18 +223,14 @@ export class RuntimeKeyringState {
     this.#notifyStateChanged();
   }
 
-  async dropKeyring(keyringId: string): Promise<void> {
+  async dropKeyring(keyringId: string, options: { notifyPayloadUpdated?: boolean } = {}): Promise<void> {
     this.#payload = {
       keyrings: this.#payload.keyrings.filter((entry) => entry.keyringId !== keyringId),
     };
 
     const runtime = this.#keyrings.get(keyringId);
     if (runtime) {
-      try {
-        runtime.instance.clear();
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to clear runtime keyring ${keyringId}`, error);
-      }
+      runtime.instance.clear();
     }
 
     this.#keyrings.delete(keyringId);
@@ -251,7 +243,9 @@ export class RuntimeKeyringState {
     }
 
     this.#reindexHydratedAccounts(false);
-    await this.#notifyPayloadUpdated();
+    if (options.notifyPayloadUpdated !== false) {
+      await this.#notifyPayloadUpdated();
+    }
     this.#notifyStateChanged();
   }
 
@@ -292,18 +286,13 @@ export class RuntimeKeyringState {
         this.#clearRuntimeState();
         this.#payload = { keyrings: [] };
 
-        try {
-          await this.#options.onHydrationError?.(error);
-        } catch (failureError) {
-          this.#options.logger?.("keyring: hydration failure handler threw", failureError);
-        }
+        await this.#options.onHydrationError?.(error);
 
         throw error;
       }
     })();
 
     this.#hydrationPromise = hydration;
-    this.#lastHydration = hydration;
 
     try {
       await hydration;
@@ -327,10 +316,9 @@ export class RuntimeKeyringState {
 
     const secret = this.#options.vault.exportSecret();
     try {
-      payload = decodePayload(secret, this.#options.logger);
+      payload = decodePayload(secret);
     } catch (error) {
       if (storedMetas.length === 0 && storedAccounts.length === 0) {
-        this.#options.logger?.("keyring: invalid vault secret detected; reseeding empty keyring payload", error);
         payload = { keyrings: [] };
         shouldResealPayload = true;
       } else {
@@ -342,7 +330,6 @@ export class RuntimeKeyringState {
       payload,
       keyringMetas: storedMetas,
       accounts: storedAccounts,
-      ...(this.#options.logger ? { logger: this.#options.logger } : {}),
     });
 
     return {
@@ -382,22 +369,14 @@ export class RuntimeKeyringState {
 
   async #commitHydrationProjectionChanges(reconciliation: RuntimeKeyringReconciliationResult): Promise<void> {
     for (const keyringId of reconciliation.prunedKeyringIds) {
-      try {
-        await Promise.all([
-          this.#options.keyringMetas.remove(keyringId),
-          this.#options.accountsStore.removeByKeyringId(keyringId),
-        ]);
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to remove orphaned store entries for ${keyringId}`, error);
-      }
+      await Promise.all([
+        this.#options.keyringMetas.remove(keyringId),
+        this.#options.accountsStore.removeByKeyringId(keyringId),
+      ]);
     }
 
     for (const meta of reconciliation.repairedMetas) {
-      try {
-        await this.#options.keyringMetas.upsert(meta);
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to recreate meta for ${meta.id}`, error);
-      }
+      await this.#options.keyringMetas.upsert(meta);
     }
   }
 
@@ -434,7 +413,6 @@ export class RuntimeKeyringState {
       };
     } catch (error) {
       const message = `keyring: failed to hydrate keyring ${entry.keyringId}`;
-      this.#options.logger?.(message, error);
       throw new Error(message, { cause: error });
     }
   }
@@ -555,17 +533,10 @@ export class RuntimeKeyringState {
       const nextMeta: KeyringMetaRecord = { ...meta, nextDerivationIndex: expectedIndex };
       this.#keyringMetas.set(keyringId, nextMeta);
       updates.push(nextMeta);
-      this.#options.logger?.(
-        `keyring: nextDerivationIndex mismatch, fixing ${meta.nextDerivationIndex ?? "unset"} -> ${expectedIndex}`,
-      );
     }
 
     for (const meta of updates) {
-      try {
-        await this.#options.keyringMetas.upsert(meta);
-      } catch (error) {
-        this.#options.logger?.(`keyring: failed to persist nextDerivationIndex repair for ${meta.id}`, error);
-      }
+      await this.#options.keyringMetas.upsert(meta);
     }
   }
 
@@ -574,21 +545,13 @@ export class RuntimeKeyringState {
 
     for (const listener of this.#payloadListeners) {
       const payload = encoded.length > 0 ? new Uint8Array(encoded) : null;
-      try {
-        await listener(payload);
-      } catch (error) {
-        this.#options.logger?.("keyring: payload listener threw", error);
-      }
+      await listener(payload);
     }
   }
 
   #notifyStateChanged(): void {
     for (const listener of this.#stateListeners) {
-      try {
-        listener();
-      } catch (error) {
-        this.#options.logger?.("keyring: state listener threw", error);
-      }
+      listener();
     }
   }
 
@@ -604,7 +567,6 @@ export class RuntimeKeyringState {
         if (strict) {
           throw new KeyringDuplicateAccountError();
         }
-        this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${account.accountId}`);
         continue;
       }
 
@@ -618,11 +580,7 @@ export class RuntimeKeyringState {
 
   #clearRuntimeState() {
     for (const runtime of this.#keyrings.values()) {
-      try {
-        runtime.instance.clear();
-      } catch (error) {
-        this.#options.logger?.("keyring: failed to clear runtime keyring", error);
-      }
+      runtime.instance.clear();
     }
 
     this.#keyrings.clear();
@@ -631,16 +589,11 @@ export class RuntimeKeyringState {
     this.#addressIndex.clear();
   }
 
-  #handleUnlocked(_payload: UnlockUnlockedPayload): void {
-    void this.#hydrate().catch((error) => this.#options.logger?.("keyring: hydrate failed", error));
-  }
-
   #handleLocked(_payload: UnlockLockedPayload): void {
     this.#epoch += 1;
     this.#clearRuntimeState();
     this.#payload = { keyrings: [] };
     this.#hydrationPromise = null;
-    this.#lastHydration = null;
     this.#notifyStateChanged();
   }
 

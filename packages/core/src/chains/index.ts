@@ -1,5 +1,5 @@
-export * from "./addressing.js";
 export * from "./activation/index.js";
+export * from "./addressing.js";
 export * from "./caip.js";
 export * from "./chains.seed.js";
 export * from "./definition.js";

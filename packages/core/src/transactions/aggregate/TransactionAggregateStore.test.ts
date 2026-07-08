@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createDefaultAccountId,
   DEFAULT_CHAIN_REF,
@@ -23,6 +23,16 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
 
 const compareRecordsNewestFirst = (left: TransactionRecord, right: TransactionRecord): number =>
   right.createdAt - left.createdAt || right.id.localeCompare(left.id);
+
+type RandomUuid = ReturnType<typeof crypto.randomUUID>;
+
+const mockTransactionIds = () => {
+  let nextId = 0;
+  vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
+    nextId += 1;
+    return `tx-${nextId}` as RandomUuid;
+  });
+};
 
 type CreateApprovedTransactionInputOverrides = Omit<Partial<CreateApprovedTransactionInput>, "request"> & {
   request?: {
@@ -148,22 +158,18 @@ const createInMemoryTransactionsStoragePort = (
 };
 
 const createService = () => {
-  let now = 1_000;
-  let nextId = 0;
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
+  mockTransactionIds();
   const storage = createInMemoryTransactionsStoragePort();
 
   return {
     store: new TransactionAggregateStore({
       transactionsPort: storage.port,
-      now: () => now,
-      createId: () => {
-        nextId += 1;
-        return `tx-${nextId}`;
-      },
     }),
     storage,
     tick: (value: number) => {
-      now = value;
+      vi.setSystemTime(value);
     },
   };
 };
@@ -174,6 +180,11 @@ const getActiveSubmissionId = (aggregate: TransactionAggregate): string => {
 };
 
 describe("TransactionAggregateStore", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("persists a newly created approved aggregate", async () => {
     const { store, storage } = createService();
 
@@ -200,8 +211,6 @@ describe("TransactionAggregateStore", () => {
 
     const freshProcess = new TransactionAggregateStore({
       transactionsPort: seededStorage.port,
-      now: () => 2_000,
-      createId: () => "unused-id",
     });
 
     const signing = await freshProcess.beginSubmissionSigning({

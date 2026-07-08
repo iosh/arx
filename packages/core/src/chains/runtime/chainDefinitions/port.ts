@@ -1,5 +1,5 @@
-import type { ChainRef } from "../../ids.js";
 import type { ChainDefinitionEntity } from "../../../storage/index.js";
+import type { ChainRef } from "../../ids.js";
 
 export interface ChainDefinitionsPort {
   get(chainRef: ChainRef): Promise<ChainDefinitionEntity | null>;

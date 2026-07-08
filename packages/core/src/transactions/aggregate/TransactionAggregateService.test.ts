@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildTransactionTerminalReason,
   TransactionAggregateInvariantError,
@@ -6,19 +6,24 @@ import {
 } from "./index.js";
 import type { TransactionAggregate } from "./types.js";
 
-const createService = () => {
-  let now = 1_000;
+type RandomUuid = ReturnType<typeof crypto.randomUUID>;
+
+const mockTransactionIds = () => {
   let nextId = 0;
+  vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
+    nextId += 1;
+    return `tx-${nextId}` as RandomUuid;
+  });
+};
+
+const createService = () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
+  mockTransactionIds();
   return {
-    service: new TransactionAggregateService({
-      now: () => now,
-      createId: () => {
-        nextId += 1;
-        return `tx-${nextId}`;
-      },
-    }),
+    service: new TransactionAggregateService(),
     tick: (value: number) => {
-      now = value;
+      vi.setSystemTime(value);
     },
   };
 };
@@ -65,6 +70,11 @@ const getActiveSubmissionId = (aggregate: TransactionAggregate): string => {
 };
 
 describe("TransactionAggregateService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("creates a durable approved transaction with a queued submission", () => {
     const { service } = createService();
 

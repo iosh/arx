@@ -34,10 +34,10 @@ import type {
 } from "./namespace/types.js";
 import type { TransactionReviewDetails } from "./review.js";
 import type { TransactionSubmissionExecutor } from "./submission/TransactionSubmissionExecutor.js";
-import type { TransactionInvalidations, TransactionsChangedHandler } from "./TransactionInvalidations.js";
+import type { TransactionChangePublisher, TransactionsChangedHandler } from "./TransactionChangePublisher.js";
 import type { TransactionResourceLock } from "./TransactionResourceLock.js";
 
-export type { TransactionsChangedHandler } from "./TransactionInvalidations.js";
+export type { TransactionsChangedHandler } from "./TransactionChangePublisher.js";
 
 export type TransactionAccount = {
   accountId: AccountId;
@@ -159,9 +159,7 @@ type TransactionsServiceDeps = {
   submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
   accountAddressing: AccountAddressingByNamespace;
   resourceLock: TransactionResourceLock;
-  invalidations: TransactionInvalidations;
-  createId?: () => string;
-  now?: () => number;
+  transactionChanges: TransactionChangePublisher;
 };
 
 const buildTransactionAccount = (
@@ -224,9 +222,7 @@ export class TransactionsService {
   #submission: TransactionsServiceDeps["submission"];
   #accountAddressing: TransactionsServiceDeps["accountAddressing"];
   #resourceLock: TransactionResourceLock;
-  #invalidations: TransactionInvalidations;
-  #createId: () => string;
-  #now: () => number;
+  #transactionChanges: TransactionChangePublisher;
 
   constructor(deps: TransactionsServiceDeps) {
     this.#aggregateStore = deps.aggregateStore;
@@ -234,9 +230,7 @@ export class TransactionsService {
     this.#submission = deps.submission;
     this.#accountAddressing = deps.accountAddressing;
     this.#resourceLock = deps.resourceLock;
-    this.#invalidations = deps.invalidations;
-    this.#createId = deps.createId ?? (() => crypto.randomUUID());
-    this.#now = deps.now ?? Date.now;
+    this.#transactionChanges = deps.transactionChanges;
   }
 
   async prepareTransaction(input: PrepareTransactionInput): Promise<TransactionProposal> {
@@ -251,7 +245,7 @@ export class TransactionsService {
       chainRef: input.chainRef,
     });
     const base = {
-      proposalId: this.#createId(),
+      proposalId: crypto.randomUUID(),
       namespace: input.namespace,
       chainRef: input.chainRef,
       source: input.source,
@@ -261,7 +255,7 @@ export class TransactionsService {
         payload: input.request.payload,
       },
       replacement: input.replacement,
-      createdAt: this.#now(),
+      createdAt: Date.now(),
     };
 
     try {
@@ -415,7 +409,7 @@ export class TransactionsService {
   }
 
   onTransactionsChanged(handler: TransactionsChangedHandler): () => void {
-    return this.#invalidations.onTransactionsChanged(handler);
+    return this.#transactionChanges.onTransactionsChanged(handler);
   }
 
   #buildProposalFromPrepareResult(

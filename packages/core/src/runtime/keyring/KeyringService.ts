@@ -7,7 +7,6 @@ import {
   KeyringAccountNotFoundError,
   KeyringDuplicateAccountError,
   KeyringIndexOutOfRangeError,
-  KeyringInvalidAddressError,
   KeyringInvalidMnemonicError,
   KeyringSecretUnavailableError,
 } from "../../keyring/errors.js";
@@ -164,19 +163,22 @@ export class KeyringService {
   }
 
   async commitInitialKeyring(draft: InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft): Promise<void> {
-    await this.#persistNewKeyring({
-      keyringId: draft.keyringId,
-      kind: draft.kind,
-      namespace: draft.namespace,
-      instance: draft.instance,
-      meta: draft.meta,
-      accounts: draft.accounts,
-      payloadEntry: draft.payloadEntry,
-    });
+    await this.#persistNewKeyring(
+      {
+        keyringId: draft.keyringId,
+        kind: draft.kind,
+        namespace: draft.namespace,
+        instance: draft.instance,
+        meta: draft.meta,
+        accounts: draft.accounts,
+        payloadEntry: draft.payloadEntry,
+      },
+      { notifyPayloadUpdated: false },
+    );
   }
 
   async removeCommittedInitialKeyring(keyringId: string): Promise<void> {
-    await this.#removeKeyring({ keyringId });
+    await this.#removeKeyring({ keyringId }, { notifyPayloadUpdated: false });
   }
 
   encodeInitialDraftPayload(draft: InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft): Uint8Array {
@@ -204,7 +206,7 @@ export class KeyringService {
     const accountId = this.#toAccountId(runtime.namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = this.#options.now();
+    const now = Date.now();
     const record = this.#buildAccountRecord({
       namespace: runtime.namespace,
       address: canonical,
@@ -428,8 +430,8 @@ export class KeyringService {
     const accountId = this.#toAccountId(namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = this.#options.now();
-    const keyringId = this.#options.uuid();
+    const now = Date.now();
+    const keyringId = crypto.randomUUID();
 
     return {
       keyringId,
@@ -481,8 +483,8 @@ export class KeyringService {
     const accountId = this.#toAccountId(namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = this.#options.now();
-    const keyringId = this.#options.uuid();
+    const now = Date.now();
+    const keyringId = crypto.randomUUID();
 
     const secret = instance.exportPrivateKey(canonical);
     const secretHex = bytesToHex(secret);
@@ -519,28 +521,31 @@ export class KeyringService {
     };
   }
 
-  async #persistNewKeyring(params: {
-    keyringId: string;
-    kind: KeyringKind;
-    namespace: string;
-    instance: HierarchicalDeterministicKeyring | SimpleKeyring;
-    meta: KeyringMetaRecord;
-    accounts: AccountRecord[];
-    payloadEntry: VaultKeyringEntry;
-  }) {
+  async #persistNewKeyring(
+    params: {
+      keyringId: string;
+      kind: KeyringKind;
+      namespace: string;
+      instance: HierarchicalDeterministicKeyring | SimpleKeyring;
+      meta: KeyringMetaRecord;
+      accounts: AccountRecord[];
+      payloadEntry: VaultKeyringEntry;
+    },
+    options: { notifyPayloadUpdated?: boolean } = {},
+  ) {
     // Persist metadata before updating the encrypted vault payload; this keeps hydration safe if a write fails.
     await this.#options.keyringMetas.upsert(params.meta);
     for (const record of params.accounts) {
       await this.#options.accountsStore.upsert(record);
     }
 
-    await this.#runtimeKeyringState.commitPersistedKeyring(params);
+    await this.#runtimeKeyringState.commitPersistedKeyring(params, options);
   }
 
-  async #removeKeyring(params: { keyringId: string }): Promise<void> {
+  async #removeKeyring(params: { keyringId: string }, options: { notifyPayloadUpdated?: boolean } = {}): Promise<void> {
     const { keyringId } = params;
 
-    await this.#runtimeKeyringState.dropKeyring(keyringId);
+    await this.#runtimeKeyringState.dropKeyring(keyringId, options);
     await this.#options.keyringMetas.remove(keyringId);
     await this.#options.accountsStore.removeByKeyringId(keyringId);
   }
@@ -638,11 +643,7 @@ export class KeyringService {
 
   #accountIdPayloadFromAddress(namespace: string, address: string): string {
     const config = this.#getConfig(namespace);
-    try {
-      return config.accountAddressing.accountIdPayloadFromAddress({ chainRef: config.defaultChainRef, address });
-    } catch {
-      throw new KeyringInvalidAddressError();
-    }
+    return config.accountAddressing.accountIdPayloadFromAddress({ chainRef: config.defaultChainRef, address });
   }
 
   #toCanonicalString(namespace: string, address: string): string {

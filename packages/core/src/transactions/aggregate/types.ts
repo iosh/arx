@@ -101,11 +101,6 @@ export type TransactionAggregate = {
   submissions: TransactionSubmission[];
 };
 
-export type TransactionAggregateServiceOptions = {
-  now?: () => number;
-  createId?: () => string;
-};
-
 /** Local replacement intent for a newly created transaction. */
 export type CreateTransactionReplacementInput = TransactionReplacement;
 

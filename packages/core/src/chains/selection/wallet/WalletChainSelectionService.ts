@@ -1,9 +1,9 @@
-import { getChainRefNamespace } from "../../caip.js";
-import type { ChainRef } from "../../ids.js";
 import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { WalletChainSelectionRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../../../utils/serialQueue.js";
+import { getChainRefNamespace } from "../../caip.js";
+import type { ChainRef } from "../../ids.js";
 import type { WalletChainSelectionPort } from "./port.js";
 import { WALLET_CHAIN_SELECTION_STORE_CHANGED } from "./topics.js";
 import type { UpdateWalletChainSelectionParams, WalletChainSelectionService } from "./types.js";
@@ -15,7 +15,6 @@ export type CreateWalletChainSelectionServiceOptions = {
     selectedNamespace: string;
     chainRefByNamespace: Record<string, ChainRef>;
   };
-  now?: () => number;
 };
 
 const areChainRefRecordsEqual = (left: Record<string, ChainRef>, right: Record<string, ChainRef>): boolean => {
@@ -35,9 +34,7 @@ export const createWalletChainSelectionService = ({
   messenger,
   port,
   defaults,
-  now,
 }: CreateWalletChainSelectionServiceOptions): WalletChainSelectionService => {
-  const clock = now ?? Date.now;
   const run = createSerialQueue();
   let cached: WalletChainSelectionRecord | null = null;
 
@@ -115,7 +112,7 @@ export const createWalletChainSelectionService = ({
         id: "wallet-chain-selection",
         selectedNamespace: nextSelectedNamespace,
         chainRefByNamespace: nextChainRefByNamespace,
-        updatedAt: clock(),
+        updatedAt: Date.now(),
       };
 
       if (previous && areWalletChainSelectionRecordsEqual(previous, next)) {

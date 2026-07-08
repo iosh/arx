@@ -121,25 +121,21 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       persistDebounceMs: 0,
     });
 
-    try {
-      await flushAsync();
+    await flushAsync();
 
-      expect(createBroadcastArtifact).toHaveBeenCalledTimes(0);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-      expect(context.runtime.transactionMonitor.getNextWakeAt()).not.toBeNull();
-      expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(0);
+    expect(createBroadcastArtifact).toHaveBeenCalledTimes(0);
+    expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+    expect(context.runtime.transactionMonitor.getNextWakeAt()).not.toBeNull();
+    expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(0);
 
-      await context.runtime.transactionMonitor.runDue();
-      expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(1);
+    await context.runtime.transactionMonitor.runDue();
+    expect(inspectSubmittedTransaction).toHaveBeenCalledTimes(1);
 
-      await expect(context.runtime.transactions.getTransaction(txId)).resolves.toMatchObject({
-        status: "confirmed",
-        receipt: {
-          status: "0x1",
-        },
-      });
-    } finally {
-      context.destroy();
-    }
+    await expect(context.runtime.transactions.getTransaction(txId)).resolves.toMatchObject({
+      status: "confirmed",
+      receipt: {
+        status: "0x1",
+      },
+    });
   });
 });

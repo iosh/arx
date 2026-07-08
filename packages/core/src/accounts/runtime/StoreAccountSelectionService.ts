@@ -1,3 +1,4 @@
+import type { AccountsService } from "../../accounts/accountsTypes.js";
 import {
   canonicalChainAddressFromAccountId,
   displayChainAddressFromAccountId,
@@ -7,7 +8,6 @@ import type { AccountAddressingByNamespace } from "../../accounts/addressing/add
 import { parseChainRef } from "../../chains/caip.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountsService } from "../../accounts/accountsTypes.js";
 import type { AccountId } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED } from "./topics.js";
@@ -34,14 +34,13 @@ export class StoreAccountSelectionService implements AccountSelectionService {
   #state: MultiNamespaceAccountsState = { namespaces: {} };
   #ready: Promise<void>;
   #refreshPromise: Promise<void> | null = null;
-  #unsubscribeAccounts: (() => void) | null = null;
 
   constructor({ messenger, accounts, accountAddressing }: Options) {
     this.#messenger = messenger;
     this.#accounts = accounts;
     this.#accountAddressing = accountAddressing;
 
-    this.#unsubscribeAccounts = this.#accounts.subscribeChanged(() => {
+    this.#accounts.subscribeChanged(() => {
       void this.refresh();
     });
 
@@ -50,14 +49,6 @@ export class StoreAccountSelectionService implements AccountSelectionService {
 
   whenReady(): Promise<void> {
     return this.#ready;
-  }
-
-  destroy() {
-    if (this.#unsubscribeAccounts) {
-      const unsubscribeAccounts = this.#unsubscribeAccounts;
-      this.#unsubscribeAccounts = null;
-      unsubscribeAccounts();
-    }
   }
 
   getState(): MultiNamespaceAccountsState {

@@ -92,7 +92,6 @@ export type CreateArxWalletRuntimeInput = CreateArxWalletInput &
 
 type ArxWalletRuntime = Readonly<{
   wallet: ArxWallet;
-  shutdown(): Promise<void>;
   messenger: BackgroundBootstrapScope["messenger"];
   transactions: ReturnType<typeof createTransactionServices>["transactions"];
   transactionMonitor: ReturnType<typeof createTransactionServices>["monitor"];
@@ -124,40 +123,9 @@ type WalletCreateWalletMethodExecutorOptions = Readonly<{
   origin: string;
 }>;
 
-const buildStorageOptions = (
-  input: CreateArxWalletInput,
-): { now?: () => number; logger?: (message: string, error?: unknown) => void; hydrate?: boolean } | undefined => {
-  const storageOptions: {
-    now?: () => number;
-    logger?: (message: string, error?: unknown) => void;
-    hydrate?: boolean;
-  } = {};
-
-  if (input.env?.now) {
-    storageOptions.now = input.env.now;
-  }
-  if (input.env?.logger) {
-    storageOptions.logger = input.env.logger;
-  }
-  if (input.storage.hydrate !== undefined) {
-    storageOptions.hydrate = input.storage.hydrate;
-  }
-
-  return Object.keys(storageOptions).length > 0 ? storageOptions : undefined;
-};
-
 const bootWalletLifecycle = async (lifecycle: Pick<RuntimeLifecycle, "initialize" | "start">): Promise<void> => {
   await lifecycle.initialize();
   lifecycle.start();
-};
-
-const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): SessionOptions | undefined => {
-  const sessionOptions: SessionOptions = {
-    ...(input.runtime?.session ?? {}),
-    ...(input.env?.randomUuid ? { uuid: input.env.randomUuid } : {}),
-  };
-
-  return Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined;
 };
 
 const createWalletEvents = (runtime: ArxWalletRuntimeCore) => {
@@ -174,17 +142,15 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
 
   const namespaces = createWalletNamespaces({ manifests });
   const namespaceBootstrap = assembleNamespaceStatic(namespaces.listManifests());
-  const storageOptions = buildStorageOptions(input);
   let sessionScope: BackgroundSessionScope | null = null;
   let backgroundSupportScope: BackgroundSupportScope | null = null;
 
   const assemblyOptions = input.runtime?.assemblyOptions;
-  const runtimeSessionOptions = buildRuntimeSessionOptions(input);
   const runtimeRpcAccessPolicy = input.runtime?.rpcAccessPolicy ?? DEFAULT_RPC_ACCESS_POLICY;
 
   const bootstrapScope: BackgroundBootstrapScope = createBackgroundBootstrapScope({
     namespaceBootstrap,
-    ...(storageOptions ? { storageOptions } : {}),
+    ...(input.storage.hydrate !== undefined ? { hydrate: input.storage.hydrate } : {}),
     ...(assemblyOptions?.approvals ? { approvalOptions: assemblyOptions.approvals } : {}),
     ...(assemblyOptions?.transactions ? { transactionOptions: assemblyOptions.transactions } : {}),
     chainDefinitionsOptions: {
@@ -206,7 +172,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       permissions: input.storage.ports.permissions,
     },
     vaultMetaPort: input.storage.ports.vault,
-    ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
+    ...(input.runtime?.session ? { sessionOptions: input.runtime.session } : {}),
   });
 
   backgroundSupportScope = createBackgroundSupportScope({
@@ -216,16 +182,12 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const transactionAggregateStore = new TransactionAggregateStore({
     transactionsPort: input.storage.ports.transactions,
-    now: bootstrapScope.storageNow,
-    ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
   });
   const transactionServices = createTransactionServices({
     aggregateStore: transactionAggregateStore,
     namespaces: backgroundSupportScope.namespaceTransactions,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
     messenger: bootstrapScope.messenger,
-    now: bootstrapScope.storageNow,
-    ...(input.env?.randomUuid ? { createId: input.env.randomUuid } : {}),
   });
 
   const lifecycle = createBackgroundRuntimeLifecycle({
@@ -239,12 +201,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     transactionRestartRecovery: input.runtime?.transactionRestartRecovery ?? "run",
     chainRpcBootstrap: backgroundSupportScope.chainRpcBootstrap,
     sessionLayer: sessionScope.sessionLayer,
-    logger: bootstrapScope.storageLogger,
   });
   const stateServices = sessionScope.stateServices;
   const rpcHandlerDeps: RpcHandlerDeps = {
-    createId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
-    now: bootstrapScope.storageNow,
     ...stateServices,
     walletChainSelection: sessionScope.walletChainSelection,
     chainActivation: sessionScope.chainActivation,
@@ -295,10 +254,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       chainRef: activeChain.chainRef,
     });
   };
-  const providerRequests = createProviderRequests({
-    generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
-    now: bootstrapScope.storageNow,
-  });
+  const providerRequests = createProviderRequests();
   const providerAccess = createProviderRuntimeAccess({
     messenger: bootstrapScope.messenger,
     getIsInitialized: () => lifecycle.getIsInitialized(),
@@ -336,7 +292,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       sessionScope.providerChainSelection.subscribeChanged(listener),
     subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(listener),
     subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(listener),
-    logger: bootstrapScope.storageLogger,
   });
   const session = createWalletSession({
     session: sessionScope.sessionLayer.session,
@@ -366,7 +321,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const dappConnections = createWalletDappConnections({
     messenger: bootstrapScope.messenger,
-    ...(input.env?.now ? { now: input.env.now } : {}),
   });
   const syncDappConnectionFromProviderState = (
     input: { origin: string; namespace: string },
@@ -454,23 +408,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     dappConnections,
     createProvider: () => provider,
   };
-  let shutdownPromise: Promise<void> | null = null;
-  const shutdown = async () => {
-    if (shutdownPromise) {
-      await shutdownPromise;
-      return;
-    }
-
-    shutdownPromise = (async () => {
-      lifecycle.shutdown();
-    })();
-
-    await shutdownPromise;
-  };
 
   const runtime: ArxWalletRuntime = {
     wallet,
-    shutdown,
     messenger: bootstrapScope.messenger,
     transactions: transactionServices.transactions,
     transactionMonitor: transactionServices.monitor,
@@ -502,13 +442,8 @@ export const createArxWalletRuntime = async (input: CreateArxWalletRuntimeInput)
     return runtime;
   }
 
-  try {
-    await bootWalletLifecycle(runtime.lifecycle);
-    return runtime;
-  } catch (error) {
-    await runtime.shutdown();
-    throw error;
-  }
+  await bootWalletLifecycle(runtime.lifecycle);
+  return runtime;
 };
 
 export const createArxWallet = async (input: CreateArxWalletInput): Promise<ArxWallet> => {

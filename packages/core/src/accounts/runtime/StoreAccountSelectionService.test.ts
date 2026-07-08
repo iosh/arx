@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildAccountAddressingByNamespace, eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { createMessenger } from "../../messenger/index.js";
 import { MemoryAccountsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
-import { createAccountsService } from "../index.js";
 import type { AccountRecord, AccountSelectionStateRecord } from "../../storage/records.js";
+import { createAccountsService } from "../index.js";
 import { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
 
 const chainRef = "eip155:1" as const;
@@ -38,14 +38,6 @@ const createService = async (params?: {
   return { service, accountsPort };
 };
 
-const createdServices: StoreAccountSelectionService[] = [];
-
-afterEach(() => {
-  for (const service of createdServices.splice(0)) {
-    service.destroy?.();
-  }
-});
-
 describe("StoreAccountSelectionService", () => {
   it("uses visible namespace accounts and falls back to the first available selection", async () => {
     const first = makeAccount("1111111111111111111111111111111111111111", 200);
@@ -61,8 +53,6 @@ describe("StoreAccountSelectionService", () => {
         },
       },
     });
-    createdServices.push(service);
-
     expect(service.getAccountIdsForNamespace(namespace)).toEqual([second.accountId, first.accountId]);
     expect(service.listOwnedForNamespace({ namespace, chainRef })).toMatchObject([
       {
@@ -95,8 +85,6 @@ describe("StoreAccountSelectionService", () => {
         },
       },
     });
-    createdServices.push(service);
-
     await expect(
       service.setActiveAccount({
         namespace,
@@ -135,8 +123,6 @@ describe("StoreAccountSelectionService", () => {
     const hidden = makeAccount("2222222222222222222222222222222222222222", 200, { hidden: true });
 
     const { service } = await createService({ accounts: [visible, hidden] });
-    createdServices.push(service);
-
     await expect(
       service.setActiveAccount({
         namespace,
@@ -158,8 +144,6 @@ describe("StoreAccountSelectionService", () => {
     const { service } = await createService({
       accounts: [makeAccount("1111111111111111111111111111111111111111", 100)],
     });
-    createdServices.push(service);
-
     await expect(
       service.setActiveAccount({
         namespace: "solana",

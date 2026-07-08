@@ -19,12 +19,10 @@ export const reconcileRuntimeKeyringState = ({
   payload,
   keyringMetas,
   accounts,
-  logger,
 }: {
   payload: Payload;
   keyringMetas: KeyringMetaRecord[];
   accounts: AccountRecord[];
-  logger?: (message: string, error?: unknown) => void;
 }): RuntimeKeyringReconciliationResult => {
   const payloadKeyringIds = new Set(payload.keyrings.map((entry) => entry.keyringId));
 
@@ -40,14 +38,10 @@ export const reconcileRuntimeKeyringState = ({
       continue;
     }
 
-    try {
-      const repaired = buildMinimalKeyringMeta(entry);
-      repairedMetas.push(repaired);
-      reconciledMetas.push(repaired);
-      metaIds.add(repaired.id);
-    } catch (error) {
-      logger?.(`keyring: failed to build minimal meta for ${entry.keyringId}`, error);
-    }
+    const repaired = buildMinimalKeyringMeta(entry);
+    repairedMetas.push(repaired);
+    reconciledMetas.push(repaired);
+    metaIds.add(repaired.id);
   }
 
   return {

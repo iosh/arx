@@ -3,10 +3,10 @@ import type { ChainAddressingByNamespace } from "../chains/addressing.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
+import type { AccountSigningService } from "../keyring/accountSigning.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
-import type { AccountSigningService } from "../keyring/accountSigning.js";
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
 
 export type NamespaceCoreManifest = {

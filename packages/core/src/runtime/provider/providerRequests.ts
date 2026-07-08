@@ -38,11 +38,6 @@ export type ProviderRequests = {
   cancelScope(scope: ProviderRuntimeRequestScope, reason: ProviderRequestCancellationReason): Promise<number>;
 };
 
-type CreateProviderRequestsDeps = {
-  generateId: () => string;
-  now: () => number;
-};
-
 const cloneRecord = (record: ProviderRequestRecord): ProviderRequestRecord => ({
   id: record.id,
   scope: { ...record.scope },
@@ -69,7 +64,7 @@ const createTerminalRequestError = (
   });
 };
 
-export const createProviderRequests = ({ generateId, now }: CreateProviderRequestsDeps): ProviderRequests => {
+export const createProviderRequests = (): ProviderRequests => {
   const records = new Map<string, ProviderRequestRecord>();
   const scopeIndex = new Map<string, Set<string>>();
   const handles = new Map<string, ProviderRequestHandle>();
@@ -88,14 +83,14 @@ export const createProviderRequests = ({ generateId, now }: CreateProviderReques
   };
 
   const beginRequest = (input: ProviderRequestBeginInput): ProviderRequestHandle => {
-    const id = generateId();
+    const id = crypto.randomUUID();
     let currentRecord: ProviderRequestRecord = {
       id,
       scope: { ...input.scope },
       rpcId: input.rpcId,
       namespace: input.namespace,
       method: input.method,
-      createdAt: now(),
+      createdAt: Date.now(),
     };
     let terminalState: ProviderRequestTerminalState | null = null;
 

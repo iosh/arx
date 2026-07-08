@@ -22,16 +22,10 @@ const parseJsonPayload = (bytes: Uint8Array): Payload => {
   }
 };
 
-// Decode payload from vault bytes (pure). Shape is an internal durable contract.
-export const decodePayload = (bytes: Uint8Array, logger?: (m: string, e?: unknown) => void): Payload => {
-  try {
-    if (bytes.length === 0) {
-      invalidPayload("Payload bytes are empty.");
-    }
-
-    return parseJsonPayload(bytes);
-  } catch (error) {
-    logger?.("keyring: failed to decode vault payload", error);
-    throw error;
+export const decodePayload = (bytes: Uint8Array): Payload => {
+  if (bytes.length === 0) {
+    invalidPayload("Payload bytes are empty.");
   }
+
+  return parseJsonPayload(bytes);
 };

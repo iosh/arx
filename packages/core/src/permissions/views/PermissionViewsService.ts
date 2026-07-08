@@ -1,10 +1,10 @@
 import type { AccountSelectionService } from "../../accounts/runtime/types.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { PermissionNotConnectedError } from "../errors.js";
-import type { PermissionsReader } from "../service/types.js";
 import type { AccountId } from "../../storage/records.js";
 import type { PermissionsSnapshot } from "../../wallet/types.js";
+import { PermissionNotConnectedError } from "../errors.js";
+import type { PermissionsReader } from "../service/types.js";
 import type { AuthorizationSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {

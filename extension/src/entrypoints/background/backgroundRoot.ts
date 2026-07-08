@@ -66,7 +66,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       return;
     }
 
-    void uiEntries.openOnboardingTab("install").catch(() => {});
+    void uiEntries.openOnboardingTab("install");
   };
 
   const handleConnect = (port: Runtime.Port) => {

@@ -49,7 +49,6 @@ export type {
   TerminalSubmissionInput,
   TerminalTransactionInput,
   TransactionAggregate,
-  TransactionAggregateServiceOptions,
   TransactionApprovedRequest,
   TransactionConflictKey,
   TransactionRecord,

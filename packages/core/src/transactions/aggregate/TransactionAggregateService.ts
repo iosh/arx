@@ -25,7 +25,6 @@ import type {
   TerminalSubmissionInput,
   TerminalTransactionInput,
   TransactionAggregate,
-  TransactionAggregateServiceOptions,
   TransactionRecord,
   TransactionRestartAction,
   TransactionSubmission,
@@ -45,19 +44,11 @@ const cloneAggregate = (aggregate: TransactionAggregate): TransactionAggregate =
  * named command here, then persist the returned next aggregate.
  */
 export class TransactionAggregateService {
-  #now: () => number;
-  #createId: () => string;
-
-  constructor(options: TransactionAggregateServiceOptions = {}) {
-    this.#now = options.now ?? Date.now;
-    this.#createId = options.createId ?? (() => crypto.randomUUID());
-  }
-
   /** Creates the durable wallet transaction after user approval. */
   createApprovedTransaction(input: CreateApprovedTransactionInput): TransactionAggregate {
-    const id = this.#createId();
-    const at = this.#now();
-    const submissionId = this.#createId();
+    const id = crypto.randomUUID();
+    const at = Date.now();
+    const submissionId = crypto.randomUUID();
 
     return {
       record: {
@@ -375,7 +366,7 @@ export class TransactionAggregateService {
     }
 
     const next = cloneAggregate(current);
-    const updatedAt = this.#now();
+    const updatedAt = Date.now();
     mutate(next, updatedAt);
     next.record.updatedAt = updatedAt;
     return next;

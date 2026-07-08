@@ -245,8 +245,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(BASE_CHAIN.chainRef);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("hydrates network selection from persisted selection state", async () => {
@@ -284,8 +282,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       ALT_CHAIN.chainRef,
     ]);
     expect(runtime.services.chainRpc.getEndpoints(ALT_CHAIN.chainRef)[0].url).toBe("https://rpc.alt");
-
-    runtime.lifecycle.shutdown();
   });
 
   it("does not hydrate provider chain selection when storage hydration is disabled", async () => {
@@ -316,8 +312,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         namespace: EIP155_NAMESPACE,
       }),
     ).toBeNull();
-
-    runtime.lifecycle.shutdown();
   });
 
   it("prefers explicit session keyring namespaces over the default session stage output", () => {
@@ -338,8 +332,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(runtime.services.keyring.getNamespaces()[0]?.defaultChainRef).toBe(ALT_CHAIN.chainRef);
     expect(runtime.services.keyring.getNamespaces()[0]).not.toBe(overriddenKeyringNamespaces[0]);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("resolves unlocked session state through wallet.session.unlock", async () => {
@@ -357,7 +349,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(result).toMatchObject({
       status: "unlocked",
     });
-    runtime.lifecycle.shutdown();
   });
 
   it("persists selectedNamespace-derived UI chain when wallet.networks.select succeeds", async () => {
@@ -397,8 +388,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       selectedNamespace: EIP155_NAMESPACE,
       chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
-
-    runtime.lifecycle.shutdown();
   });
 
   it("does not change permissions when wallet.networks.select succeeds", async () => {
@@ -432,8 +421,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await wallet.networks.select({ chainRef: ALT_CHAIN.chainRef });
 
     expect(runtime.services.permissions.getState()).toEqual(before);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("does not change permissions when switch-chain approval is approved", async () => {
@@ -494,8 +481,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     ).resolves.toBeNull();
     await expect(approvalPromise).resolves.toBeUndefined();
     expect(runtime.services.permissions.getState()).toEqual(before);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("resolves wallet.balances.getNative via namespace runtime bindings", async () => {
@@ -546,8 +531,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       blockTag: "latest",
       timeoutMs: 15_000,
     });
-
-    runtime.lifecycle.shutdown();
   });
 
   it("prepares wallet send transactions when receipt tracking is unsupported", async () => {
@@ -593,8 +576,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
     expect(runtime.services.approvals.getState().pending).toHaveLength(0);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("projects transaction submission capability from overridden namespace transactions", async () => {
@@ -623,8 +604,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
 
     expect(runtime.services.namespaceRuntime.ui.getNativeBalance).toEqual(expect.any(Function));
-
-    runtime.lifecycle.shutdown();
   });
 
   it("prefers overridden namespace transactions over manifest transaction construction", async () => {
@@ -654,8 +633,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     expect(createTransaction).not.toHaveBeenCalled();
-
-    runtime.lifecycle.shutdown();
   });
 
   it("creates send-transaction proposals from wallet transaction requests", async () => {
@@ -710,8 +687,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
     await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
     expect(runtime.services.approvals.getState().pending).toHaveLength(0);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("creates wallet transaction proposals across wallet api instances", async () => {
@@ -785,8 +760,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     ).toBe(3);
     await expect(runtime.transactions.listTransactions()).resolves.toEqual([]);
     expect(runtime.services.approvals.getState().pending).toHaveLength(0);
-
-    runtime.lifecycle.shutdown();
   });
 
   it("propagates transaction prepare errors to the UI handler", async () => {
@@ -814,7 +787,5 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
       }),
     ).rejects.toThrow("prepare failed");
-
-    runtime.lifecycle.shutdown();
   });
 });

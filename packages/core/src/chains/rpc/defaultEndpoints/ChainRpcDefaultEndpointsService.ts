@@ -1,10 +1,10 @@
-import type { RpcEndpoint } from "../../definition.js";
-import type { ChainRef } from "../../ids.js";
-import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../config.js";
 import { OWNER_CHANGED } from "../../../events/ownerChanged.js";
 import type { Messenger } from "../../../messenger/index.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
 import { createSerialQueue } from "../../../utils/serialQueue.js";
+import type { RpcEndpoint } from "../../definition.js";
+import type { ChainRef } from "../../ids.js";
+import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints } from "../config.js";
 import type { ChainRpcDefaultEndpointsPort } from "./port.js";
 import { CHAIN_RPC_DEFAULT_ENDPOINTS_STORE_CHANGED } from "./topics.js";
 import type { ChainRpcDefaultEndpointsSeed, ChainRpcDefaultEndpointsService } from "./types.js";
@@ -15,15 +15,12 @@ const cloneRpcEndpoints = (rpcEndpoints: readonly RpcEndpoint[]): RpcEndpoint[] 
 export type CreateChainRpcDefaultEndpointsServiceOptions = {
   messenger: Messenger;
   port: ChainRpcDefaultEndpointsPort;
-  now?: () => number;
 };
 
 export const createChainRpcDefaultEndpointsService = ({
   messenger,
   port,
-  now,
 }: CreateChainRpcDefaultEndpointsServiceOptions): ChainRpcDefaultEndpointsService => {
-  const clock = now ?? Date.now;
   const run = createSerialQueue();
   const cache = new Map<ChainRef, ChainRpcDefaultEndpointsRecord>();
 
@@ -82,7 +79,7 @@ export const createChainRpcDefaultEndpointsService = ({
         chainRef,
         rpcEndpoints,
         source,
-        updatedAt: shouldWrite ? clock() : previousRecord.updatedAt,
+        updatedAt: shouldWrite ? Date.now() : previousRecord.updatedAt,
       };
 
       if (shouldWrite) {
@@ -132,7 +129,7 @@ export const createChainRpcDefaultEndpointsService = ({
           chainRef: seed.chainRef,
           rpcEndpoints,
           source: seed.source,
-          updatedAt: clock(),
+          updatedAt: Date.now(),
         };
         await port.upsert(next);
         cache.set(seed.chainRef, toRecord(next));

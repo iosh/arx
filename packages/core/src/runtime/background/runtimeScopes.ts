@@ -1,31 +1,31 @@
+import type { AccountsPort } from "../../accounts/accountsPort.js";
+import { createChainActivationService } from "../../chains/activation/index.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../../chains/definition.js";
+import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
+import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
+import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
+import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
 import type { ChainRpcAccessUpdater } from "../../chains/rpc/types.js";
+import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
+import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
+import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
+import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
+import { createChainViewsService } from "../../chains/views/index.js";
+import { type AccountSigningService, createAccountSigningService } from "../../keyring/accountSigning.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import { createMessenger, type Messenger } from "../../messenger/index.js";
 import {
   materializeNamespaceRuntime,
   type NamespaceRuntimeServices,
   type NamespaceStaticAssembly,
 } from "../../namespaces/index.js";
-import { listRpcNamespaces } from "../../rpc/index.js";
-import { type AccountSigningService, createAccountSigningService } from "../../keyring/accountSigning.js";
-import { createAttentionService } from "../../wallet/attention/index.js";
-import { createChainActivationService } from "../../chains/activation/index.js";
-import { createChainViewsService } from "../../chains/views/index.js";
-import { createPermissionViewsService } from "../../permissions/views/index.js";
-import type { AccountsPort } from "../../accounts/accountsPort.js";
-import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
-import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
-import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
-import type { ChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/types.js";
-import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import type { PermissionsPort } from "../../permissions/service/port.js";
-import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
-import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
-import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
-import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
+import { createPermissionViewsService } from "../../permissions/views/index.js";
+import { listRpcNamespaces } from "../../rpc/index.js";
 import type { VaultMetaPort } from "../../storage/index.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import { createAttentionService } from "../../wallet/attention/index.js";
 import type { KeyringService } from "../keyring/KeyringService.js";
 import {
   type BackgroundStateServiceOptions,
@@ -38,13 +38,6 @@ import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
 import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 import { initRuntimeStoreServices } from "./runtimeStoreServices.js";
 import { initSessionLayer, type SessionLayerOptions, type SessionLayerResult, type SessionOptions } from "./session.js";
-
-type StorageOptions = {
-  vaultMetaPort?: VaultMetaPort;
-  now?: () => number;
-  hydrate?: boolean;
-  logger?: (message: string, error?: unknown) => void;
-};
 
 export type BackgroundTransactionOptions = {
   namespaces?: NamespaceTransactions;
@@ -60,8 +53,6 @@ export type BackgroundBootstrapScope = {
   registeredNamespaces: ReadonlySet<string>;
   admittedChainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
   chainAdmission: RuntimeChainAdmission;
-  storageLogger: (message: string, error?: unknown) => void;
-  storageNow: () => number;
   hydrationEnabled: boolean;
   backgroundAssemblyOptions: BackgroundAssemblyOptions;
 };
@@ -102,18 +93,17 @@ const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLay
 
 export const createBackgroundBootstrapScope = ({
   namespaceBootstrap,
-  storageOptions,
+  hydrate,
   approvalOptions,
   transactionOptions,
   chainDefinitionsOptions,
 }: {
   namespaceBootstrap: NamespaceStaticAssembly;
-  storageOptions?: StorageOptions;
+  hydrate?: boolean;
   approvalOptions?: BackgroundAssemblyOptions["approvals"];
   transactionOptions?: BackgroundAssemblyOptions["transactions"];
   chainDefinitionsOptions: NonNullable<BackgroundAssemblyOptions["chainDefinitions"]>;
 }): BackgroundBootstrapScope => {
-  const storageLogger = storageOptions?.logger ?? (() => {});
   const messenger = createMessenger();
   const registeredNamespaces = new Set(listRpcNamespaces(namespaceBootstrap.rpcRouting));
   const chainDefinitionSeed = chainDefinitionsOptions.seed ?? namespaceBootstrap.chainSeeds;
@@ -123,11 +113,10 @@ export const createBackgroundBootstrapScope = ({
     ),
   });
 
-  const storageNow = storageOptions?.now ?? Date.now;
-  const hydrationEnabled = storageOptions?.hydrate ?? true;
+  const hydrationEnabled = hydrate ?? true;
 
   const backgroundAssemblyOptions: BackgroundAssemblyOptions = {
-    ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
+    ...(approvalOptions ? { approvals: approvalOptions } : {}),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainDefinitions: { ...chainDefinitionsOptions, seed: [...chainDefinitionSeed] },
   };
@@ -138,8 +127,6 @@ export const createBackgroundBootstrapScope = ({
     registeredNamespaces,
     admittedChainSeeds: chainAdmission.admittedChainSeeds,
     chainAdmission,
-    storageLogger,
-    storageNow,
     hydrationEnabled,
     backgroundAssemblyOptions,
   };
@@ -185,7 +172,6 @@ export const createBackgroundSessionScope = ({
     chainRpcEndpointOverridesPort,
     ports: storePorts,
     selectionDefaults: bootstrapScope.chainAdmission.selectionDefaults,
-    now: bootstrapScope.storageNow,
   });
 
   const stateServicesInit = initBackgroundStateServices({
@@ -208,12 +194,10 @@ export const createBackgroundSessionScope = ({
     chainRpc: stateServices.chainRpc,
     walletChainSelection,
     providerChainSelection,
-    logger: bootstrapScope.storageLogger,
   });
 
   const attention = createAttentionService({
     messenger: bootstrapScope.messenger,
-    now: bootstrapScope.storageNow,
   });
 
   const runtimeLifecycle = createRuntimeLifecycle(lifecycleLabel ?? "createBackgroundRuntime");
@@ -225,11 +209,8 @@ export const createBackgroundSessionScope = ({
     accountsStore,
     keyringMetas,
     keyringNamespaces: resolvedKeyringNamespaces,
-    storageLogger: bootstrapScope.storageLogger,
-    storageNow: bootstrapScope.storageNow,
     hydrationEnabled: bootstrapScope.hydrationEnabled,
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
-    getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
     ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
   });
@@ -307,7 +288,6 @@ export const createBackgroundSupportScope = ({
     endpointOverrides: sessionScope.chainRpcEndpointOverrides,
     selectionDefaults: bootstrapScope.chainAdmission.selectionDefaults,
     hydrationEnabled: bootstrapScope.hydrationEnabled,
-    logger: bootstrapScope.storageLogger,
     getIsHydrating: () => sessionScope.runtimeLifecycle.getIsHydrating(),
     getRegisteredNamespaces: () => bootstrapScope.registeredNamespaces,
   });

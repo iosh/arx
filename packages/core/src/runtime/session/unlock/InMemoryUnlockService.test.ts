@@ -1,11 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../../messenger/index.js";
 import { InMemoryUnlockService } from "./InMemoryUnlockService.js";
 import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_UNLOCKED } from "./topics.js";
 import type { SessionLockState, UnlockLockedPayload, UnlockUnlockedPayload } from "./types.js";
 
 describe("InMemoryUnlockService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("unlocks the vault, emits events, and schedules auto lock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const messenger = createMessenger();
     const stateUpdates: SessionLockState[] = [];
     const lockedEvents: UnlockLockedPayload[] = [];
@@ -14,23 +20,6 @@ describe("InMemoryUnlockService", () => {
     messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
     messenger.subscribe(UNLOCK_LOCKED, (payload) => lockedEvents.push(payload));
     messenger.subscribe(UNLOCK_UNLOCKED, (payload) => unlockedEvents.push(payload));
-
-    let now = 1_000;
-    let triggerTimeout: (() => void) | null = () => {};
-
-    const setTimeoutSpy = vi.fn((handler: () => void, timeout: number) => {
-      expect(timeout).toBe(500);
-      triggerTimeout = handler;
-      return 1 as unknown as ReturnType<typeof setTimeout>;
-    });
-    const clearTimeoutSpy = vi.fn(() => {
-      triggerTimeout = null;
-    });
-
-    const timers = {
-      setTimeout: setTimeoutSpy as unknown as typeof setTimeout,
-      clearTimeout: clearTimeoutSpy as unknown as typeof clearTimeout,
-    };
 
     let vaultUnlocked = false;
     const vaultUnlock = vi.fn(async () => {
@@ -48,8 +37,6 @@ describe("InMemoryUnlockService", () => {
         getStatus: () => (vaultUnlocked ? "unlocked" : "locked"),
       },
       autoLockDurationMs: 500,
-      now: () => now,
-      timers,
     });
 
     expect(stateUpdates).toEqual([
@@ -72,10 +59,7 @@ describe("InMemoryUnlockService", () => {
       nextAutoLockAt: 1_500,
     });
 
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
-
-    now = 1_500;
-    triggerTimeout?.();
+    await vi.advanceTimersByTimeAsync(500);
 
     expect(vaultLock).toHaveBeenCalledTimes(1);
     expect(unlockService.isUnlocked()).toBe(false);
@@ -88,23 +72,11 @@ describe("InMemoryUnlockService", () => {
   });
 
   it("reconfigures auto-lock duration while unlocked", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5_000);
     const messenger = createMessenger();
     const stateUpdates: SessionLockState[] = [];
     messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
-
-    const now = 5_000;
-
-    const setTimeoutSpy = vi.fn((handler: () => void, timeout: number) => {
-      void handler;
-      void timeout;
-      return 1 as unknown as ReturnType<typeof setTimeout>;
-    });
-    const clearTimeoutSpy = vi.fn();
-
-    const timers = {
-      setTimeout: setTimeoutSpy as unknown as typeof setTimeout,
-      clearTimeout: clearTimeoutSpy as unknown as typeof clearTimeout,
-    };
 
     const unlockService = new InMemoryUnlockService({
       messenger,
@@ -114,23 +86,16 @@ describe("InMemoryUnlockService", () => {
         getStatus: () => "locked",
       },
       autoLockDurationMs: 600,
-      now: () => now,
-      timers,
     });
 
     await unlockService.unlock({ password: "pwd" });
 
-    setTimeoutSpy.mockClear();
-    clearTimeoutSpy.mockClear();
-
     unlockService.setAutoLockDuration(1_200);
 
     expect(unlockService.getState().autoLockDurationMs).toBe(1_200);
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
-    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1_200);
     expect(stateUpdates.at(-1)).toMatchObject({
       autoLockDurationMs: 1_200,
-      nextAutoLockAt: now + 1_200,
+      nextAutoLockAt: 6_200,
     });
   });
 
@@ -138,11 +103,6 @@ describe("InMemoryUnlockService", () => {
     const messenger = createMessenger();
     const stateUpdates: SessionLockState[] = [];
     messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
-
-    const timers = {
-      setTimeout: vi.fn(),
-      clearTimeout: vi.fn(),
-    };
 
     const vaultUnlock = vi.fn(async () => {
       throw new Error("unlock failed");
@@ -156,17 +116,11 @@ describe("InMemoryUnlockService", () => {
         getStatus: () => "locked",
       },
       autoLockDurationMs: 1_000,
-      now: () => 10_000,
-      timers: timers as unknown as {
-        setTimeout: typeof setTimeout;
-        clearTimeout: typeof clearTimeout;
-      },
     });
 
     await expect(unlockService.unlock({ password: "secret" })).rejects.toThrow("unlock failed");
 
     expect(unlockService.isUnlocked()).toBe(false);
-    expect(timers.setTimeout).not.toHaveBeenCalled();
     expect(stateUpdates.at(-1)).toMatchObject({
       status: "locked",
       nextAutoLockAt: null,
@@ -187,11 +141,6 @@ describe("InMemoryUnlockService", () => {
         getStatus: () => (hasEnvelope ? "locked" : "uninitialized"),
       },
       autoLockDurationMs: 1_000,
-      now: () => 10_000,
-      timers: {
-        setTimeout: vi.fn() as unknown as typeof setTimeout,
-        clearTimeout: vi.fn() as unknown as typeof clearTimeout,
-      },
     });
 
     expect(unlockService.getState()).toEqual({

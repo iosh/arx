@@ -1,7 +1,7 @@
 import type { CoreStoragePorts } from "@arx/core/engine";
 
 import { ArxStorageDatabase } from "./db.js";
-import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
+import { createDexieCtx, type DexieCtx } from "./internal/ctx.js";
 import { DexieAccountsPort } from "./ports/accountsPort.js";
 import { DexieChainDefinitionsPort } from "./ports/chainDefinitionsPort.js";
 import { DexieChainRpcDefaultEndpointsPort } from "./ports/chainRpcDefaultEndpointsPort.js";
@@ -32,15 +32,12 @@ export type DexieStorage = {
 
 export type CreateDexieStorageOptions = {
   databaseName?: string;
-  logger?: StorageDexieLogger;
 };
 
 export const createDexieStorage = (options: CreateDexieStorageOptions = {}): DexieStorage => {
   const dbName = options.databaseName ?? DEFAULT_DEXIE_DATABASE_NAME;
   const db = new ArxStorageDatabase(dbName);
-
-  const logger: StorageDexieLogger = options.logger ?? { warn: console.warn.bind(console) };
-  const ctx = createDexieCtx(db, logger);
+  const ctx = createDexieCtx(db);
 
   return {
     ports: {

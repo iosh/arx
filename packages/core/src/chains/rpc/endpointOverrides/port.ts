@@ -1,5 +1,5 @@
-import type { ChainRef } from "../../ids.js";
 import type { ChainRpcEndpointOverrideRecord } from "../../../storage/records.js";
+import type { ChainRef } from "../../ids.js";
 
 export interface ChainRpcEndpointOverridesPort {
   get(chainRef: ChainRef): Promise<ChainRpcEndpointOverrideRecord | null>;

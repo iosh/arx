@@ -16,7 +16,6 @@ type Entry = { key: string; request: AttentionRequest };
 
 export class InMemoryAttentionService implements AttentionService {
   #messenger: Messenger;
-  #now: () => number;
   #defaultTtlMs: number;
   #maxQueueSize: number;
   #queue: Entry[] = [];
@@ -24,18 +23,16 @@ export class InMemoryAttentionService implements AttentionService {
 
   constructor(opts: {
     messenger: Messenger;
-    now?: () => number;
     defaultTtlMs?: number;
     maxQueueSize?: number;
   }) {
     this.#messenger = opts.messenger;
-    this.#now = opts.now ?? Date.now;
     this.#defaultTtlMs = opts.defaultTtlMs ?? DEFAULT_TTL_MS;
     this.#maxQueueSize = opts.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
   }
 
   requestAttention(params: RequestAttentionParams): AttentionRequestResult {
-    const now = this.#now();
+    const now = Date.now();
     this.#pruneExpired(now);
 
     const key = JSON.stringify([
@@ -105,7 +102,7 @@ export class InMemoryAttentionService implements AttentionService {
   }
 
   clearExpired(): AttentionState {
-    const now = this.#now();
+    const now = Date.now();
     const changed = this.#pruneExpired(now);
     if (!changed) return this.getSnapshot();
 

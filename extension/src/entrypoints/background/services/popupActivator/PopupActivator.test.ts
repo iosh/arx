@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPopupActivator } from "./PopupActivator.js";
 
 type PopupActivatorDeps = NonNullable<Parameters<typeof createPopupActivator>[0]>;
@@ -10,6 +10,10 @@ const makeBrowser = () => {
 };
 
 describe("PopupActivator", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("uses custom popupPath for notification window", async () => {
     const browser = makeBrowser();
     browser.windows.getAll.mockResolvedValue([]);
@@ -17,7 +21,6 @@ describe("PopupActivator", () => {
 
     const act = createPopupActivator({
       browser: browser as unknown as PopupActivatorDeps["browser"],
-      now: () => 0,
       popupPath: "notification.html",
     });
     await expect(act.open()).resolves.toMatchObject({ activationPath: "create", windowId: 1 });
@@ -32,7 +35,7 @@ describe("PopupActivator", () => {
     const browser = makeBrowser();
     browser.windows.getAll.mockResolvedValue([]);
     browser.windows.create.mockResolvedValue({ id: 1 });
-    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"], now: () => 0 });
+    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"] });
     await expect(act.open()).resolves.toMatchObject({ activationPath: "create", windowId: 1 });
     expect(browser.windows.create).toHaveBeenCalledTimes(1);
   });
@@ -40,13 +43,14 @@ describe("PopupActivator", () => {
   it("scans and focuses when cached window is gone", async () => {
     const browser = makeBrowser();
     const popupUrl = browser.runtime.getURL("popup.html");
-    let t = 0;
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     browser.windows.getAll.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 9, tabs: [{ url: popupUrl }] }]);
     browser.windows.create.mockResolvedValue({ id: 1 });
     browser.windows.get.mockRejectedValueOnce(new Error("gone")).mockResolvedValue({});
-    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"], now: () => t });
+    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"] });
     await act.open(); // create id=1, caches it
-    t = 1000;
+    vi.setSystemTime(1_000);
     await expect(act.open()).resolves.toMatchObject({ activationPath: "focus", windowId: 9 });
     expect(browser.windows.update).toHaveBeenCalledWith(9, { focused: true });
     expect(browser.windows.create).toHaveBeenCalledTimes(1);
@@ -54,16 +58,16 @@ describe("PopupActivator", () => {
 
   it("debounces within cooldown window", async () => {
     const browser = makeBrowser();
-    let t = 0;
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     browser.windows.getAll.mockResolvedValue([]);
     browser.windows.create.mockResolvedValue({ id: 2 });
     const act = createPopupActivator({
       browser: browser as unknown as PopupActivatorDeps["browser"],
-      now: () => t,
       cooldownMs: 500,
     });
     await act.open();
-    t = 100;
+    vi.setSystemTime(100);
     await expect(act.open()).resolves.toMatchObject({ activationPath: "debounced", debounced: true });
     expect(browser.windows.create).toHaveBeenCalledTimes(1);
   });
@@ -80,7 +84,7 @@ describe("PopupActivator", () => {
         }),
     );
 
-    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"], now: () => 0 });
+    const act = createPopupActivator({ browser: browser as unknown as PopupActivatorDeps["browser"] });
     const p1 = act.open();
     const p2 = act.open();
 

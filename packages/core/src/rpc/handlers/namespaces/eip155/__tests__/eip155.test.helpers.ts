@@ -316,7 +316,7 @@ export const setupApprovalResponder = (
       } catch (error) {
         console.error("[setupApprovalResponder] Responder error:", error);
         if (runtime.services.approvals.has(record.approvalId)) {
-          await runtime.services.approvals.cancel({
+          runtime.services.approvals.cancel({
             approvalId: record.approvalId,
             reason: "internal_error",
             error: new Error("setupApprovalResponder: responder did not resolve/reject approval"),

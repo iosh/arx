@@ -1,8 +1,8 @@
+import type { AccountsService } from "../../accounts/index.js";
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
+import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import type { AccountsService } from "../../accounts/index.js";
-import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { CreateVaultParams, VaultEnvelope, VaultService } from "../../vault/types.js";
@@ -26,8 +26,6 @@ export type SessionOptions = {
   unlock?: UnlockFactory;
   autoLockDurationMs?: number;
   persistDebounceMs?: number;
-  timers?: UnlockServiceOptions["timers"];
-  uuid?: () => string;
   keyringNamespaces?: NamespaceConfig[];
 };
 
@@ -63,24 +61,19 @@ type SessionLayerParams = {
   accountsStore: AccountsService;
   keyringMetas: KeyringMetasPort;
   keyringNamespaces: readonly NamespaceConfig[];
-  storageLogger: (message: string, error?: unknown) => void;
-  storageNow: () => number;
   hydrationEnabled: boolean;
   sessionOptions?: SessionLayerOptions;
   getIsHydrating(): boolean;
-  getIsDestroyed(): boolean;
 };
 
 export type SessionLayerResult = {
   session: BackgroundSessionServices;
   keyringService: KeyringService;
+  attachKeyring(): Promise<void>;
   persistVaultMetaImmediate(): Promise<void>;
   scheduleVaultMetaPersist(): void;
   attachSessionListeners(): void;
-  detachSessionListeners(): void;
-  cleanupVaultPersistTimer(): void;
   hydrateVaultMeta(): Promise<void>;
-  destroySessionLayer(): void;
 };
 
 export const initSessionLayer = ({
@@ -89,12 +82,9 @@ export const initSessionLayer = ({
   accountsStore,
   keyringMetas,
   keyringNamespaces,
-  storageLogger,
-  storageNow,
   hydrationEnabled,
   sessionOptions,
   getIsHydrating,
-  getIsDestroyed,
 }: SessionLayerParams): SessionLayerResult => {
   const createBaseVaultService = (): VaultService => {
     const candidate = sessionOptions?.vault;
@@ -108,9 +98,6 @@ export const initSessionLayer = ({
   const unlockFactory =
     sessionOptions?.unlock ?? ((options: UnlockServiceOptions) => new InMemoryUnlockService(options));
 
-  const sessionTimers = sessionOptions?.timers ?? {};
-  const sessionSetTimeout = sessionTimers.setTimeout ?? setTimeout;
-  const sessionClearTimeout = sessionTimers.clearTimeout ?? clearTimeout;
   const baseAutoLockDurationMs = sessionOptions?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_MS;
   const persistDebounceMs = sessionOptions?.persistDebounceMs ?? DEFAULT_PERSIST_DEBOUNCE_MS;
 
@@ -118,37 +105,32 @@ export const initSessionLayer = ({
   let lastPersistedVaultMeta: VaultMetaSnapshot | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionListenersAttached = false;
+  let keyringService: KeyringService;
 
   const stateChangedListeners = new Set<() => void>();
 
   const notifySessionStateChanged = () => {
     for (const listener of stateChangedListeners) {
-      try {
-        listener();
-      } catch (error) {
-        storageLogger("session: failed to notify state listener", error);
-      }
+      listener();
     }
   };
 
   const getOrInitVaultInitializedAt = () => {
     if (vaultInitializedAt === null) {
-      vaultInitializedAt = storageNow();
+      vaultInitializedAt = Date.now();
     }
     return vaultInitializedAt;
   };
 
-  const sessionSubscriptions: Array<() => void> = [];
-
   const cleanupVaultPersistTimer = () => {
     if (persistTimer !== null) {
-      sessionClearTimeout(persistTimer as Parameters<typeof clearTimeout>[0]);
+      clearTimeout(persistTimer);
       persistTimer = null;
     }
   };
 
-  const persistVaultMetaImmediate = async (options?: { throwOnError?: boolean }): Promise<void> => {
-    if (!vaultMetaPort || getIsDestroyed()) {
+  const persistVaultMetaImmediate = async (): Promise<void> => {
+    if (!vaultMetaPort) {
       return;
     }
 
@@ -156,7 +138,7 @@ export const initSessionLayer = ({
 
     const envelope: VaultMetaSnapshot = {
       version: VAULT_META_SNAPSHOT_VERSION,
-      updatedAt: storageNow(),
+      updatedAt: Date.now(),
       payload: {
         envelope: baseVault.getEnvelope(),
         autoLockDurationMs: unlockState.autoLockDurationMs,
@@ -164,19 +146,12 @@ export const initSessionLayer = ({
       },
     };
 
-    try {
-      await vaultMetaPort.saveVaultMeta(envelope);
-      lastPersistedVaultMeta = envelope;
-    } catch (error) {
-      storageLogger("session: failed to persist vault meta", error);
-      if (options?.throwOnError) {
-        throw error;
-      }
-    }
+    await vaultMetaPort.saveVaultMeta(envelope);
+    lastPersistedVaultMeta = envelope;
   };
 
   const scheduleVaultMetaPersist = () => {
-    if (!vaultMetaPort || getIsDestroyed() || getIsHydrating()) {
+    if (!vaultMetaPort || getIsHydrating()) {
       return;
     }
 
@@ -186,7 +161,7 @@ export const initSessionLayer = ({
     }
 
     cleanupVaultPersistTimer();
-    persistTimer = sessionSetTimeout(() => {
+    persistTimer = setTimeout(() => {
       persistTimer = null;
       void persistVaultMetaImmediate();
     }, persistDebounceMs);
@@ -211,12 +186,7 @@ export const initSessionLayer = ({
       getStatus: () => baseVault.getStatus(),
     },
     autoLockDurationMs: baseAutoLockDurationMs,
-    now: storageNow,
   };
-
-  if (sessionOptions?.timers) {
-    unlockOptions.timers = sessionOptions.timers;
-  }
 
   const unlock = unlockFactory(unlockOptions);
 
@@ -263,7 +233,7 @@ export const initSessionLayer = ({
     params: CreateVaultParams & { secret: Uint8Array; persist?: boolean },
   ): Promise<VaultEnvelope> => {
     assertSessionLockedForVaultLifecycle("createVault");
-    vaultInitializedAt = storageNow();
+    vaultInitializedAt = Date.now();
     const envelope = await baseVault.initialize({
       password: params.password,
       secret: params.secret,
@@ -272,7 +242,7 @@ export const initSessionLayer = ({
     unlock.syncVaultStatus();
     notifySessionStateChanged();
     if (params.persist === true && !getIsHydrating()) {
-      await persistVaultMetaImmediate({ throwOnError: true });
+      await persistVaultMetaImmediate();
     }
     return envelope;
   };
@@ -283,10 +253,10 @@ export const initSessionLayer = ({
     assertVaultLockedAfterMutation("loadEnvelope");
     unlock.syncVaultStatus();
     notifySessionStateChanged();
-    vaultInitializedAt = storageNow();
+    vaultInitializedAt = Date.now();
     cleanupVaultPersistTimer();
     if (!getIsHydrating()) {
-      await persistVaultMetaImmediate({ throwOnError: true });
+      await persistVaultMetaImmediate();
     }
 
     const importedEnvelope = baseVault.getEnvelope();
@@ -305,19 +275,13 @@ export const initSessionLayer = ({
     keyringService.detach();
     baseVault.clear();
     cleanupVaultPersistTimer();
-    try {
-      await vaultMetaPort?.clearVaultMeta();
-    } catch (error) {
-      storageLogger("session: failed to clear vault meta", error);
-    }
+    await vaultMetaPort?.clearVaultMeta();
     unlock.syncVaultStatus();
     notifySessionStateChanged();
-    void keyringService.attach().catch((error) => storageLogger("session: keyring attach failed", error));
+    await keyringService.attach();
   };
 
-  const keyringService = new KeyringService({
-    now: storageNow,
-    uuid: sessionOptions?.uuid ?? (() => crypto.randomUUID()),
+  keyringService = new KeyringService({
     vault: baseVault,
     unlock,
     accountsStore,
@@ -326,50 +290,41 @@ export const initSessionLayer = ({
       ...namespace,
       factories: { ...namespace.factories },
     })),
-    logger: storageLogger,
-    onHydrationError: (error: unknown) => {
-      storageLogger("session: keyring hydration failed; locking session", error);
+    onHydrationError: () => {
       unlock.lock("reload");
     },
   });
 
-  void keyringService.attach().catch((error) => storageLogger("session: keyring attach failed", error));
-
-  sessionSubscriptions.push(
-    keyringService.onPayloadUpdated(async (payload) => {
-      if (!payload) return;
-      try {
-        await baseVault.commitSecret({ secret: payload });
-        scheduleVaultMetaPersist();
-      } catch (error) {
-        storageLogger("session: failed to reseal keyring payload", error);
-      }
-    }),
-  );
+  keyringService.onPayloadUpdated(async (payload) => {
+    if (!payload) return;
+    await baseVault.commitSecret({ secret: payload });
+    scheduleVaultMetaPersist();
+  });
 
   const attachSessionListeners = () => {
     if (sessionListenersAttached) return;
 
     sessionListenersAttached = true;
-    sessionSubscriptions.push(
-      unlock.onStateChanged(() => {
-        scheduleVaultMetaPersist();
-        notifySessionStateChanged();
-      }),
-    );
+    unlock.onStateChanged(() => {
+      scheduleVaultMetaPersist();
+      notifySessionStateChanged();
+    });
   };
 
-  const detachSessionListeners = () => {
-    if (!sessionListenersAttached) return;
-
-    sessionListenersAttached = false;
-    sessionSubscriptions.splice(0).forEach((unsubscribe) => {
-      try {
-        unsubscribe();
-      } catch (error) {
-        storageLogger("session: failed to remove unlock listener", error);
-      }
-    });
+  const sessionUnlock: UnlockService = {
+    getState: () => unlock.getState(),
+    isUnlocked: () => unlock.isUnlocked(),
+    unlock: async (params) => {
+      await unlock.unlock(params);
+      await keyringService.attach();
+    },
+    lock: (reason) => unlock.lock(reason),
+    syncVaultStatus: () => unlock.syncVaultStatus(),
+    scheduleAutoLock: (duration) => unlock.scheduleAutoLock(duration),
+    setAutoLockDuration: (duration) => unlock.setAutoLockDuration(duration),
+    onStateChanged: (handler) => unlock.onStateChanged(handler),
+    onLocked: (handler) => unlock.onLocked(handler),
+    onUnlocked: (handler) => unlock.onUnlocked(handler),
   };
 
   const hydrateVaultMeta = async () => {
@@ -416,25 +371,9 @@ export const initSessionLayer = ({
     }
   };
 
-  const destroySessionLayer = () => {
-    try {
-      unlock.lock("suspend");
-    } catch (error) {
-      storageLogger("session: failed to lock during destroy", error);
-    }
-
-    detachSessionListeners();
-    cleanupVaultPersistTimer();
-    try {
-      keyringService.detach();
-    } catch (error) {
-      storageLogger("session: failed to detach keyring", error);
-    }
-  };
-
   const session: BackgroundSessionServices = {
     vault: baseVault,
-    unlock,
+    unlock: sessionUnlock,
     getStatus: () => {
       const unlockState = unlock.getState();
       const vaultStatus = baseVault.getStatus();
@@ -446,7 +385,7 @@ export const initSessionLayer = ({
         nextAutoLockAt: unlockState.nextAutoLockAt,
       };
     },
-    isUnlocked: () => unlock.isUnlocked(),
+    isUnlocked: () => sessionUnlock.isUnlocked(),
     hasInitializedVault: () => baseVault.getStatus() !== "uninitialized",
     createVault: createSessionVault,
     createVaultWithSecret: createSessionVaultWithSecret,
@@ -462,7 +401,7 @@ export const initSessionLayer = ({
       };
     },
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
-    persistVaultMetaSnapshot: () => persistVaultMetaImmediate({ throwOnError: true }),
+    persistVaultMetaSnapshot: () => persistVaultMetaImmediate(),
     onStateChanged: (listener) => {
       stateChangedListeners.add(listener);
       return () => {
@@ -474,12 +413,10 @@ export const initSessionLayer = ({
   return {
     session,
     keyringService,
+    attachKeyring: () => keyringService.attach(),
     persistVaultMetaImmediate,
     scheduleVaultMetaPersist,
     attachSessionListeners,
-    detachSessionListeners,
-    cleanupVaultPersistTimer,
     hydrateVaultMeta,
-    destroySessionLayer,
   };
 };

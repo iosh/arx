@@ -1,5 +1,3 @@
-import { getAccountIdNamespace } from "./addressing/accountId.js";
-import { AccountNamespaceMismatchError } from "./errors.js";
 import { OWNER_CHANGED } from "../events/ownerChanged.js";
 import { KeyringAccountNotFoundError } from "../keyring/errors.js";
 import type { Messenger } from "../messenger/index.js";
@@ -9,6 +7,8 @@ import { createSerialQueue } from "../utils/serialQueue.js";
 import type { AccountsPort } from "./accountsPort.js";
 import { ACCOUNTS_STORE_CHANGED } from "./accountsTopics.js";
 import type { AccountsService, ListAccountsParams } from "./accountsTypes.js";
+import { getAccountIdNamespace } from "./addressing/accountId.js";
+import { AccountNamespaceMismatchError } from "./errors.js";
 
 export type CreateAccountsServiceOptions = {
   messenger: Messenger;

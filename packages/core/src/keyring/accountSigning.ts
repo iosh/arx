@@ -1,6 +1,6 @@
-import type { KeyringService } from "../runtime/keyring/KeyringService.js";
-import type { AccountId } from "../runtime/keyring/types.js";
-import { SessionLockedError } from "../runtime/session/errors.js";
+import { SessionLockedError } from "../session/errors.js";
+import type { KeyringService } from "./service/KeyringService.js";
+import type { AccountId } from "./service/types.js";
 
 type SignDigestResult = Awaited<ReturnType<KeyringService["signDigestByAccountId"]>>;
 

@@ -1,4 +1,4 @@
-import type { AccountSelectionService } from "../accounts/runtime/types.js";
+import type { AccountSelectionService } from "../accounts/selection/types.js";
 import type { ApprovalAccountSelectionDecision, ApprovalRecord } from "../approvals/queue/types.js";
 import { PermissionDeniedError } from "../permissions/errors.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";

@@ -85,10 +85,13 @@ class FailingTransactionAggregatesPort extends MemoryTransactionAggregatesPort {
   }
 }
 
-const expectHydrationFailure = async (input: CreateCoreRuntimeInput, details: { owner: string; resource: string }) => {
+const expectBootFailure = async (
+  input: CreateCoreRuntimeInput,
+  expected: { code: string; details: Record<string, string> },
+) => {
   await expect(createCoreRuntime(input)).rejects.toMatchObject({
-    code: "runtime.hydration_failed",
-    details,
+    code: expected.code,
+    details: expected.details,
   });
 };
 
@@ -284,29 +287,29 @@ describe("createCoreRuntime", () => {
   });
 
   it("fails boot when correctness-critical vault metadata cannot hydrate", async () => {
-    await expectHydrationFailure(
+    await expectBootFailure(
       createCoreRuntimeInput({
         vaultMetaPort: new FailingVaultMetaPort(),
       }),
-      { owner: "vault", resource: "vaultMeta" },
+      { code: "global.session.hydration_failed", details: { resource: "vaultMeta" } },
     );
   });
 
   it("fails boot when correctness-critical chain preferences cannot hydrate", async () => {
-    await expectHydrationFailure(
+    await expectBootFailure(
       createCoreRuntimeInput({
         walletChainSelectionPort: new FailingWalletChainSelectionPort(),
       }),
-      { owner: "chains", resource: "walletChainSelection" },
+      { code: "chain.bootstrap_hydration_failed", details: { resource: "walletChainSelection" } },
     );
   });
 
   it("fails boot when transaction restart recovery cannot read persisted aggregates", async () => {
-    await expectHydrationFailure(
+    await expectBootFailure(
       createCoreRuntimeInput({
         transactionAggregatesPort: new FailingTransactionAggregatesPort(),
       }),
-      { owner: "transactions", resource: "restartRecovery" },
+      { code: "runtime.hydration_failed", details: { owner: "transactions", resource: "restartRecovery" } },
     );
   });
 });

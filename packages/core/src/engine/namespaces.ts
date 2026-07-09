@@ -8,7 +8,7 @@ export const createWalletNamespaces = (params: { manifests: readonly NamespaceMa
   const manifestByNamespace = new Map<string, NamespaceManifest>();
   for (const manifest of manifests) {
     if (manifestByNamespace.has(manifest.namespace)) {
-      throw new DuplicateWalletNamespaceManifestError({ namespace: manifest.namespace });
+      throw new DuplicateWalletNamespaceManifestError(manifest.namespace);
     }
     manifestByNamespace.set(manifest.namespace, manifest);
   }
@@ -20,7 +20,7 @@ export const createWalletNamespaces = (params: { manifests: readonly NamespaceMa
   const requireManifest = (namespace: string): NamespaceManifest => {
     const manifest = manifestByNamespace.get(namespace);
     if (manifest) return manifest;
-    throw new WalletNamespaceManifestNotFoundError({ namespace });
+    throw new WalletNamespaceManifestNotFoundError(namespace);
   };
 
   return {

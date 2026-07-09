@@ -291,9 +291,9 @@ describe("createArxWallet", () => {
   });
 
   it("rejects empty namespace manifests", async () => {
-    await expect(createArxWallet(createWalletInput({ manifests: [] }))).rejects.toThrow(
-      /requires at least one namespace manifest/,
-    );
+    await expect(createArxWallet(createWalletInput({ manifests: [] }))).rejects.toMatchObject({
+      code: "wallet.namespace_manifest_required",
+    });
   });
 
   it("rejects duplicate namespace manifests", async () => {

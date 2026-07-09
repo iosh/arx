@@ -1,9 +1,9 @@
-import type { ProviderRuntimeAccess } from "../../runtime/provider/types.js";
+import type { ProviderAccess } from "../../provider/access/types.js";
 import type { WalletDappConnections, WalletProvider } from "../types.js";
 import type { DappConnectionWriter } from "./dappConnections.js";
 
 export const createWalletProvider = (deps: {
-  runtimeAccess: ProviderRuntimeAccess;
+  runtimeAccess: ProviderAccess;
   dappConnections: Pick<WalletDappConnections, "isConnected"> & Pick<DappConnectionWriter, "record" | "remove">;
 }): WalletProvider => {
   const { runtimeAccess, dappConnections } = deps;
@@ -27,7 +27,7 @@ export const createWalletProvider = (deps: {
     },
     subscribeConnectionStateChanged: (listener) => runtimeAccess.subscribeConnectionStateChanged(listener),
     request: (input) => runtimeAccess.request(input),
-    encodeRuntimeRpcError: (error) => runtimeAccess.encodeRuntimeRpcError(error),
+    encodeRpcError: (error) => runtimeAccess.encodeRpcError(error),
     cancelRequestScope: (input) => runtimeAccess.cancelRequestScope(input),
     subscribeSessionUnlocked: (listener) => runtimeAccess.subscribeSessionUnlocked(listener),
     subscribeSessionLocked: (listener) => runtimeAccess.subscribeSessionLocked(listener),

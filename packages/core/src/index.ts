@@ -10,7 +10,7 @@ export type {
 export * from "./accounts/index.js";
 export * from "./chains/index.js";
 export * from "./engine/index.js";
-export type { ArxErrorDetails, ErrorCause, JsonValue, SerializedArxError } from "./error.js";
+export type { ArxErrorDetails, JsonValue, SerializedArxError } from "./error.js";
 export {
   ARX_ERROR_KIND,
   ArxBaseError,
@@ -18,12 +18,15 @@ export {
   isArxBaseError,
   serializeArxError,
 } from "./error.js";
+export * from "./errors/index.js";
 export * from "./messenger/index.js";
 export * from "./namespaces/index.js";
 export * from "./permissions/index.js";
+export * from "./provider/index.js";
 export type { RpcHandlerDeps } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
+export * from "./session/index.js";
 export type {
   AccountNamespace,
   AccountRecord,

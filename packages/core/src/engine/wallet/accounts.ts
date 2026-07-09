@@ -1,5 +1,5 @@
-import type { AccountSelectionService } from "../../accounts/runtime/types.js";
-import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { AccountSelectionService } from "../../accounts/selection/types.js";
+import type { KeyringService } from "../../keyring/service/KeyringService.js";
 import type { WalletAccounts, WalletBackupStatus, WalletSetupState } from "../types.js";
 
 const deriveBackupStatus = (keyrings: Pick<KeyringService, "getKeyrings">): WalletBackupStatus => {

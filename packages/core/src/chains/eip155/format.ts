@@ -13,7 +13,7 @@ export const eip155ChainIdHexFromChainRef = (chainRef: ChainRef): Hex.Hex => {
   assertNamespace(chainRef, "eip155");
   const { reference } = parseChainRef(chainRef);
   if (!EIP155_DECIMAL_REFERENCE_PATTERN.test(reference)) {
-    throw new ChainInvalidRefError({ rule: "reference" });
+    throw new ChainInvalidRefError("reference");
   }
 
   return Hex.fromNumber(BigInt(reference));

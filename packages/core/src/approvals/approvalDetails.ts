@@ -1,10 +1,11 @@
-import type { AccountSelectionService } from "../accounts/runtime/types.js";
+import type { AccountSelectionService } from "../accounts/selection/types.js";
 import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainViewsService } from "../chains/views/types.js";
 import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
+import { UnsupportedApprovalKindError } from "./errors.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
 import { getApprovalSelectableAccounts } from "./shared.js";
 import type { ApprovalSource } from "./source.js";
@@ -141,8 +142,8 @@ const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
   createdAt: item.createdAt,
 });
 
-const assertUnreachable = (_value: never): never => {
-  throw new Error("Unreachable approval kind");
+const assertUnreachable = (value: never): never => {
+  throw new UnsupportedApprovalKindError(String(value));
 };
 
 const toDetailMeta = (record: ApprovalRecord) => {
@@ -381,7 +382,7 @@ export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetail
       return buildTransactionDetail(record);
     }
 
-    throw new Error(`Unsupported approval kind: ${record.kind}`);
+    throw new UnsupportedApprovalKindError(record.kind);
   };
 
   return {

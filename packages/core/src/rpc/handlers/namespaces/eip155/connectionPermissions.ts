@@ -1,4 +1,4 @@
-import type { AccountSelectionService } from "../../../../accounts/runtime/types.js";
+import type { AccountSelectionService } from "../../../../accounts/selection/types.js";
 import { deriveApprovalReviewContext } from "../../../../approvals/chainContext.js";
 import type { ApprovalRecord } from "../../../../approvals/queue/types.js";
 import { getApprovalSelectableAccounts, resolveApprovalSelectedAccounts } from "../../../../approvals/shared.js";

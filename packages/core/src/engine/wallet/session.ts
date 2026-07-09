@@ -1,10 +1,10 @@
-import type { BackgroundSessionServices } from "../../runtime/background/session.js";
-import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { KeyringService } from "../../keyring/service/KeyringService.js";
+import type { SessionServices } from "../../session/sessionLayer.js";
 import type { WalletSession } from "../types.js";
 
 // Vault lifecycle and unlock state exposed on the wallet surface.
 export const createWalletSession = (deps: {
-  session: BackgroundSessionServices;
+  session: SessionServices;
   keyring: Pick<KeyringService, "waitForReady">;
 }): WalletSession => {
   const { session, keyring } = deps;

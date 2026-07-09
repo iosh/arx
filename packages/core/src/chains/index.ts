@@ -1,8 +1,10 @@
 export * from "./activation/index.js";
 export * from "./addressing.js";
+export * from "./bootstrap/index.js";
 export * from "./caip.js";
 export * from "./chains.seed.js";
 export * from "./definition.js";
+export * from "./definitions/index.js";
 export { createEip155AddressFormat } from "./eip155/address.js";
 export { eip155ChainAddressing } from "./eip155/chainAddressing.js";
 export { createEip155DefinitionSeedFromEip3085 } from "./eip155/eip3085.js";
@@ -22,7 +24,6 @@ export type {
   ChainRpcState,
   NonEmptyRpcEndpoints,
 } from "./rpc/types.js";
-export * from "./runtime/chainDefinitions/index.js";
 export * from "./selection/provider/index.js";
 export * from "./selection/wallet/index.js";
 export * from "./types.js";

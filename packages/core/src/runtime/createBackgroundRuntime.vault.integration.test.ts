@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { decodePayload, encodePayload } from "../keyring/service/vaultPayloadCodec.js";
 import type { VaultMetaSnapshot } from "../storage/index.js";
 import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
 import {
@@ -12,7 +13,6 @@ import {
   TEST_INITIAL_TIME,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
-import { decodePayload, encodePayload } from "./keyring/keyring-utils.js";
 
 const TEST_PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 const CORRUPTED_PRIVATE_KEY = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -233,9 +233,8 @@ describe("createBackgroundRuntime (vault integration)", () => {
         vaultMetaPort,
       }),
     ).rejects.toMatchObject({
-      code: "runtime.hydration_failed",
+      code: "global.session.hydration_failed",
       details: {
-        owner: "vault",
         resource: "vaultEnvelope",
       },
     });

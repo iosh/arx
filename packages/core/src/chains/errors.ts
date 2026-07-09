@@ -1,4 +1,4 @@
-import { ArxBaseError, type ErrorCause } from "../error.js";
+import { ArxBaseError } from "../error.js";
 
 export type ChainInvalidRefRule =
   | "type"
@@ -8,18 +8,13 @@ export type ChainInvalidRefRule =
   | "reference"
   | "pattern";
 
-export type ChainInvalidRefInput = ErrorCause & {
-  rule: ChainInvalidRefRule;
-};
-
 export class ChainInvalidRefError extends ArxBaseError {
   static readonly code = "chain.invalid_ref";
 
-  constructor(input: ChainInvalidRefInput) {
+  constructor(rule: ChainInvalidRefRule) {
     super("Invalid CAIP-2 chainRef.", {
       code: ChainInvalidRefError.code,
-      details: { rule: input.rule },
-      cause: input.cause,
+      details: { rule },
     });
   }
 }
@@ -27,30 +22,24 @@ export class ChainInvalidRefError extends ArxBaseError {
 export class ChainNotFoundError extends ArxBaseError {
   static readonly code = "chain.not_found";
 
-  constructor(input: ErrorCause = {}) {
+  constructor() {
     super("Requested chain is not registered with ARX.", {
       code: ChainNotFoundError.code,
-      cause: input.cause,
     });
   }
 }
-
-export type ChainAvailabilityInput = ErrorCause & {
-  message?: string;
-};
 
 export class ChainNotAvailableError extends ArxBaseError {
   static readonly code = "chain.not_available";
 
-  constructor(params: ChainAvailabilityInput = {}) {
-    super(params.message ?? "Requested chain is not available in network runtime.", {
+  constructor(message = "Requested chain is not available.") {
+    super(message, {
       code: ChainNotAvailableError.code,
-      cause: params.cause,
     });
   }
 }
 
-export type ChainRpcAccessConfigInput = ErrorCause & {
+export type ChainRpcAccessConfigInput = {
   chainRef: string;
   reason: "duplicate" | "empty_endpoints" | "missing_endpoints";
 };
@@ -67,7 +56,6 @@ export class ChainRpcAccessConfigError extends ArxBaseError {
     super(messageByReason[params.reason], {
       code: ChainRpcAccessConfigError.code,
       details: { chainRef: params.chainRef, reason: params.reason },
-      cause: params.cause,
     });
   }
 }
@@ -75,10 +63,9 @@ export class ChainRpcAccessConfigError extends ArxBaseError {
 export class ChainNotSupportedError extends ArxBaseError {
   static readonly code = "chain.not_supported";
 
-  constructor(params: ChainAvailabilityInput = {}) {
-    super(params.message ?? "Requested chain is not supported.", {
+  constructor(message = "Requested chain is not supported.") {
+    super(message, {
       code: ChainNotSupportedError.code,
-      cause: params.cause,
     });
   }
 }
@@ -86,10 +73,9 @@ export class ChainNotSupportedError extends ArxBaseError {
 export class ChainNotCompatibleError extends ArxBaseError {
   static readonly code = "chain.not_compatible";
 
-  constructor(params: ChainAvailabilityInput = {}) {
-    super(params.message ?? "Requested chain is not compatible with this operation.", {
+  constructor(message = "Requested chain is not compatible with this operation.") {
+    super(message, {
       code: ChainNotCompatibleError.code,
-      cause: params.cause,
     });
   }
 }
@@ -97,7 +83,7 @@ export class ChainNotCompatibleError extends ArxBaseError {
 export class ChainNamespaceMismatchError extends ArxBaseError {
   static readonly code = "chain.namespace_mismatch";
 
-  constructor(params: ErrorCause & { chainRef: string; expected: string; actual: string }) {
+  constructor(params: { chainRef: string; expected: string; actual: string }) {
     super(`Chain ${params.chainRef} does not belong to namespace "${params.expected}".`, {
       code: ChainNamespaceMismatchError.code,
       details: {
@@ -105,7 +91,6 @@ export class ChainNamespaceMismatchError extends ArxBaseError {
         expectedNamespace: params.expected,
         actualNamespace: params.actual,
       },
-      cause: params.cause,
     });
   }
 }
@@ -113,11 +98,10 @@ export class ChainNamespaceMismatchError extends ArxBaseError {
 export class ChainAddressNamespaceNotSupportedError extends ArxBaseError {
   static readonly code = "chain.address_namespace_not_supported";
 
-  constructor(params: ErrorCause & { chainRef: string; namespace: string }) {
+  constructor(params: { chainRef: string; namespace: string }) {
     super(`No chain address handling is available for "${params.chainRef}".`, {
       code: ChainAddressNamespaceNotSupportedError.code,
       details: { chainRef: params.chainRef, namespace: params.namespace },
-      cause: params.cause,
     });
   }
 }
@@ -125,11 +109,10 @@ export class ChainAddressNamespaceNotSupportedError extends ArxBaseError {
 export class ChainInvalidAddressError extends ArxBaseError {
   static readonly code = "chain.address.invalid";
 
-  constructor(params: ErrorCause & { namespace: string; field: "input" | "canonical" }) {
+  constructor(params: { namespace: string; field: "input" | "canonical" }) {
     super(`Invalid ${params.namespace} address.`, {
       code: params.namespace === "eip155" ? "eip155.address.invalid" : ChainInvalidAddressError.code,
       details: { namespace: params.namespace, field: params.field },
-      cause: params.cause,
     });
   }
 }
@@ -137,11 +120,68 @@ export class ChainInvalidAddressError extends ArxBaseError {
 export class ChainDefinitionConflictError extends ArxBaseError {
   static readonly code = "chain.definition_conflict";
 
-  constructor(params: ErrorCause & { chainRef: string }) {
+  constructor(chainRef: string) {
     super("Requested chain conflicts with a builtin chain definition.", {
       code: ChainDefinitionConflictError.code,
-      details: { chainRef: params.chainRef },
-      cause: params.cause,
+      details: { chainRef },
+    });
+  }
+}
+
+export class DuplicateBuiltinChainDefinitionError extends ArxBaseError {
+  static readonly code = "chain.definition.duplicate_builtin";
+
+  constructor(chainRef: string) {
+    super("Duplicate builtin chain definition.", {
+      code: DuplicateBuiltinChainDefinitionError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class ChainDefinitionRpcUrlsRequiredError extends ArxBaseError {
+  static readonly code = "chain.definition.rpc_urls_required";
+
+  constructor(chainRef: string) {
+    super("At least one valid RPC URL is required.", {
+      code: ChainDefinitionRpcUrlsRequiredError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class ChainBootstrapInvariantError extends ArxBaseError {
+  static readonly code = "chain.bootstrap_invariant";
+
+  constructor() {
+    super("Chain bootstrap expected at least one available chain.", {
+      code: ChainBootstrapInvariantError.code,
+    });
+  }
+}
+
+export class ChainAdmissionConfigError extends ArxBaseError {
+  static readonly code = "chain.admission_config_invalid";
+
+  constructor(reason: "missing_admitted_chain") {
+    super("Chain admission configuration is invalid.", {
+      code: ChainAdmissionConfigError.code,
+      details: { reason },
+    });
+  }
+}
+
+export class ChainBootstrapHydrationError extends ArxBaseError {
+  static readonly code = "chain.bootstrap_hydration_failed";
+
+  constructor(
+    resource: "walletChainSelection" | "chainRpcDefaultEndpoints" | "chainRpcEndpointOverrides",
+    cause: unknown,
+  ) {
+    super("Failed to hydrate chain bootstrap state.", {
+      code: ChainBootstrapHydrationError.code,
+      details: { resource },
+      cause,
     });
   }
 }

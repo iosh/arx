@@ -3,6 +3,9 @@ import { formatChainAddress } from "../chains/addressing.js";
 import { OWNER_CHANGED } from "../events/ownerChanged.js";
 import type { MethodExecutor } from "../invoke/methods.js";
 import { assembleNamespaceStatic } from "../namespaces/index.js";
+import { createProviderAccess } from "../provider/access/createProviderAccess.js";
+import { createProviderRequests } from "../provider/access/providerRequests.js";
+import type { ProviderAccess } from "../provider/access/types.js";
 import {
   createRpcHintNamespaceResolver,
   createRpcMethodExecutor,
@@ -12,23 +15,21 @@ import {
   resolveRpcInvocationDetails,
 } from "../rpc/index.js";
 import type { BackgroundStateServices } from "../runtime/background/backgroundStateServices.js";
-import type { BackgroundRpcAccessPolicyHooks } from "../runtime/background/rpcAccessPolicy.js";
-import type { RpcLayerOptions } from "../runtime/background/rpcLayer.js";
-import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
 import {
   type BackgroundAssemblyOptions,
   createBackgroundBootstrapScope,
-  createBackgroundSessionScope,
+  createBackgroundCoreScope,
   createBackgroundSupportScope,
-} from "../runtime/background/runtimeScopes.js";
-import type { SessionOptions } from "../runtime/background/session.js";
-import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
-import { createProviderRequests } from "../runtime/provider/providerRequests.js";
-import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
+} from "../runtime/background/coreScopes.js";
+import type { BackgroundRpcAccessPolicyHooks } from "../runtime/background/rpcAccessPolicy.js";
+import type { RpcLayerOptions } from "../runtime/background/rpcLayer.js";
+import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
+import type { SessionOptions } from "../session/sessionLayer.js";
 import { createTransactionServices, TransactionAggregateStore } from "../transactions/index.js";
 import { createWalletSetupWorkflow } from "../wallet/actions/setupWorkflow.js";
 import { createWalletApi, createWalletMethodExecutor, createWalletMethodHandlers } from "../wallet/createWalletApi.js";
 import { WALLET_UI_CALLER_ORIGIN, type WalletApi, type WalletEvent } from "../wallet/index.js";
+import { WalletNamespaceManifestRequiredError } from "./errors.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput, WalletProvider } from "./types.js";
 import { resolveProviderChain as resolveProviderChainForConnection } from "./wallet/providerSnapshot.js";
@@ -42,7 +43,7 @@ import {
 } from "./wallet.js";
 
 type BackgroundBootstrapScope = ReturnType<typeof createBackgroundBootstrapScope>;
-type BackgroundSessionScope = ReturnType<typeof createBackgroundSessionScope>;
+type BackgroundCoreScope = ReturnType<typeof createBackgroundCoreScope>;
 type BackgroundSupportScope = ReturnType<typeof createBackgroundSupportScope>;
 type RuntimeLifecycle = ReturnType<typeof createBackgroundRuntimeLifecycle>;
 
@@ -53,19 +54,19 @@ const DEFAULT_RPC_ACCESS_POLICY = {
 
 type WalletRuntimeServices = Readonly<
   BackgroundStateServices & {
-    attention: BackgroundSessionScope["attention"];
-    chainActivation: BackgroundSessionScope["chainActivation"];
-    chainViews: BackgroundSessionScope["chainViews"];
+    attention: BackgroundCoreScope["attention"];
+    chainActivation: BackgroundCoreScope["chainActivation"];
+    chainViews: BackgroundCoreScope["chainViews"];
     permissionViews: BackgroundSupportScope["permissionViews"];
     accountAddressing: BackgroundBootstrapScope["namespaceBootstrap"]["accountAddressing"];
-    walletChainSelection: BackgroundSessionScope["walletChainSelection"];
-    providerChainSelection: BackgroundSessionScope["providerChainSelection"];
-    chainRpcDefaultEndpoints: BackgroundSessionScope["chainRpcDefaultEndpoints"];
-    chainRpcEndpointOverrides: BackgroundSessionScope["chainRpcEndpointOverrides"];
+    walletChainSelection: BackgroundCoreScope["walletChainSelection"];
+    providerChainSelection: BackgroundCoreScope["providerChainSelection"];
+    chainRpcDefaultEndpoints: BackgroundCoreScope["chainRpcDefaultEndpoints"];
+    chainRpcEndpointOverrides: BackgroundCoreScope["chainRpcEndpointOverrides"];
     namespaceRuntime: BackgroundSupportScope["namespaceRuntime"];
-    session: BackgroundSessionScope["sessionLayer"]["session"];
-    accountSigning: BackgroundSessionScope["accountSigning"];
-    keyring: BackgroundSessionScope["keyringService"];
+    session: BackgroundCoreScope["sessionLayer"]["session"];
+    accountSigning: BackgroundCoreScope["accountSigning"];
+    keyring: BackgroundCoreScope["keyringService"];
   }
 >;
 
@@ -113,7 +114,7 @@ type ArxWalletRuntime = Readonly<{
     executeRequest: ReturnType<typeof createRpcMethodExecutor>;
   }>;
   provider: WalletProvider;
-  providerAccess: ProviderRuntimeAccess;
+  providerAccess: ProviderAccess;
   walletApi: WalletApi;
   createWalletMethodExecutor(options: WalletCreateWalletMethodExecutorOptions): MethodExecutor;
   subscribeWalletEvents(listener: (event: WalletEvent) => void): () => void;
@@ -137,12 +138,12 @@ const createWalletEvents = (runtime: ArxWalletRuntimeCore) => {
 export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): ArxWalletRuntime => {
   const manifests = input.namespaces.manifests;
   if (manifests.length === 0) {
-    throw new Error("createArxWallet requires at least one namespace manifest");
+    throw new WalletNamespaceManifestRequiredError();
   }
 
   const namespaces = createWalletNamespaces({ manifests });
   const namespaceBootstrap = assembleNamespaceStatic(namespaces.listManifests());
-  let sessionScope: BackgroundSessionScope | null = null;
+  let coreScope: BackgroundCoreScope | null = null;
   let backgroundSupportScope: BackgroundSupportScope | null = null;
 
   const assemblyOptions = input.runtime?.assemblyOptions;
@@ -159,7 +160,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     },
   });
 
-  sessionScope = createBackgroundSessionScope({
+  coreScope = createBackgroundCoreScope({
     lifecycleLabel: input.runtime?.lifecycleLabel ?? "createArxWallet",
     bootstrapScope,
     walletChainSelectionPort: input.storage.ports.chains.walletChainSelection,
@@ -177,7 +178,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
 
   backgroundSupportScope = createBackgroundSupportScope({
     bootstrapScope,
-    sessionScope,
+    coreScope,
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
   const transactionAggregateStore = new TransactionAggregateStore({
@@ -191,23 +192,23 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
 
   const lifecycle = createBackgroundRuntimeLifecycle({
-    runtimeLifecycle: sessionScope.runtimeLifecycle,
-    stateServices: sessionScope.stateServices,
-    providerChainSelection: sessionScope.providerChainSelection,
+    runtimeLifecycle: coreScope.runtimeLifecycle,
+    stateServices: coreScope.stateServices,
+    providerChainSelection: coreScope.providerChainSelection,
     hydrationEnabled: bootstrapScope.hydrationEnabled,
-    permissionsReady: sessionScope.permissionsReady,
+    permissionsReady: coreScope.permissionsReady,
     transactionRecovery: transactionServices.recovery,
     submittedTransactionMonitor: transactionServices.monitor,
     transactionRestartRecovery: input.runtime?.transactionRestartRecovery ?? "run",
     chainRpcBootstrap: backgroundSupportScope.chainRpcBootstrap,
-    sessionLayer: sessionScope.sessionLayer,
+    sessionLayer: coreScope.sessionLayer,
   });
-  const stateServices = sessionScope.stateServices;
+  const stateServices = coreScope.stateServices;
   const rpcHandlerDeps: RpcHandlerDeps = {
     ...stateServices,
-    walletChainSelection: sessionScope.walletChainSelection,
-    chainActivation: sessionScope.chainActivation,
-    chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
+    walletChainSelection: coreScope.walletChainSelection,
+    chainActivation: coreScope.chainActivation,
+    chainRpcDefaultEndpoints: coreScope.chainRpcDefaultEndpoints,
     chainAddressing: bootstrapScope.namespaceBootstrap.chainAddressing,
     permissionViews: backgroundSupportScope.permissionViews,
     namespaceRuntime: backgroundSupportScope.namespaceRuntime,
@@ -228,15 +229,15 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const resolveProviderChain = (input: { origin: string; namespace: string }) =>
     resolveProviderChainForConnection(
       {
-        chainViews: sessionScope.chainViews,
-        providerChainSelection: sessionScope.providerChainSelection,
+        chainViews: coreScope.chainViews,
+        providerChainSelection: coreScope.providerChainSelection,
       },
       input,
     );
   const initializeProviderChainSelection = async (input: { origin: string; namespace: string }) => {
-    const selectedChainRef = sessionScope.providerChainSelection.getSelectedChainRef(input);
+    const selectedChainRef = coreScope.providerChainSelection.getSelectedChainRef(input);
     if (selectedChainRef) {
-      const selectedChain = sessionScope.chainViews.findAvailableChainView({
+      const selectedChain = coreScope.chainViews.findAvailableChainView({
         namespace: input.namespace,
         chainRef: selectedChainRef,
       });
@@ -244,21 +245,21 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
         return;
       }
 
-      await sessionScope.providerChainSelection.clear(input);
+      await coreScope.providerChainSelection.clear(input);
     }
 
-    const activeChain = sessionScope.chainViews.getActiveChainViewForNamespace(input.namespace);
-    await sessionScope.providerChainSelection.setSelectedChainRef({
+    const activeChain = coreScope.chainViews.getActiveChainViewForNamespace(input.namespace);
+    await coreScope.providerChainSelection.setSelectedChainRef({
       origin: input.origin,
       namespace: input.namespace,
       chainRef: activeChain.chainRef,
     });
   };
   const providerRequests = createProviderRequests();
-  const providerAccess = createProviderRuntimeAccess({
+  const providerAccess = createProviderAccess({
     messenger: bootstrapScope.messenger,
     getIsInitialized: () => lifecycle.getIsInitialized(),
-    getSessionStatus: () => sessionScope.sessionLayer.session.getStatus(),
+    getSessionStatus: () => coreScope.sessionLayer.session.getStatus(),
     resolveProviderChain,
     initializeProviderChainSelection,
     listPermittedAccountsView: (origin, options) =>
@@ -271,7 +272,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       ? { shouldRequestUnlockAttention: runtimeRpcAccessPolicy.shouldRequestUnlockAttention }
       : {}),
     requestUnlockAttention: (args) => {
-      sessionScope.attention.requestAttention({
+      coreScope.attention.requestAttention({
         reason: "unlock_required",
         origin: args.origin,
         method: args.method,
@@ -285,39 +286,38 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       }).isAuthorized,
     approvals: stateServices.approvals,
     providerRequests,
-    subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
-    subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
+    subscribeSessionUnlocked: (listener) => coreScope.sessionLayer.session.unlock.onUnlocked(listener),
+    subscribeSessionLocked: (listener) => coreScope.sessionLayer.session.unlock.onLocked(listener),
     subscribeChainRpcStateChanged: (listener) => stateServices.chainRpc.onStateChanged(listener),
-    subscribeProviderChainSelectionChanged: (listener) =>
-      sessionScope.providerChainSelection.subscribeChanged(listener),
+    subscribeProviderChainSelectionChanged: (listener) => coreScope.providerChainSelection.subscribeChanged(listener),
     subscribeAccountsStateChanged: (listener) => stateServices.accounts.onStateChanged(listener),
     subscribePermissionsStateChanged: (listener) => stateServices.permissions.onStateChanged(listener),
   });
   const session = createWalletSession({
-    session: sessionScope.sessionLayer.session,
-    keyring: sessionScope.keyringService,
+    session: coreScope.sessionLayer.session,
+    keyring: coreScope.keyringService,
   });
   const accounts = createWalletAccounts({
     accounts: stateServices.accounts,
-    keyring: sessionScope.keyringService,
+    keyring: coreScope.keyringService,
   });
   const approvals = stateServices.approvals;
   const approvalDetails = createApprovalDetails({
     approvals: stateServices.approvals,
     accounts,
-    chainViews: sessionScope.chainViews,
+    chainViews: coreScope.chainViews,
   });
   const permissions = stateServices.permissions;
   const networks = createWalletNetworks({
-    walletChainSelection: sessionScope.walletChainSelection,
+    walletChainSelection: coreScope.walletChainSelection,
     chainDefinitions: stateServices.chainDefinitions,
-    chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
-    chainViews: sessionScope.chainViews,
-    chainActivation: sessionScope.chainActivation,
+    chainRpcEndpointOverrides: coreScope.chainRpcEndpointOverrides,
+    chainViews: coreScope.chainViews,
+    chainActivation: coreScope.chainActivation,
     chainRpc: stateServices.chainRpc,
   });
   const attention = createWalletAttention({
-    attention: sessionScope.attention,
+    attention: coreScope.attention,
   });
   const dappConnections = createWalletDappConnections({
     messenger: bootstrapScope.messenger,
@@ -335,32 +335,32 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const services: WalletRuntimeServices = {
     ...stateServices,
-    attention: sessionScope.attention,
-    chainActivation: sessionScope.chainActivation,
-    chainViews: sessionScope.chainViews,
+    attention: coreScope.attention,
+    chainActivation: coreScope.chainActivation,
+    chainViews: coreScope.chainViews,
     permissionViews: backgroundSupportScope.permissionViews,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
-    walletChainSelection: sessionScope.walletChainSelection,
-    providerChainSelection: sessionScope.providerChainSelection,
-    chainRpcDefaultEndpoints: sessionScope.chainRpcDefaultEndpoints,
-    chainRpcEndpointOverrides: sessionScope.chainRpcEndpointOverrides,
+    walletChainSelection: coreScope.walletChainSelection,
+    providerChainSelection: coreScope.providerChainSelection,
+    chainRpcDefaultEndpoints: coreScope.chainRpcDefaultEndpoints,
+    chainRpcEndpointOverrides: coreScope.chainRpcEndpointOverrides,
     namespaceRuntime: backgroundSupportScope.namespaceRuntime,
-    session: sessionScope.sessionLayer.session,
-    accountSigning: sessionScope.accountSigning,
-    keyring: sessionScope.keyringService,
+    session: coreScope.sessionLayer.session,
+    accountSigning: coreScope.accountSigning,
+    keyring: coreScope.keyringService,
   };
   const setupWorkflow = createWalletSetupWorkflow({
     vaultLifecycle: {
       createVaultWithSecret: async (params) => {
-        await sessionScope.sessionLayer.session.createVaultWithSecret(params);
+        await coreScope.sessionLayer.session.createVaultWithSecret(params);
       },
       unlock: async (params) => {
-        await sessionScope.sessionLayer.session.unlock.unlock(params);
+        await coreScope.sessionLayer.session.unlock.unlock(params);
       },
-      persistVaultMetaSnapshot: () => sessionScope.sessionLayer.session.persistVaultMetaSnapshot(),
-      clearVault: () => sessionScope.sessionLayer.session.clearVault(),
+      persistVaultMetaSnapshot: () => coreScope.sessionLayer.session.persistVaultMetaSnapshot(),
+      clearVault: () => coreScope.sessionLayer.session.clearVault(),
     },
-    keyring: sessionScope.keyringService,
+    keyring: coreScope.keyringService,
     accounts: stateServices.accounts,
     accountAddressing: bootstrapScope.namespaceBootstrap.accountAddressing,
   });

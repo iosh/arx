@@ -17,14 +17,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
-const createInvalidParamsError = (
-  message: string,
-  input: { details?: Record<string, string> | undefined; cause?: unknown } = {},
-) => {
+const createInvalidParamsError = (message: string, input: { details?: Record<string, string> | undefined } = {}) => {
   return new RpcInvalidParamsError({
     message,
     details: input.details,
-    cause: input.cause,
   });
 };
 
@@ -46,7 +42,6 @@ const readChainIdHex = (value: unknown): Hex.Hex => {
         field: "chainId",
         expected: "hex string",
       },
-      cause: error,
     });
   }
 };

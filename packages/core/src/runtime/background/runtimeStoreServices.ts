@@ -1,5 +1,6 @@
 import { createAccountsService } from "../../accounts/AccountsService.js";
 import type { AccountsPort } from "../../accounts/accountsPort.js";
+import type { WalletChainSelectionDefaults } from "../../chains/bootstrap/chainAdmission.js";
 import { createChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/ChainRpcDefaultEndpointsService.js";
 import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
 import { createChainRpcEndpointOverridesService } from "../../chains/rpc/endpointOverrides/ChainRpcEndpointOverridesService.js";
@@ -11,7 +12,6 @@ import { createWalletChainSelectionService } from "../../chains/selection/wallet
 import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";
 import type { Messenger } from "../../messenger/index.js";
 import type { PermissionsPort } from "../../permissions/service/port.js";
-import type { RuntimeWalletChainSelectionDefaults } from "./chainRpcDefaults.js";
 
 export type RuntimeStorePorts = {
   accounts: AccountsPort;
@@ -43,7 +43,7 @@ export const initRuntimeStoreServices = ({
   chainRpcDefaultEndpointsPort: ChainRpcDefaultEndpointsPort;
   chainRpcEndpointOverridesPort: ChainRpcEndpointOverridesPort;
   ports: RuntimeStorePorts;
-  selectionDefaults: RuntimeWalletChainSelectionDefaults;
+  selectionDefaults: WalletChainSelectionDefaults;
 }): RuntimeStoreServices => {
   const walletChainSelection = createWalletChainSelectionService({
     messenger,

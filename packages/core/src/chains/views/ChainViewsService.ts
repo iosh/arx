@@ -1,9 +1,9 @@
 import { getChainRefNamespace } from "../caip.js";
 import { type ChainDefinition, cloneChainDefinition } from "../definition.js";
+import type { ChainDefinitionsService } from "../definitions/types.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../errors.js";
 import type { ChainRef } from "../ids.js";
 import type { ChainRpcReader } from "../rpc/types.js";
-import type { ChainDefinitionsService } from "../runtime/chainDefinitions/types.js";
 import type { WalletChainSelectionService } from "../selection/wallet/types.js";
 import type { ChainView, ChainViewsService, FindAvailableChainViewParams, NetworksSnapshot } from "./types.js";
 
@@ -121,9 +121,7 @@ class DefaultChainViewsService implements ChainViewsService {
       return activeChain;
     }
 
-    throw new ChainNotSupportedError({
-      message: `No available chain for namespace "${namespace}"`,
-    });
+    throw new ChainNotSupportedError(`No available chain for namespace "${namespace}"`);
   }
 
   #resolveActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {
@@ -159,9 +157,7 @@ class DefaultChainViewsService implements ChainViewsService {
   #resolveSelectedNamespace(): string {
     const selectedNamespace = this.#selection.getSelectedNamespace().trim();
     if (selectedNamespace.length === 0) {
-      throw new ChainNotSupportedError({
-        message: "Missing selected namespace",
-      });
+      throw new ChainNotSupportedError("Missing selected namespace");
     }
     return selectedNamespace;
   }

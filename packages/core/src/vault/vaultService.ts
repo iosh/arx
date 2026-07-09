@@ -1,5 +1,6 @@
 import { isArxBaseError } from "../error.js";
 import {
+  VaultConfigError,
   VaultInvalidCiphertextError,
   VaultInvalidPasswordError,
   VaultInvariantViolationError,
@@ -44,7 +45,8 @@ const VAULT_CIPHER = { name: "aes-gcm" } as const;
 
 const assertPositiveInteger = (value: number, label: string) => {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive integer`);
+    const field = label === "PBKDF2 iteration count" ? "iterations" : label === "Salt length" ? "saltBytes" : "ivBytes";
+    throw new VaultConfigError(field);
   }
 };
 
@@ -72,13 +74,13 @@ const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
     const ivBytes = fromBase64(value.cipher.iv);
     const dataBytes = fromBase64(value.cipher.data);
     if (!saltBytes.length || !ivBytes.length || !dataBytes.length) {
-      throw new Error("Decoded envelope is empty");
+      throw new VaultInvalidCiphertextError();
     }
 
     // Normalize malformed envelopes to a stable VaultInvalidCiphertext reason.
     const iterations = value.kdf.iterations;
     if (!Number.isInteger(iterations) || iterations <= 0) {
-      throw new Error("PBKDF2 iteration count must be a positive integer");
+      throw new VaultInvalidCiphertextError();
     }
 
     return {
@@ -88,8 +90,11 @@ const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
       ivBytes,
       dataBytes,
     };
-  } catch {
-    throw new VaultInvalidCiphertextError();
+  } catch (error) {
+    if (error instanceof VaultInvalidCiphertextError) {
+      throw error;
+    }
+    throw new VaultInvalidCiphertextError(error);
   }
 };
 
@@ -164,7 +169,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
   return {
     async initialize(params): Promise<VaultEnvelope> {
       if (envelope !== null) {
-        throw new VaultInvariantViolationError({ invariant: "already_initialized" });
+        throw new VaultInvariantViolationError("already_initialized");
       }
 
       const saltBytes = randomBytes(resolved.saltBytes);
@@ -299,9 +304,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
 
       if (hasSecret || hasDerivedKey) {
         if (!hasEnvelope || !hasSecret || !hasDerivedKey) {
-          throw new VaultInvariantViolationError({
-            invariant: "unlocked_requires_envelope_secret_and_derived_key",
-          });
+          throw new VaultInvariantViolationError("unlocked_requires_envelope_secret_and_derived_key");
         }
         return "unlocked";
       }

@@ -1,4 +1,4 @@
-import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
+import type { NamespaceConfig } from "../keyring/service/namespaceConfig.js";
 import { createKeyringNamespacesFromManifests } from "./assembly.js";
 import { eip155NamespaceManifest } from "./eip155/manifest.js";
 import type { NamespaceManifest } from "./types.js";

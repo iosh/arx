@@ -7,10 +7,10 @@ import { parseChainRef } from "../chains/caip.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import { ChainNotCompatibleError } from "../chains/errors.js";
 import type { AccountSigningService } from "../keyring/accountSigning.js";
+import type { NamespaceConfig } from "../keyring/service/namespaceConfig.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { buildRpcRouting, type RpcRouting } from "../rpc/routing.js";
-import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { AnyNamespaceTransaction } from "../transactions/namespace/types.js";
 import type {
@@ -133,9 +133,7 @@ const namespaceRuntimeFor = (
   const runtime = runtimes.get(namespace);
   if (runtime) return runtime;
 
-  throw new ChainNotCompatibleError({
-    message: `Namespace runtime is not available for "${namespace}".`,
-  });
+  throw new ChainNotCompatibleError(`Namespace runtime is not available for "${namespace}".`);
 };
 
 const namespaceRuntimeForChainRef = (

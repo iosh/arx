@@ -48,8 +48,14 @@ describe("InMemoryApprovalQueueService", () => {
     const queue = new InMemoryApprovalQueueService({ messenger });
     const request = createRequest();
 
-    // @ts-expect-error - requester is required
-    expect(() => queue.create(request, null)).toThrow(/requester/i);
+    let caught: unknown;
+    try {
+      // @ts-expect-error - requester is required
+      queue.create(request, null);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code: "approval.requester_required" });
   });
 
   it("create() rejects request-permissions approvals with empty descriptor chainRefs", async () => {
@@ -137,7 +143,10 @@ describe("InMemoryApprovalQueueService", () => {
       terminalReason: "user_approve",
       decision,
     });
-    await expect(second).rejects.toThrow(`Approval ${request.approvalId} not found`);
+    await expect(second).rejects.toMatchObject({
+      code: "approval.not_found",
+      details: { approvalId: request.approvalId },
+    });
     await expect(handle.settled).resolves.toEqual(decision);
   });
 

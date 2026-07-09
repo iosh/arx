@@ -1,5 +1,5 @@
 import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
-import type { ChainNamespace } from "../../accounts/runtime/types.js";
+import type { ChainNamespace } from "../../accounts/selection/types.js";
 import { CAIP2_NAMESPACE_PATTERN, parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
@@ -91,7 +91,6 @@ export const parsePermissionAccountIdsForNamespace = (
         throw new RpcInvalidRequestError({
           message: "Permission accountId is invalid",
           details: { namespace },
-          cause: parsed.error,
         });
       }
 

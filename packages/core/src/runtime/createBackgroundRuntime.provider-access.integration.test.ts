@@ -9,7 +9,9 @@ import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
+import { createUnsupportedKeyringFactories } from "../keyring/index.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
+import type { ProviderConnectionStateChange } from "../provider/access/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
@@ -36,7 +38,6 @@ import {
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
-import type { ProviderConnectionStateChange } from "./provider/types.js";
 
 const PASSWORD = "secret-pass";
 const ORIGIN = "https://dapp.example";
@@ -295,7 +296,7 @@ const solanaNamespaceManifest = (() => {
         namespace,
         defaultChainRef: SOLANA_CHAIN.chainRef as ChainRef,
         accountAddressing,
-        factories: {},
+        factories: createUnsupportedKeyringFactories(namespace),
       },
       chainSeeds: [toChainSeed(SOLANA_CHAIN)],
     },
@@ -316,7 +317,7 @@ const solanaNamespaceManifest = (() => {
   } satisfies NamespaceManifest;
 })();
 
-const setupNamespaceAwareProviderRuntime = async () => {
+const setupNamespaceAwareProviderAccess = async () => {
   const chainDefinitionsPort = new MemoryChainDefinitionsPort();
   const runtime = createBackgroundRuntime({
     chainDefinitions: {
@@ -1278,7 +1279,7 @@ describe("createBackgroundRuntime provider access", () => {
   });
 
   it("returns internal core error envelopes when provider requests fail", async () => {
-    const runtime = await setupNamespaceAwareProviderRuntime();
+    const runtime = await setupNamespaceAwareProviderAccess();
 
     await expect(
       requestProviderRpc(runtime, {

@@ -1,3 +1,5 @@
+import { RuntimeLifecycleError } from "../errors.js";
+
 export type RuntimeLifecycle = {
   getIsHydrating(): boolean;
   getIsInitialized(): boolean;
@@ -47,7 +49,7 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
 
   const start = (run: () => void) => {
     if (!initialized) {
-      throw new Error(`${label}.lifecycle.initialize() must complete before start()`);
+      throw new RuntimeLifecycleError({ label, operation: "start", required: "initialize" });
     }
 
     run();

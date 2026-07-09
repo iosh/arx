@@ -1,9 +1,9 @@
 import type { AccountsPort } from "../accounts/accountsPort.js";
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { createChainActivationService } from "../chains/activation/index.js";
+import type { ChainDefinitionsPort } from "../chains/definitions/port.js";
 import type { ChainRpcDefaultEndpointsPort } from "../chains/rpc/defaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../chains/rpc/endpointOverrides/port.js";
-import type { ChainDefinitionsPort } from "../chains/runtime/chainDefinitions/port.js";
 import type { ProviderChainSelectionPort } from "../chains/selection/provider/port.js";
 import type { ProviderChainSelectionService } from "../chains/selection/provider/types.js";
 import type { WalletChainSelectionPort } from "../chains/selection/wallet/port.js";
@@ -13,24 +13,24 @@ import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
 import type { ArxWallet } from "../engine/types.js";
 import type { AccountSigningService } from "../keyring/accountSigning.js";
 import type { KeyringMetasPort } from "../keyring/keyringMetasPort.js";
+import type { KeyringService } from "../keyring/service/KeyringService.js";
 import type { Messenger } from "../messenger/index.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type { PermissionsPort } from "../permissions/service/port.js";
 import type { createPermissionViewsService } from "../permissions/views/index.js";
+import type { ProviderAccess } from "../provider/access/types.js";
 import type { Namespace } from "../rpc/handlers/types.js";
 import type { RpcInvocationHint, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
+import type { SessionOptions, SessionServices } from "../session/sessionLayer.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { createAttentionService } from "../wallet/attention/index.js";
 import type { BackgroundStateServices } from "./background/backgroundStateServices.js";
+import type { BackgroundAssemblyOptions } from "./background/coreScopes.js";
 import type { BackgroundRpcAccessPolicyHooks } from "./background/rpcAccessPolicy.js";
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
-import type { BackgroundAssemblyOptions } from "./background/runtimeScopes.js";
-import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
-import type { KeyringService } from "./keyring/KeyringService.js";
-import type { ProviderRuntimeAccess } from "./provider/types.js";
 
-export type { BackgroundSessionServices } from "./background/session.js";
+export type { SessionServices } from "../session/sessionLayer.js";
 
 export type CreateBackgroundRuntimeOptions = Omit<BackgroundAssemblyOptions, "chainDefinitions"> & {
   rpcAccessPolicy: BackgroundRpcAccessPolicyHooks;
@@ -80,7 +80,7 @@ export type BackgroundRuntime = {
     walletChainSelection: WalletChainSelectionService;
     providerChainSelection: ProviderChainSelectionService;
     namespaceRuntime: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntime"];
-    session: BackgroundSessionServices;
+    session: SessionServices;
     accountSigning: AccountSigningService;
     keyring: KeyringService;
   };
@@ -97,7 +97,7 @@ export type BackgroundRuntime = {
     executeRequest: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["executeRequest"];
   };
   lifecycle: ReturnType<typeof assembleArxWalletRuntime>["lifecycle"];
-  providerAccess: ProviderRuntimeAccess;
+  providerAccess: ProviderAccess;
   wallet: ArxWallet;
 };
 

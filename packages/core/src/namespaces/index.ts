@@ -23,3 +23,4 @@ export type {
   NamespaceUiBindings,
   NamespaceUiService,
 } from "./types.js";
+export { defineNamespaceManifest } from "./types.js";

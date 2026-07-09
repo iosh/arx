@@ -14,7 +14,7 @@ import { eip155Module } from "../../rpc/namespaces/eip155/module.js";
 import { createEip155Broadcaster } from "../../transactions/namespace/eip155/broadcaster.js";
 import { createEip155Signer, type Eip155Signer } from "../../transactions/namespace/eip155/signer.js";
 import { createEip155Transaction } from "../../transactions/namespace/eip155/transaction.js";
-import type { NamespaceManifest } from "../types.js";
+import { defineNamespaceManifest } from "../types.js";
 
 const DEFAULT_EIP155_CHAIN_SEED = EIP155_CHAIN_DEFINITION_SEEDS[0] as (typeof EIP155_CHAIN_DEFINITION_SEEDS)[number];
 const DEFAULT_EIP155_CHAIN_REF = DEFAULT_EIP155_CHAIN_SEED.definition.chainRef;
@@ -29,7 +29,7 @@ const toEip155AccountId = (params: { chainRef: string; address: string }) => {
   });
 };
 
-export const eip155NamespaceManifest = {
+export const eip155NamespaceManifest = defineNamespaceManifest({
   namespace: EIP155_NAMESPACE,
   core: {
     rpc: eip155Module,
@@ -86,4 +86,4 @@ export const eip155NamespaceManifest = {
       });
     },
   },
-} satisfies NamespaceManifest;
+});

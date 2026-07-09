@@ -1,15 +1,20 @@
 import { parseChainRef } from "../../chains/caip.js";
+import { TransportDisconnectedError } from "../../errors/transport.js";
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
-import { TransportDisconnectedError } from "../../runtime/provider/errors.js";
-import { SessionLockedError } from "../../runtime/session/errors.js";
+import { SessionLockedError } from "../../session/errors.js";
 import {
   ApprovalCancelledError,
+  ApprovalNotFoundError,
+  ApprovalOriginMismatchError,
   ApprovalRejectedError,
+  ApprovalRequesterRequiredError,
   ApprovalSupersededError,
   ApprovalTimeoutError,
   ApprovalUserDismissedError,
+  DuplicateApprovalError,
+  UnexpectedApprovalCancellationError,
 } from "../errors.js";
 import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED } from "./topics.js";
 import type {
@@ -179,17 +184,21 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     requester: ApprovalRequester,
     settlement: PendingApprovalSettlement,
   ): ApprovalRecord<K> {
-    if (!requester) throw new Error("Approval requester is required");
+    if (!requester) throw new ApprovalRequesterRequiredError();
     assertApprovalContext(request);
 
     const record = structuredClone({ ...request, requester });
 
     if (record.origin !== requester.origin) {
-      throw new Error("Approval origin mismatch between request and requester");
+      throw new ApprovalOriginMismatchError({
+        approvalId: record.approvalId,
+        origin: record.origin,
+        requesterOrigin: requester.origin,
+      });
     }
 
     if (this.#pending.has(record.approvalId)) {
-      throw new Error(`Duplicate approval id "${record.approvalId}"`);
+      throw new DuplicateApprovalError(record.approvalId);
     }
 
     this.#pending.set(record.approvalId, {
@@ -214,7 +223,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   async resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult> {
     const entry = this.#takePendingApproval(input.approvalId);
     if (!entry) {
-      throw new Error(`Approval ${input.approvalId} not found`);
+      throw new ApprovalNotFoundError(input.approvalId);
     }
 
     if (input.action === "reject") {
@@ -387,7 +396,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   #getRejectionError(params: { approvalId: string; provided?: Error | undefined; message: string }): Error {
     if (params.provided) return params.provided;
 
-    return new ApprovalRejectedError({ message: params.message });
+    return new ApprovalRejectedError(params.message);
   }
 
   #getTerminalError(params: {
@@ -422,7 +431,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       return new RpcInternalError();
     }
     if (params.terminalReason === "user_approve") {
-      throw new Error(`Unexpected approval cancellation for approved request "${params.approvalId}"`);
+      throw new UnexpectedApprovalCancellationError(params.approvalId);
     }
 
     return new ApprovalCancelledError();

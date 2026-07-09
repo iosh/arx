@@ -1,6 +1,7 @@
 import { z } from "zod";
 import * as Hex from "../../utils/hex.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../definition.js";
+import { ChainDefinitionRpcUrlsRequiredError } from "../errors.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
 import { eip155ChainRefFromChainIdHex } from "./format.js";
 
@@ -40,7 +41,7 @@ export const createEip155DefinitionSeedFromEip3085 = (input: unknown): ChainDefi
 
   const rpcUrls = dedupe(payload.rpcUrls).filter(Boolean);
   if (rpcUrls.length === 0) {
-    throw new Error("At least one valid rpcUrl is required");
+    throw new ChainDefinitionRpcUrlsRequiredError(chainRef);
   }
 
   const explorers = payload.blockExplorerUrls

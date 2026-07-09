@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./engine": "./src/engine/index.ts",
+    "./errors": "./src/errors/index.ts",
     "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
     "./approvals": "./src/approvals/index.ts",
@@ -18,8 +19,10 @@
     "./chains": "./src/chains/index.ts",
     "./namespaces": "./src/namespaces/index.ts",
     "./permissions": "./src/permissions/index.ts",
+    "./provider": "./src/provider/index.ts",
     "./rpc": "./src/rpc/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./session": "./src/session/index.ts",
     "./transactions": "./src/transactions/index.ts",
     "./transactions/eip155": "./src/transactions/namespace/eip155/index.ts",
     "./transactions/storage": "./src/transactions/storage/index.ts",

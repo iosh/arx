@@ -1,14 +1,14 @@
 import type { NamespaceManifest } from "../namespaces/index.js";
 import type {
+  ProviderConnectionQuery,
+  ProviderConnectionState,
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
-  ProviderRuntimeConnectionQuery,
-  ProviderRuntimeConnectionState,
-  ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcError,
-  ProviderRuntimeRpcResponse,
-} from "../runtime/provider/types.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../runtime/session/unlock/types.js";
+  ProviderRequestScope,
+  ProviderRpcError,
+  ProviderRpcResponse,
+} from "../provider/access/types.js";
+import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../session/unlock/types.js";
 import type { WalletApi } from "../wallet/api.js";
 import type { CoreStoragePorts, WalletProviderConnectionState } from "./types.js";
 
@@ -30,13 +30,13 @@ export type CreateCoreRuntimeInput = Readonly<{
 }>;
 
 export type CoreProviderApi = Readonly<{
-  getConnectionState(input: ProviderRuntimeConnectionQuery): Promise<WalletProviderConnectionState>;
-  activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
-  deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
+  getConnectionState(input: ProviderConnectionQuery): Promise<WalletProviderConnectionState>;
+  activateConnectionScope(input: ProviderConnectionQuery): Promise<ProviderConnectionState>;
+  deactivateConnectionScope(input: ProviderConnectionQuery): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): CoreUnsubscribe;
-  request(input: ProviderRequestInput): Promise<ProviderRuntimeRpcResponse>;
-  encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
+  request(input: ProviderRequestInput): Promise<ProviderRpcResponse>;
+  encodeRpcError(error: unknown): ProviderRpcError;
+  cancelRequestScope(input: ProviderRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): CoreUnsubscribe;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): CoreUnsubscribe;
 }>;

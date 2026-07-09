@@ -1,5 +1,5 @@
 import type { WalletSession } from "../../engine/types.js";
-import { SessionLockedError } from "../../runtime/session/errors.js";
+import { SessionLockedError } from "../../session/errors.js";
 import type { LockSessionInput, SetAutoLockDurationInput, UnlockSessionInput } from "../api.js";
 
 export const assertSessionUnlocked = (session: Pick<WalletSession, "isUnlocked">): void => {

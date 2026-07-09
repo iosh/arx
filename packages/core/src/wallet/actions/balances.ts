@@ -18,9 +18,7 @@ export const createBalancesHandlers = (deps: {
     const { namespace } = parseChainRef(input.chainRef);
     const chain = deps.networks.findAvailableChainView({ chainRef: input.chainRef });
     if (!chain) {
-      throw new ChainNotSupportedError({
-        message: `Native balance is not supported for chain "${input.chainRef}" yet.`,
-      });
+      throw new ChainNotSupportedError(`Native balance is not supported for chain "${input.chainRef}" yet.`);
     }
     const account = deps.accounts.getOwnedAccount({
       namespace,

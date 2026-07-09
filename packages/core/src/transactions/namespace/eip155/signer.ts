@@ -146,7 +146,6 @@ const parseTypedDataPayload = (raw: string) => {
   } catch (error) {
     throw new RpcInvalidParamsError({
       message: "Typed data payload must be valid JSON.",
-      cause: error,
     });
   }
 
@@ -161,7 +160,6 @@ const parseTypedDataPayload = (raw: string) => {
   } catch (error) {
     throw new RpcInvalidParamsError({
       message: "Typed data payload failed validation.",
-      cause: error,
     });
   }
 

@@ -104,7 +104,6 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       if (error instanceof ZodError) {
         throw new RpcInvalidParamsError({
           message: "wallet_requestPermissions expects a single object parameter",
-          cause: error,
         });
       }
       throw error;

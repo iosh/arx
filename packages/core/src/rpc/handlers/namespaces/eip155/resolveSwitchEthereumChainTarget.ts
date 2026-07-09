@@ -38,9 +38,7 @@ export const resolveSwitchEthereumChainTarget = ({
   }
 
   if (entry.namespace !== "eip155") {
-    throw new ChainNotCompatibleError({
-      message: "Requested chain is not compatible with wallet_switchEthereumChain",
-    });
+    throw new ChainNotCompatibleError("Requested chain is not compatible with wallet_switchEthereumChain");
   }
 
   return cloneChainDefinition(entry.definition);

@@ -1,15 +1,15 @@
 import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
-import type { AccountSelectionService } from "../../accounts/runtime/types.js";
+import type { AccountSelectionService } from "../../accounts/selection/types.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportPrivateKeyParams,
   InitialHdKeyringDraft,
   InitialPrivateKeyKeyringDraft,
   KeyringService,
-} from "../../runtime/keyring/KeyringService.js";
+} from "../../keyring/service/KeyringService.js";
+import { RpcInvalidRequestError } from "../../rpc/errors.js";
 
 type InitialKeyringDraft = InitialHdKeyringDraft | InitialPrivateKeyKeyringDraft;
 

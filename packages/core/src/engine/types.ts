@@ -1,5 +1,5 @@
 import type { AccountsPort } from "../accounts/accountsPort.js";
-import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/runtime/types.js";
+import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/selection/types.js";
 import type {
   ApprovalCreatedEvent,
   ApprovalCreateParams,
@@ -15,22 +15,28 @@ import type {
 } from "../approvals/queue/types.js";
 import type { ActivateNamespaceChainParams } from "../chains/activation/types.js";
 import type { ChainDefinition, RpcEndpoint } from "../chains/definition.js";
+import type { ChainDefinitionsPort } from "../chains/definitions/port.js";
+import type {
+  ChainDefinitionsUpdate,
+  ChainDefinitionsUpsertCustomOptions,
+  ChainDefinitionsUpsertCustomResult,
+} from "../chains/definitions/types.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainRpcDefaultEndpointsPort } from "../chains/rpc/defaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../chains/rpc/endpointOverrides/port.js";
 import type { ChainRpcEndpointOverridesChangedHandler } from "../chains/rpc/endpointOverrides/types.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
-import type { ChainDefinitionsPort } from "../chains/runtime/chainDefinitions/port.js";
-import type {
-  ChainDefinitionsUpdate,
-  ChainDefinitionsUpsertCustomOptions,
-  ChainDefinitionsUpsertCustomResult,
-} from "../chains/runtime/chainDefinitions/types.js";
 import type { ProviderChainSelectionPort } from "../chains/selection/provider/port.js";
 import type { WalletChainSelectionPort } from "../chains/selection/wallet/port.js";
 import type { WalletChainSelectionChangedHandler } from "../chains/selection/wallet/types.js";
 import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
 import type { KeyringMetasPort } from "../keyring/keyringMetasPort.js";
+import type {
+  ConfirmNewMnemonicParams,
+  ImportMnemonicParams,
+  ImportPrivateKeyParams,
+  KeyringService,
+} from "../keyring/service/KeyringService.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
 import type { PermissionsPort } from "../permissions/service/port.js";
 import type {
@@ -40,29 +46,23 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../permissions/service/types.js";
-import type { SessionStatus } from "../runtime/background/session.js";
 import type {
-  ConfirmNewMnemonicParams,
-  ImportMnemonicParams,
-  ImportPrivateKeyParams,
-  KeyringService,
-} from "../runtime/keyring/KeyringService.js";
-import type {
+  ProviderConnectionQuery,
+  ProviderConnectionState,
   ProviderConnectionStateChangedHandler,
   ProviderRequestInput,
-  ProviderRuntimeConnectionQuery,
-  ProviderRuntimeConnectionState,
-  ProviderRuntimeRequestScope,
-  ProviderRuntimeRpcError,
-  ProviderRuntimeRpcResponse,
-} from "../runtime/provider/types.js";
+  ProviderRequestScope,
+  ProviderRpcError,
+  ProviderRpcResponse,
+} from "../provider/access/types.js";
+import type { SessionStatus } from "../session/sessionLayer.js";
 import type {
   SessionLockState,
   UnlockLockedPayload,
   UnlockParams,
   UnlockReason,
   UnlockUnlockedPayload,
-} from "../runtime/session/unlock/types.js";
+} from "../session/unlock/types.js";
 import type {
   AccountRecord,
   ChainDefinitionEntity,
@@ -267,20 +267,20 @@ export type DappConnectionsState = Readonly<{
 
 /** Provider-facing connection state with the live connected bit. */
 export type WalletProviderConnectionState = Readonly<
-  ProviderRuntimeConnectionState & {
+  ProviderConnectionState & {
     connected: boolean;
   }
 >;
 
 /** Engine-owned provider contract for wallet shells. */
 export type WalletProvider = Readonly<{
-  getConnectionState(input: ProviderRuntimeConnectionQuery): Promise<WalletProviderConnectionState>;
-  activateConnectionScope(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
-  deactivateConnectionScope(input: ProviderRuntimeConnectionQuery): void;
+  getConnectionState(input: ProviderConnectionQuery): Promise<WalletProviderConnectionState>;
+  activateConnectionScope(input: ProviderConnectionQuery): Promise<ProviderConnectionState>;
+  deactivateConnectionScope(input: ProviderConnectionQuery): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): () => void;
-  request(input: ProviderRequestInput): Promise<ProviderRuntimeRpcResponse>;
-  encodeRuntimeRpcError(error: unknown): ProviderRuntimeRpcError;
-  cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
+  request(input: ProviderRequestInput): Promise<ProviderRpcResponse>;
+  encodeRpcError(error: unknown): ProviderRpcError;
+  cancelRequestScope(input: ProviderRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
 }>;

@@ -1,12 +1,12 @@
 import { canonicalChainAddressFromAccountId, getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
 import type { WalletAccounts, WalletNetworks, WalletSession } from "../../engine/types.js";
-import { PermissionDeniedError } from "../../permissions/errors.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,
   ImportPrivateKeyParams,
-} from "../../runtime/keyring/KeyringService.js";
+} from "../../keyring/service/KeyringService.js";
+import { PermissionDeniedError } from "../../permissions/errors.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type {
   ConfirmNewMnemonicInput,

@@ -1,6 +1,6 @@
-import { ArxBaseError, type ErrorCause } from "../error.js";
+import { ArxBaseError } from "../error.js";
 
-export type PermissionErrorInput = ErrorCause & {
+export type PermissionErrorInput = {
   message?: string;
 };
 
@@ -10,7 +10,6 @@ export class PermissionNotConnectedError extends ArxBaseError {
   constructor(input: PermissionErrorInput = {}) {
     super(input.message ?? "Origin is not connected.", {
       code: PermissionNotConnectedError.code,
-      cause: input.cause,
     });
   }
 }
@@ -21,7 +20,6 @@ export class PermissionDeniedError extends ArxBaseError {
   constructor(input: PermissionErrorInput = {}) {
     super(input.message ?? "Permission denied.", {
       code: PermissionDeniedError.code,
-      cause: input.cause,
     });
   }
 }

@@ -1,5 +1,5 @@
 import type { Hex } from "ox/Hex";
-import type { AccountAddress } from "../../../accounts/runtime/types.js";
+import type { AccountAddress } from "../../../accounts/selection/types.js";
 import type { TransactionConflictKey } from "../../aggregate/types.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type {

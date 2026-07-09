@@ -3,7 +3,7 @@ import { getChainRefNamespace, normalizeChainRef } from "../chains/caip.js";
 import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainRpcReader } from "../chains/rpc/types.js";
-import { RpcInternalError } from "./errors.js";
+import { RpcClientPoolConfigError, RpcInternalError } from "./errors.js";
 import { isJsonRpcErrorLike, JsonRpcResponseError } from "./jsonRpcError.js";
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
@@ -296,7 +296,7 @@ export class ChainRpcClientPool {
   constructor(options: ChainRpcClientPoolOptions) {
     const fetchFn = options.fetch ?? globalThis.fetch?.bind(globalThis);
     if (!fetchFn) {
-      throw new Error("ChainRpcClientPool requires a fetch implementation");
+      throw new RpcClientPoolConfigError({ reason: "missing_fetch" });
     }
 
     this.#chainRpc = options.chainRpc;
@@ -326,13 +326,18 @@ export class ChainRpcClientPool {
     namespace: string,
     chainRef: string,
   ): RpcClient<TCapabilities> {
-    if (!namespace) throw new Error("ChainRpcClientPool.getClient requires a namespace");
-    if (!chainRef) throw new Error("ChainRpcClientPool.getClient requires a chainRef");
+    if (!namespace) throw new RpcClientPoolConfigError({ reason: "missing_namespace" });
+    if (!chainRef) throw new RpcClientPoolConfigError({ reason: "missing_chain_ref", namespace });
 
     const normalizedChainRef = normalizeChainRef(chainRef as ChainRef);
     const chainNamespace = getChainRefNamespace(normalizedChainRef);
     if (chainNamespace !== namespace) {
-      throw new Error(`Namespace mismatch: chainRef "${chainRef}" does not match namespace "${namespace}"`);
+      throw new RpcClientPoolConfigError({
+        reason: "namespace_mismatch",
+        namespace,
+        chainRef: normalizedChainRef,
+        actualNamespace: chainNamespace,
+      });
     }
 
     let perNamespace = this.#clients.get(namespace);
@@ -348,7 +353,7 @@ export class ChainRpcClientPool {
 
     const factory = this.#factories.get(namespace) as RpcClientFactory<TCapabilities> | undefined;
     if (!factory) {
-      throw new Error(`No RPC client factory registered for namespace "${namespace}"`);
+      throw new RpcClientPoolConfigError({ reason: "missing_factory", namespace });
     }
     const transport = createJsonRpcTransport(namespace, normalizedChainRef, this.#chainRpc, this.#config);
     const client = factory({

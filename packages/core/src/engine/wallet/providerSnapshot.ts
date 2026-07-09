@@ -2,7 +2,7 @@ import { eip155ChainIdHexFromChainRef } from "../../chains/eip155/format.js";
 import { ChainNotAvailableError, ChainNotSupportedError } from "../../chains/errors.js";
 import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
 import type { ChainViewsService } from "../../chains/views/types.js";
-import type { ProviderRuntimeConnectionQuery, ProviderRuntimeSnapshot } from "../../runtime/provider/types.js";
+import type { ProviderConnectionQuery, ProviderSnapshot } from "../../provider/access/types.js";
 
 export type ProviderChainResolutionDeps = {
   chainViews: Pick<ChainViewsService, "findAvailableChainView">;
@@ -10,17 +10,17 @@ export type ProviderChainResolutionDeps = {
 };
 
 export type ResolvedProviderChain = {
-  chain: ProviderRuntimeSnapshot["chain"];
+  chain: ProviderSnapshot["chain"];
 };
 
 const deriveEip155ProviderChain = (
-  input: ProviderRuntimeConnectionQuery,
-  chainRef: ProviderRuntimeSnapshot["chain"]["chainRef"],
-): ProviderRuntimeSnapshot["chain"] => {
+  input: ProviderConnectionQuery,
+  chainRef: ProviderSnapshot["chain"]["chainRef"],
+): ProviderSnapshot["chain"] => {
   if (input.namespace !== "eip155") {
-    throw new ChainNotSupportedError({
-      message: `EIP-1193 provider snapshots are not supported for namespace "${input.namespace}"`,
-    });
+    throw new ChainNotSupportedError(
+      `EIP-1193 provider snapshots are not supported for namespace "${input.namespace}"`,
+    );
   }
 
   return {
@@ -37,13 +37,13 @@ export type ProviderSnapshotDeps = {
 
 export const resolveProviderChain = (
   deps: ProviderChainResolutionDeps,
-  input: ProviderRuntimeConnectionQuery,
+  input: ProviderConnectionQuery,
 ): ResolvedProviderChain => {
   const selectedChainRef = deps.providerChainSelection.getSelectedChainRef(input);
   if (!selectedChainRef) {
-    throw new ChainNotSupportedError({
-      message: `Provider chain selection is not initialized for origin "${input.origin}" and namespace "${input.namespace}"`,
-    });
+    throw new ChainNotSupportedError(
+      `Provider chain selection is not initialized for origin "${input.origin}" and namespace "${input.namespace}"`,
+    );
   }
 
   const providerSelectedChain = deps.chainViews.findAvailableChainView({
@@ -52,9 +52,7 @@ export const resolveProviderChain = (
   });
 
   if (!providerSelectedChain) {
-    throw new ChainNotAvailableError({
-      message: `Selected provider chain "${selectedChainRef}" is not available`,
-    });
+    throw new ChainNotAvailableError(`Selected provider chain "${selectedChainRef}" is not available`);
   }
 
   return {
@@ -62,10 +60,7 @@ export const resolveProviderChain = (
   };
 };
 
-export const buildProviderSnapshot = (
-  deps: ProviderSnapshotDeps,
-  input: ProviderRuntimeConnectionQuery,
-): ProviderRuntimeSnapshot => {
+export const buildProviderSnapshot = (deps: ProviderSnapshotDeps, input: ProviderConnectionQuery): ProviderSnapshot => {
   const { namespace } = input;
   const resolvedProviderChain = resolveProviderChain(deps, input);
   const { chain } = resolvedProviderChain;

@@ -1,4 +1,4 @@
-import type { ChainNamespace } from "../../accounts/runtime/types.js";
+import type { ChainNamespace } from "../../accounts/selection/types.js";
 import type { ChainDefinition, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";

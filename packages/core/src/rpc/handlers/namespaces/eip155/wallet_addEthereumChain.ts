@@ -42,7 +42,6 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
         details: {
           expected: "EIP-3085 chain metadata",
         },
-        cause: error,
       });
     }
   },
@@ -50,24 +49,18 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
     const { params: seed, deps, executionContext } = context;
     const { definition, defaultRpcEndpoints = [] } = seed;
     if (getChainRefNamespace(definition.chainRef) !== "eip155") {
-      throw new ChainNotCompatibleError({
-        message: "Requested chain is not compatible with wallet_addEthereumChain",
-      });
+      throw new ChainNotCompatibleError("Requested chain is not compatible with wallet_addEthereumChain");
     }
 
     const existing = deps.chainDefinitions.getChain(definition.chainRef);
     if (existing && existing.namespace !== "eip155") {
-      throw new ChainNotCompatibleError({
-        message: "Requested chain conflicts with an existing non-EVM chain",
-      });
+      throw new ChainNotCompatibleError("Requested chain conflicts with an existing non-EVM chain");
     }
 
     if (existing?.source === "builtin") {
       const definitionMatches = isSameChainDefinition(existing.definition, definition);
       if (!definitionMatches) {
-        throw new ChainNotSupportedError({
-          message: "Requested chain conflicts with a builtin chain definition",
-        });
+        throw new ChainNotSupportedError("Requested chain conflicts with a builtin chain definition");
       }
     }
 

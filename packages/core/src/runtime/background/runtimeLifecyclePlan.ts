@@ -1,10 +1,10 @@
+import type { ChainRpcBootstrap } from "../../chains/bootstrap/chainRpcBootstrap.js";
 import type { ProviderChainSelectionService } from "../../chains/selection/provider/types.js";
+import type { SessionLayer } from "../../session/sessionLayer.js";
+import { RuntimeHydrationError } from "../errors.js";
 import type { BackgroundStateServices } from "./backgroundStateServices.js";
-import type { ChainRpcBootstrap } from "./chainRpcBootstrap.js";
-import { RuntimeHydrationError } from "./errors.js";
 import type { RuntimeLifecycle } from "./runtimeLifecycle.js";
 import { type RuntimePlugin, runPluginHooks, startPlugins } from "./runtimePlugins.js";
-import type { SessionLayerResult } from "./session.js";
 
 export type BackgroundLifecycleHandle = {
   initialize(): Promise<void>;
@@ -66,7 +66,7 @@ export const createBackgroundRuntimeLifecycle = ({
   submittedTransactionMonitor: SubmittedTransactionMonitor;
   transactionRestartRecovery?: "run" | "skip";
   chainRpcBootstrap: ChainRpcBootstrap;
-  sessionLayer: SessionLayerResult;
+  sessionLayer: SessionLayer;
 }): BackgroundLifecycleHandle => {
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
@@ -74,7 +74,7 @@ export const createBackgroundRuntimeLifecycle = ({
       await hydrateCriticalStorage("chains", "chainDefinitions", () => stateServices.chainDefinitions.whenReady());
       await hydrateCriticalStorage("accounts", "accounts", () => stateServices.accounts.whenReady?.());
       await hydrateCriticalStorage("permissions", "permissions", () => permissionsReady);
-      await hydrateCriticalStorage("keyring", "runtimeKeyrings", () => sessionLayer.attachKeyring());
+      await hydrateCriticalStorage("keyring", "keyrings", () => sessionLayer.attachKeyring());
       if (hydrationEnabled) {
         await hydrateCriticalStorage("chains", "providerChainSelection", () => providerChainSelection.loadAll());
       }
@@ -88,9 +88,19 @@ export const createBackgroundRuntimeLifecycle = ({
         const results = await transactionRecovery.recoverAfterRestart();
         const failed = results.find((result) => result.status === "failed") ?? null;
         if (failed) {
-          throw failed.error ?? new Error(`Failed to apply transaction restart action ${failed.action.kind}`);
+          if (failed.error) {
+            throw failed.error;
+          }
+          throw new RuntimeHydrationError({
+            owner: "transactions",
+            resource: "restartRecovery",
+            cause: { actionKind: failed.action.kind },
+          });
         }
       } catch (error) {
+        if (error instanceof RuntimeHydrationError) {
+          throw error;
+        }
         throw new RuntimeHydrationError({
           owner: "transactions",
           resource: "restartRecovery",

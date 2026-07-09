@@ -14,10 +14,6 @@ export type SerializedArxError = {
   details?: ArxErrorDetails;
 };
 
-export type ErrorCause = {
-  cause?: unknown;
-};
-
 export abstract class ArxBaseError extends Error {
   readonly kind = ARX_ERROR_KIND;
   readonly code: string;

@@ -51,10 +51,7 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
       return selectedAccounts.map((account) => account.displayAddress);
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
-      throw new ApprovalRejectedError({
-        message: "User rejected account access",
-        cause: error,
-      });
+      throw new ApprovalRejectedError("User rejected account access");
     }
   },
 });

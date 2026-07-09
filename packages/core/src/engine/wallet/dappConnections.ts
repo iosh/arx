@@ -1,5 +1,5 @@
 import { eventTopic, type Messenger } from "../../messenger/index.js";
-import type { ProviderRuntimeConnectionQuery, ProviderRuntimeConnectionState } from "../../runtime/provider/types.js";
+import type { ProviderConnectionQuery, ProviderConnectionState } from "../../provider/access/types.js";
 import type { DappConnectionRecord, DappConnectionsState, WalletDappConnections } from "../types.js";
 
 type DappConnectionsRecord = {
@@ -11,8 +11,8 @@ type DappConnectionsRecord = {
 };
 
 export type DappConnectionWriter = Readonly<{
-  record(scope: ProviderRuntimeConnectionQuery, state: ProviderRuntimeConnectionState): DappConnectionRecord | null;
-  remove(scope: ProviderRuntimeConnectionQuery): boolean;
+  record(scope: ProviderConnectionQuery, state: ProviderConnectionState): DappConnectionRecord | null;
+  remove(scope: ProviderConnectionQuery): boolean;
 }>;
 
 export type WalletDappConnectionsController = WalletDappConnections & DappConnectionWriter;
@@ -85,8 +85,8 @@ export const createWalletDappConnections = (deps: { messenger: Messenger }): Wal
   };
 
   const recordConnection = (
-    scope: ProviderRuntimeConnectionQuery,
-    state: ProviderRuntimeConnectionState,
+    scope: ProviderConnectionQuery,
+    state: ProviderConnectionState,
   ): DappConnectionRecord | null => {
     const existing = readConnectionRecord(scope.origin, scope.namespace);
     const at = Date.now();
@@ -106,7 +106,7 @@ export const createWalletDappConnections = (deps: { messenger: Messenger }): Wal
     return toConnectionRecord(next);
   };
 
-  const removeConnection = (scope: ProviderRuntimeConnectionQuery): boolean => {
+  const removeConnection = (scope: ProviderConnectionQuery): boolean => {
     const removed = deleteConnectionRecord(scope.origin, scope.namespace);
     if (removed) {
       emitChanged();

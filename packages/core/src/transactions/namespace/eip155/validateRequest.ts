@@ -23,7 +23,6 @@ const runRequestParser = <T>(parse: () => T): T => {
           code: error.reason,
           field: error.field,
         },
-        cause: error,
       });
     }
     throw error;

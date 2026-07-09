@@ -65,7 +65,6 @@ export const createRpcMethodExecutor = ({ routing, deps, chainRpcClientPool }: C
       if (error instanceof ZodError) {
         throw new RpcInvalidParamsError({
           message: "Invalid params",
-          cause: error,
         });
       }
 

@@ -1,13 +1,22 @@
-import { ArxBaseError, type ErrorCause } from "../error.js";
+import { ArxBaseError } from "../error.js";
+
+export class WalletNamespaceManifestRequiredError extends ArxBaseError {
+  static readonly code = "wallet.namespace_manifest_required";
+
+  constructor() {
+    super("At least one namespace manifest is required.", {
+      code: WalletNamespaceManifestRequiredError.code,
+    });
+  }
+}
 
 export class WalletNamespaceManifestNotFoundError extends ArxBaseError {
   static readonly code = "wallet.namespace_manifest_not_found";
 
-  constructor(params: ErrorCause & { namespace: string }) {
-    super(`Namespace manifest "${params.namespace}" is not installed.`, {
+  constructor(namespace: string) {
+    super(`Namespace manifest "${namespace}" is not installed.`, {
       code: WalletNamespaceManifestNotFoundError.code,
-      details: { namespace: params.namespace },
-      cause: params.cause,
+      details: { namespace },
     });
   }
 }
@@ -15,11 +24,10 @@ export class WalletNamespaceManifestNotFoundError extends ArxBaseError {
 export class DuplicateWalletNamespaceManifestError extends ArxBaseError {
   static readonly code = "wallet.duplicate_namespace_manifest";
 
-  constructor(params: ErrorCause & { namespace: string }) {
-    super(`Duplicate wallet namespace manifest "${params.namespace}".`, {
+  constructor(namespace: string) {
+    super(`Duplicate wallet namespace manifest "${namespace}".`, {
       code: DuplicateWalletNamespaceManifestError.code,
-      details: { namespace: params.namespace },
-      cause: params.cause,
+      details: { namespace },
     });
   }
 }

@@ -11,11 +11,11 @@ import {
   cloneChainDefinition,
   type RpcEndpoint,
 } from "../../chains/definition.js";
+import type { ChainDefinitionsPort } from "../../chains/definitions/port.js";
 import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainRpcDefaultEndpointsPort } from "../../chains/rpc/defaultEndpoints/port.js";
 import type { ChainRpcEndpointOverridesPort } from "../../chains/rpc/endpointOverrides/port.js";
-import type { ChainDefinitionsPort } from "../../chains/runtime/chainDefinitions/port.js";
 import type { ProviderChainSelectionPort } from "../../chains/selection/provider/port.js";
 import type { WalletChainSelectionPort } from "../../chains/selection/wallet/port.js";
 import type { KeyringMetasPort } from "../../keyring/keyringMetasPort.js";

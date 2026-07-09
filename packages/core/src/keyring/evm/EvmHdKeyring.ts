@@ -2,6 +2,7 @@ import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import {
+  KeyringAccountEntryMissingError,
   KeyringAccountNotFoundError,
   KeyringDuplicateAccountError,
   KeyringIndexOutOfRangeError,
@@ -69,7 +70,7 @@ export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyring
     return this.#order.map((address) => {
       const entry = this.#accounts.get(address);
       if (!entry) {
-        throw new Error(`Account entry missing for address ${address}`);
+        throw new KeyringAccountEntryMissingError(address);
       }
       return { ...entry.account };
     });

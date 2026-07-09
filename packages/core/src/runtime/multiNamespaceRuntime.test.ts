@@ -4,6 +4,7 @@ import type { ChainDefinitionSeed } from "../chains/definition.js";
 import { type ChainDefinition, cloneChainDefinition, type RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
+import { createUnsupportedKeyringFactories } from "../keyring/index.js";
 import { eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import { listRpcNamespaces } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
@@ -113,7 +114,7 @@ const solanaNamespaceManifest = (() => {
         namespace,
         defaultChainRef: SOLANA_CHAIN.chainRef as ChainRef,
         accountAddressing,
-        factories: {},
+        factories: createUnsupportedKeyringFactories(namespace),
       },
       chainSeeds: [toChainSeed(SOLANA_CHAIN)],
     },

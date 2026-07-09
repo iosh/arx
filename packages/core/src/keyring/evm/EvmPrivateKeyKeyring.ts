@@ -1,4 +1,8 @@
-import { KeyringAccountNotFoundError, KeyringSecretUnavailableError } from "../errors.js";
+import {
+  KeyringAccountNotFoundError,
+  KeyringPrivateKeyEntryMissingError,
+  KeyringSecretUnavailableError,
+} from "../errors.js";
 import type { KeyringAccount, SimpleKeyring, SimpleKeyringSnapshot } from "../types.js";
 import { canonicalizeEvmAddress, parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";
 
@@ -23,8 +27,7 @@ export class EvmPrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string
     this.loadFromPrivateKey(privateKey);
     const entry = this.#entry;
     if (!entry) {
-      // Defensive: loadFromPrivateKey should always set this.
-      throw new Error("Private key entry not initialized");
+      throw new KeyringPrivateKeyEntryMissingError();
     }
     return { ...entry.account };
   }

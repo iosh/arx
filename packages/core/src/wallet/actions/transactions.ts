@@ -1,4 +1,4 @@
-import type { ActiveAccountView } from "../../accounts/runtime/types.js";
+import type { ActiveAccountView } from "../../accounts/selection/types.js";
 import { ChainNotSupportedError } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { WalletAccounts, WalletNetworks, WalletSession } from "../../engine/types.js";
@@ -31,14 +31,12 @@ const resolveWalletTransactionChainRef = (
   const chainRef = getSelectedWalletChainRefForNamespace(deps.networks, walletRequest.namespace);
   const chain = deps.networks.findAvailableChainView({ chainRef });
   if (!chain) {
-    throw new ChainNotSupportedError({
-      message: `Send transaction is not supported for chain "${chainRef}" yet.`,
-    });
+    throw new ChainNotSupportedError(`Send transaction is not supported for chain "${chainRef}" yet.`);
   }
   if (chain.namespace !== walletRequest.namespace) {
-    throw new ChainNotSupportedError({
-      message: `Wallet selected chain "${chainRef}" is not in namespace "${walletRequest.namespace}".`,
-    });
+    throw new ChainNotSupportedError(
+      `Wallet selected chain "${chainRef}" is not in namespace "${walletRequest.namespace}".`,
+    );
   }
 
   return chain.chainRef;

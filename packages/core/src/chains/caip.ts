@@ -12,23 +12,23 @@ export type ParsedChainRef = {
 };
 export const parseChainRef = (value: ChainRef): ParsedChainRef => {
   if (typeof value !== "string") {
-    throw new ChainInvalidRefError({ rule: "type" });
+    throw new ChainInvalidRefError("type");
   }
   const first = value.indexOf(":");
   if (first <= 0 || first === value.length - 1) {
-    throw new ChainInvalidRefError({ rule: "namespace:reference" });
+    throw new ChainInvalidRefError("namespace:reference");
   }
   // Reject additional ":" segments to avoid silently truncating CAIP-10-like strings.
   if (value.indexOf(":", first + 1) !== -1) {
-    throw new ChainInvalidRefError({ rule: "single_colon" });
+    throw new ChainInvalidRefError("single_colon");
   }
   const namespace = value.slice(0, first);
   const reference = value.slice(first + 1);
   if (!CAIP2_NAMESPACE_PATTERN.test(namespace)) {
-    throw new ChainInvalidRefError({ rule: "namespace" });
+    throw new ChainInvalidRefError("namespace");
   }
   if (!CAIP2_REFERENCE_PATTERN.test(reference)) {
-    throw new ChainInvalidRefError({ rule: "reference" });
+    throw new ChainInvalidRefError("reference");
   }
   return { namespace, reference };
 };
@@ -49,7 +49,7 @@ export const isChainRef = (value: unknown): value is ChainRef =>
 
 export const assertChainRef = (value: unknown): asserts value is ChainRef => {
   if (!isChainRef(value)) {
-    throw new ChainInvalidRefError({ rule: "pattern" });
+    throw new ChainInvalidRefError("pattern");
   }
 };
 

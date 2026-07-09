@@ -81,7 +81,6 @@ const parseOptionalInvocationChainRef = (raw: unknown): { kind: "present"; value
   } catch (error) {
     throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
-      cause: error,
     });
   }
 };
@@ -96,7 +95,6 @@ const assertInvocationHintConsistency = (hint?: RpcInvocationHint) => {
     } catch (error) {
       throw new RpcInvalidRequestError({
         message: "Invalid chainRef identifier",
-        cause: error,
       });
     }
   }
@@ -134,7 +132,6 @@ const assertInvocationChainRefMatchesNamespace = (method: string, namespace: Nam
   } catch (error) {
     throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
-      cause: error,
     });
   }
 

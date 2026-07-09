@@ -1,4 +1,9 @@
-import { VaultInvalidCiphertextError, VaultInvalidPasswordError, VaultPlatformUnavailableError } from "./errors.js";
+import {
+  VaultConfigError,
+  VaultInvalidCiphertextError,
+  VaultInvalidPasswordError,
+  VaultPlatformUnavailableError,
+} from "./errors.js";
 
 const KEY_LENGTH_BITS = 256;
 
@@ -6,7 +11,7 @@ const cryptoApi = (() => {
   if (typeof globalThis.crypto !== "undefined" && globalThis.crypto !== null) {
     return globalThis.crypto as Crypto;
   }
-  throw new VaultPlatformUnavailableError({ platform: "WebCrypto" });
+  throw new VaultPlatformUnavailableError("WebCrypto");
 })();
 
 const encoder = new TextEncoder();
@@ -20,7 +25,7 @@ const toArrayBuffer = (view: Uint8Array): ArrayBuffer => {
 
 export const randomBytes = (size: number): Uint8Array => {
   if (!Number.isInteger(size) || size <= 0) {
-    throw new Error("Random byte length must be a positive integer");
+    throw new VaultConfigError("randomBytes");
   }
   const buffer = new Uint8Array(size);
   cryptoApi.getRandomValues(buffer);
@@ -37,7 +42,7 @@ export const toBase64 = (bytes: Uint8Array): string => {
     }
     return globalThis.btoa(parts.join(""));
   }
-  throw new VaultPlatformUnavailableError({ platform: "btoa" });
+  throw new VaultPlatformUnavailableError("btoa");
 };
 
 export const fromBase64 = (value: string): Uint8Array => {
@@ -49,7 +54,7 @@ export const fromBase64 = (value: string): Uint8Array => {
     }
     return output;
   }
-  throw new VaultPlatformUnavailableError({ platform: "atob" });
+  throw new VaultPlatformUnavailableError("atob");
 };
 
 export const importPasswordKey = (password: string): Promise<CryptoKey> => {
@@ -65,7 +70,7 @@ export const deriveKeyMaterial = async (
   iterations: number,
 ): Promise<Uint8Array> => {
   if (!Number.isInteger(iterations) || iterations <= 0) {
-    throw new Error("PBKDF2 iteration count must be a positive integer");
+    throw new VaultConfigError("iterations");
   }
   const buffer = await cryptoApi.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: toArrayBuffer(salt), iterations },
@@ -85,7 +90,7 @@ export const aesGcmEncrypt = async (
   ivLength: number,
 ): Promise<{ cipher: Uint8Array; iv: Uint8Array }> => {
   if (!Number.isInteger(ivLength) || ivLength <= 0) {
-    throw new Error("AES-GCM IV length must be a positive integer");
+    throw new VaultConfigError("ivBytes");
   }
   const iv = randomBytes(ivLength);
   const cryptoKey = await importAesKey(keyMaterial, ["encrypt"]);
@@ -111,6 +116,6 @@ export const aesGcmDecrypt = async (
     );
     return new Uint8Array(decrypted);
   } catch (cause) {
-    throw new VaultInvalidCiphertextError({ cause });
+    throw new VaultInvalidCiphertextError(cause);
   }
 };

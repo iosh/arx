@@ -1,4 +1,4 @@
-import type { AccountSelectionService } from "../../accounts/runtime/types.js";
+import type { AccountSelectionService } from "../../accounts/selection/types.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountId } from "../../storage/records.js";

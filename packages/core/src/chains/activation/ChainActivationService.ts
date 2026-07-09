@@ -39,16 +39,14 @@ export const createChainActivationService = ({
 
     const activeChainRef = walletChainSelection.getSelectedChainRef(namespaceKey);
     if (!activeChainRef) {
-      throw new ChainNotSupportedError({
-        message: `No active chain configured for namespace "${namespaceKey}"`,
-      });
+      throw new ChainNotSupportedError(`No active chain configured for namespace "${namespaceKey}"`);
     }
 
     const parsed = parseChainRef(activeChainRef);
     if (parsed.namespace !== namespaceKey) {
-      throw new ChainNotCompatibleError({
-        message: `Active chain "${activeChainRef}" does not belong to namespace "${namespaceKey}"`,
-      });
+      throw new ChainNotCompatibleError(
+        `Active chain "${activeChainRef}" does not belong to namespace "${namespaceKey}"`,
+      );
     }
 
     assertAvailableChainRef(activeChainRef);
@@ -81,9 +79,7 @@ export const createChainActivationService = ({
   }: ActivateNamespaceChainParams): Promise<void> => {
     const parsed = parseChainRef(chainRef);
     if (parsed.namespace !== namespace) {
-      throw new ChainNotCompatibleError({
-        message: `Chain activation namespace mismatch for reason "${reason}"`,
-      });
+      throw new ChainNotCompatibleError(`Chain activation namespace mismatch for reason "${reason}"`);
     }
 
     assertAvailableChainRef(chainRef);
@@ -98,9 +94,7 @@ export const createChainActivationService = ({
   }: SelectProviderChainParams): Promise<void> => {
     const parsed = parseChainRef(chainRef);
     if (parsed.namespace !== namespace) {
-      throw new ChainNotCompatibleError({
-        message: `Provider chain selection namespace mismatch for reason "${reason}"`,
-      });
+      throw new ChainNotCompatibleError(`Provider chain selection namespace mismatch for reason "${reason}"`);
     }
 
     assertAvailableChainRef(chainRef);

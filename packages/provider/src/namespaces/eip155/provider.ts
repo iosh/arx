@@ -77,7 +77,7 @@ const EIP155_INVALID_PARAMS_CODES = new Set([
   "global.rpc.invalid_params",
 ]);
 
-const isProviderRuntimeError = (value: unknown): value is ArxProviderError | JsonRpcProviderError => {
+const isProviderRpcError = (value: unknown): value is ArxProviderError | JsonRpcProviderError => {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   return candidate.kind === "ArxError" || candidate.kind === "JsonRpcError";
@@ -398,8 +398,8 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     if (isTransportFailure(error)) {
       return this.#mapTransportFailure(error);
     }
-    if (isProviderRuntimeError(error)) {
-      return this.#mapProviderRuntimeError(error);
+    if (isProviderRpcError(error)) {
+      return this.#mapProviderRpcError(error);
     }
     if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
       return error as EIP1193ProviderRpcError;
@@ -407,7 +407,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     return new JsonRpcInternalError();
   }
 
-  #mapProviderRuntimeError(error: ArxProviderError | JsonRpcProviderError): EIP1193ProviderRpcError {
+  #mapProviderRpcError(error: ArxProviderError | JsonRpcProviderError): EIP1193ProviderRpcError {
     if (error.kind === "JsonRpcError") {
       return new ProviderCustomError({
         code: error.code,

@@ -1,5 +1,5 @@
 import type { JsonRpcParams, JsonRpcRequest } from "@arx/core";
-import type { ProviderRpcRequest } from "@arx/core/runtime";
+import type { ProviderRpcRequest } from "@arx/core/provider";
 
 export const createCoreProviderRpcRequest = (request: JsonRpcRequest<JsonRpcParams>): ProviderRpcRequest => {
   const coreRequest: ProviderRpcRequest = {

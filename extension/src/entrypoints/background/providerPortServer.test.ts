@@ -1,5 +1,5 @@
 import type { WalletProvider } from "@arx/core/engine";
-import type { ProviderRuntimeRpcResponse } from "@arx/core/runtime";
+import type { ProviderRpcResponse } from "@arx/core/provider";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -89,7 +89,7 @@ const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
   activateConnectionScope?: WalletProvider["activateConnectionScope"];
   request?: WalletProvider["request"];
-  encodeRuntimeRpcError?: WalletProvider["encodeRuntimeRpcError"];
+  encodeRpcError?: WalletProvider["encodeRpcError"];
   cancelRequestScope?: WalletProvider["cancelRequestScope"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
   failFirstProviderBootstrap?: boolean;
@@ -163,10 +163,10 @@ const createServerHarness = (options?: {
           id: input.request.id,
           jsonrpc: input.request.jsonrpc,
           result: null,
-        }) satisfies ProviderRuntimeRpcResponse),
+        }) satisfies ProviderRpcResponse),
   );
-  const encodeRuntimeRpcError = vi.fn(
-    options?.encodeRuntimeRpcError ??
+  const encodeRpcError = vi.fn(
+    options?.encodeRpcError ??
       ((error: unknown) => {
         const payload = error as { code?: number; message?: string } | undefined;
         return {
@@ -187,7 +187,7 @@ const createServerHarness = (options?: {
       return () => connectionStateChangedHandlers.delete(listener);
     },
     request,
-    encodeRuntimeRpcError,
+    encodeRpcError,
     cancelRequestScope,
     subscribeSessionUnlocked: (listener) => {
       sessionUnlockedHandlers.add(listener as (payload: ProviderLifecyclePayload) => void);
@@ -221,7 +221,7 @@ const createServerHarness = (options?: {
       activateConnectionScope,
       deactivateConnectionScope,
       request,
-      encodeRuntimeRpcError,
+      encodeRpcError,
       cancelRequestScope,
     },
     setSnapshot(namespaceOrScope: string | { origin: string; namespace: string }, snapshot: ProviderBridgeSnapshot) {
@@ -367,15 +367,15 @@ describe("providerPortServer", () => {
   });
 
   it("rejects pending requests on same-scope session rotation without disconnect or reconnect churn", async () => {
-    let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
+    let resolveRequest: (value: ProviderRpcResponse) => void = () => {
       throw new Error("request resolver not initialized");
     };
     const harness = createServerHarness({
       request: () =>
-        new Promise<ProviderRuntimeRpcResponse>((resolve) => {
+        new Promise<ProviderRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
-      encodeRuntimeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
+      encodeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
     });
     const port = new FakePort();
 
@@ -469,15 +469,15 @@ describe("providerPortServer", () => {
   it("finalizes disconnect state and cancels provider-scoped approvals when a port disconnects", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
 
-    let resolveRequest: (value: ProviderRuntimeRpcResponse) => void = () => {
+    let resolveRequest: (value: ProviderRpcResponse) => void = () => {
       throw new Error("request resolver not initialized");
     };
     const harness = createServerHarness({
       request: () =>
-        new Promise<ProviderRuntimeRpcResponse>((resolve) => {
+        new Promise<ProviderRpcResponse>((resolve) => {
           resolveRequest = resolve;
         }),
-      encodeRuntimeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
+      encodeRpcError: () => ({ kind: "ArxError", code: "global.transport.disconnected" }),
     });
     const port = new FakePort();
 

@@ -1,5 +1,5 @@
 import type { WalletProvider } from "@arx/core/engine";
-import type { ProviderRuntimeRequestScope } from "@arx/core/runtime";
+import type { ProviderRequestScope } from "@arx/core/provider";
 import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { createCoreProviderRpcRequest } from "../rpc";
@@ -27,7 +27,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     const origin = sessionContext.origin;
     const portId = getOrCreatePortId(port);
 
-    const requestScope: ProviderRuntimeRequestScope = {
+    const requestScope: ProviderRequestScope = {
       transport: "provider" as const,
       origin,
       portId,
@@ -57,7 +57,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       sendReply(port, envelope.sessionId, envelope.id, { result: response.result });
     } catch (error) {
       const rpcError = provider
-        ? provider.encodeRuntimeRpcError(error)
+        ? provider.encodeRpcError(error)
         : ({ kind: "JsonRpcError", code: -32603, message: "Internal error" } as const);
 
       sendReply(port, envelope.sessionId, envelope.id, {

@@ -1,5 +1,6 @@
 import type { WalletProvider } from "@arx/core/engine";
-import { type ProviderRuntimeRpcError, TransportDisconnectedError } from "@arx/core/runtime";
+import { TransportDisconnectedError } from "@arx/core/errors";
+import type { ProviderRpcError } from "@arx/core/provider";
 import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import type { ProviderConnectionScope } from "./providerPortConnections";
@@ -33,19 +34,19 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     cancelRequestScope,
   } = deps;
 
-  const encodeDisconnectError = (overrideError?: ProviderRuntimeRpcError): ProviderRuntimeRpcError => {
+  const encodeDisconnectError = (overrideError?: ProviderRpcError): ProviderRpcError => {
     if (overrideError) {
       return overrideError;
     }
 
     const provider = getProvider();
-    const disconnectError = new TransportDisconnectedError({ message: "Disconnected" });
+    const disconnectError = new TransportDisconnectedError("Disconnected");
 
     if (!provider) {
       return { kind: "ArxError", code: TransportDisconnectedError.code };
     }
 
-    return provider.encodeRuntimeRpcError(disconnectError);
+    return provider.encodeRpcError(disconnectError);
   };
 
   const disconnectPort = (port: Runtime.Port) => {
@@ -59,7 +60,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const rejectPendingWithDisconnectForSession = (
     port: Runtime.Port,
     sessionId: string,
-    overrideError?: ProviderRuntimeRpcError,
+    overrideError?: ProviderRpcError,
   ) => {
     const requestMap = getPendingRequestMap(port);
     if (!requestMap) return;
@@ -80,7 +81,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     clearPendingForPort(port);
   };
 
-  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: ProviderRuntimeRpcError) => {
+  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: ProviderRpcError) => {
     const sessionId = getSessionIdForPort(port);
     if (!sessionId) {
       clearPendingForPort(port);

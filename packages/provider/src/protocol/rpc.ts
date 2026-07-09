@@ -1,5 +1,5 @@
 import type { JsonRpcParams } from "@arx/core";
-import type { ProviderRuntimeRpcError } from "@arx/core/runtime";
+import type { ProviderRpcError } from "@arx/core/provider";
 
 export type ProviderRpcParams = JsonRpcParams;
 export type ProviderRpcRequest = {
@@ -11,5 +11,5 @@ export type ProviderRpcResponse =
       result: unknown;
     }
   | {
-      error: ProviderRuntimeRpcError;
+      error: ProviderRpcError;
     };

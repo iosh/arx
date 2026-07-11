@@ -75,7 +75,7 @@ export type {
   PersistenceRemoveChangeOf,
 } from "./change.js";
 export { persistenceChange } from "./change.js";
-export type { CorePersistence, CorePersistenceReaders, PersistenceWriter } from "./contract.js";
+export type { CorePersistence, CorePersistenceReaders, PersistenceWriter } from "./corePersistence.js";
 export type {
   AnyPersistenceType,
   KeyedPersistenceType,

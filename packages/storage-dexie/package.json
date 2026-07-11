@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "compile": "tsc --noEmit"
   },
 
   "dependencies": {

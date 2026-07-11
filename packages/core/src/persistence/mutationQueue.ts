@@ -1,4 +1,4 @@
-import type { PersistenceWriter } from "./contract.js";
+import type { PersistenceWriter } from "./corePersistence.js";
 
 export interface CoreMutationQueue {
   /** Runs one mutation through commit, activation, and publication before the next mutation starts. */

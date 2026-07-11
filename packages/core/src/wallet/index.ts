@@ -1,3 +1,9 @@
+export {
+  AutoLockTimer,
+  assertAutoLockDuration,
+  MAX_AUTO_LOCK_DURATION_MS,
+  MIN_AUTO_LOCK_DURATION_MS,
+} from "./AutoLockTimer.js";
 export type {
   ConfirmNewMnemonicInput,
   CreateWalletFromMnemonicInput,
@@ -45,6 +51,7 @@ export {
   createWalletApiFromExecutor,
   createWalletMethodExecutor,
 } from "./createWalletApi.js";
+export * from "./errors.js";
 export type {
   AccountMeta,
   ApprovalDetail,
@@ -83,3 +90,5 @@ export type {
   WalletApiTransactionsResult,
   WalletSetupAvailability,
 } from "./types.js";
+export type { Wallet, WalletChanged } from "./Wallet.js";
+export { createWallet } from "./Wallet.js";

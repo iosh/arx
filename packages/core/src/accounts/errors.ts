@@ -1,5 +1,5 @@
 import { ArxBaseError } from "../error.js";
-import type { AccountId } from "../storage/records.js";
+import type { AccountId } from "./addressing/accountId.js";
 
 export class AccountNotOwnedError extends ArxBaseError {
   static readonly code = "account.not_owned";
@@ -34,6 +34,28 @@ export class AccountNamespaceMismatchError extends ArxBaseError {
     super(`Account does not belong to namespace "${input.namespace}".`, {
       code: AccountNamespaceMismatchError.code,
       details: { namespace: input.namespace, accountNamespace: input.accountNamespace },
+    });
+  }
+}
+
+export class AccountNotFoundError extends ArxBaseError {
+  static readonly code = "account.not_found";
+
+  constructor(accountId: AccountId) {
+    super("Account was not found.", {
+      code: AccountNotFoundError.code,
+      details: { accountId },
+    });
+  }
+}
+
+export class AccountOperationRejectedError extends ArxBaseError {
+  static readonly code = "account.operation_rejected";
+
+  constructor(reason: string) {
+    super("Account operation was rejected.", {
+      code: AccountOperationRejectedError.code,
+      details: { reason },
     });
   }
 }

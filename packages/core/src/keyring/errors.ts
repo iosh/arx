@@ -139,6 +139,17 @@ export class KeyringNotFoundError extends ArxBaseError {
   }
 }
 
+export class KeyringSourceNotFoundError extends ArxBaseError {
+  static readonly code = "keyring.source_not_found";
+
+  constructor(keySourceId: string) {
+    super("Key source required by the unlocked keyring was not found.", {
+      code: KeyringSourceNotFoundError.code,
+      details: { keySourceId },
+    });
+  }
+}
+
 export class KeyringAccountEntryMissingError extends ArxBaseError {
   static readonly code = "keyring.account_entry_missing";
 

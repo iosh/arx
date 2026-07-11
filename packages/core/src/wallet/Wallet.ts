@@ -1,0 +1,151 @@
+import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
+import type { KeySourceId } from "../keyring/persistence.js";
+import { type UnlockedSigner, UnlockedSigners } from "../keyring/UnlockedSigners.js";
+import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
+import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import type { VaultBootstrap } from "../vault/bootstrap.js";
+import { Vault, type VaultStatus } from "../vault/Vault.js";
+import { AutoLockTimer } from "./AutoLockTimer.js";
+import { removeAccount, renameAccount, selectAccount, setAccountHidden } from "./accounts.js";
+import { addHdKeyring, deriveHdAccount, removeHdKeyring } from "./keyrings.js";
+import {
+  addNewMnemonic,
+  confirmMnemonicBackup,
+  importMnemonic,
+  importPrivateKey,
+  removeKeySource,
+} from "./keySources.js";
+import { changePassword, lock, setAutoLockDuration, unlock } from "./locking.js";
+import { deleteWallet } from "./removal.js";
+import { initializeFromMnemonic, initializeFromPrivateKey, initializeWithNewMnemonic } from "./setup.js";
+
+export type WalletChanged = Readonly<{
+  vault?: boolean;
+  accounts?: readonly AccountId[];
+  keySources?: readonly KeySourceId[];
+  autoLock?: boolean;
+}>;
+
+export type WalletContext = Readonly<{
+  readers: Pick<
+    CorePersistenceReaders,
+    | "encryptedVault"
+    | "keySources"
+    | "hdKeyrings"
+    | "accounts"
+    | "permissions"
+    | "providerChainSelections"
+    | "transactions"
+  >;
+  mutations: CoreMutationQueue;
+  vault: Vault;
+  signers: UnlockedSigners;
+  autoLock: AutoLockTimer;
+  adapters: KeyringNamespaceAdapters;
+  /** Publishes committed wallet changes and must not throw. */
+  publishChanged(change: WalletChanged): void;
+}>;
+
+export type Wallet = Readonly<{
+  getStatus(): VaultStatus;
+  getAutoLock(): Readonly<{ durationMs: number; deadline: number | null }>;
+  getSigner(accountId: AccountId): UnlockedSigner | null;
+  initializeWithNewMnemonic(params: {
+    password: string;
+    mnemonic: string;
+    passphrase?: string;
+    namespace: string;
+  }): Promise<AccountId>;
+  initializeFromMnemonic(params: {
+    password: string;
+    mnemonic: string;
+    passphrase?: string;
+    namespace: string;
+  }): Promise<AccountId>;
+  initializeFromPrivateKey(params: { password: string; privateKey: string; namespace: string }): Promise<AccountId>;
+  unlock(password: string): Promise<void>;
+  lock(): boolean;
+  changePassword(params: { currentPassword: string; newPassword: string }): Promise<void>;
+  setAutoLockDuration(durationMs: number): Promise<void>;
+  accounts: Readonly<{
+    rename(params: { accountId: AccountId; alias?: string }): Promise<void>;
+    setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
+    select(accountId: AccountId): Promise<void>;
+    remove(accountId: AccountId): Promise<void>;
+  }>;
+  keySources: Readonly<{
+    addMnemonic(params: { mnemonic: string; passphrase?: string; namespace: string }): Promise<AccountId>;
+    importMnemonic(params: { mnemonic: string; passphrase?: string; namespace: string }): Promise<AccountId>;
+    importPrivateKey(params: { privateKey: string; namespace: string }): Promise<AccountId>;
+    confirmBackup(params: { keySourceId: KeySourceId; mnemonic: string }): Promise<void>;
+    remove(keySourceId: KeySourceId): Promise<void>;
+  }>;
+  keyrings: Readonly<{
+    add(params: { keySourceId: KeySourceId; namespace: string; derivationProfileId?: string }): Promise<AccountId>;
+    deriveAccount(keyringId: string): Promise<AccountId>;
+    remove(keyringId: string): Promise<void>;
+  }>;
+  delete(): Promise<void>;
+}>;
+
+export const createWallet = (params: {
+  readers: WalletContext["readers"];
+  mutations: CoreMutationQueue;
+  adapters: KeyringNamespaceAdapters;
+  bootstrap: VaultBootstrap;
+  /** Publishes committed wallet changes and must not throw. */
+  publishChanged(change: WalletChanged): void;
+}): Wallet => {
+  const vault = new Vault(params.bootstrap.encryptedVault);
+  const signers = new UnlockedSigners();
+  let expire = (): void => {};
+  const autoLock = new AutoLockTimer({
+    durationMs: params.bootstrap.autoLockDurationMs,
+    onExpire: () => expire(),
+  });
+  const context: WalletContext = {
+    readers: params.readers,
+    mutations: params.mutations,
+    vault,
+    signers,
+    autoLock,
+    adapters: params.adapters,
+    publishChanged: params.publishChanged,
+  };
+  expire = () => {
+    lock(context);
+  };
+
+  return {
+    getStatus: () => vault.getStatus(),
+    getAutoLock: () => ({ durationMs: autoLock.getDuration(), deadline: autoLock.getDeadline() }),
+    getSigner: (accountId) => signers.get(accountId),
+    initializeWithNewMnemonic: (input) => initializeWithNewMnemonic(context, input),
+    initializeFromMnemonic: (input) => initializeFromMnemonic(context, input),
+    initializeFromPrivateKey: (input) => initializeFromPrivateKey(context, input),
+    unlock: (password) => unlock(context, password),
+    lock: () => lock(context),
+    changePassword: (input) => changePassword(context, input),
+    setAutoLockDuration: (durationMs) => setAutoLockDuration(context, durationMs),
+    accounts: {
+      rename: (input) => renameAccount(context, input),
+      setHidden: (input) => setAccountHidden(context, input),
+      select: (accountId) => selectAccount(context, accountId),
+      remove: (accountId) => removeAccount(context, accountId),
+    },
+    keySources: {
+      addMnemonic: (input) => addNewMnemonic(context, input),
+      importMnemonic: (input) => importMnemonic(context, input),
+      importPrivateKey: (input) => importPrivateKey(context, input),
+      confirmBackup: (input) => confirmMnemonicBackup(context, input),
+      remove: (keySourceId) => removeKeySource(context, keySourceId),
+    },
+    keyrings: {
+      add: (input) => addHdKeyring(context, input),
+      deriveAccount: (keyringId) => deriveHdAccount(context, keyringId),
+      remove: (keyringId) => removeHdKeyring(context, keyringId),
+    },
+    delete: () => deleteWallet(context),
+  };
+};

@@ -35,7 +35,7 @@ export const parseEip155TypedDataParams = (params: readonly unknown[]) => {
 
   try {
     return { address, typedData: JSON.stringify(payload) };
-  } catch (error) {
+  } catch (_error) {
     throw new RpcInvalidParamsError({
       message: "Failed to serialise typed data payload",
     });

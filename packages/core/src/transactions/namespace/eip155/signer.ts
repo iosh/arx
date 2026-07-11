@@ -143,7 +143,7 @@ const parseTypedDataPayload = (raw: string) => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (error) {
+  } catch (_error) {
     throw new RpcInvalidParamsError({
       message: "Typed data payload must be valid JSON.",
     });
@@ -157,7 +157,7 @@ const parseTypedDataPayload = (raw: string) => {
 
   try {
     TypedData.assert(parsed as TypedData.Definition<Record<string, unknown>, string>);
-  } catch (error) {
+  } catch (_error) {
     throw new RpcInvalidParamsError({
       message: "Typed data payload failed validation.",
     });

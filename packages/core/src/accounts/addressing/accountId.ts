@@ -1,9 +1,8 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountId as StorageAccountId } from "../../storage/records.js";
 import { type AccountAddressingByNamespace, accountAddressingForNamespace } from "./addressing.js";
 
-export type AccountId = StorageAccountId;
+export type AccountId = string;
 
 export const parseAccountId = (accountId: AccountId): { namespace: string; payloadHex: string } => {
   const separatorIndex = accountId.indexOf(":");

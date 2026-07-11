@@ -36,7 +36,7 @@ const readChainIdHex = (value: unknown): Hex.Hex => {
 
   try {
     return Hex.fromNumber(Hex.toBigInt(value));
-  } catch (error) {
+  } catch (_error) {
     throw createInvalidParamsError("wallet_switchEthereumChain received an invalid hex chainId", {
       details: {
         field: "chainId",

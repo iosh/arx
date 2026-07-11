@@ -128,6 +128,41 @@ export class ChainDefinitionConflictError extends ArxBaseError {
   }
 }
 
+export class CustomChainNotFoundError extends ArxBaseError {
+  static readonly code = "chain.custom_not_found";
+
+  constructor(chainRef: string) {
+    super("Requested custom chain does not exist.", {
+      code: CustomChainNotFoundError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export type CustomChainRemovalRejectedReason = "wallet_selected" | "active_transaction";
+
+export class CustomChainRemovalRejectedError extends ArxBaseError {
+  static readonly code = "chain.custom_removal_rejected";
+
+  constructor(chainRef: string, reason: CustomChainRemovalRejectedReason) {
+    super("Custom chain cannot be removed while it is in active use.", {
+      code: CustomChainRemovalRejectedError.code,
+      details: { chainRef, reason },
+    });
+  }
+}
+
+export class WalletChainSelectionUnavailableError extends ArxBaseError {
+  static readonly code = "chain.wallet_selection_unavailable";
+
+  constructor(namespace: string) {
+    super("No wallet chain is selected for the requested namespace.", {
+      code: WalletChainSelectionUnavailableError.code,
+      details: { namespace },
+    });
+  }
+}
+
 export class DuplicateBuiltinChainDefinitionError extends ArxBaseError {
   static readonly code = "chain.definition.duplicate_builtin";
 

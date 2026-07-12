@@ -1,5 +1,4 @@
 import { parseChainRef } from "../../chains/caip.js";
-import { TransportDisconnectedError } from "../../errors/transport.js";
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
@@ -410,7 +409,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
     };
   }): Error {
     if (params.terminalReason === "caller_disconnected") {
-      return new TransportDisconnectedError();
+      return new ApprovalCancelledError();
     }
     if (params.terminalReason === "timeout") {
       return new ApprovalTimeoutError();

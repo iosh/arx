@@ -1,4 +1,4 @@
-import { ArxBaseError, type JsonValue } from "../../error.js";
+import { ArxBaseError, type JsonValue } from "../../errors.js";
 
 export class SubmittedTransactionTrackingInvariantError extends ArxBaseError {
   static readonly code = "transaction.tracking.invariant";

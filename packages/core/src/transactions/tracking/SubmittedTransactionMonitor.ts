@@ -1,5 +1,5 @@
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
-import { isArxBaseError } from "../../error.js";
+import { isArxBaseError } from "../../errors.js";
 import type { TransactionAggregateStore, TransactionRecord } from "../aggregate/index.js";
 import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
 import type {

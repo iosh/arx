@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 import type { TransactionStatus } from "./aggregate/index.js";
 
 export class TransactionReplacementUnavailableError extends ArxBaseError {

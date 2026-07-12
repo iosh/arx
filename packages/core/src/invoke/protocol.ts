@@ -1,4 +1,4 @@
-import { ArxBaseError, type SerializedArxError } from "../error.js";
+import { ArxBaseError, type SerializedArxError } from "../errors.js";
 
 export type InvokeChannel = {
   connect(): Promise<void>;

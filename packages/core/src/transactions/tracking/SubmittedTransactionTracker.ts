@@ -1,5 +1,5 @@
 import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
-import { isArxBaseError } from "../../error.js";
+import { isArxBaseError } from "../../errors.js";
 import {
   buildTransactionTerminalReason,
   isTransactionStatusTerminal,

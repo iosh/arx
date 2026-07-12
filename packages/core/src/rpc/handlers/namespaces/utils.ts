@@ -1,4 +1,4 @@
-import { isArxBaseError } from "../../../error.js";
+import { isArxBaseError } from "../../../errors.js";
 
 export const isRpcError = (value: unknown): value is { code: number } =>
   Boolean(value && typeof value === "object" && "code" in (value as Record<string, unknown>));

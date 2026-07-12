@@ -1,4 +1,4 @@
-import { ArxBaseError, toJsonSafe } from "../error.js";
+import { ArxBaseError, toJsonSafe } from "../errors.js";
 import type { TransactionConflictKey, TransactionJsonObject, TransactionStatus } from "./persistence.js";
 
 export class TransactionRecordNotFoundError extends ArxBaseError {

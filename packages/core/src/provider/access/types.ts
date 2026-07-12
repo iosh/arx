@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { JsonValue } from "../../error.js";
+import type { JsonValue } from "../../errors.js";
 import type { Unsubscribe } from "../../messenger/index.js";
 import type {
   JsonRpcParams,

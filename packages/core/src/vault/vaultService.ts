@@ -1,4 +1,4 @@
-import { isArxBaseError } from "../error.js";
+import { isArxBaseError } from "../errors.js";
 import {
   VaultConfigError,
   VaultInvalidCiphertextError,

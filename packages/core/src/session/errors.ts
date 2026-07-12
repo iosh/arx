@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export class SessionLockedError extends ArxBaseError {
   static readonly code = "global.session.locked";

@@ -3,7 +3,7 @@ import { InMemoryApprovalQueueService } from "../approvals/queue/InMemoryApprova
 import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
 import type { WalletChainSelectionDefaults } from "../chains/WalletChainSelection.js";
-import type { JsonValue } from "../error.js";
+import type { JsonValue } from "../errors.js";
 import { createWalletAccountSigning } from "../keyring/accountSigning.js";
 import { createMessenger } from "../messenger/Messenger.js";
 import { assembleNamespaceStatic } from "../namespaces/index.js";

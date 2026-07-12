@@ -1,6 +1,6 @@
 import type { Hex as OxHexValue } from "ox/Hex";
 import * as OxHex from "ox/Hex";
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export type Hex = OxHexValue;
 

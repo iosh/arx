@@ -55,7 +55,7 @@ describe("createProviderRequests", () => {
     expect(providerRequests.has(REQUEST_1)).toBe(false);
     expect(providerRequests.has(REQUEST_2)).toBe(true);
     expect(targetHandle.getTerminalError()).toMatchObject({
-      code: "global.transport.disconnected",
+      code: "provider.disconnected",
     });
     expect(siblingHandle.getTerminalError()).toBeNull();
   });
@@ -76,7 +76,7 @@ describe("createProviderRequests", () => {
     expect(handle.fulfill()).toBe(false);
     expect(handle.reject()).toBe(false);
     expect(handle.getTerminalError()).toMatchObject({
-      code: "global.transport.disconnected",
+      code: "provider.disconnected",
     });
   });
 
@@ -95,7 +95,7 @@ describe("createProviderRequests", () => {
 
     expect(handle.reject()).toBe(false);
     expect(handle.getTerminalError()).toMatchObject({
-      code: "global.transport.disconnected",
+      code: "provider.disconnected",
     });
     expect(providerRequests.has(REQUEST_5)).toBe(false);
   });

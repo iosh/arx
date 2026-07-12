@@ -1,4 +1,4 @@
-import { isArxBaseError } from "../../../error.js";
+import { isArxBaseError } from "../../../errors.js";
 import { RpcInternalError } from "../../../rpc/errors.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { SignedTransactionPayload } from "../types.js";

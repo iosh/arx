@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 import type { AccountId } from "./addressing/accountId.js";
 
 export class AccountNotOwnedError extends ArxBaseError {

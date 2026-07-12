@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../../../error.js";
+import { ArxBaseError } from "../../../errors.js";
 
 export class Eip155ChainRefError extends ArxBaseError {
   static readonly code = "transaction.eip155.chain_ref_invalid";

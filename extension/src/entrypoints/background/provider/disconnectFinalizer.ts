@@ -1,6 +1,5 @@
 import type { CoreProviderApi } from "@arx/core/engine";
-import { TransportDisconnectedError } from "@arx/core/errors";
-import type { ProviderRpcError } from "@arx/core/provider";
+import { ProviderDisconnectedError, type ProviderRpcError } from "@arx/core/provider";
 import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import type { ProviderConnectionScope } from "./providerPortConnections";
@@ -40,10 +39,10 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     }
 
     const provider = getProvider();
-    const disconnectError = new TransportDisconnectedError("Disconnected");
+    const disconnectError = new ProviderDisconnectedError("Disconnected");
 
     if (!provider) {
-      return { kind: "ArxError", code: TransportDisconnectedError.code };
+      return { kind: "ArxError", code: ProviderDisconnectedError.code };
     }
 
     return provider.encodeRpcError(disconnectError);

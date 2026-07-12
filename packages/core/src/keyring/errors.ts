@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export class KeyringNotInitializedError extends ArxBaseError {
   static readonly code = "keyring.not_initialized";

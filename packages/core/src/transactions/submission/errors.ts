@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../../error.js";
+import { ArxBaseError } from "../../errors.js";
 import type { JsonObject } from "../aggregate/index.js";
 
 type TransactionAcceptanceCommitErrorInput = {

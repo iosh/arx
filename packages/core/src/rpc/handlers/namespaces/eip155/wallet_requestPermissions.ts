@@ -1,7 +1,7 @@
 import { ZodError, z } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import type { ChainRef } from "../../../../chains/ids.js";
-import { isArxBaseError } from "../../../../error.js";
+import { isArxBaseError } from "../../../../errors.js";
 import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
 import { buildEip2255Permissions } from "../../../../permissions/eip2255.js";
 import {

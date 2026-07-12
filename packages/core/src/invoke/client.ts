@@ -1,4 +1,4 @@
-import { deserializeArxError } from "../error.js";
+import { deserializeArxError } from "../errors.js";
 import type { Unsubscribe } from "../messenger/topic.js";
 import {
   InvokeConnectInvalidatedError,

@@ -10,15 +10,14 @@ export type {
 export * from "./accounts/index.js";
 export * from "./chains/index.js";
 export * from "./engine/index.js";
-export type { ArxErrorDetails, JsonValue, SerializedArxError } from "./error.js";
+export type { ArxErrorDetails, JsonValue, SerializedArxError } from "./errors.js";
 export {
   ARX_ERROR_KIND,
   ArxBaseError,
   deserializeArxError,
   isArxBaseError,
   serializeArxError,
-} from "./error.js";
-export * from "./errors/index.js";
+} from "./errors.js";
 export * from "./messenger/index.js";
 export * from "./namespaces/index.js";
 export * from "./permissions/index.js";

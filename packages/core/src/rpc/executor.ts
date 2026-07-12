@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
-import { isArxBaseError } from "../error.js";
+import { isArxBaseError } from "../errors.js";
 import type { ChainRpcClientPool, RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {

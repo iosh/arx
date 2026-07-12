@@ -1,8 +1,7 @@
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
-import { TransportDisconnectedError } from "../../errors/transport.js";
 import { RpcInternalError } from "../../rpc/errors.js";
 import type { RpcProviderRequestCancellationReason, RpcProviderRequestHandle } from "../../rpc/executionContext.js";
-import { ProviderRequestCancellationError } from "./errors.js";
+import { ProviderDisconnectedError, ProviderRequestCancellationError } from "./errors.js";
 
 export type ProviderRequestScope = {
   transport: "provider";
@@ -57,7 +56,7 @@ const createTerminalRequestError = (
   terminalState: ProviderRequestTerminalState,
 ): Error => {
   if (terminalState.status === "cancelled" && terminalState.reason === "caller_disconnected") {
-    return new TransportDisconnectedError();
+    return new ProviderDisconnectedError();
   }
 
   return new RpcInternalError({

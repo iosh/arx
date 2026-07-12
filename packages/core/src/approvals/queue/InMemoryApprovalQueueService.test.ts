@@ -162,7 +162,7 @@ describe("InMemoryApprovalQueueService", () => {
     await queue.cancel({ approvalId: request.approvalId, reason: "caller_disconnected" });
     expect(queue.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
 
-    await expect(handle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
+    await expect(handle.settled).rejects.toMatchObject({ code: "approval.cancelled" });
   });
 
   it("cancelScope() cancels only approvals attached to the matching scope", async () => {
@@ -179,7 +179,7 @@ describe("InMemoryApprovalQueueService", () => {
 
     expect(queue.cancelScope(scope, "caller_disconnected")).toBe(1);
 
-    await expect(targetHandle.settled).rejects.toMatchObject({ code: "global.transport.disconnected" });
+    await expect(targetHandle.settled).rejects.toMatchObject({ code: "approval.cancelled" });
     expect(queue.getState().pending.map((item) => item.approvalId)).toEqual([sibling.approvalId]);
 
     await queue.resolve({

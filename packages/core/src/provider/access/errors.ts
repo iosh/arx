@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../../error.js";
+import { ArxBaseError } from "../../errors.js";
 
 export type InvalidProviderConnectionScopeInput = {
   field: "origin" | "namespace";
@@ -23,6 +23,16 @@ export class ProviderRequestCancellationError extends ArxBaseError {
     super("Failed to cancel provider requests.", {
       code: ProviderRequestCancellationError.code,
       details: { rejectionCount },
+    });
+  }
+}
+
+export class ProviderDisconnectedError extends ArxBaseError {
+  static readonly code = "provider.disconnected";
+
+  constructor(message = "Provider disconnected.") {
+    super(message, {
+      code: ProviderDisconnectedError.code,
     });
   }
 }

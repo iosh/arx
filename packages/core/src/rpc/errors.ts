@@ -1,4 +1,4 @@
-import { ArxBaseError, type JsonObject, type JsonValue, toJsonSafe } from "../error.js";
+import { ArxBaseError, type JsonObject, type JsonValue, toJsonSafe } from "../errors.js";
 import type { JsonRpcErrorLike } from "./jsonRpcError.js";
 
 export { isJsonRpcErrorLike } from "./jsonRpcError.js";

@@ -1,7 +1,7 @@
 import { type AccountId, canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
 import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
 import type { ChainRef } from "../chains/ids.js";
-import { isArxBaseError } from "../error.js";
+import { isArxBaseError } from "../errors.js";
 import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
 import type {
   CreateTransactionInput,

@@ -1,5 +1,9 @@
 export { createProviderAccess } from "./createProviderAccess.js";
-export { InvalidProviderConnectionScopeError, ProviderRequestCancellationError } from "./errors.js";
+export {
+  InvalidProviderConnectionScopeError,
+  ProviderDisconnectedError,
+  ProviderRequestCancellationError,
+} from "./errors.js";
 export type {
   ProviderRequestBeginInput,
   ProviderRequestCancellationReason,

@@ -1,4 +1,4 @@
-import { isArxBaseError } from "../error.js";
+import { isArxBaseError } from "../errors.js";
 import { VaultInvalidPasswordError } from "./errors.js";
 import type { EncryptedVaultRecord } from "./persistence.js";
 import { decodeVaultSecrets, encodeVaultSecrets, type VaultSecrets } from "./secrets.js";

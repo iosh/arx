@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export class WalletAlreadyInitializedError extends ArxBaseError {
   static readonly code = "wallet.already_initialized";

@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export class VaultNotInitializedError extends ArxBaseError {
   static readonly code = "vault.not_initialized";

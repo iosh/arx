@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../../error.js";
+import { ArxBaseError } from "../../errors.js";
 
 export class TransactionAggregateNotFoundError extends ArxBaseError {
   static readonly code = "transaction.aggregate.not_found";

@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../error.js";
+import { ArxBaseError } from "../errors.js";
 
 export class AutoLockDurationOutOfRangeError extends ArxBaseError {
   static readonly code = "settings.auto_lock_duration_out_of_range";

@@ -9,23 +9,3 @@ export type {
 } from "./coreRuntime.js";
 export { createCoreRuntime } from "./createCoreRuntime.js";
 export { WalletNamespaceManifestNotFoundError } from "./errors.js";
-export type {
-  ArxWallet,
-  CoreChainsStoragePorts,
-  CoreStoragePorts,
-  CreateArxWalletInput,
-  DappConnectionRecord,
-  DappConnectionsState,
-  WalletAccounts,
-  WalletApprovals,
-  WalletAttention,
-  WalletBackupStatus,
-  WalletDappConnections,
-  WalletNamespaces,
-  WalletNetworks,
-  WalletPermissions,
-  WalletProvider,
-  WalletProviderConnectionState,
-  WalletSession,
-  WalletSetupState,
-} from "./types.js";

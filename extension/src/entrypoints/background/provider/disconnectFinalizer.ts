@@ -1,4 +1,4 @@
-import type { WalletProvider } from "@arx/core/engine";
+import type { CoreProviderApi } from "@arx/core/engine";
 import { TransportDisconnectedError } from "@arx/core/errors";
 import type { ProviderRpcError } from "@arx/core/provider";
 import { CHANNEL, type Envelope } from "@arx/provider/protocol";
@@ -7,7 +7,7 @@ import type { ProviderConnectionScope } from "./providerPortConnections";
 import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
-  getProvider: () => WalletProvider | null;
+  getProvider: () => CoreProviderApi | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;

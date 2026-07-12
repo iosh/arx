@@ -1,4 +1,4 @@
-import type { WalletProvider } from "@arx/core/engine";
+import type { CoreProviderApi } from "@arx/core/engine";
 import type { ProviderRequestScope } from "@arx/core/provider";
 import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
@@ -7,7 +7,7 @@ import type { ProviderSessionContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
-  getProvider: () => Promise<WalletProvider>;
+  getProvider: () => Promise<CoreProviderApi>;
   getSessionContext: (port: Runtime.Port) => ProviderSessionContext;
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
@@ -39,7 +39,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       ...envelope.payload,
     });
 
-    let provider: WalletProvider | null = null;
+    let provider: CoreProviderApi | null = null;
 
     try {
       provider = await getProvider();

@@ -1,2 +1,1 @@
-export type { BackgroundRpcAccessPolicyHooks } from "./background/rpcAccessPolicy.js";
-export * from "./createBackgroundRuntime.js";
+export { WALLET_UI_ORIGIN } from "./internalOrigins.js";

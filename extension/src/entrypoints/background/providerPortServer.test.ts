@@ -1,4 +1,4 @@
-import type { WalletProvider } from "@arx/core/engine";
+import type { CoreProviderApi } from "@arx/core/engine";
 import type { ProviderRpcResponse } from "@arx/core/provider";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,7 @@ vi.mock("./origin", () => ({
 
 type Listener = (message: unknown) => void;
 type ProviderLifecyclePayload = { reason?: string };
-type ProviderConnectionStateChange = Parameters<WalletProvider["subscribeConnectionStateChanged"]>[0] extends (
+type ProviderConnectionStateChange = Parameters<CoreProviderApi["subscribeConnectionStateChanged"]>[0] extends (
   change: infer T,
 ) => void
   ? T
@@ -87,10 +87,10 @@ const buildTestConnectionScopeKey = ({ origin, namespace }: { origin: string; na
 
 const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
-  activateConnectionScope?: WalletProvider["activateConnectionScope"];
-  request?: WalletProvider["request"];
-  encodeRpcError?: WalletProvider["encodeRpcError"];
-  cancelRequestScope?: WalletProvider["cancelRequestScope"];
+  activateConnectionScope?: CoreProviderApi["activateConnectionScope"];
+  request?: CoreProviderApi["request"];
+  encodeRpcError?: CoreProviderApi["encodeRpcError"];
+  cancelRequestScope?: CoreProviderApi["cancelRequestScope"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
   failFirstProviderBootstrap?: boolean;
 }) => {
@@ -150,7 +150,7 @@ const createServerHarness = (options?: {
     options?.activateConnectionScope ??
       (async (input: { origin: string; namespace: string }) => {
         activeConnectionScopes.add(buildTestConnectionScopeKey(input));
-        return buildProviderConnectionState(input);
+        return { ...buildProviderConnectionState(input), connected: true };
       }),
   );
   const deactivateConnectionScope = vi.fn((input: { origin: string; namespace: string }) => {
@@ -178,7 +178,7 @@ const createServerHarness = (options?: {
   );
   const cancelRequestScope = vi.fn(options?.cancelRequestScope ?? (async () => 1));
 
-  const provider: WalletProvider = {
+  const provider: CoreProviderApi = {
     getConnectionState,
     activateConnectionScope,
     deactivateConnectionScope,
@@ -329,10 +329,10 @@ describe("providerPortServer", () => {
   });
 
   it("does not revive a provider session when the port disconnects during connection activation", async () => {
-    let resolveActivation: (value: ProviderBridgeConnectionState) => void = () => {
+    let resolveActivation: (value: ProviderBridgeConnectionState & { connected: boolean }) => void = () => {
       throw new Error("activateConnectionScope resolver not initialized");
     };
-    const activated = new Promise<ProviderBridgeConnectionState>((resolve) => {
+    const activated = new Promise<ProviderBridgeConnectionState & { connected: boolean }>((resolve) => {
       resolveActivation = resolve;
     });
     const harness = createServerHarness({
@@ -356,7 +356,7 @@ describe("providerPortServer", () => {
       namespace: "eip155",
     });
 
-    resolveActivation(makeConnectionState(makeSnapshot("eip155", true), ["0xaaa"]));
+    resolveActivation({ ...makeConnectionState(makeSnapshot("eip155", true), ["0xaaa"]), connected: true });
 
     await vi.waitFor(() => expect(harness.mocks.deactivateConnectionScope).toHaveBeenCalledTimes(2));
     expect(port.postMessage).not.toHaveBeenCalled();
@@ -449,7 +449,7 @@ describe("providerPortServer", () => {
     });
 
     await vi.waitFor(() => expect(harness.mocks.request).toHaveBeenCalledTimes(1));
-    const input = harness.mocks.request.mock.calls[0]?.[0] as Parameters<WalletProvider["request"]>[0];
+    const input = harness.mocks.request.mock.calls[0]?.[0] as Parameters<CoreProviderApi["request"]>[0];
 
     expect(input.request).toMatchObject({
       id: "transport-1",

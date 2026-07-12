@@ -1,6 +1,7 @@
 export type { AccountSigningService } from "./accountSigning.js";
-export { createAccountSigningService } from "./accountSigning.js";
+export { createAccountSigningService, createWalletAccountSigning } from "./accountSigning.js";
 export * from "./errors.js";
+export { eip155KeyringAdapter } from "./evm/adapter.js";
 export type { EvmKeyringAccount } from "./evm/EvmHdKeyring.js";
 export { EvmHdKeyring } from "./evm/EvmHdKeyring.js";
 export { EvmPrivateKeyKeyring } from "./evm/EvmPrivateKeyKeyring.js";

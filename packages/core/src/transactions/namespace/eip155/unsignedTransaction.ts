@@ -1,5 +1,5 @@
 import type { Hex } from "ox/Hex";
-import type { TransactionConflictKey } from "../../aggregate/types.js";
+import type { TransactionConflictKey } from "../../persistence.js";
 
 /**
  * Durable JSON form of the EIP-155 fields that must be fixed before signing.

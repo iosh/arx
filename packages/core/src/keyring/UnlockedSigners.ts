@@ -7,7 +7,7 @@ import type { HdKeyringRecord } from "./persistence.js";
 
 export type UnlockedSigner = Readonly<{
   accountId: AccountId;
-  sign(payload: Uint8Array): Promise<Uint8Array>;
+  signDigest(digest: Uint8Array): Promise<Readonly<{ r: bigint; s: bigint; yParity: number; bytes: Uint8Array }>>;
   clear(): void;
 }>;
 

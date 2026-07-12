@@ -168,7 +168,7 @@ export const createUiEntryCoordinator = ({
 
   const hasInitializedVault = async (uiEntryAccess: BackgroundUiEntryAccess) => {
     const sessionStatus = await uiEntryAccess.getSessionStatus();
-    return sessionStatus.vaultInitialized;
+    return sessionStatus.hasInitializedVault;
   };
 
   const openNotificationForUnlockAttention = (

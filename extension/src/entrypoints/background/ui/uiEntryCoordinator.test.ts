@@ -180,7 +180,7 @@ const buildHarness = (
         getSessionStatus: async () => ({
           status: "locked" as const,
           isUnlocked: false,
-          vaultInitialized: true,
+          hasInitializedVault: true,
           autoLockDurationMs: null,
           nextAutoLockAt: null,
         }),

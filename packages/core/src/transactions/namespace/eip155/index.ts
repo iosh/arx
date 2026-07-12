@@ -1,3 +1,4 @@
+export { createEip155TransactionAdapter } from "./adapter.js";
 export type { Eip155Broadcaster } from "./broadcaster.js";
 export { createEip155Broadcaster } from "./broadcaster.js";
 export {

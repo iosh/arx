@@ -1,4 +1,5 @@
 import { SessionLockedError } from "../session/errors.js";
+import type { Wallet } from "../wallet/Wallet.js";
 import type { KeyringService } from "./service/KeyringService.js";
 import type { AccountId } from "./service/types.js";
 
@@ -30,3 +31,14 @@ export const createAccountSigningService = ({ keyring }: CreateAccountSigningSer
     },
   };
 };
+
+export const createWalletAccountSigning = (wallet: Pick<Wallet, "getSigner">): AccountSigningService => ({
+  assertAccountUnlocked: async (accountId) => {
+    if (!wallet.getSigner(accountId)) throw new SessionLockedError();
+  },
+  signDigestByAccountId: async ({ accountId, digest }) => {
+    const signer = wallet.getSigner(accountId);
+    if (!signer) throw new SessionLockedError();
+    return await signer.signDigest(digest);
+  },
+});

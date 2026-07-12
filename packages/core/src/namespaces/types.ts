@@ -4,16 +4,19 @@ import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import type { AccountSigningService } from "../keyring/accountSigning.js";
+import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { NamespaceConfig } from "../keyring/service/namespaceConfig.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
+import type { TransactionNamespaceAdapter } from "../transactions/transactionNamespace.js";
 
 export type NamespaceCoreManifest<TNamespace extends string = string> = {
   rpc: RpcNamespaceModule;
   chainAddressing: NamespaceChainAddressing;
   accountAddressing: NamespaceAccountAddressing;
   keyring: NamespaceConfig<TNamespace>;
+  keyringAdapter: KeyringNamespaceAdapter;
   chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
 };
 
@@ -65,6 +68,12 @@ export type NamespaceRuntimeManifest = {
     chains: ChainAddressingByNamespace;
     signer: unknown;
   }): NamespaceTransaction;
+  createTransactionAdapter(params: {
+    rpcClients: Pick<ChainRpcClientPool, "getClient">;
+    chains: ChainAddressingByNamespace;
+    accounts: Readonly<Record<string, NamespaceAccountAddressing>>;
+    accountSigning: AccountSigningService;
+  }): TransactionNamespaceAdapter;
 };
 
 export type NamespaceManifest<TNamespace extends string = string> = {

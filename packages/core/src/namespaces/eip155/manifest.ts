@@ -3,7 +3,7 @@ import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.j
 import { eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { EIP155_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
 import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
-import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
+import { EvmHdKeyring, EvmPrivateKeyKeyring, eip155KeyringAdapter } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
 import {
   createEip155RpcClientFactory,
@@ -11,6 +11,7 @@ import {
   type Eip155RpcClient,
 } from "../../rpc/namespaceClients/eip155.js";
 import { eip155Module } from "../../rpc/namespaces/eip155/module.js";
+import { createEip155TransactionAdapter } from "../../transactions/namespace/eip155/adapter.js";
 import { createEip155Broadcaster } from "../../transactions/namespace/eip155/broadcaster.js";
 import { createEip155Signer, type Eip155Signer } from "../../transactions/namespace/eip155/signer.js";
 import { createEip155Transaction } from "../../transactions/namespace/eip155/transaction.js";
@@ -44,6 +45,7 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
         "private-key": () => new EvmPrivateKeyKeyring(),
       },
     },
+    keyringAdapter: eip155KeyringAdapter,
     chainSeeds: EIP155_CHAIN_DEFINITION_SEEDS,
   },
   runtime: {
@@ -85,5 +87,13 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
         chains,
       });
     },
+    createTransactionAdapter: ({ rpcClients, chains, accounts, accountSigning }) =>
+      createEip155TransactionAdapter({
+        rpcClientFactory: (chainRef) =>
+          rpcClients.getClient<Eip155RpcCapabilities>(EIP155_NAMESPACE, chainRef) as Eip155RpcClient,
+        chains,
+        accounts,
+        accountSigning,
+      }),
   },
 });

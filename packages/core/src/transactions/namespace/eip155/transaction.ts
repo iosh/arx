@@ -32,10 +32,10 @@ type AdapterDeps = {
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
 };
 
-const EIP155_INITIAL_INSPECTION_DELAY_MS = 3_000;
-const EIP155_PENDING_INSPECTION_DELAY_MS = 12_000;
-const EIP155_RETRY_BASE_DELAY_MS = 5_000;
-const EIP155_RETRY_MAX_DELAY_MS = 60_000;
+export const EIP155_INITIAL_INSPECTION_DELAY_MS = 3_000;
+export const EIP155_PENDING_INSPECTION_DELAY_MS = 12_000;
+export const EIP155_RETRY_BASE_DELAY_MS = 5_000;
+export const EIP155_RETRY_MAX_DELAY_MS = 60_000;
 const EIP155_CANCEL_GAS_LIMIT: Hex.Hex = "0x5208";
 const REPLACEMENT_FEE_BUMP_NUMERATOR = 11n;
 const REPLACEMENT_FEE_BUMP_DENOMINATOR = 10n;
@@ -93,7 +93,7 @@ const priceReplacementFees = async (
   };
 };
 
-const createEip155ReplacementRequest = async (
+export const createEip155ReplacementRequest = async (
   context: Eip155ReplacementRequestContext,
   deps: Pick<AdapterDeps, "rpcClientFactory">,
 ): Promise<Eip155TransactionRequest> => {
@@ -164,7 +164,7 @@ const deriveLocalNextNonce = (context: Eip155FinalizeSubmitContext): `0x${string
   return maxNonce === null ? null : (Hex.fromNumber(maxNonce + 1n) as `0x${string}`);
 };
 
-const finalizeEip155Submit = async (
+export const finalizeEip155Submit = async (
   context: Eip155FinalizeSubmitContext,
   deps: Pick<AdapterDeps, "rpcClientFactory">,
 ): Promise<Eip155FinalizeSubmitResult> => {

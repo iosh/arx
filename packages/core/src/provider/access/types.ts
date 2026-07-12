@@ -7,7 +7,6 @@ import type {
   RpcProviderExecutionContext,
   RpcProviderRequestContext,
 } from "../../rpc/index.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../session/unlock/types.js";
 import type { ProviderRequestScope } from "./providerRequests.js";
 
 export type { ProviderRequestScope } from "./providerRequests.js";
@@ -97,8 +96,8 @@ export type ProviderAccess = {
   activateConnectionScope(input: ProviderConnectionScope): Promise<ProviderConnectionState>;
   deactivateConnectionScope(input: ProviderConnectionScope): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): Unsubscribe;
-  subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
-  subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
+  subscribeSessionUnlocked(listener: (payload: { at: number }) => void): () => void;
+  subscribeSessionLocked(listener: (payload: { at: number; reason: "manual" }) => void): () => void;
   request(input: ProviderRequestInput): Promise<ProviderRpcResponse>;
   encodeRpcError(error: unknown): ProviderRpcError;
   listPermittedAccounts(input: ProviderAccountsQuery): Promise<string[]>;

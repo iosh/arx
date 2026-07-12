@@ -5,7 +5,6 @@ import type { ChainRef } from "../chains/ids.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import type { AccountSigningService } from "../keyring/accountSigning.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
-import type { NamespaceConfig } from "../keyring/service/namespaceConfig.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceTransaction } from "../transactions/namespace/types.js";
@@ -15,7 +14,6 @@ export type NamespaceCoreManifest<TNamespace extends string = string> = {
   rpc: RpcNamespaceModule;
   chainAddressing: NamespaceChainAddressing;
   accountAddressing: NamespaceAccountAddressing;
-  keyring: NamespaceConfig<TNamespace>;
   keyringAdapter: KeyringNamespaceAdapter;
   chainSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
 };

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { KeyringType } from "./keyringSchemas.js";
 
 export type AccountNamespace = string;
 
@@ -42,16 +41,6 @@ export type ProviderChainSelectionRecord = {
   namespace: string;
   chainRef: ChainRef;
   updatedAt: number;
-};
-
-export type KeyringMetaRecord = {
-  id: string;
-  type: KeyringType;
-  alias?: string | undefined;
-  needsBackup?: boolean | undefined;
-  // HD only: the next derivation index to use (monotonic, even if accounts are removed/hidden).
-  nextDerivationIndex?: number | undefined;
-  createdAt: number;
 };
 
 export type AccountRecord = {

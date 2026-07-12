@@ -79,8 +79,7 @@ export const createUnlockedSignersDraft = (params: {
       if (!source || source.type !== "private-key") {
         throw new KeyringSourceNotFoundError(record.origin.keySourceId);
       }
-      const namespace = record.accountId.slice(0, record.accountId.indexOf(":"));
-      signers.push(getKeyringNamespaceAdapter(params.adapters, namespace).importPrivateKey(source));
+      signers.push(getKeyringNamespaceAdapter(params.adapters, source.namespace).importPrivateKey(source));
     }
   } catch (error) {
     for (const signer of signers) signer.clear();

@@ -23,7 +23,7 @@ export const unlock = async (wallet: WalletContext, password: string): Promise<v
     accounts: [...hdAccounts, ...privateAccounts],
     adapters: wallet.adapters,
   });
-  wallet.vault.activate(unlocked);
+  wallet.vault.replaceUnlocked(unlocked);
   wallet.signers.replace(signers);
   wallet.autoLock.start();
   wallet.publishChanged({ vault: true });
@@ -49,7 +49,7 @@ export const changePassword = async (
       newPassword: params.newPassword,
     });
     await commit([persistenceChange.put(encryptedVaultPersistenceType, draft.record)]);
-    wallet.vault.activate(draft);
+    wallet.vault.replaceUnlocked(draft);
     wallet.autoLock.start();
     wallet.publishChanged({ vault: true });
   });

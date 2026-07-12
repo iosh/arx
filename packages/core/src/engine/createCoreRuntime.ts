@@ -1,5 +1,5 @@
 import { canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
-import { InMemoryApprovalQueueService } from "../approvals/queue/InMemoryApprovalQueueService.js";
+import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
 import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
 import type { WalletChainSelectionDefaults } from "../chains/WalletChainSelection.js";
@@ -150,7 +150,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   });
   transactions.monitor.start();
   const messenger = createMessenger();
-  const approvals = new InMemoryApprovalQueueService({ messenger });
+  const approvals = new ApprovalQueue({ messenger });
   approvals.onStateChanged(() => publish({ owner: "approvals" }));
 
   const activeConnections = new Map<string, ProviderConnectionState>();

@@ -1,6 +1,9 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountId } from "../../storage/records.js";
-import type { PermissionsSnapshot } from "../../wallet/types.js";
+
+export type PermissionsSnapshot = {
+  origins: Record<string, Record<string, { chains: Record<ChainRef, { accountIds: AccountId[] }> }>>;
+};
 
 export type PermittedAccountView = {
   accountId: AccountId;

@@ -27,9 +27,7 @@ describe("namespace assembly", () => {
     expect(assembly.chainSeeds).toEqual(eip155NamespaceManifest.core.chainSeeds);
     expect(assembly.chainSeeds[0]).toBe(eip155NamespaceManifest.core.chainSeeds?.[0]);
 
-    expect(assembly.keyringNamespaces).toHaveLength(1);
-    expect(assembly.keyringNamespaces[0]).toBe(eip155NamespaceManifest.core.keyring);
-    expect(assembly.keyringNamespaces[0]?.factories).toBe(eip155NamespaceManifest.core.keyring.factories);
+    expect(eip155NamespaceManifest.core.keyringAdapter.namespace).toBe("eip155");
   });
 
   it("prefers overridden namespace transactions when materializing runtime bindings", () => {

@@ -3,7 +3,7 @@ import { accountIdFromChainAddress } from "../../accounts/addressing/accountId.j
 import { eip155AccountAddressing } from "../../accounts/addressing/addressing.js";
 import { EIP155_CHAIN_DEFINITION_SEEDS } from "../../chains/chains.seed.js";
 import { eip155ChainAddressing } from "../../chains/eip155/chainAddressing.js";
-import { EvmHdKeyring, EvmPrivateKeyKeyring, eip155KeyringAdapter } from "../../keyring/index.js";
+import { eip155KeyringAdapter } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
 import {
   createEip155RpcClientFactory,
@@ -17,8 +17,6 @@ import { createEip155Signer, type Eip155Signer } from "../../transactions/namesp
 import { createEip155Transaction } from "../../transactions/namespace/eip155/transaction.js";
 import { defineNamespaceManifest } from "../types.js";
 
-const DEFAULT_EIP155_CHAIN_SEED = EIP155_CHAIN_DEFINITION_SEEDS[0] as (typeof EIP155_CHAIN_DEFINITION_SEEDS)[number];
-const DEFAULT_EIP155_CHAIN_REF = DEFAULT_EIP155_CHAIN_SEED.definition.chainRef;
 const EIP155_CLIENT_FACTORY = createEip155RpcClientFactory();
 const EIP155_ACCOUNT_ADDRESSING = { [EIP155_NAMESPACE]: eip155AccountAddressing };
 
@@ -36,15 +34,6 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
     rpc: eip155Module,
     chainAddressing: eip155ChainAddressing,
     accountAddressing: eip155AccountAddressing,
-    keyring: {
-      namespace: EIP155_NAMESPACE,
-      defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
-      accountAddressing: eip155AccountAddressing,
-      factories: {
-        hd: () => new EvmHdKeyring(),
-        "private-key": () => new EvmPrivateKeyKeyring(),
-      },
-    },
     keyringAdapter: eip155KeyringAdapter,
     chainSeeds: EIP155_CHAIN_DEFINITION_SEEDS,
   },

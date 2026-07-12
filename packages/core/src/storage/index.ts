@@ -1,5 +1,3 @@
-export type { KeyringType, VaultKeyringEntry, VaultKeyringPayload } from "./keyringSchemas.js";
-export { KEYRING_TYPES, KEYRING_VAULT_ENTRY_VERSION } from "./keyringSchemas.js";
 export type {
   AccountId,
   AccountNamespace,
@@ -7,18 +5,14 @@ export type {
   AccountSelectionStateRecord,
   ChainRpcDefaultEndpointsRecord,
   ChainRpcEndpointOverrideRecord,
-  KeyringMetaRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
   WalletChainSelectionRecord,
 } from "./records.js";
 export { AccountIdSchema } from "./records.js";
 
-export type { ChainDefinitionEntity, ChainDefinitionSource, VaultMetaSnapshot } from "./schemas.js";
+export type { ChainDefinitionEntity, ChainDefinitionSource } from "./schemas.js";
 export {
   CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   DOMAIN_SCHEMA_VERSION,
-  VAULT_META_SNAPSHOT_VERSION,
 } from "./schemas.js";
-
-export type { VaultMetaPort } from "./types.js";

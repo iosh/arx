@@ -8,7 +8,7 @@ export type Bip39KeySource = Readonly<{
 export type PrivateKeySource = Readonly<{
   keySourceId: string;
   type: "private-key";
-  algorithm: string;
+  namespace: string;
   privateKey: string;
 }>;
 

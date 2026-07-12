@@ -7,7 +7,6 @@ import { parseChainRef } from "../chains/caip.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import { ChainNotCompatibleError } from "../chains/errors.js";
 import type { AccountSigningService } from "../keyring/accountSigning.js";
-import type { NamespaceConfig } from "../keyring/service/namespaceConfig.js";
 import type { ChainRpcClientPool, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import { buildRpcRouting, type RpcRouting } from "../rpc/routing.js";
@@ -33,7 +32,6 @@ export type NamespaceStaticAssembly = Readonly<{
   accountAddressing: AccountAddressingByNamespace;
   chainAddressing: ChainAddressingByNamespace;
   chainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
-  keyringNamespaces: readonly NamespaceConfig[];
 }>;
 
 export type NamespaceRuntimeAssembly = Readonly<{
@@ -67,10 +65,6 @@ export const buildAccountAddressingByNamespaceFromManifests = (
   return buildAccountAddressingByNamespace(manifests.map((manifest) => manifest.core.accountAddressing));
 };
 
-export const createKeyringNamespacesFromManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
-  return manifests.map((manifest) => manifest.core.keyring);
-};
-
 const createRpcClientFactoriesFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): NamespaceRpcClientFactory[] => {
@@ -91,7 +85,6 @@ export const assembleNamespaceStatic = (manifests: readonly NamespaceManifest[])
     accountAddressing: buildAccountAddressingByNamespaceFromManifests(manifests),
     chainAddressing: buildChainAddressingByNamespaceFromManifests(manifests),
     chainSeeds: collectChainSeedsFromManifests(manifests),
-    keyringNamespaces: createKeyringNamespacesFromManifests(manifests),
   };
 };
 

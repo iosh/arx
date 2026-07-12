@@ -2,7 +2,7 @@ import { parseChainRef } from "../../chains/caip.js";
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
-import { SessionLockedError } from "../../session/errors.js";
+import { WalletLockedError } from "../../wallet/errors.js";
 import {
   ApprovalCancelledError,
   ApprovalNotFoundError,
@@ -33,7 +33,7 @@ import type {
 } from "./types.js";
 import { createDeferred, deriveApprovalFinalStatus, serializeApprovalFinishedError } from "./utils.js";
 
-type CreateInMemoryApprovalQueueServiceOptions = {
+type CreateApprovalQueueOptions = {
   messenger: Messenger;
   autoRejectMessage?: string;
   ttlMs?: number;
@@ -121,7 +121,7 @@ const isSameApprovalScope = (left: ApprovalScope, right: ApprovalScope): boolean
   return left.transport === "wallet-ui" && right.transport === "wallet-ui";
 };
 
-export class InMemoryApprovalQueueService implements ApprovalQueueService {
+export class ApprovalQueue implements ApprovalQueueService {
   #messenger: Messenger;
   #autoRejectMessage: string;
   #ttlMs: number;
@@ -131,7 +131,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-  constructor({ messenger, autoRejectMessage, ttlMs }: CreateInMemoryApprovalQueueServiceOptions) {
+  constructor({ messenger, autoRejectMessage, ttlMs }: CreateApprovalQueueOptions) {
     this.#messenger = messenger;
     this.#autoRejectMessage = autoRejectMessage ?? "User rejected the request.";
     this.#ttlMs = ttlMs ?? 5 * 60_000;
@@ -415,7 +415,7 @@ export class InMemoryApprovalQueueService implements ApprovalQueueService {
       return new ApprovalTimeoutError();
     }
     if (params.terminalReason === "locked") {
-      return new SessionLockedError();
+      return new WalletLockedError();
     }
     if (params.terminalReason === "internal_error") {
       return new RpcInternalError();

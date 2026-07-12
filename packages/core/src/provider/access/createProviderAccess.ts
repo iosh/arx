@@ -13,8 +13,7 @@ import {
 import { AuthorizationRequirements } from "../../rpc/handlers/types.js";
 import type { Json, JsonRpcParams, ResolvedRpcInvocationDetails, RpcInvocationHint } from "../../rpc/index.js";
 import { RpcExecutionContextKinds } from "../../rpc/index.js";
-import { SessionLockedError } from "../../session/errors.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../session/unlock/types.js";
+import { WalletLockedError } from "../../wallet/errors.js";
 import { InvalidProviderConnectionScopeError } from "./errors.js";
 import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
@@ -80,8 +79,8 @@ type ProviderAccessDeps = {
   isAuthorized: (origin: string, options: { namespace: string; chainRef: ChainRef }) => boolean;
   approvals: Pick<ApprovalQueueService, "cancelScope">;
   providerRequests: ProviderRequests;
-  subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
-  subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
+  subscribeSessionUnlocked: (listener: (payload: { at: number }) => void) => () => void;
+  subscribeSessionLocked: (listener: (payload: { at: number; reason: "manual" }) => void) => () => void;
   subscribeChainRpcStateChanged: (listener: () => void) => () => void;
   subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
   subscribeAccountsStateChanged: (listener: () => void) => () => void;
@@ -366,7 +365,7 @@ export const createProviderAccess = ({
           return { kind: "continue" };
         }
         requestUnlockAttention();
-        throw new SessionLockedError();
+        throw new WalletLockedError();
       }
 
       throw new RpcUnsupportedMethodError({
@@ -385,7 +384,7 @@ export const createProviderAccess = ({
           break;
         case "deny":
           requestUnlockAttention();
-          throw new SessionLockedError();
+          throw new WalletLockedError();
       }
     }
 

@@ -29,3 +29,11 @@ export class WalletOperationRejectedError extends ArxBaseError {
     });
   }
 }
+
+export class WalletLockedError extends ArxBaseError {
+  static readonly code = "wallet.locked";
+
+  constructor() {
+    super("Wallet is locked.", { code: WalletLockedError.code });
+  }
+}

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AccountId, getAccountIdNamespace } from "../accounts/addressing/accountId.js";
 import type { AccountRecord, AccountSelectionRecord } from "../accounts/persistence.js";
-import type { ProviderChainSelectionRecord } from "../chains/selection/provider/persistence.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";
 import type { UnlockedSigner } from "../keyring/UnlockedSigners.js";
@@ -19,8 +18,6 @@ type State = {
   accounts: Map<AccountId, AccountRecord>;
   selections: Map<string, AccountSelectionRecord>;
   permissions: Map<string, PermissionRecord>;
-  providerSelections: Map<string, ProviderChainSelectionRecord>;
-  transactionIds: string[];
   autoLockDurationMs: number | null;
 };
 
@@ -31,8 +28,6 @@ const emptyState = (): State => ({
   accounts: new Map(),
   selections: new Map(),
   permissions: new Map(),
-  providerSelections: new Map(),
-  transactionIds: [],
   autoLockDurationMs: null,
 });
 
@@ -46,7 +41,12 @@ const createAdapter = () => {
   const signer = (accountId: AccountId): UnlockedSigner => {
     const value: UnlockedSigner = {
       accountId,
-      sign: vi.fn(async () => new Uint8Array()),
+      signDigest: vi.fn(async () => ({
+        r: 0n,
+        s: 0n,
+        yParity: 0,
+        bytes: new Uint8Array(),
+      })),
       clear: vi.fn(),
     };
     createdSigners.push(value);
@@ -55,7 +55,6 @@ const createAdapter = () => {
   const adapter: KeyringNamespaceAdapter = {
     namespace: "eip155",
     defaultDerivationProfileId: "default",
-    privateKeyAlgorithm: "secp256k1",
     deriveAccount: ({ source, derivationIndex }: { source: Bip39KeySource; derivationIndex: number }) =>
       signer(accountIdFor(source.keySourceId, derivationIndex)),
     importPrivateKey: (source: PrivateKeySource) => signer(accountIdFor(source.keySourceId, 0)),
@@ -64,9 +63,6 @@ const createAdapter = () => {
 };
 
 const permissionKey = (record: Pick<PermissionRecord, "origin" | "namespace">): string =>
-  `${record.origin}\u0000${record.namespace}`;
-
-const selectionKey = (record: Pick<ProviderChainSelectionRecord, "origin" | "namespace">): string =>
   `${record.origin}\u0000${record.namespace}`;
 
 const applyChanges = (state: State, changes: readonly PersistenceChange[]): void => {
@@ -97,15 +93,6 @@ const applyChanges = (state: State, changes: readonly PersistenceChange[]): void
       case "permission":
         if (change.operation === "put") state.permissions.set(permissionKey(change.value), change.value);
         else state.permissions.delete(permissionKey(change.key));
-        break;
-      case "providerChainSelection":
-        if (change.operation === "put") state.providerSelections.set(selectionKey(change.value), change.value);
-        else state.providerSelections.delete(selectionKey(change.key));
-        break;
-      case "transaction":
-        if (change.operation === "remove") {
-          state.transactionIds = state.transactionIds.filter((transactionId) => transactionId !== change.key);
-        }
         break;
     }
   }
@@ -183,24 +170,6 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
       ),
       listAll: vi.fn(async () => [...state.permissions.values()]),
     },
-    providerChainSelections: {
-      get: vi.fn(async (key) => state.providerSelections.get(selectionKey(key)) ?? null),
-      listByOrigin: vi.fn(async (origin) =>
-        [...state.providerSelections.values()].filter((selection) => selection.origin === origin),
-      ),
-      listByChainRef: vi.fn(async (chainRef) =>
-        [...state.providerSelections.values()].filter((selection) => selection.chainRef === chainRef),
-      ),
-      listAll: vi.fn(async () => [...state.providerSelections.values()]),
-    },
-    transactions: {
-      get: vi.fn(async () => null),
-      listHistory: vi.fn(async () => ({ transactions: [] })),
-      listByConflictKey: vi.fn(async () => []),
-      listByStatuses: vi.fn(async () => []),
-      existsByChainRefAndStatuses: vi.fn(async () => false),
-      listIds: vi.fn(async () => [...state.transactionIds]),
-    },
   };
   const { adapter, createdSigners } = createAdapter();
   const changes: WalletChanged[] = [];
@@ -222,7 +191,7 @@ afterEach(() => vi.useRealTimers());
 
 describe("Wallet", () => {
   it("initializes a mnemonic wallet with one five-record commit", async () => {
-    const { wallet, commits } = createHarness();
+    const { wallet, commits, state } = createHarness();
 
     const accountId = await wallet.initializeWithNewMnemonic({
       password: "password",
@@ -240,6 +209,12 @@ describe("Wallet", () => {
     ]);
     expect(wallet.getStatus()).toBe("unlocked");
     expect(wallet.getSigner(accountId)).not.toBeNull();
+    expect([...state.keySources.values()][0]).toMatchObject({
+      type: "bip39",
+      backupStatus: "pending",
+      createAt: expect.any(Number),
+    });
+    expect([...state.keyrings.values()][0]).toMatchObject({ createAt: expect.any(Number) });
   });
 
   it("does not activate wallet state when the initial commit fails", async () => {
@@ -288,6 +263,24 @@ describe("Wallet", () => {
 
     await expect(wallet.accounts.setHidden({ accountId, hidden: true })).rejects.toMatchObject({
       code: "account.operation_rejected",
+    });
+  });
+
+  it("stores private keys with an explicit namespace and does not allow hiding them", async () => {
+    const { wallet, state } = createHarness();
+    const accountId = await wallet.initializeFromPrivateKey({
+      password: "password",
+      privateKey: "private-key",
+      namespace: "eip155",
+    });
+
+    expect([...state.keySources.values()][0]).toMatchObject({
+      type: "private-key",
+      namespace: "eip155",
+      createAt: expect.any(Number),
+    });
+    await expect(wallet.accounts.setHidden({ accountId, hidden: true })).rejects.toMatchObject({
+      details: { reason: "only_hd_accounts_can_be_hidden" },
     });
   });
 
@@ -351,5 +344,23 @@ describe("Wallet", () => {
     await expect(wallet.setAutoLockDuration(120_000)).rejects.toBe(failure);
 
     expect(wallet.getAutoLock().durationMs).toBe(60_000);
+  });
+
+  it("deletes identity records without deleting transaction history", async () => {
+    const { wallet, state } = createHarness();
+    await wallet.initializeWithNewMnemonic({
+      password: "password",
+      mnemonic: "test mnemonic",
+      namespace: "eip155",
+    });
+
+    await wallet.deleteIdentity();
+
+    expect(wallet.getStatus()).toBe("uninitialized");
+    expect(state.encryptedVault).toBeNull();
+    expect(state.keySources.size).toBe(0);
+    expect(state.keyrings.size).toBe(0);
+    expect(state.accounts.size).toBe(0);
+    expect(state.selections.size).toBe(0);
   });
 });

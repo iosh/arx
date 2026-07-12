@@ -7,7 +7,7 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { VaultBootstrap } from "../vault/bootstrap.js";
 import { Vault, type VaultStatus } from "../vault/Vault.js";
 import { AutoLockTimer } from "./AutoLockTimer.js";
-import { removeAccount, renameAccount, selectAccount, setAccountHidden } from "./accounts.js";
+import { renameAccount, selectAccount, setAccountHidden } from "./accounts.js";
 import { addHdKeyring, deriveHdAccount, removeHdKeyring } from "./keyrings.js";
 import {
   addNewMnemonic,
@@ -28,16 +28,7 @@ export type WalletChanged = Readonly<{
 }>;
 
 export type WalletContext = Readonly<{
-  readers: Pick<
-    CorePersistenceReaders,
-    | "encryptedVault"
-    | "keySources"
-    | "hdKeyrings"
-    | "accounts"
-    | "permissions"
-    | "providerChainSelections"
-    | "transactions"
-  >;
+  readers: Pick<CorePersistenceReaders, "encryptedVault" | "keySources" | "hdKeyrings" | "accounts" | "permissions">;
   mutations: CoreMutationQueue;
   vault: Vault;
   signers: UnlockedSigners;
@@ -72,7 +63,6 @@ export type Wallet = Readonly<{
     rename(params: { accountId: AccountId; alias?: string }): Promise<void>;
     setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
     select(accountId: AccountId): Promise<void>;
-    remove(accountId: AccountId): Promise<void>;
   }>;
   keySources: Readonly<{
     addMnemonic(params: { mnemonic: string; passphrase?: string; namespace: string }): Promise<AccountId>;
@@ -86,7 +76,7 @@ export type Wallet = Readonly<{
     deriveAccount(keyringId: string): Promise<AccountId>;
     remove(keyringId: string): Promise<void>;
   }>;
-  delete(): Promise<void>;
+  deleteIdentity(): Promise<void>;
 }>;
 
 export const createWallet = (params: {
@@ -132,7 +122,6 @@ export const createWallet = (params: {
       rename: (input) => renameAccount(context, input),
       setHidden: (input) => setAccountHidden(context, input),
       select: (accountId) => selectAccount(context, accountId),
-      remove: (accountId) => removeAccount(context, accountId),
     },
     keySources: {
       addMnemonic: (input) => addNewMnemonic(context, input),
@@ -146,6 +135,6 @@ export const createWallet = (params: {
       deriveAccount: (keyringId) => deriveHdAccount(context, keyringId),
       remove: (keyringId) => removeHdKeyring(context, keyringId),
     },
-    delete: () => deleteWallet(context),
+    deleteIdentity: () => deleteWallet(context),
   };
 };

@@ -9,11 +9,14 @@ export type Bip39KeySourceRecord = Readonly<{
   keySourceId: KeySourceId;
   type: "bip39";
   backupStatus: BackupStatus;
+  createAt: number;
 }>;
 
 export type PrivateKeySourceRecord = Readonly<{
   keySourceId: KeySourceId;
   type: "private-key";
+  namespace: string;
+  createAt: number;
 }>;
 
 export type KeySourceRecord = Bip39KeySourceRecord | PrivateKeySourceRecord;
@@ -25,6 +28,7 @@ export type HdKeyringRecord = Readonly<{
   derivationProfileId: DerivationProfileId;
   /** Monotonic index reserved for the next HD derivation. */
   nextDerivationIndex: number;
+  createAt: number;
 }>;
 
 export interface KeySourcesReader {

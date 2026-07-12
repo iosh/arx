@@ -8,10 +8,9 @@ export {
   buildAccountAddressingByNamespaceFromManifests,
   buildChainAddressingByNamespaceFromManifests,
   collectChainSeedsFromManifests,
-  createKeyringNamespacesFromManifests,
   materializeNamespaceRuntime,
 } from "./assembly.js";
-export { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
+export { BUILTIN_NAMESPACE_MANIFESTS } from "./builtin.js";
 export { eip155NamespaceManifest } from "./eip155/manifest.js";
 export type {
   NamespaceApprovalBindings,

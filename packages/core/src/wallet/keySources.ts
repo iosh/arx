@@ -25,6 +25,7 @@ const addMnemonic = async (
 ): Promise<AccountId> => {
   const keySourceId = crypto.randomUUID();
   const keyringId = crypto.randomUUID();
+  const createAt = Date.now();
   const source: Bip39KeySource = {
     keySourceId,
     type: "bip39",
@@ -59,7 +60,7 @@ const addMnemonic = async (
       const account = createAccountRecord({
         accountId: signer.accountId,
         origin: { type: "hd", keyringId, derivationIndex: 0 },
-        createAt: Date.now(),
+        createAt,
       });
       const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
       const nextVault = await replaceVaultSecrets(unlocked, {
@@ -71,6 +72,7 @@ const addMnemonic = async (
           keySourceId,
           type: "bip39",
           backupStatus: params.backupStatus,
+          createAt,
         }),
         persistenceChange.put(hdKeyringPersistenceType, {
           keyringId,
@@ -78,6 +80,7 @@ const addMnemonic = async (
           namespace: params.namespace,
           derivationProfileId: adapter.defaultDerivationProfileId,
           nextDerivationIndex: 1,
+          createAt,
         }),
         persistenceChange.put(accountPersistenceType, account),
         ...(namespaceState
@@ -89,7 +92,7 @@ const addMnemonic = async (
               }),
             ]),
       ]);
-      wallet.vault.activate(nextVault);
+      wallet.vault.replaceUnlocked(nextVault);
       wallet.signers.add(signer);
       signer = null;
       wallet.autoLock.restart();
@@ -117,6 +120,7 @@ export const importPrivateKey = async (
   params: { privateKey: string; namespace: string },
 ): Promise<AccountId> => {
   const keySourceId = crypto.randomUUID();
+  const createAt = Date.now();
   let signer: ReturnType<KeyringNamespaceAdapter["importPrivateKey"]> | null = null;
 
   try {
@@ -126,14 +130,14 @@ export const importPrivateKey = async (
       const source: PrivateKeySource = {
         keySourceId,
         type: "private-key",
-        algorithm: adapter.privateKeyAlgorithm,
+        namespace: params.namespace,
         privateKey: params.privateKey,
       };
       if (
         unlocked.secrets.keySources.some(
           (candidate) =>
             candidate.type === "private-key" &&
-            candidate.algorithm === source.algorithm &&
+            candidate.namespace === source.namespace &&
             candidate.privateKey === source.privateKey,
         )
       ) {
@@ -146,7 +150,7 @@ export const importPrivateKey = async (
       const account = createAccountRecord({
         accountId: signer.accountId,
         origin: { type: "private-key", keySourceId },
-        createAt: Date.now(),
+        createAt,
       });
       const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
       const nextVault = await replaceVaultSecrets(unlocked, {
@@ -154,7 +158,12 @@ export const importPrivateKey = async (
       });
       await commit([
         persistenceChange.put(encryptedVaultPersistenceType, nextVault.record),
-        persistenceChange.put(keySourcePersistenceType, { keySourceId, type: "private-key" }),
+        persistenceChange.put(keySourcePersistenceType, {
+          keySourceId,
+          type: "private-key",
+          namespace: params.namespace,
+          createAt,
+        }),
         persistenceChange.put(accountPersistenceType, account),
         ...(namespaceState
           ? []
@@ -165,7 +174,7 @@ export const importPrivateKey = async (
               }),
             ]),
       ]);
-      wallet.vault.activate(nextVault);
+      wallet.vault.replaceUnlocked(nextVault);
       wallet.signers.add(signer);
       signer = null;
       wallet.autoLock.restart();
@@ -228,7 +237,7 @@ export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySou
       ...selectionChanges,
       ...permissionChanges,
     ]);
-    wallet.vault.activate(nextVault);
+    wallet.vault.replaceUnlocked(nextVault);
     wallet.signers.remove(accountIds);
     wallet.autoLock.restart();
     wallet.publishChanged({ vault: true, accounts: accountIds, keySources: [keySourceId] });

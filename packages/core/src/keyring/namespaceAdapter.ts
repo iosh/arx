@@ -6,7 +6,6 @@ import type { UnlockedSigner } from "./UnlockedSigners.js";
 export interface KeyringNamespaceAdapter {
   namespace: string;
   defaultDerivationProfileId: string;
-  privateKeyAlgorithm: string;
   deriveAccount(params: {
     source: Bip39KeySource;
     derivationProfileId: string;

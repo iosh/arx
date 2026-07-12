@@ -13,7 +13,6 @@ import type {
   ProviderRpcResponse,
 } from "../provider/access/types.js";
 import type { ChainRpcClientPoolOptions, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../session/unlock/types.js";
 import type { Transactions, TransactionsChanged } from "../transactions/Transactions.js";
 import type { Wallet, WalletChanged } from "../wallet/Wallet.js";
 
@@ -55,8 +54,8 @@ export type CoreProviderApi = Readonly<{
   activateConnectionScope(input: ProviderConnectionQuery): Promise<CoreProviderConnectionState>;
   deactivateConnectionScope(input: ProviderConnectionQuery): void;
   subscribeConnectionStateChanged(listener: ProviderConnectionStateChangedHandler): CoreUnsubscribe;
-  subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): CoreUnsubscribe;
-  subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): CoreUnsubscribe;
+  subscribeSessionUnlocked(listener: (payload: { at: number }) => void): CoreUnsubscribe;
+  subscribeSessionLocked(listener: (payload: { at: number; reason: "manual" }) => void): CoreUnsubscribe;
   request(input: ProviderRequestInput): Promise<ProviderRpcResponse>;
   encodeRpcError(error: unknown): ProviderRpcError;
   cancelRequestScope(input: ProviderRequestScope): Promise<number>;

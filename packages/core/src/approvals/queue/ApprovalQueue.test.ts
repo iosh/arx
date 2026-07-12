@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMessenger } from "../../messenger/index.js";
-import { InMemoryApprovalQueueService } from "./InMemoryApprovalQueueService.js";
+import { ApprovalQueue } from "./ApprovalQueue.js";
 import {
   type ApprovalCreatedEvent,
   type ApprovalCreateParams,
@@ -38,14 +38,14 @@ const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalK
   } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>;
 };
 
-describe("InMemoryApprovalQueueService", () => {
+describe("ApprovalQueue", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it("create() requires requester", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
     const request = createRequest();
 
     let caught: unknown;
@@ -60,7 +60,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("create() rejects request-permissions approvals with empty descriptor chainRefs", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
     const request = {
       approvalId: "a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0",
       kind: ApprovalKinds.RequestPermissions,
@@ -85,7 +85,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("create() enqueues + resolve(approve) finalizes + resolves the original promise with the decision", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const request = createRequest({ approvalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
     const handle = queue.create(request, requester);
@@ -107,7 +107,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("allows synchronous onCreated handlers to resolve without races", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const request = createRequest({ approvalId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
     const unsubscribe = queue.onCreated(({ record }) => {
@@ -128,7 +128,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("prevents duplicate approve settlement while approval settlement is in flight", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const request = createRequest({ approvalId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd" });
     const handle = queue.create(request, requester);
@@ -152,7 +152,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("cancel() rejects caller-disconnected approvals and removes them from state", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const request = createRequest({ approvalId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" });
     const handle = queue.create(request, requester);
@@ -167,7 +167,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("cancelScope() cancels only approvals attached to the matching scope", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const target = createRequest({ approvalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
     const sibling = createRequest({
@@ -192,7 +192,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("resolve(reject) preserves caller-provided Error instance", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const request = createRequest({ approvalId: "01010101-0101-4101-8101-010101010101" });
     const handle = queue.create(request, requester);
@@ -210,7 +210,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("sorts pending approvals by createdAt and id", () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     queue.create(createRequest({ approvalId: "approval-b", createdAt: 2_000 }), requester);
     queue.create(createRequest({ approvalId: "approval-a", createdAt: 2_000 }), requester);
@@ -221,7 +221,7 @@ describe("InMemoryApprovalQueueService", () => {
 
   it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({ messenger });
+    const queue = new ApprovalQueue({ messenger });
 
     const createdEvents: ApprovalCreatedEvent[] = [];
     const finishedEvents: ApprovalFinishedEvent[] = [];
@@ -240,7 +240,7 @@ describe("InMemoryApprovalQueueService", () => {
       const cancelledRequest = createRequest({ approvalId: "abababab-abab-4aba-8aba-abababababab" });
       const cancelledHandle = queue.create(cancelledRequest, requester);
       await queue.cancel({ approvalId: cancelledRequest.approvalId, reason: "locked" });
-      await expect(cancelledHandle.settled).rejects.toMatchObject({ code: "global.session.locked" });
+      await expect(cancelledHandle.settled).rejects.toMatchObject({ code: "wallet.locked" });
 
       expect(createdEvents.map((event) => event.record.approvalId)).toEqual([
         approvedRequest.approvalId,
@@ -265,7 +265,7 @@ describe("InMemoryApprovalQueueService", () => {
             origin: cancelledRequest.origin,
             namespace: cancelledRequest.namespace,
             chainRef: cancelledRequest.chainRef,
-            error: expect.objectContaining({ code: "global.session.locked" }),
+            error: expect.objectContaining({ code: "wallet.locked" }),
           }),
         ]),
       );
@@ -278,7 +278,7 @@ describe("InMemoryApprovalQueueService", () => {
   it("expires approvals after ttlMs to avoid hanging requests", async () => {
     vi.useFakeTimers();
     const messenger = createMessenger();
-    const queue = new InMemoryApprovalQueueService({
+    const queue = new ApprovalQueue({
       messenger,
       ttlMs: 1_000,
     });

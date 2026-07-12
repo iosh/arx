@@ -25,24 +25,12 @@ export * from "./provider/index.js";
 export type { RpcHandlerDeps } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
-export * from "./session/index.js";
 export type {
   AccountNamespace,
   AccountRecord,
   AccountSelectionStateRecord,
-  KeyringMetaRecord,
-  KeyringType,
   PermissionRecord,
-  VaultKeyringEntry,
-  VaultKeyringPayload,
-  VaultMetaPort,
-  VaultMetaSnapshot,
 } from "./storage/index.js";
-export {
-  DOMAIN_SCHEMA_VERSION,
-  KEYRING_TYPES,
-  KEYRING_VAULT_ENTRY_VERSION,
-  VAULT_META_SNAPSHOT_VERSION,
-} from "./storage/index.js";
+export { DOMAIN_SCHEMA_VERSION } from "./storage/index.js";
 export * from "./vault/index.js";
 export * from "./wallet/index.js";

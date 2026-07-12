@@ -18,10 +18,6 @@ export class Vault {
     return this.#record ? "locked" : "uninitialized";
   }
 
-  getRecord(): EncryptedVaultRecord | null {
-    return this.#record;
-  }
-
   requireRecord(): EncryptedVaultRecord {
     if (!this.#record) throw new VaultNotInitializedError();
     return this.#record;
@@ -32,7 +28,7 @@ export class Vault {
     return this.#unlocked;
   }
 
-  activate(unlocked: UnlockedVault): void {
+  replaceUnlocked(unlocked: UnlockedVault): void {
     this.#record = unlocked.record;
     this.#unlocked = unlocked;
   }

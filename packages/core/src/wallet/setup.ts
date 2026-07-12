@@ -24,6 +24,7 @@ const initializeBip39 = async (
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
   const keyringId = crypto.randomUUID();
+  const createAt = Date.now();
   const source: Bip39KeySource = {
     keySourceId,
     type: "bip39",
@@ -38,7 +39,7 @@ const initializeBip39 = async (
   const account = createAccountRecord({
     accountId: signer.accountId,
     origin: { type: "hd", keyringId, derivationIndex: 0 },
-    createAt: Date.now(),
+    createAt,
   });
   const unlocked = await createUnlockedVault({ password: params.password, secrets: { keySources: [source] } });
   let signerOwnedByDraft = true;
@@ -52,6 +53,7 @@ const initializeBip39 = async (
           keySourceId,
           type: "bip39",
           backupStatus: params.backupStatus,
+          createAt,
         }),
         persistenceChange.put(hdKeyringPersistenceType, {
           keyringId,
@@ -59,6 +61,7 @@ const initializeBip39 = async (
           namespace: params.namespace,
           derivationProfileId: adapter.defaultDerivationProfileId,
           nextDerivationIndex: 1,
+          createAt,
         }),
         persistenceChange.put(accountPersistenceType, account),
         persistenceChange.put(accountSelectionPersistenceType, {
@@ -66,7 +69,7 @@ const initializeBip39 = async (
           accountId: account.accountId,
         }),
       ]);
-      wallet.vault.activate(unlocked);
+      wallet.vault.replaceUnlocked(unlocked);
       wallet.signers.replace({ signers: [signer] });
       signerOwnedByDraft = false;
       wallet.autoLock.start();
@@ -95,17 +98,18 @@ export const initializeFromPrivateKey = async (
 ): Promise<AccountId> => {
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
+  const createAt = Date.now();
   const source: PrivateKeySource = {
     keySourceId,
     type: "private-key",
-    algorithm: adapter.privateKeyAlgorithm,
+    namespace: params.namespace,
     privateKey: params.privateKey,
   };
   const signer: UnlockedSigner = adapter.importPrivateKey(source);
   const account = createAccountRecord({
     accountId: signer.accountId,
     origin: { type: "private-key", keySourceId },
-    createAt: Date.now(),
+    createAt,
   });
   const unlocked = await createUnlockedVault({ password: params.password, secrets: { keySources: [source] } });
   let signerOwnedByDraft = true;
@@ -115,14 +119,19 @@ export const initializeFromPrivateKey = async (
       if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
       await commit([
         persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
-        persistenceChange.put(keySourcePersistenceType, { keySourceId, type: "private-key" }),
+        persistenceChange.put(keySourcePersistenceType, {
+          keySourceId,
+          type: "private-key",
+          namespace: params.namespace,
+          createAt,
+        }),
         persistenceChange.put(accountPersistenceType, account),
         persistenceChange.put(accountSelectionPersistenceType, {
           namespace: params.namespace,
           accountId: account.accountId,
         }),
       ]);
-      wallet.vault.activate(unlocked);
+      wallet.vault.replaceUnlocked(unlocked);
       wallet.signers.replace({ signers: [signer] });
       signerOwnedByDraft = false;
       wallet.autoLock.start();

@@ -1,9 +1,18 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { HDKey } from "@scure/bip32";
+import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { wordlist } from "@scure/bip39/wordlists/english";
 import type { AccountId } from "../../accounts/addressing/accountId.js";
+import {
+  KeyringInvalidMnemonicError,
+  KeyringSecretUnavailableError,
+  KeyringUnsupportedDerivationProfileError,
+} from "../errors.js";
 import type { KeyringNamespaceAdapter } from "../namespaceAdapter.js";
 import type { UnlockedSigner } from "../UnlockedSigners.js";
-import { EvmHdKeyring } from "./EvmHdKeyring.js";
 import { parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";
+
+const DERIVATION_PREFIX = "m/44'/60'/0'/0";
 
 const accountIdFromAddress = (address: string): AccountId => `eip155:${address.slice(2).toLowerCase()}`;
 
@@ -28,18 +37,21 @@ const createSigner = (secretInput: Uint8Array): UnlockedSigner => {
 export const eip155KeyringAdapter: KeyringNamespaceAdapter = {
   namespace: "eip155",
   defaultDerivationProfileId: "bip44",
-  privateKeyAlgorithm: "secp256k1",
   deriveAccount: ({ source, derivationProfileId, derivationIndex }) => {
     if (derivationProfileId !== "bip44") {
-      throw new Error(`Unsupported eip155 derivation profile: ${derivationProfileId}`);
+      throw new KeyringUnsupportedDerivationProfileError("eip155", derivationProfileId);
     }
-    const keyring = new EvmHdKeyring();
+    if (!validateMnemonic(source.mnemonic, wordlist)) {
+      throw new KeyringInvalidMnemonicError();
+    }
+    const root = HDKey.fromMasterSeed(mnemonicToSeedSync(source.mnemonic, source.passphrase));
+    const node = root.derive(`${DERIVATION_PREFIX}/${derivationIndex}`);
     try {
-      keyring.loadFromMnemonic(source.mnemonic, source.passphrase ? { passphrase: source.passphrase } : undefined);
-      const account = keyring.deriveAccount(derivationIndex);
-      return createSigner(keyring.exportPrivateKey(account.address));
+      if (!node.privateKey) throw new KeyringSecretUnavailableError();
+      return createSigner(node.privateKey);
     } finally {
-      keyring.clear();
+      node.wipePrivateData();
+      root.wipePrivateData();
     }
   },
   importPrivateKey: (source) => createSigner(parsePrivateKeyBytes(source.privateKey)),

@@ -17,6 +17,7 @@ export const addHdKeyring = async (
   params: { keySourceId: KeySourceId; namespace: string; derivationProfileId?: string },
 ): Promise<AccountId> => {
   const keyringId = crypto.randomUUID();
+  const createAt = Date.now();
   let signer: ReturnType<KeyringNamespaceAdapter["deriveAccount"]> | null = null;
 
   try {
@@ -33,11 +34,15 @@ export const addHdKeyring = async (
       );
       if (!source) throw new WalletRecordNotFoundError("keySource", params.keySourceId);
       const existingKeyrings = await wallet.readers.hdKeyrings.listByKeySourceIds([params.keySourceId]);
-      if (existingKeyrings.some((keyring) => keyring.namespace === params.namespace)) {
-        throw new WalletOperationRejectedError("namespace_keyring_already_exists");
-      }
       const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
       const derivationProfileId = params.derivationProfileId ?? adapter.defaultDerivationProfileId;
+      if (
+        existingKeyrings.some(
+          (keyring) => keyring.namespace === params.namespace && keyring.derivationProfileId === derivationProfileId,
+        )
+      ) {
+        throw new WalletOperationRejectedError("namespace_keyring_already_exists");
+      }
       signer = adapter.deriveAccount({ source, derivationProfileId, derivationIndex: 0 });
       if (await wallet.readers.accounts.get(signer.accountId)) {
         throw new WalletOperationRejectedError("account_already_exists");
@@ -45,7 +50,7 @@ export const addHdKeyring = async (
       const account = createAccountRecord({
         accountId: signer.accountId,
         origin: { type: "hd", keyringId, derivationIndex: 0 },
-        createAt: Date.now(),
+        createAt,
       });
       const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
       await commit([
@@ -55,6 +60,7 @@ export const addHdKeyring = async (
           namespace: params.namespace,
           derivationProfileId,
           nextDerivationIndex: 1,
+          createAt,
         }),
         persistenceChange.put(accountPersistenceType, account),
         ...(namespaceState

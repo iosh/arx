@@ -1,4 +1,4 @@
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { ApprovalSource } from "../approvals/source.js";
 import type { ChainRef } from "../chains/ids.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";

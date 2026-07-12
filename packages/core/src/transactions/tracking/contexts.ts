@@ -1,12 +1,12 @@
-import { canonicalChainAddressFromAccountId } from "../../accounts/addressing/accountId.js";
-import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
+import type { AccountAddressCodecs } from "../../accounts/accountAddressCodec.js";
+import { addressFromAccountId } from "../../accounts/accountId.js";
 import type { TransactionAggregate } from "../aggregate/index.js";
 import type { TransactionTrackingContext } from "../namespace/types.js";
 import { SubmittedTransactionTrackingInvariantError } from "./errors.js";
 
 export const buildSubmittedTransactionTrackingContext = (
   aggregate: TransactionAggregate,
-  accountAddressing: AccountAddressingByNamespace,
+  accountAddressCodecs: AccountAddressCodecs,
 ): TransactionTrackingContext => {
   if (aggregate.record.status !== "submitted") {
     throw new SubmittedTransactionTrackingInvariantError(
@@ -35,8 +35,8 @@ export const buildSubmittedTransactionTrackingContext = (
     namespace: aggregate.record.namespace,
     chainRef: aggregate.record.chainRef,
     origin: aggregate.record.origin,
-    from: canonicalChainAddressFromAccountId({
-      accountAddressing,
+    from: addressFromAccountId({
+      accountAddressCodecs,
       chainRef: aggregate.record.chainRef,
       accountId: aggregate.record.accountId,
     }),

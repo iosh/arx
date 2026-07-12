@@ -6,4 +6,4 @@ export type {
   CreateCoreRuntimeInput,
 } from "./coreRuntime.js";
 export { createCoreRuntime } from "./createCoreRuntime.js";
-export { WalletNamespaceManifestNotFoundError } from "./errors.js";
+export { NamespaceDefinitionRequiredError } from "./errors.js";

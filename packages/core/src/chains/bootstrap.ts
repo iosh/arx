@@ -1,9 +1,7 @@
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "./definition.js";
-import type { CustomChainRecord } from "./definitions/persistence.js";
-import type { ChainRpcOverrideRecord } from "./rpc/endpointOverrides/persistence.js";
-import type { WalletChainSelectionRecord } from "./selection/wallet/persistence.js";
-import { createWalletChainSelection, type WalletChainSelectionDefaults } from "./WalletChainSelection.js";
+import type { ChainRpcOverrideRecord, CustomChainRecord, WalletChainSelectionRecord } from "./persistence.js";
+import { createWalletChainSelection, type WalletChainSelectionDefaults } from "./selection.js";
 
 export type NetworksBootstrap = Readonly<{
   builtinSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];

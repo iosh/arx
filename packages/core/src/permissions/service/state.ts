@@ -1,4 +1,4 @@
-import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
+import { getAccountIdNamespace } from "../../accounts/accountId.js";
 import type { ChainNamespace } from "../../accounts/selection/types.js";
 import { CAIP2_NAMESPACE_PATTERN, parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";

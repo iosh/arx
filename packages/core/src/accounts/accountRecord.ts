@@ -1,4 +1,4 @@
-import { type AccountId, getAccountIdNamespace } from "./addressing/accountId.js";
+import { type AccountId, getAccountIdNamespace } from "./accountId.js";
 import { AccountNotFoundError, AccountOperationRejectedError } from "./errors.js";
 import type { AccountRecord, AccountSelectionRecord, NamespaceAccounts } from "./persistence.js";
 

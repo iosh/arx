@@ -9,7 +9,6 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
-import type { NamespaceRuntimeServices } from "../../namespaces/index.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
@@ -40,7 +39,12 @@ export type RpcHandlerDeps = {
   chainRpcDefaultEndpoints?: Pick<ChainRpcDefaultEndpointsService, "readDefaultEndpoints" | "setDefaultEndpoints">;
   chainAddressing: ChainAddressingByNamespace;
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
-  namespaceRuntime: NamespaceRuntimeServices;
+  namespaceRuntime: {
+    approvals: {
+      signMessage(params: { chainRef: ChainRef; address: string; message: string }): Promise<string>;
+      signTypedData(params: { chainRef: ChainRef; address: string; typedData: string }): Promise<string>;
+    };
+  };
   transactions: Pick<TransactionsService, "prepareTransaction" | "submitTransaction">;
 };
 

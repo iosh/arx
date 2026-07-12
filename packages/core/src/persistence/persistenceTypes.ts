@@ -1,10 +1,12 @@
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
-import { customChainPersistenceType } from "../chains/definitions/persistence.js";
-import { chainRpcOverridePersistenceType } from "../chains/rpc/endpointOverrides/persistence.js";
-import { providerChainSelectionPersistenceType } from "../chains/selection/provider/persistence.js";
-import { walletChainSelectionPersistenceType } from "../chains/selection/wallet/persistence.js";
+import {
+  chainRpcOverridePersistenceType,
+  customChainPersistenceType,
+  walletChainSelectionPersistenceType,
+} from "../chains/persistence.js";
 import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
 import { permissionPersistenceType } from "../permissions/persistence.js";
+import { providerChainSelectionPersistenceType } from "../provider/persistence.js";
 import { settingPersistenceType } from "../settings/persistence.js";
 import { transactionPersistenceType } from "../transactions/persistence.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";

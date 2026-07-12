@@ -1,5 +1,5 @@
 import { ArxBaseError } from "../errors.js";
-import type { AccountId } from "./addressing/accountId.js";
+import type { AccountId } from "./accountId.js";
 
 export class AccountNotOwnedError extends ArxBaseError {
   static readonly code = "account.not_owned";
@@ -16,12 +16,12 @@ export class AccountNotOwnedError extends ArxBaseError {
   }
 }
 
-export class AccountAddressNamespaceNotSupportedError extends ArxBaseError {
-  static readonly code = "account.address_namespace_not_supported";
+export class AccountAddressCodecNotFoundError extends ArxBaseError {
+  static readonly code = "account.address_codec_not_found";
 
   constructor(input: { namespace: string }) {
-    super(`No account address handling is available for namespace "${input.namespace}".`, {
-      code: AccountAddressNamespaceNotSupportedError.code,
+    super(`No account address codec is available for namespace "${input.namespace}".`, {
+      code: AccountAddressCodecNotFoundError.code,
       details: { namespace: input.namespace },
     });
   }

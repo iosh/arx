@@ -1,5 +1,5 @@
-import { type AccountId, canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
-import type { AccountAddressingByNamespace } from "../accounts/addressing/addressing.js";
+import type { AccountAddressCodecs } from "../accounts/accountAddressCodec.js";
+import { type AccountId, addressFromAccountId } from "../accounts/accountId.js";
 import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../errors.js";
 import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
@@ -157,18 +157,18 @@ type TransactionsServiceDeps = {
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
   submission: Pick<TransactionSubmissionExecutor, "submitApprovedTransaction">;
-  accountAddressing: AccountAddressingByNamespace;
+  accountAddressCodecs: AccountAddressCodecs;
   resourceLock: TransactionResourceLock;
   transactionChanges: TransactionChangePublisher;
 };
 
 const buildTransactionAccount = (
-  accountAddressing: TransactionsServiceDeps["accountAddressing"],
+  accountAddressCodecs: TransactionsServiceDeps["accountAddressCodecs"],
   record: Pick<TransactionRecord, "accountId" | "chainRef">,
 ): TransactionAccount => ({
   accountId: record.accountId,
-  address: canonicalChainAddressFromAccountId({
-    accountAddressing,
+  address: addressFromAccountId({
+    accountAddressCodecs,
     chainRef: record.chainRef,
     accountId: record.accountId,
   }),
@@ -199,7 +199,7 @@ const buildReplacementSummary = (record: TransactionRecord): TransactionReplacem
 
 const buildTransaction = (
   record: TransactionRecord,
-  accountAddressing: TransactionsServiceDeps["accountAddressing"],
+  accountAddressCodecs: TransactionsServiceDeps["accountAddressCodecs"],
 ): Transaction => ({
   id: record.id,
   status: record.status,
@@ -207,7 +207,7 @@ const buildTransaction = (
   chainRef: record.chainRef,
   source: record.source,
   origin: record.origin,
-  account: buildTransactionAccount(accountAddressing, record),
+  account: buildTransactionAccount(accountAddressCodecs, record),
   submitted: cloneNullableSummary(record.submitted),
   receipt: cloneNullableSummary(record.receipt),
   replacement: buildReplacementSummary(record),
@@ -220,7 +220,7 @@ export class TransactionsService {
   #aggregateStore: TransactionsServiceDeps["aggregateStore"];
   #namespaces: TransactionsServiceDeps["namespaces"];
   #submission: TransactionsServiceDeps["submission"];
-  #accountAddressing: TransactionsServiceDeps["accountAddressing"];
+  #accountAddressCodecs: TransactionsServiceDeps["accountAddressCodecs"];
   #resourceLock: TransactionResourceLock;
   #transactionChanges: TransactionChangePublisher;
 
@@ -228,7 +228,7 @@ export class TransactionsService {
     this.#aggregateStore = deps.aggregateStore;
     this.#namespaces = deps.namespaces;
     this.#submission = deps.submission;
-    this.#accountAddressing = deps.accountAddressing;
+    this.#accountAddressCodecs = deps.accountAddressCodecs;
     this.#resourceLock = deps.resourceLock;
     this.#transactionChanges = deps.transactionChanges;
   }
@@ -587,10 +587,10 @@ export class TransactionsService {
   }
 
   #buildAccount(record: Pick<TransactionRecord, "accountId" | "chainRef">): TransactionAccount {
-    return buildTransactionAccount(this.#accountAddressing, record);
+    return buildTransactionAccount(this.#accountAddressCodecs, record);
   }
 
   #buildTransactionRecord(record: TransactionRecord): Transaction {
-    return buildTransaction(record, this.#accountAddressing);
+    return buildTransaction(record, this.#accountAddressCodecs);
   }
 }

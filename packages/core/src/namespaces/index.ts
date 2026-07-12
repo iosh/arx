@@ -1,25 +1,3 @@
-export type {
-  NamespaceRpcClientFactory,
-  NamespaceRuntimeAssembly,
-  NamespaceStaticAssembly,
-} from "./assembly.js";
-export {
-  assembleNamespaceStatic,
-  buildAccountAddressingByNamespaceFromManifests,
-  buildChainAddressingByNamespaceFromManifests,
-  collectChainSeedsFromManifests,
-  materializeNamespaceRuntime,
-} from "./assembly.js";
-export { BUILTIN_NAMESPACE_MANIFESTS } from "./builtin.js";
-export { eip155NamespaceManifest } from "./eip155/manifest.js";
-export type {
-  NamespaceApprovalBindings,
-  NamespaceApprovalService,
-  NamespaceCoreManifest,
-  NamespaceManifest,
-  NamespaceRuntimeManifest,
-  NamespaceRuntimeServices,
-  NamespaceUiBindings,
-  NamespaceUiService,
-} from "./types.js";
-export { defineNamespaceManifest } from "./types.js";
+export { builtinNamespaces } from "./builtin.js";
+export type { NamespaceDefinition } from "./definition.js";
+export { eip155Namespace } from "./eip155/namespace.js";

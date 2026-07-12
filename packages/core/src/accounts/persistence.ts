@@ -1,6 +1,6 @@
 import type { KeyringId, KeySourceId } from "../keyring/persistence.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
-import type { AccountId } from "./addressing/accountId.js";
+import type { AccountId } from "./accountId.js";
 
 export type HdAccountOrigin = Readonly<{
   type: "hd";

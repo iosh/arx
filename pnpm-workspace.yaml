@@ -4,6 +4,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  spawn-sync: true
 
 catalog:
   '@types/webextension-polyfill': 0.12.3

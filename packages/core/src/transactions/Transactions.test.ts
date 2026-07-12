@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type {

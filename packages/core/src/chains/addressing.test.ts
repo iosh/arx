@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { eip155ChainAddressing } from "../namespaces/eip155/chainAddressing.js";
 import {
   buildChainAddressingByNamespace,
   canonicalizeChainAddress,
   formatChainAddress,
   validateChainAddress,
 } from "./addressing.js";
-import { eip155ChainAddressing } from "./eip155/chainAddressing.js";
 import type { NamespaceChainAddressing } from "./types.js";
 
 const createTestTable = () => buildChainAddressingByNamespace([eip155ChainAddressing]);

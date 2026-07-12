@@ -1,7 +1,6 @@
 export type { AccountSigningService } from "./accountSigning.js";
 export { createWalletAccountSigning } from "./accountSigning.js";
 export * from "./errors.js";
-export { eip155KeyringAdapter } from "./evm/adapter.js";
 export type { KeyringNamespaceAdapter, KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 export { getKeyringNamespaceAdapter } from "./namespaceAdapter.js";
 export type {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildChainAddressingByNamespace } from "../../../chains/addressing.js";
-import { eip155ChainAddressing } from "../../../chains/eip155/chainAddressing.js";
+import { eip155ChainAddressing } from "../../../namespaces/eip155/chainAddressing.js";
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 const chains = buildChainAddressingByNamespace([eip155ChainAddressing]);

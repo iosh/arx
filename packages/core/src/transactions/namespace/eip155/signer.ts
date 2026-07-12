@@ -5,9 +5,9 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { accountIdFromChainAddress } from "../../../accounts/addressing/accountId.js";
-import { eip155AccountAddressing } from "../../../accounts/addressing/addressing.js";
+import { accountIdFromAddress } from "../../../accounts/accountId.js";
 import type { AccountSigningService } from "../../../keyring/accountSigning.js";
+import { eip155AccountAddressCodec } from "../../../namespaces/eip155/accountAddressCodec.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
 import { EIP155_NAMESPACE } from "../../../rpc/handlers/namespaces/eip155/constants.js";
 import { Eip155SigningAbortedError } from "./errors.js";
@@ -15,7 +15,7 @@ import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const textEncoder = new TextEncoder();
-const EIP155_ACCOUNT_ADDRESSING = { [EIP155_NAMESPACE]: eip155AccountAddressing };
+const EIP155_ACCOUNT_ADDRESS_CODECS = new Map([[EIP155_NAMESPACE, eip155AccountAddressCodec]]);
 
 type SignerDeps = {
   accountSigning: Pick<AccountSigningService, "assertAccountUnlocked" | "signDigestByAccountId">;
@@ -115,10 +115,10 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
 };
 
 const toEip155AccountId = (params: { chainRef: string; address: string }) => {
-  return accountIdFromChainAddress({
+  return accountIdFromAddress({
     chainRef: params.chainRef,
     address: params.address,
-    accountAddressing: EIP155_ACCOUNT_ADDRESSING,
+    accountAddressCodecs: EIP155_ACCOUNT_ADDRESS_CODECS,
   });
 };
 

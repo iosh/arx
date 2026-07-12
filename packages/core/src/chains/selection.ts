@@ -1,6 +1,6 @@
 import { getChainRefNamespace } from "./caip.js";
 import type { ChainRef } from "./ids.js";
-import type { WalletChainSelectionRecord } from "./selection/wallet/persistence.js";
+import type { WalletChainSelectionRecord } from "./persistence.js";
 
 export type WalletChainSelectionDefaults = Readonly<{
   activeNamespace: string;

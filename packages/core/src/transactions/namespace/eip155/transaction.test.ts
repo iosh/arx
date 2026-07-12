@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildChainAddressingByNamespace } from "../../../chains/addressing.js";
-import { eip155ChainAddressing } from "../../../chains/eip155/chainAddressing.js";
+import { eip155ChainAddressing } from "../../../namespaces/eip155/chainAddressing.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./__fixtures__/constants.js";
 import { createEip155Transaction } from "./transaction.js";

@@ -1,9 +1,8 @@
 import type { ChainDefinitionSeed, RpcEndpoint } from "./definition.js";
-import type { CustomChainRecord } from "./definitions/persistence.js";
 import { ChainRpcAccessConfigError } from "./errors.js";
 import type { ChainRef } from "./ids.js";
+import type { ChainRpcOverrideRecord, CustomChainRecord } from "./persistence.js";
 import { assertNonEmptyRpcEndpoints, cloneNonEmptyRpcEndpoints } from "./rpc/config.js";
-import type { ChainRpcOverrideRecord } from "./rpc/endpointOverrides/persistence.js";
 import type { NonEmptyRpcEndpoints } from "./rpc/types.js";
 
 /** Owns default RPC endpoints and user overrides for available chains. */

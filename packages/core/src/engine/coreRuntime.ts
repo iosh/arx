@@ -1,7 +1,7 @@
 import type { ApprovalQueueService } from "../approvals/queue/types.js";
-import type { Networks, NetworksChanged } from "../chains/Networks.js";
-import type { WalletChainSelectionDefaults } from "../chains/WalletChainSelection.js";
-import type { NamespaceManifest } from "../namespaces/types.js";
+import type { Networks, NetworksChanged } from "../chains/networks.js";
+import type { WalletChainSelectionDefaults } from "../chains/selection.js";
+import type { NamespaceDefinition } from "../namespaces/definition.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
   ProviderConnectionQuery,
@@ -26,7 +26,7 @@ export type CoreRuntimeChanged =
   | Readonly<{ owner: "approvals" }>;
 
 export type CreateCoreRuntimeInput = Readonly<{
-  namespaces: Readonly<{ manifests: readonly NamespaceManifest[] }>;
+  namespaces: Readonly<{ definitions: readonly NamespaceDefinition[] }>;
   persistence: CorePersistence;
   defaults?: Readonly<{
     autoLockDurationMs?: number;

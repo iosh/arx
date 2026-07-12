@@ -1,4 +1,4 @@
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { PermissionRecord } from "./persistence.js";
 

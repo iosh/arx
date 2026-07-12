@@ -128,6 +128,17 @@ export class ChainDefinitionConflictError extends ArxBaseError {
   }
 }
 
+export class CustomChainAlreadyExistsError extends ArxBaseError {
+  static readonly code = "chain.custom_already_exists";
+
+  constructor(chainRef: string) {
+    super("Requested custom chain already exists.", {
+      code: CustomChainAlreadyExistsError.code,
+      details: { chainRef },
+    });
+  }
+}
+
 export class CustomChainNotFoundError extends ArxBaseError {
   static readonly code = "chain.custom_not_found";
 
@@ -139,13 +150,13 @@ export class CustomChainNotFoundError extends ArxBaseError {
   }
 }
 
-export type CustomChainRemovalRejectedReason = "wallet_selected" | "active_transaction";
+export type CustomChainRemovalRejectedReason = "wallet_selected";
 
 export class CustomChainRemovalRejectedError extends ArxBaseError {
   static readonly code = "chain.custom_removal_rejected";
 
   constructor(chainRef: string, reason: CustomChainRemovalRejectedReason) {
-    super("Custom chain cannot be removed while it is in active use.", {
+    super("The selected wallet chain cannot be removed.", {
       code: CustomChainRemovalRejectedError.code,
       details: { chainRef, reason },
     });

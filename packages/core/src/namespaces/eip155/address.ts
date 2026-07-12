@@ -1,12 +1,12 @@
 import { add0x, getChecksumAddress, type Hex, isValidHexAddress } from "@metamask/utils";
-import { assertNamespace } from "../caip.js";
-import { ChainInvalidAddressError } from "../errors.js";
+import { assertNamespace } from "../../chains/caip.js";
+import { ChainInvalidAddressError } from "../../chains/errors.js";
 import type {
   CanonicalizeAddressParams,
   CanonicalizedAddressResult,
   ChainAddressFormat,
   FormatAddressParams,
-} from "../types.js";
+} from "../../chains/types.js";
 
 const HEX_ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/i;
 

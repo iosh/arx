@@ -1,7 +1,8 @@
 import { type ChainDefinition, cloneChainDefinition } from "../../../../chains/definition.js";
-import { eip155ChainRefFromChainIdHex } from "../../../../chains/eip155/format.js";
 import { ChainNotCompatibleError, ChainNotFoundError } from "../../../../chains/errors.js";
 import type { ChainRef } from "../../../../chains/ids.js";
+import { chainRefFromChainId } from "../../../../namespaces/eip155/chainId.js";
+import * as Hex from "../../../../utils/hex.js";
 
 export type ResolveSwitchEthereumChainTargetParams = {
   chainId: string;
@@ -26,7 +27,7 @@ export const resolveSwitchEthereumChainTarget = ({
   chainRpc,
   chainId,
 }: ResolveSwitchEthereumChainTargetDeps): ChainDefinition => {
-  const targetChainRef = eip155ChainRefFromChainIdHex(chainId);
+  const targetChainRef = chainRefFromChainId(Hex.toBigInt(chainId));
 
   if (!chainRpc.hasEndpoints(targetChainRef)) {
     throw new ChainNotFoundError();

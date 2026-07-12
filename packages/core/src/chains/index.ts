@@ -1,21 +1,23 @@
 export * from "./activation/index.js";
 export * from "./addressing.js";
 export * from "./bootstrap/index.js";
-export type { AvailableChain } from "./ChainDefinitions.js";
+export type { NetworksBootstrap } from "./bootstrap.js";
+export { loadNetworksBootstrap } from "./bootstrap.js";
 export * from "./caip.js";
-export * from "./chains.seed.js";
+export type { CustomChainInput } from "./customChains.js";
 export * from "./definition.js";
 export * from "./definitions/index.js";
-export { createEip155AddressFormat } from "./eip155/address.js";
-export { eip155ChainAddressing } from "./eip155/chainAddressing.js";
+export type { AvailableChain } from "./definitions.js";
 export { createEip155DefinitionSeedFromEip3085 } from "./eip155/eip3085.js";
-export * from "./eip155/format.js";
 export * from "./errors.js";
 export * from "./ids.js";
-export type { Networks, NetworksChanged } from "./Networks.js";
-export { createNetworks } from "./Networks.js";
-export type { NetworksBootstrap } from "./networkBootstrap.js";
-export { loadNetworksBootstrap } from "./networkBootstrap.js";
+export type { Networks, NetworksChanged } from "./networks.js";
+export { createNetworks } from "./networks.js";
+export type {
+  ChainRpcOverrideRecord,
+  CustomChainRecord,
+  WalletChainSelectionRecord,
+} from "./persistence.js";
 export { ChainRpcService } from "./rpc/ChainRpcService.js";
 export * from "./rpc/config.js";
 export * from "./rpc/defaultEndpoints/index.js";
@@ -31,7 +33,7 @@ export type {
 } from "./rpc/types.js";
 export * from "./selection/provider/index.js";
 export * from "./selection/wallet/index.js";
+export type { WalletChainSelectionDefaults } from "./selection.js";
 export * from "./types.js";
 export * from "./url.js";
 export * from "./views/index.js";
-export type { WalletChainSelectionDefaults } from "./WalletChainSelection.js";

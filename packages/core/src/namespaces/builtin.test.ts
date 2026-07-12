@@ -1,25 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { getChainRefNamespace } from "../chains/caip.js";
-import { buildAccountAddressingByNamespaceFromManifests } from "./assembly.js";
-import { BUILTIN_NAMESPACE_MANIFESTS } from "./builtin.js";
+import { builtinNamespaces } from "./builtin.js";
 
-describe("builtin namespace manifests", () => {
-  it("exposes eip155 as the current builtin namespace manifest", () => {
-    expect(BUILTIN_NAMESPACE_MANIFESTS.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
+describe("builtin namespaces", () => {
+  it("exposes one complete eip155 definition", () => {
+    expect(builtinNamespaces.map((definition) => definition.namespace)).toEqual(["eip155"]);
 
-    const [manifest] = BUILTIN_NAMESPACE_MANIFESTS;
-    expect(manifest?.core.rpc.namespace).toBe("eip155");
-    expect(manifest?.core.chainAddressing.namespace).toBe("eip155");
-    expect(manifest?.core.accountAddressing.namespace).toBe("eip155");
-    expect(manifest?.core.keyringAdapter.namespace).toBe("eip155");
+    const [definition] = builtinNamespaces;
+    expect(definition?.chainAddressing.namespace).toBe("eip155");
+    expect(definition?.accountAddressCodec.namespace).toBe("eip155");
+    expect(definition?.keyring.namespace).toBe("eip155");
     expect(
-      manifest?.core.chainSeeds?.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),
+      definition?.builtinChains.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),
     ).toBe(true);
   });
 
-  it("can derive account addressing from builtin manifests", () => {
-    const accountAddressing = buildAccountAddressingByNamespaceFromManifests(BUILTIN_NAMESPACE_MANIFESTS);
-    expect(Object.keys(accountAddressing)).toEqual(["eip155"]);
-    expect(accountAddressing.eip155).toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.accountAddressing);
+  it("does not contain duplicate namespace identifiers", () => {
+    expect(new Set(builtinNamespaces.map(({ namespace }) => namespace)).size).toBe(builtinNamespaces.length);
   });
 });

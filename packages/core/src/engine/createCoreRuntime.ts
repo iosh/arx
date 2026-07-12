@@ -1,35 +1,42 @@
-import { canonicalChainAddressFromAccountId } from "../accounts/addressing/accountId.js";
+import { addressFromAccountId } from "../accounts/accountId.js";
 import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
+import { buildChainAddressingByNamespace } from "../chains/addressing.js";
 import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
-import type { WalletChainSelectionDefaults } from "../chains/WalletChainSelection.js";
+import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { JsonValue } from "../errors.js";
 import { createWalletAccountSigning } from "../keyring/accountSigning.js";
 import { createMessenger } from "../messenger/Messenger.js";
-import { assembleNamespaceStatic } from "../namespaces/index.js";
 import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
+import { createProviderChainSelections } from "../provider/chainSelection.js";
 import { ChainRpcClientPool } from "../rpc/ChainRpcClientPool.js";
 import { JsonRpcResponseError } from "../rpc/jsonRpcError.js";
+import {
+  createEip155RpcClientFactory,
+  type Eip155RpcCapabilities,
+  type Eip155RpcClient,
+} from "../rpc/namespaceClients/eip155.js";
 import { createTransactions, loadTransactionsBootstrap } from "../transactions/index.js";
+import { createEip155TransactionAdapter } from "../transactions/namespace/eip155/adapter.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { createWallet } from "../wallet/Wallet.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
-import { WalletNamespaceManifestRequiredError } from "./errors.js";
+import { NamespaceDefinitionRequiredError } from "./errors.js";
 
 const DEFAULT_AUTO_LOCK_DURATION_MS = 15 * 60_000;
 
 const createWalletSelectionDefaults = (
-  manifests: CreateCoreRuntimeInput["namespaces"]["manifests"],
+  definitions: CreateCoreRuntimeInput["namespaces"]["definitions"],
 ): WalletChainSelectionDefaults => {
   const chainRefByNamespace: Record<string, string> = {};
-  for (const manifest of manifests) {
-    const seed = manifest.core.chainSeeds?.[0];
-    if (seed) chainRefByNamespace[manifest.namespace] = seed.definition.chainRef;
+  for (const definition of definitions) {
+    const seed = definition.builtinChains[0];
+    if (seed) chainRefByNamespace[definition.namespace] = seed.definition.chainRef;
   }
-  const activeNamespace = manifests.find((manifest) => chainRefByNamespace[manifest.namespace])?.namespace;
-  if (!activeNamespace) throw new WalletNamespaceManifestRequiredError();
+  const activeNamespace = definitions.find((definition) => chainRefByNamespace[definition.namespace])?.namespace;
+  if (!activeNamespace) throw new NamespaceDefinitionRequiredError();
   return { activeNamespace, chainRefByNamespace };
 };
 
@@ -55,16 +62,24 @@ const encodeProviderError = (error: unknown): ProviderRpcError => {
 };
 
 export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
-  const manifests = [...input.namespaces.manifests];
-  if (manifests.length === 0) throw new WalletNamespaceManifestRequiredError();
-  const namespaceStatic = assembleNamespaceStatic(manifests);
+  const namespaceDefinitions = [...input.namespaces.definitions];
+  if (namespaceDefinitions.length === 0) throw new NamespaceDefinitionRequiredError();
+  const namespaceNames = new Set(namespaceDefinitions.map((definition) => definition.namespace));
+  const accountAddressCodecs = new Map(
+    namespaceDefinitions.map((definition) => [definition.namespace, definition.accountAddressCodec]),
+  );
+  const chainAddressing = buildChainAddressingByNamespace(
+    namespaceDefinitions.map((definition) => definition.chainAddressing),
+  );
+  const builtinChains = namespaceDefinitions.flatMap((definition) => definition.builtinChains);
   const mutations = createCoreMutationQueue(input.persistence.writer);
   const listeners = new Set<(event: CoreRuntimeChanged) => void>();
   const publish = (event: CoreRuntimeChanged) => {
     for (const listener of listeners) listener(event);
   };
   const endpointListeners = new Set<(event: { chainRef: string }) => void>();
-  const walletSelectionDefaults = input.defaults?.walletSelection ?? createWalletSelectionDefaults(manifests);
+  const walletSelectionDefaults =
+    input.defaults?.walletSelection ?? createWalletSelectionDefaults(namespaceDefinitions);
 
   const [vaultBootstrap, networksBootstrap, transactionsBootstrap] = await Promise.all([
     loadVaultBootstrap({
@@ -73,7 +88,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     }),
     loadNetworksBootstrap({
       readers: input.persistence.readers,
-      builtinSeeds: namespaceStatic.chainSeeds,
+      builtinSeeds: builtinChains,
       walletSelectionDefaults,
     }),
     loadTransactionsBootstrap(input.persistence.readers),
@@ -85,7 +100,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const wallet = createWallet({
     readers: input.persistence.readers,
     mutations,
-    adapters: new Map(manifests.map((manifest) => [manifest.namespace, manifest.core.keyringAdapter])),
+    adapters: new Map(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
     bootstrap: vaultBootstrap,
     publishChanged: (change) => {
       const nextStatus = wallet.getStatus();
@@ -101,7 +116,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     },
   });
   const networks = createNetworks({
-    readers: input.persistence.readers,
     mutations,
     bootstrap: networksBootstrap,
     publishChanged: (change) => {
@@ -110,6 +124,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       }
       publish({ owner: "networks", change });
     },
+  });
+  const providerChainSelections = createProviderChainSelections({
+    reader: input.persistence.readers.providerChainSelections,
+    mutations,
+    networks,
   });
   const permissions = createPermissions({
     readers: input.persistence.readers,
@@ -127,20 +146,24 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       },
     },
   });
-  for (const manifest of manifests) rpcClients.registerFactory(manifest.namespace, manifest.runtime.clientFactory);
+  if (namespaceNames.has("eip155")) {
+    rpcClients.registerFactory("eip155", createEip155RpcClientFactory());
+  }
   for (const entry of input.rpc?.factories ?? []) rpcClients.registerFactory(entry.namespace, entry.factory);
 
-  const transactionAdapters = new Map(
-    manifests.map((manifest) => [
-      manifest.namespace,
-      manifest.runtime.createTransactionAdapter({
-        rpcClients,
-        chains: namespaceStatic.chainAddressing,
-        accounts: namespaceStatic.accountAddressing,
+  const transactionAdapters = new Map();
+  if (namespaceNames.has("eip155")) {
+    transactionAdapters.set(
+      "eip155",
+      createEip155TransactionAdapter({
+        rpcClientFactory: (chainRef) =>
+          rpcClients.getClient<Eip155RpcCapabilities>("eip155", chainRef) as Eip155RpcClient,
+        chains: chainAddressing,
+        accountAddressCodecs,
         accountSigning,
       }),
-    ]),
-  );
+    );
+  }
   const transactions = await createTransactions({
     readers: input.persistence.readers,
     mutations,
@@ -163,16 +186,15 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   >();
   const connectionKey = (query: ProviderConnectionQuery) => `${query.origin}\u0000${query.namespace}`;
   const buildConnectionState = async (query: ProviderConnectionQuery): Promise<ProviderConnectionState> => {
-    const selection =
-      (await networks.getProviderChainSelection(query)) ?? (await networks.initializeProviderChainSelection(query));
+    const selection = (await providerChainSelections.get(query)) ?? (await providerChainSelections.initialize(query));
     const accountIds = await permissions.listAccountIds({ ...query, chainRef: selection.chainRef });
     const accounts =
       wallet.getStatus() === "unlocked"
         ? accountIds.map((accountId) =>
-            canonicalChainAddressFromAccountId({
+            addressFromAccountId({
               accountId,
               chainRef: selection.chainRef,
-              accountAddressing: namespaceStatic.accountAddressing,
+              accountAddressCodecs,
             }),
           )
         : [];
@@ -214,8 +236,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     request: async (request) => {
       try {
         const selection =
-          (await networks.getProviderChainSelection({ origin: request.scope.origin, namespace: request.namespace })) ??
-          (await networks.initializeProviderChainSelection({
+          (await providerChainSelections.get({ origin: request.scope.origin, namespace: request.namespace })) ??
+          (await providerChainSelections.initialize({
             origin: request.scope.origin,
             namespace: request.namespace,
           }));

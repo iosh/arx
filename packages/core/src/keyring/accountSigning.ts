@@ -1,4 +1,4 @@
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import { WalletLockedError } from "../wallet/errors.js";
 import type { Wallet } from "../wallet/Wallet.js";
 

@@ -31,6 +31,5 @@ export type {
   AccountSelectionStateRecord,
   PermissionRecord,
 } from "./storage/index.js";
-export { DOMAIN_SCHEMA_VERSION } from "./storage/index.js";
 export * from "./vault/index.js";
 export * from "./wallet/index.js";

@@ -1,5 +1,5 @@
-import { canonicalChainAddressFromAccountId } from "../../../accounts/addressing/accountId.js";
-import type { AccountAddressingByNamespace } from "../../../accounts/addressing/addressing.js";
+import type { AccountAddressCodecs } from "../../../accounts/accountAddressCodec.js";
+import { addressFromAccountId } from "../../../accounts/accountId.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { AccountSigningService } from "../../../keyring/accountSigning.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
@@ -29,13 +29,13 @@ import type { Eip155PreparedTransaction, Eip155UnsignedTransaction } from "./uns
 const asJsonObject = (value: object): TransactionJsonObject => value as unknown as TransactionJsonObject;
 
 const eip155AddressForAccount = (
-  accounts: AccountAddressingByNamespace,
+  accountAddressCodecs: AccountAddressCodecs,
   input: { chainRef: string; accountId: string },
 ): string =>
-  canonicalChainAddressFromAccountId({
+  addressFromAccountId({
     chainRef: input.chainRef,
     accountId: input.accountId,
-    accountAddressing: accounts,
+    accountAddressCodecs,
   });
 
 const toLocalActiveTransactions = (records: readonly TransactionRecord[]) =>
@@ -55,7 +55,7 @@ const buildFinalizationContext = (input: {
   transactionId: string;
   submission: TransactionSubmissionInput;
   activeTransactions: readonly TransactionRecord[];
-  accounts: AccountAddressingByNamespace;
+  accountAddressCodecs: AccountAddressCodecs;
 }): Eip155FinalizeSubmitContext => {
   const { transactionId, submission, activeTransactions } = input;
   const preparedPayload = submission.finalizationPayload as Eip155PreparedTransaction;
@@ -65,7 +65,7 @@ const buildFinalizationContext = (input: {
     chainRef: submission.chainRef,
     origin: submission.origin,
     accountId: submission.accountId,
-    from: eip155AddressForAccount(input.accounts, submission),
+    from: eip155AddressForAccount(input.accountAddressCodecs, submission),
     request: { namespace: "eip155", chainRef: submission.chainRef, payload: preparedPayload },
     preparedPayload,
     replacement: submission.replacementTargetId
@@ -118,7 +118,7 @@ const retryInspectionDelay = (attempt: number): number => {
 export const createEip155TransactionAdapter = (params: {
   rpcClientFactory(chainRef: string): Eip155RpcClient;
   chains: ChainAddressingByNamespace;
-  accounts: AccountAddressingByNamespace;
+  accountAddressCodecs: AccountAddressCodecs;
   accountSigning: AccountSigningService;
 }): TransactionNamespaceAdapter => {
   const signer = createEip155Signer({ accountSigning: params.accountSigning });
@@ -133,7 +133,7 @@ export const createEip155TransactionAdapter = (params: {
         transactionId,
         submission,
         activeTransactions,
-        accounts: params.accounts,
+        accountAddressCodecs: params.accountAddressCodecs,
       });
       const finalized = await finalizeEip155Submit(context, { rpcClientFactory: params.rpcClientFactory });
       return toFinalizationResult(finalized);
@@ -146,7 +146,7 @@ export const createEip155TransactionAdapter = (params: {
           chainRef: target.chainRef,
           origin: target.origin,
           accountId: target.accountId,
-          from: eip155AddressForAccount(params.accounts, target),
+          from: eip155AddressForAccount(params.accountAddressCodecs, target),
           type: type === "speed-up" ? "speed_up" : type,
           targetTransactionId: target.transactionId,
           targetRequest: { namespace: "eip155", chainRef: target.chainRef, payload: approved },
@@ -163,7 +163,7 @@ export const createEip155TransactionAdapter = (params: {
           namespace: "eip155",
           chainRef,
           origin: "wallet",
-          from: eip155AddressForAccount(params.accounts, { chainRef, accountId }),
+          from: eip155AddressForAccount(params.accountAddressCodecs, { chainRef, accountId }),
           request: { namespace: "eip155", chainRef, payload: approved },
         },
         approved,

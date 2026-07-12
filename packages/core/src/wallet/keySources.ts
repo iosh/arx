@@ -1,5 +1,5 @@
+import type { AccountId } from "../accounts/accountId.js";
 import { createAccountRecord } from "../accounts/accountRecord.js";
-import type { AccountId } from "../accounts/addressing/accountId.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
 import { getKeyringNamespaceAdapter, type KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import {

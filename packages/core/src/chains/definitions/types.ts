@@ -1,6 +1,16 @@
-import type { ChainDefinitionEntity } from "../../storage/index.js";
 import type { ChainDefinition } from "../definition.js";
 import type { ChainRef } from "../ids.js";
+
+/** @deprecated Replaced by the Networks owner and retained until legacy RPC handlers are removed. */
+export type ChainDefinitionEntity = {
+  chainRef: ChainRef;
+  namespace: string;
+  definition: ChainDefinition;
+  schemaVersion: 1;
+  updatedAt: number;
+  source: "builtin" | "custom";
+  createdByOrigin?: string | undefined;
+};
 
 export type ChainDefinitionsState = {
   chains: ChainDefinitionEntity[];

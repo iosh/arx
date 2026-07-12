@@ -1,7 +1,7 @@
 import { type ChainDefinition, type ChainDefinitionSeed, cloneChainDefinition } from "./definition.js";
-import type { CustomChainRecord } from "./definitions/persistence.js";
 import { ChainDefinitionConflictError, DuplicateBuiltinChainDefinitionError } from "./errors.js";
 import type { ChainRef } from "./ids.js";
+import type { CustomChainRecord } from "./persistence.js";
 
 export type AvailableChain = Readonly<{
   definition: ChainDefinition;

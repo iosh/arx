@@ -1,4 +1,4 @@
-import { type ChainDefinitionSeed, defineChainDefinitionSeeds, type RpcEndpoint } from "./definition.js";
+import { type ChainDefinitionSeed, defineChainDefinitionSeeds, type RpcEndpoint } from "../../chains/definition.js";
 
 const defineRpcChainDefinitionSeeds = <const TSeeds extends readonly ChainDefinitionSeed<RpcEndpoint>[]>(
   seeds: TSeeds,
@@ -138,38 +138,4 @@ export const EIP155_TESTNET_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
 export const EIP155_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
   ...EIP155_MAINNET_DEFINITION_SEEDS,
   ...EIP155_TESTNET_DEFINITION_SEEDS,
-]);
-
-export const CONFLUX_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
-  {
-    definition: {
-      chainRef: "conflux:cfx",
-      displayName: "Conflux Core Space",
-      shortName: "cfx",
-      nativeCurrency: { name: "Conflux", symbol: "CFX", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://confluxscan.io", title: "ConfluxScan" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
-        format: "png",
-      },
-    },
-  },
-  {
-    definition: {
-      chainRef: "conflux:cfxtest",
-      displayName: "Conflux Core Testnet",
-      shortName: "cfxtest",
-      nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://testnet.confluxscan.io", title: "ConfluxScan Testnet" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux/info/logo.png",
-        format: "png",
-      },
-    },
-  },
-] as const);
-
-export const DEFAULT_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
-  ...EIP155_CHAIN_DEFINITION_SEEDS,
-  // ...CONFLUX_CHAIN_DEFINITION_SEEDS,
 ]);

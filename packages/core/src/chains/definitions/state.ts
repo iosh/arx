@@ -1,7 +1,6 @@
-import type { ChainDefinitionEntity } from "../../storage/index.js";
 import { type ChainDefinition, isSameChainDefinition, normalizeChainDefinition } from "../definition.js";
 import type { ChainRef } from "../ids.js";
-import type { ChainDefinitionsState } from "./types.js";
+import type { ChainDefinitionEntity, ChainDefinitionsState } from "./types.js";
 
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
   if (

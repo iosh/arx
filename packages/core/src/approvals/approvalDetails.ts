@@ -1,9 +1,10 @@
 import type { AccountSelectionService } from "../accounts/selection/types.js";
-import { eip155ChainIdHexFromChainRef } from "../chains/eip155/format.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainViewsService } from "../chains/views/types.js";
+import { chainIdFromChainRef } from "../namespaces/eip155/chainId.js";
 import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
+import * as Hex from "../utils/hex.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
 import { UnsupportedApprovalKindError } from "./errors.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
@@ -273,7 +274,7 @@ const buildStaticDetail = (
         },
         request: {
           chainRef: context.reviewChainRef,
-          chainId: eip155ChainIdHexFromChainRef(context.reviewChainRef),
+          chainId: Hex.fromNumber(chainIdFromChainRef(context.reviewChainRef)),
           ...(displayName ? { displayName } : {}),
         },
         review: null,
@@ -298,7 +299,7 @@ const buildStaticDetail = (
         },
         request: {
           chainRef: record.chainRef,
-          chainId: eip155ChainIdHexFromChainRef(definition.chainRef),
+          chainId: Hex.fromNumber(chainIdFromChainRef(definition.chainRef)),
           displayName: definition.displayName,
           rpcUrls,
           ...(definition.nativeCurrency

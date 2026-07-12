@@ -2,9 +2,9 @@ import { persistenceChange } from "../persistence/change.js";
 import type { RpcEndpoint } from "./definition.js";
 import { ChainNotFoundError } from "./errors.js";
 import type { ChainRef } from "./ids.js";
-import type { NetworksContext } from "./Networks.js";
+import type { NetworksContext } from "./networks.js";
+import { chainRpcOverridePersistenceType } from "./persistence.js";
 import { assertNonEmptyRpcEndpoints } from "./rpc/config.js";
-import { chainRpcOverridePersistenceType } from "./rpc/endpointOverrides/persistence.js";
 
 export const setRpcOverride = async (
   networks: NetworksContext,

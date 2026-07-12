@@ -1,4 +1,4 @@
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { AccountRecord } from "../accounts/persistence.js";
 import type { LocalKeySource } from "../vault/secrets.js";
 import { KeyringNotFoundError, KeyringSourceNotFoundError } from "./errors.js";

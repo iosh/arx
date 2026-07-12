@@ -1,9 +1,9 @@
 import { z } from "zod";
+import { chainRefFromChainId } from "../../namespaces/eip155/chainId.js";
 import * as Hex from "../../utils/hex.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "../definition.js";
 import { ChainDefinitionRpcUrlsRequiredError } from "../errors.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
-import { eip155ChainRefFromChainIdHex } from "./format.js";
 
 const trimmed = () =>
   z
@@ -36,8 +36,7 @@ const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((val
 export const createEip155DefinitionSeedFromEip3085 = (input: unknown): ChainDefinitionSeed<RpcEndpoint> => {
   const payload = eip3085Schema.parse(input);
 
-  const chainId = Hex.fromNumber(Hex.toBigInt(payload.chainId));
-  const chainRef = eip155ChainRefFromChainIdHex(chainId);
+  const chainRef = chainRefFromChainId(Hex.toBigInt(payload.chainId));
 
   const rpcUrls = dedupe(payload.rpcUrls).filter(Boolean);
   if (rpcUrls.length === 0) {

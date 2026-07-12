@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type AccountId, getAccountIdNamespace } from "../accounts/addressing/accountId.js";
+import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
 import type { AccountRecord, AccountSelectionRecord } from "../accounts/persistence.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";

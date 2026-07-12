@@ -1,4 +1,4 @@
-import type { AccountAddressingByNamespace } from "../../accounts/addressing/addressing.js";
+import type { AccountAddressCodecs } from "../../accounts/accountAddressCodec.js";
 import { isArxBaseError } from "../../errors.js";
 import type { TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
@@ -23,7 +23,7 @@ type TransactionSubmissionExecutorDeps = {
     | "failSubmission"
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
-  accountAddressing: AccountAddressingByNamespace;
+  accountAddressCodecs: AccountAddressCodecs;
   resourceLock: TransactionResourceLock;
 };
 
@@ -46,13 +46,13 @@ export class TransactionSubmissionExecutor {
     | "failSubmission"
   >;
   #namespaces: Pick<NamespaceTransactions, "require">;
-  #accountAddressing: AccountAddressingByNamespace;
+  #accountAddressCodecs: AccountAddressCodecs;
   #resourceLock: TransactionResourceLock;
 
   constructor(deps: TransactionSubmissionExecutorDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
-    this.#accountAddressing = deps.accountAddressing;
+    this.#accountAddressCodecs = deps.accountAddressCodecs;
     this.#resourceLock = deps.resourceLock;
   }
 
@@ -89,7 +89,7 @@ export class TransactionSubmissionExecutor {
     let broadcastArtifact: BroadcastArtifact;
     try {
       broadcastArtifact = await submission.createBroadcastArtifact(
-        buildBroadcastArtifactContext(signing, this.#accountAddressing),
+        buildBroadcastArtifactContext(signing, this.#accountAddressCodecs),
       );
     } catch (error) {
       await this.#failSubmission({
@@ -112,7 +112,7 @@ export class TransactionSubmissionExecutor {
     let broadcastResult: BroadcastResult;
     try {
       broadcastResult = await submission.broadcast(
-        buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountAddressing),
+        buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountAddressCodecs),
       );
     } catch (error) {
       await this.#failSubmission({

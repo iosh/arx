@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { SubmittingTransactionRecord } from "./persistence.js";
 import {
   confirmTransaction,

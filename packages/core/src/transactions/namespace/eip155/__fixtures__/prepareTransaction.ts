@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { buildChainAddressingByNamespace } from "../../../../chains/addressing.js";
-import { eip155ChainAddressing } from "../../../../chains/eip155/chainAddressing.js";
+import { eip155ChainAddressing } from "../../../../namespaces/eip155/chainAddressing.js";
 import type { Eip155FeeOracle, Eip155FeeSuggestion } from "../feeOracle.js";
 import { createEip155PrepareTransaction } from "../prepareTransaction.js";
 import type { Eip155PrepareResult } from "../types.js";

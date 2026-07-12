@@ -1,4 +1,4 @@
-import type { AccountId } from "../accounts/addressing/accountId.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import type { KeySourceId } from "../keyring/persistence.js";
 import { type UnlockedSigner, UnlockedSigners } from "../keyring/UnlockedSigners.js";

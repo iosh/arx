@@ -2,15 +2,15 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import type { AccountId } from "../../accounts/addressing/accountId.js";
+import type { AccountId } from "../../accounts/accountId.js";
 import {
   KeyringInvalidMnemonicError,
   KeyringSecretUnavailableError,
   KeyringUnsupportedDerivationProfileError,
-} from "../errors.js";
-import type { KeyringNamespaceAdapter } from "../namespaceAdapter.js";
-import type { UnlockedSigner } from "../UnlockedSigners.js";
-import { parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";
+} from "../../keyring/errors.js";
+import type { KeyringNamespaceAdapter } from "../../keyring/namespaceAdapter.js";
+import type { UnlockedSigner } from "../../keyring/UnlockedSigners.js";
+import { parsePrivateKeyBytes, privateKeyToEvmAddress } from "./keyringCrypto.js";
 
 const DERIVATION_PREFIX = "m/44'/60'/0'/0";
 

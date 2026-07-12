@@ -1,9 +1,9 @@
+import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
 import {
   renameAccount as renameAccountRecord,
   selectAccount as selectAccountRecord,
   setAccountHidden as setAccountHiddenRecord,
 } from "../accounts/accountRecord.js";
-import { type AccountId, getAccountIdNamespace } from "../accounts/addressing/accountId.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
 import { persistenceChange } from "../persistence/change.js";

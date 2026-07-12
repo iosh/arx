@@ -1,4 +1,4 @@
-import { type AccountId, getAccountIdNamespace } from "../accounts/addressing/accountId.js";
+import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
 import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
 import { removeAccountsFromPermissions } from "../permissions/permissionRecord.js";

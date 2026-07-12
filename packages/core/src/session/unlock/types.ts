@@ -24,6 +24,14 @@ export type UnlockedSessionLockState = {
 
 export type SessionLockState = UninitializedSessionLockState | LockedSessionLockState | UnlockedSessionLockState;
 
+export type SessionStatus = {
+  status: SessionLockState["status"];
+  vaultInitialized: boolean;
+  isUnlocked: boolean;
+  autoLockDurationMs: number;
+  nextAutoLockAt: number | null;
+};
+
 export type UnlockParams = UnlockVaultParams;
 
 export type UnlockVaultPort = {

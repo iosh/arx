@@ -1,4 +1,3 @@
-export { StoreAccountSelectionService } from "./StoreAccountSelectionService.js";
 export { ACCOUNTS_STATE_CHANGED } from "./topics.js";
 export type {
   AccountAddress,

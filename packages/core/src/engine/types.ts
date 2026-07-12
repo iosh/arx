@@ -1,4 +1,3 @@
-import type { AccountsPort } from "../accounts/accountsPort.js";
 import type { AccountSelectionService, MultiNamespaceAccountsState } from "../accounts/selection/types.js";
 import type {
   ApprovalCreatedEvent,
@@ -15,22 +14,16 @@ import type {
 } from "../approvals/queue/types.js";
 import type { ActivateNamespaceChainParams } from "../chains/activation/types.js";
 import type { ChainDefinition, RpcEndpoint } from "../chains/definition.js";
-import type { ChainDefinitionsPort } from "../chains/definitions/port.js";
 import type {
   ChainDefinitionsUpdate,
   ChainDefinitionsUpsertCustomOptions,
   ChainDefinitionsUpsertCustomResult,
 } from "../chains/definitions/types.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainRpcDefaultEndpointsPort } from "../chains/rpc/defaultEndpoints/port.js";
-import type { ChainRpcEndpointOverridesPort } from "../chains/rpc/endpointOverrides/port.js";
 import type { ChainRpcEndpointOverridesChangedHandler } from "../chains/rpc/endpointOverrides/types.js";
 import type { ChainRpcState } from "../chains/rpc/types.js";
-import type { ProviderChainSelectionPort } from "../chains/selection/provider/port.js";
-import type { WalletChainSelectionPort } from "../chains/selection/wallet/port.js";
 import type { WalletChainSelectionChangedHandler } from "../chains/selection/wallet/types.js";
 import type { ChainView, NetworksSnapshot } from "../chains/views/types.js";
-import type { KeyringMetasPort } from "../keyring/keyringMetasPort.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,
@@ -38,7 +31,6 @@ import type {
   KeyringService,
 } from "../keyring/service/KeyringService.js";
 import type { NamespaceManifest } from "../namespaces/types.js";
-import type { PermissionsPort } from "../permissions/service/port.js";
 import type {
   PermissionAuthorization,
   PermissionsEvents,
@@ -55,23 +47,16 @@ import type {
   ProviderRpcError,
   ProviderRpcResponse,
 } from "../provider/access/types.js";
-import type { SessionStatus } from "../session/sessionLayer.js";
 import type {
   SessionLockState,
+  SessionStatus,
   UnlockLockedPayload,
   UnlockParams,
   UnlockReason,
   UnlockUnlockedPayload,
 } from "../session/unlock/types.js";
-import type {
-  AccountRecord,
-  ChainDefinitionEntity,
-  KeyringMetaRecord,
-  VaultMetaPort,
-  VaultMetaSnapshot,
-} from "../storage/index.js";
+import type { AccountRecord, ChainDefinitionEntity, KeyringMetaRecord, VaultMetaSnapshot } from "../storage/index.js";
 import type { WalletChainSelectionRecord } from "../storage/records.js";
-import type { TransactionsStoragePort } from "../transactions/storage/index.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 import type { AttentionService } from "../wallet/attention/types.js";
 
@@ -80,39 +65,6 @@ export type WalletNamespaces = Readonly<{
   requireManifest(namespace: string): NamespaceManifest;
   listManifests(): NamespaceManifest[];
   listNamespaces(): string[];
-}>;
-
-/** Chain storage ports required to boot a wallet. */
-export type CoreChainsStoragePorts = Readonly<{
-  chainDefinitions: ChainDefinitionsPort;
-  chainRpcDefaultEndpoints: ChainRpcDefaultEndpointsPort;
-  chainRpcEndpointOverrides: ChainRpcEndpointOverridesPort;
-  walletChainSelection: WalletChainSelectionPort;
-  providerChainSelection: ProviderChainSelectionPort;
-}>;
-
-/** Owner-scoped storage ports required to boot a wallet. */
-export type CoreStoragePorts = Readonly<{
-  vault: VaultMetaPort;
-  keyrings: KeyringMetasPort;
-  accounts: AccountsPort;
-  permissions: PermissionsPort;
-  chains: CoreChainsStoragePorts;
-  transactions: TransactionsStoragePort;
-}>;
-
-/** Arguments for `createArxWallet()`. */
-export type CreateArxWalletInput = Readonly<{
-  namespaces: Readonly<{
-    /** Namespace manifests to install. */
-    manifests: readonly NamespaceManifest[];
-  }>;
-  storage: Readonly<{
-    /** Required storage ports. */
-    ports: CoreStoragePorts;
-    /** Whether to hydrate persisted state. */
-    hydrate?: boolean;
-  }>;
 }>;
 
 /** Vault lifecycle, unlock state, and auto-lock controls. */

@@ -5,7 +5,6 @@ export { eip155KeyringAdapter } from "./evm/adapter.js";
 export type { EvmKeyringAccount } from "./evm/EvmHdKeyring.js";
 export { EvmHdKeyring } from "./evm/EvmHdKeyring.js";
 export { EvmPrivateKeyKeyring } from "./evm/EvmPrivateKeyKeyring.js";
-export type { KeyringMetasPort } from "./keyringMetasPort.js";
 export type { KeyringNamespaceAdapter, KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 export { getKeyringNamespaceAdapter } from "./namespaceAdapter.js";
 export type {

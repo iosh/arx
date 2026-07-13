@@ -1,4 +1,5 @@
 import type { ApprovalQueueService } from "../approvals/queue/types.js";
+import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
 import type { Networks, NetworksChanged } from "../chains/networks.js";
 import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
@@ -12,7 +13,6 @@ import type {
   ProviderRpcError,
   ProviderRpcResponse,
 } from "../provider/access/types.js";
-import type { ChainRpcClientPoolOptions, RpcClientFactory } from "../rpc/ChainRpcClientPool.js";
 import type { Transactions, TransactionsChanged } from "../transactions/Transactions.js";
 import type { Wallet, WalletChanged } from "../wallet/Wallet.js";
 
@@ -33,8 +33,7 @@ export type CreateCoreRuntimeInput = Readonly<{
     walletSelection?: WalletChainSelectionDefaults;
   }>;
   rpc?: Readonly<{
-    options?: Partial<Omit<ChainRpcClientPoolOptions, "chainRpc">>;
-    factories?: readonly Readonly<{ namespace: string; factory: RpcClientFactory }>[];
+    options?: Partial<Omit<ChainJsonRpcOptions, "endpoints">>;
   }>;
   provider?: Readonly<{
     isInternalOrigin(origin: string): boolean;

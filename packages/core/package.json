@@ -17,6 +17,7 @@
     "./persistence": "./src/persistence/index.ts",
     "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
+    "./chain-json-rpc": "./src/chainJsonRpc/index.ts",
     "./namespaces": "./src/namespaces/index.ts",
     "./permissions": "./src/permissions/index.ts",
     "./provider": "./src/provider/index.ts",

@@ -1,8 +1,8 @@
 import type { AccountAddressCodecs } from "../../../accounts/accountAddressCodec.js";
 import { addressFromAccountId } from "../../../accounts/accountId.js";
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { AccountSigningService } from "../../../keyring/accountSigning.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { TransactionJsonObject, TransactionRecord } from "../../persistence.js";
 import type {
   TransactionFinalizationResult,
@@ -116,14 +116,14 @@ const retryInspectionDelay = (attempt: number): number => {
 };
 
 export const createEip155TransactionAdapter = (params: {
-  rpcClientFactory(chainRef: string): Eip155RpcClient;
+  chainJsonRpc: ChainJsonRpcClient;
   chains: ChainAddressingByNamespace;
   accountAddressCodecs: AccountAddressCodecs;
   accountSigning: AccountSigningService;
 }): TransactionNamespaceAdapter => {
   const signer = createEip155Signer({ accountSigning: params.accountSigning });
-  const broadcaster = createEip155Broadcaster({ rpcClientFactory: params.rpcClientFactory });
-  const receipts = createEip155ReceiptService({ rpcClientFactory: params.rpcClientFactory });
+  const broadcaster = createEip155Broadcaster({ chainJsonRpc: params.chainJsonRpc });
+  const receipts = createEip155ReceiptService({ chainJsonRpc: params.chainJsonRpc });
 
   return {
     namespace: "eip155",
@@ -135,7 +135,7 @@ export const createEip155TransactionAdapter = (params: {
         activeTransactions,
         accountAddressCodecs: params.accountAddressCodecs,
       });
-      const finalized = await finalizeEip155Submit(context, { rpcClientFactory: params.rpcClientFactory });
+      const finalized = await finalizeEip155Submit(context, { chainJsonRpc: params.chainJsonRpc });
       return toFinalizationResult(finalized);
     },
     createReplacementPayload: async ({ target, type }) => {
@@ -152,7 +152,7 @@ export const createEip155TransactionAdapter = (params: {
           targetRequest: { namespace: "eip155", chainRef: target.chainRef, payload: approved },
           targetApprovedPayload: approved,
         },
-        { rpcClientFactory: params.rpcClientFactory },
+        { chainJsonRpc: params.chainJsonRpc },
       );
       return asJsonObject(request.payload);
     },

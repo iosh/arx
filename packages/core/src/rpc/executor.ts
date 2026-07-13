@@ -1,7 +1,8 @@
 import { ZodError } from "zod";
+import type { ChainJsonRpcClient, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
+import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../errors.js";
-import type { ChainRpcClientPool, RpcTransportRequest } from "./ChainRpcClientPool.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
   MethodDefinition,
@@ -19,7 +20,7 @@ import { type RpcRouting, rpcPassthroughPolicyForNamespace } from "./routing.js"
 type CreateRpcMethodExecutorOptions = {
   routing: RpcRouting;
   deps: RpcHandlerDeps;
-  chainRpcClientPool: ChainRpcClientPool;
+  chainJsonRpc: ChainJsonRpcClient;
 };
 
 type RpcExecutorBaseArgs = {
@@ -40,7 +41,7 @@ type RpcExecutorWithHint = RpcExecutorBaseArgs & {
 
 type RpcExecutorArgs = RpcExecutorWithInvocation | RpcExecutorWithHint;
 
-export const createRpcMethodExecutor = ({ routing, deps, chainRpcClientPool }: CreateRpcMethodExecutorOptions) => {
+export const createRpcMethodExecutor = ({ routing, deps, chainJsonRpc }: CreateRpcMethodExecutorOptions) => {
   const parseDefinitionParams = (
     definition: MethodDefinition,
     args: {
@@ -112,6 +113,13 @@ export const createRpcMethodExecutor = ({ routing, deps, chainRpcClientPool }: C
   };
 
   const sanitizeNodeRpcError = (error: unknown) => {
+    if (error instanceof ChainJsonRpcResponseError) {
+      return {
+        code: error.rpcCode,
+        message: error.message,
+        ...(error.rpcData !== undefined ? { data: error.rpcData } : {}),
+      };
+    }
     if (!isJsonRpcErrorLike(error)) return null;
     const rpcError: JsonRpcErrorLike = error;
 
@@ -134,15 +142,15 @@ export const createRpcMethodExecutor = ({ routing, deps, chainRpcClientPool }: C
 
   const executePassthrough = async (args: { request: RpcRequest; namespace: Namespace; chainRef: ChainRef }) => {
     try {
-      const client = chainRpcClientPool.getClient(args.namespace, args.chainRef);
-      const rpcPayload: RpcTransportRequest = {
+      const rpcPayload: ChainJsonRpcRequest = {
+        chainRef: args.chainRef,
         method: args.request.method,
-        retry: { transportFailure: true },
+        replay: "never",
       };
       if (args.request.params !== undefined) {
         rpcPayload.params = args.request.params;
       }
-      const result = await client.request(rpcPayload);
+      const result = await chainJsonRpc.request(rpcPayload);
       return result;
     } catch (error) {
       const sanitized = sanitizeNodeRpcError(error);

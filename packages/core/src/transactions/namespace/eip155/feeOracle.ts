@@ -1,6 +1,7 @@
 import type { Hex as OxHex } from "ox/Hex";
 import * as Hex from "ox/Hex";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainRef } from "../../../chains/ids.js";
 import { Eip155FeeOracleResponseError } from "./errors.js";
 
 export type Eip155FeeSuggestion =
@@ -18,7 +19,8 @@ export type Eip155FeeOracle = {
 };
 
 type FeeOracleDeps = {
-  rpc: Pick<Eip155RpcClient, "getFeeHistory" | "getGasPrice" | "getMaxPriorityFeePerGas" | "getBlockByNumber">;
+  chainJsonRpc: ChainJsonRpcClient;
+  chainRef: ChainRef;
 };
 
 const FEE_HISTORY_BLOCK_COUNT: OxHex = "0x5";
@@ -47,16 +49,24 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
     async suggestFees(overrides) {
       const timeoutMs = overrides?.timeoutMs;
       const rpcOverrides = timeoutMs !== undefined ? { timeoutMs } : undefined;
-      const blockOverrides = { includeTransactions: false, ...(rpcOverrides ?? {}) };
-
       try {
         // - Use `latest` base fee (more consistent than `pending` across providers/caches).
         // - Prefer `eth_feeHistory` for priority fee sampling; fall back to `eth_maxPriorityFeePerGas`.
-        const baseFeeBlock = await deps.rpc.getBlockByNumber("latest", blockOverrides);
+        const baseFeeBlock = await deps.chainJsonRpc.request<Record<string, unknown>>({
+          chainRef: deps.chainRef,
+          method: "eth_getBlockByNumber",
+          params: ["latest", false],
+          ...rpcOverrides,
+        });
         const baseFee = toBigIntQuantity(baseFeeBlock.baseFeePerGas);
         if (baseFee !== null) {
-          const feeHistory = await deps.rpc
-            .getFeeHistory(FEE_HISTORY_BLOCK_COUNT, "latest", [...FEE_HISTORY_REWARD_PERCENTILES], rpcOverrides)
+          const feeHistory = await deps.chainJsonRpc
+            .request<{ reward?: unknown[][] }>({
+              chainRef: deps.chainRef,
+              method: "eth_feeHistory",
+              params: [FEE_HISTORY_BLOCK_COUNT, "latest", [...FEE_HISTORY_REWARD_PERCENTILES]],
+              ...rpcOverrides,
+            })
             .catch(() => null);
 
           const rewardSamples =
@@ -68,7 +78,11 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
           const fallbackTip =
             sampledTip !== null
               ? null
-              : toBigIntQuantity(await deps.rpc.getMaxPriorityFeePerGas(rpcOverrides).catch(() => null));
+              : toBigIntQuantity(
+                  await deps.chainJsonRpc
+                    .request<string>({ chainRef: deps.chainRef, method: "eth_maxPriorityFeePerGas", ...rpcOverrides })
+                    .catch(() => null),
+                );
 
           // `eth_feeHistory` may return 0 rewards for empty blocks; avoid producing 0-tip suggestions.
           const tipCandidate = sampledTip ?? fallbackTip;
@@ -94,7 +108,11 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
         // ignore and fall back
       }
 
-      const gasPriceHex = await deps.rpc.getGasPrice(rpcOverrides);
+      const gasPriceHex = await deps.chainJsonRpc.request<string>({
+        chainRef: deps.chainRef,
+        method: "eth_gasPrice",
+        ...rpcOverrides,
+      });
       const gasPrice = toBigIntQuantity(gasPriceHex);
       if (gasPrice === null || gasPrice < 0n) {
         throw new Eip155FeeOracleResponseError({ method: "eth_gasPrice", value: gasPriceHex });

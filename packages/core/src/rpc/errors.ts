@@ -57,29 +57,6 @@ export class RpcInternalError extends ArxBaseError {
   }
 }
 
-export type RpcClientPoolConfigErrorInput = {
-  reason: "missing_fetch" | "missing_namespace" | "missing_chain_ref" | "namespace_mismatch" | "missing_factory";
-  namespace?: string;
-  chainRef?: string;
-  actualNamespace?: string;
-};
-
-export class RpcClientPoolConfigError extends ArxBaseError {
-  static readonly code = "global.rpc.client_pool_config_invalid";
-
-  constructor(input: RpcClientPoolConfigErrorInput) {
-    super("RPC client pool configuration is invalid.", {
-      code: RpcClientPoolConfigError.code,
-      details: {
-        reason: input.reason,
-        ...(input.namespace ? { namespace: input.namespace } : {}),
-        ...(input.chainRef ? { chainRef: input.chainRef } : {}),
-        ...(input.actualNamespace ? { actualNamespace: input.actualNamespace } : {}),
-      },
-    });
-  }
-}
-
 export const sanitizeJsonRpcErrorObject = (
   error: JsonRpcErrorLike,
 ): { code: number; message: string; data?: JsonValue } => {

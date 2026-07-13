@@ -1,191 +1,93 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPrepareContext } from "./__fixtures__/contexts.js";
 import { createTestPrepareTransaction, requireReadyPrepared } from "./__fixtures__/prepareTransaction.js";
-import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - fees", () => {
-  describe("legacy fees", () => {
-    it("uses legacy gasPrice when provided", async () => {
-      const rpc = createEip155RpcMock();
-      const feeOracle = { suggestFees: vi.fn() };
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => rpc.client),
-        feeOracleFactory: vi.fn((_rpc) => feeOracle),
-      });
-
-      const ctx = createPrepareContext();
-      ctx.request.payload.gasPrice = "0x3b9aca00";
-
-      const result = await prepareTransaction(ctx);
-      const prepared = requireReadyPrepared(result);
-
-      expect(prepared.gasPrice).toBe("0x3b9aca00");
-      expect(feeOracle.suggestFees).not.toHaveBeenCalled();
+  it("uses a provided legacy gas price without consulting the fee oracle", async () => {
+    const feeOracle = { suggestFees: vi.fn() };
+    const prepareTransaction = createTestPrepareTransaction({
+      feeOracleFactory: vi.fn(() => feeOracle),
     });
+    const ctx = createPrepareContext();
+    ctx.request.payload.gasPrice = "0x3b9aca00";
 
-    it("forwards gasPrice to RPC gas estimation when provided", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getTransactionCount.mockResolvedValue("0x2");
-      rpc.estimateGas.mockResolvedValue("0x5208");
+    const prepared = requireReadyPrepared(await prepareTransaction(ctx));
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gas");
-      ctx.request.payload.gasPrice = "0x2540be400";
-
-      await prepareTransaction(ctx);
-
-      expect(rpc.estimateGas).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-        }),
-      );
-    });
-
-    it("falls back to legacy fee data when RPC only returns gasPrice", async () => {
-      const rpc = createEip155RpcMock();
-      const feeOracle = { suggestFees: vi.fn() };
-      feeOracle.suggestFees.mockResolvedValue({ mode: "legacy", gasPrice: "0x3b9aca00", source: "eth_gasPrice" });
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => rpc.client),
-        feeOracleFactory: vi.fn((_rpc) => feeOracle),
-      });
-
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
-      Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
-
-      const result = await prepareTransaction(ctx);
-      const prepared = requireReadyPrepared(result);
-
-      expect(prepared.gasPrice).toBe("0x3b9aca00");
-    });
+    expect(prepared.gasPrice).toBe("0x3b9aca00");
+    expect(feeOracle.suggestFees).not.toHaveBeenCalled();
   });
 
-  describe("EIP-1559 fees", () => {
-    it("forwards eip1559 fees to RPC gas estimation when provided", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getTransactionCount.mockResolvedValue("0x3");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gas");
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      ctx.request.payload.maxFeePerGas = "0x59682f00";
-      ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
-
-      await prepareTransaction(ctx);
-
-      expect(rpc.estimateGas).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-        }),
-      );
+  it("uses legacy fee data returned by the fee oracle", async () => {
+    const feeOracle = {
+      suggestFees: vi.fn(async () => ({
+        mode: "legacy" as const,
+        gasPrice: "0x3b9aca00" as const,
+        source: "eth_gasPrice" as const,
+      })),
+    };
+    const prepareTransaction = createTestPrepareTransaction({
+      feeOracleFactory: vi.fn(() => feeOracle),
     });
+    const ctx = createPrepareContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
-    it("uses eip1559 fee fields provided in payload", async () => {
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
-      });
+    const prepared = requireReadyPrepared(await prepareTransaction(ctx));
 
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      ctx.request.payload.maxFeePerGas = "0x59682F00";
-      ctx.request.payload.maxPriorityFeePerGas = "0x3B9ACA00";
-
-      const result = await prepareTransaction(ctx);
-      const prepared = requireReadyPrepared(result);
-
-      expect(prepared.maxFeePerGas).toBe("0x59682f00");
-      expect(prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
-    });
-
-    it("does not surface incomplete EIP-1559 fee pair as a prepare issue", async () => {
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
-      });
-
-      const ctx = createPrepareContext();
-      ctx.request.payload.maxFeePerGas = "0x59682f00";
-      Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
-
-      const result = await prepareTransaction(ctx);
-
-      expect(result.status).toBe("ready");
-    });
+    expect(prepared.gasPrice).toBe("0x3b9aca00");
   });
 
-  describe("fee conflicts", () => {
-    it("does not surface fee conflict when mixing gasPrice with EIP-1559 fields", async () => {
-      const rpc = createEip155RpcMock();
+  it("normalizes provided EIP-1559 fee fields", async () => {
+    const prepareTransaction = createTestPrepareTransaction();
+    const ctx = createPrepareContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    ctx.request.payload.maxFeePerGas = "0x59682F00";
+    ctx.request.payload.maxPriorityFeePerGas = "0x3B9ACA00";
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+    const prepared = requireReadyPrepared(await prepareTransaction(ctx));
 
-      const ctx = createPrepareContext();
-      ctx.request.payload.gasPrice = "0x3b9aca00";
-      ctx.request.payload.maxFeePerGas = "0x59682f00";
-
-      const result = await prepareTransaction(ctx);
-
-      expect(result.status).toBe("ready");
-    });
-
-    it("does not record a fee conflict issue when fee fields conflict", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createPrepareContext();
-      ctx.request.payload.gasPrice = "0x3b9aca00";
-      ctx.request.payload.maxFeePerGas = "0x59682f00";
-      ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
-
-      const result = await prepareTransaction(ctx);
-
-      expect(result.status).toBe("ready");
-    });
+    expect(prepared.maxFeePerGas).toBe("0x59682f00");
+    expect(prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
   });
 
-  describe("fee estimation errors", () => {
-    it("attaches rpc error details when fee estimation fails", async () => {
-      const rpc = createEip155RpcMock();
-      const feeOracle = { suggestFees: vi.fn() };
-      feeOracle.suggestFees.mockRejectedValue(new Error("fee rpc down"));
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
+  it("allows an incomplete EIP-1559 fee pair during preparation", async () => {
+    const prepareTransaction = createTestPrepareTransaction();
+    const ctx = createPrepareContext();
+    ctx.request.payload.maxFeePerGas = "0x59682f00";
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
-      const prepareTransaction = createTestPrepareTransaction({
-        rpcClientFactory: vi.fn(() => rpc.client),
-        feeOracleFactory: vi.fn((_rpc) => feeOracle),
-      });
+    await expect(prepareTransaction(ctx)).resolves.toMatchObject({ status: "ready" });
+  });
 
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
-      Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
+  it("does not reject mixed legacy and EIP-1559 fee fields during preparation", async () => {
+    const prepareTransaction = createTestPrepareTransaction();
+    const ctx = createPrepareContext();
+    ctx.request.payload.gasPrice = "0x3b9aca00";
+    ctx.request.payload.maxFeePerGas = "0x59682f00";
+    ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
 
-      const result = await prepareTransaction(ctx);
+    await expect(prepareTransaction(ctx)).resolves.toMatchObject({ status: "ready" });
+  });
 
-      expect(result.status).toBe("failed");
-      expect(result.status === "failed" ? result.error.code : null).toBe("transaction.prepare.fee_estimation_failed");
-      expect(result.status === "failed" ? result.error.details : null).toMatchObject({
-        method: "feeOracle.suggestFees",
-        error: "fee rpc down",
-      });
+  it("returns the fee estimation failure", async () => {
+    const feeOracle = { suggestFees: vi.fn().mockRejectedValue(new Error("fee rpc down")) };
+    const prepareTransaction = createTestPrepareTransaction({
+      feeOracleFactory: vi.fn(() => feeOracle),
+    });
+    const ctx = createPrepareContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
+
+    const result = await prepareTransaction(ctx);
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: {
+        code: "transaction.prepare.fee_estimation_failed",
+        details: { method: "feeOracle.suggestFees", error: "fee rpc down" },
+      },
     });
   });
 });

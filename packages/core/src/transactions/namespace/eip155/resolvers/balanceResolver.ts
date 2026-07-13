@@ -1,5 +1,6 @@
 import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
+import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainRef } from "../../../../chains/ids.js";
 import type { Eip155PrepareStepResult } from "../types.js";
 import type { Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
 import {
@@ -19,17 +20,18 @@ const toBigIntOrNull = (value: string | undefined): bigint | null => {
 };
 
 type BalanceResolverParams = {
-  rpc: Eip155RpcCapabilities | null;
+  chainJsonRpc: ChainJsonRpcClient;
+  chainRef: ChainRef;
   prepared: Pick<Eip155UnsignedTransactionDraft, "from" | "gas" | "value" | "gasPrice" | "maxFeePerGas">;
   additionalFeeWei?: bigint;
 };
 
 export const checkBalanceForMaxCost = async ({
-  rpc,
+  chainJsonRpc,
+  chainRef,
   prepared,
   additionalFeeWei = 0n,
 }: BalanceResolverParams): Promise<Eip155PrepareStepResult<Partial<Eip155UnsignedTransactionDraft>>> => {
-  if (!rpc) return { status: "ok", patch: {} };
   if (!prepared.from) return { status: "ok", patch: {} };
 
   let gasLimit: bigint | null = null;
@@ -57,7 +59,11 @@ export const checkBalanceForMaxCost = async ({
 
   let balanceHex: string | null = null;
   try {
-    balanceHex = await rpc.getBalance(prepared.from as string, { blockTag: "latest" });
+    balanceHex = await chainJsonRpc.request<string>({
+      chainRef,
+      method: "eth_getBalance",
+      params: [prepared.from, "latest"],
+    });
   } catch (error) {
     return {
       status: "failed",

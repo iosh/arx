@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eip155AccountAddressCodec } from "../namespaces/eip155/accountAddressCodec.js";
-import {
-  accountIdFromAddress,
-  addressFromAccountId,
-  getAccountIdNamespace,
-  parseAccountId,
-} from "./accountId.js";
+import { accountIdFromAddress, addressFromAccountId, getAccountIdNamespace, parseAccountId } from "./accountId.js";
 
 const chainRef = "eip155:1" as const;
 const accountAddressCodecs = new Map([["eip155", eip155AccountAddressCodec]]);
@@ -38,6 +33,5 @@ describe("accountId", () => {
         accountAddressCodecs,
       }),
     ).toBe("0x52908400098527886e0f7030069857d2e4169ee7");
-
   });
 });

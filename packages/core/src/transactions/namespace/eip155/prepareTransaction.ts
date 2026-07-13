@@ -1,5 +1,5 @@
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
@@ -12,12 +12,11 @@ import type {
   Eip155TransactionCoreFields,
   Eip155UnsignedTransactionDraft,
 } from "./unsignedTransaction.js";
-import { readErrorMessage } from "./utils/validation.js";
 
 type PrepareTransactionDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
+  chainJsonRpc: ChainJsonRpcClient;
   chains: ChainAddressingByNamespace;
-  feeOracleFactory?: (rpc: Eip155RpcClient) => Eip155FeeOracle;
+  feeOracleFactory?: (chainJsonRpc: ChainJsonRpcClient, chainRef: string) => Eip155FeeOracle;
 };
 
 const applyPrepareStep = <TPatch>(
@@ -81,7 +80,8 @@ const readPreparedCoreFields = (transaction: Eip155UnsignedTransactionDraft): Ei
 export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
   const chains = deps.chains;
   const deriveAddresses = createAddressResolver({ chains });
-  const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
+  const feeOracleFactory =
+    deps.feeOracleFactory ?? ((chainJsonRpc, chainRef) => createEip155FeeOracle({ chainJsonRpc, chainRef }));
 
   return async (ctx: Eip155PrepareContext): Promise<Eip155PrepareResult> => {
     const payload = ctx.request.payload;
@@ -109,22 +109,7 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
         : {}),
     };
 
-    let rpc: Eip155RpcClient | null = null;
-    try {
-      rpc = deps.rpcClientFactory(ctx.chainRef);
-    } catch (error) {
-      return {
-        status: "failed",
-        error: {
-          code: "transaction.prepare.rpc_unavailable",
-          message: "Failed to create RPC client.",
-          details: { error: readErrorMessage(error) },
-        },
-        reviewSnapshot: prepared,
-      };
-    }
-
-    const feeOracle = feeOracleFactory(rpc);
+    const feeOracle = feeOracleFactory(deps.chainJsonRpc, ctx.chainRef);
 
     const callParams: Eip155CallParams = {};
     if (prepared.from) callParams.from = prepared.from;
@@ -133,7 +118,8 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     if (prepared.data) callParams.data = prepared.data;
 
     const gasResolution = await deriveGas({
-      rpc,
+      chainJsonRpc: deps.chainJsonRpc,
+      chainRef: ctx.chainRef,
       callParams,
       gasProvided: fieldPatch.payloadValues.gas ?? null,
     });
@@ -144,7 +130,11 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     const feeResult = applyPrepareStep(prepared, feeResolution, (patch) => patch);
     if (feeResult) return feeResult;
 
-    const balanceResolution = await checkBalanceForMaxCost({ rpc, prepared });
+    const balanceResolution = await checkBalanceForMaxCost({
+      chainJsonRpc: deps.chainJsonRpc,
+      chainRef: ctx.chainRef,
+      prepared,
+    });
     const balanceResult = applyPrepareStep(prepared, balanceResolution, (patch) => patch);
     if (balanceResult) return balanceResult;
 

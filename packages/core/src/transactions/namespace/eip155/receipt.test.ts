@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
+import { describe, expect, it } from "vitest";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
 import { createReceiptContext } from "./__fixtures__/contexts.js";
-import { createEip155RpcClient } from "./__mocks__/rpc.js";
+import { createChainJsonRpcMock } from "./__mocks__/rpc.js";
 import { createEip155ReceiptService } from "./receipt.js";
 import type { Eip155TrackingContext } from "./types.js";
 
@@ -22,15 +21,17 @@ const BASE_CONTEXT: Eip155TrackingContext = {
 
 describe("createEip155ReceiptService", () => {
   it("throws when receipt hash mismatches", async () => {
-    const client = createEip155RpcClient({
-      getTransactionReceipt: vi.fn(async () => ({
-        transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        status: "0x1",
-      })) as unknown as Eip155RpcClient["getTransactionReceipt"],
-    });
+    const rpc = createChainJsonRpcMock(({ method }) =>
+      method === "eth_getTransactionReceipt"
+        ? {
+            transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            status: "0x1",
+          }
+        : null,
+    );
 
     const service = createEip155ReceiptService({
-      rpcClientFactory: () => client,
+      chainJsonRpc: rpc.client,
     });
 
     await expect(service.inspectSubmittedTransaction(BASE_CONTEXT)).rejects.toMatchObject({
@@ -40,14 +41,12 @@ describe("createEip155ReceiptService", () => {
   });
 
   it("reports confirmed when blockNumber exists", async () => {
-    const client = createEip155RpcClient({
-      getTransactionReceipt: vi.fn(async () => ({
-        blockNumber: "0x123",
-      })) as unknown as Eip155RpcClient["getTransactionReceipt"],
-    });
+    const rpc = createChainJsonRpcMock(({ method }) =>
+      method === "eth_getTransactionReceipt" ? { blockNumber: "0x123" } : null,
+    );
 
     const service = createEip155ReceiptService({
-      rpcClientFactory: () => client,
+      chainJsonRpc: rpc.client,
     });
 
     const result = await service.inspectSubmittedTransaction(BASE_CONTEXT);
@@ -58,19 +57,13 @@ describe("createEip155ReceiptService", () => {
   });
 
   it("reports dropped when nonce is already consumed", async () => {
-    const client = createEip155RpcClient({
-      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
-    });
+    const rpc = createChainJsonRpcMock(({ method }) => (method === "eth_getTransactionCount" ? "0x5" : null));
 
     const service = createEip155ReceiptService({
-      rpcClientFactory: () => client,
+      chainJsonRpc: rpc.client,
     });
 
-    const context: Eip155TrackingContext = {
-      ...BASE_CONTEXT,
-    };
-
-    const result = await service.inspectSubmittedTransaction(context);
+    const result = await service.inspectSubmittedTransaction(BASE_CONTEXT);
     expect(result).toEqual({
       trackingStatus: "dropped",
       evidence: { reason: "replaced" },
@@ -78,19 +71,13 @@ describe("createEip155ReceiptService", () => {
   });
 
   it("reports pending when nonce has not been consumed", async () => {
-    const client = createEip155RpcClient({
-      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x3"),
-    });
+    const rpc = createChainJsonRpcMock(({ method }) => (method === "eth_getTransactionCount" ? "0x3" : null));
 
     const service = createEip155ReceiptService({
-      rpcClientFactory: () => client,
+      chainJsonRpc: rpc.client,
     });
 
-    const context: Eip155TrackingContext = {
-      ...BASE_CONTEXT,
-    };
-
-    const result = await service.inspectSubmittedTransaction(context);
+    const result = await service.inspectSubmittedTransaction(BASE_CONTEXT);
     expect(result).toEqual({
       trackingStatus: "pending",
       evidence: null,

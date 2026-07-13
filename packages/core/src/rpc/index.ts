@@ -7,14 +7,6 @@ export type {
   JsonRpcSuccess,
   JsonRpcVersion2,
 } from "@metamask/utils";
-export {
-  ChainRpcClientPool,
-  type ChainRpcClientPoolOptions,
-  type RpcClient,
-  type RpcClientFactory,
-  type RpcTransport,
-  type RpcTransportRequest,
-} from "./ChainRpcClientPool.js";
 export * from "./errors.js";
 export { createRpcMethodExecutor } from "./executor.js";
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
@@ -45,8 +37,6 @@ export {
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
 } from "./invocation.js";
-export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
-export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
 export type { RpcNamespaceModule } from "./namespaces/types.js";
 export type { RequestContext } from "./requestContext.js";
 export type { RpcRequestKind } from "./requestKind.js";

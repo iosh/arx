@@ -6,7 +6,7 @@ import { type AvailableChain, ChainDefinitions } from "./definitions.js";
 import type { ChainRef } from "./ids.js";
 import type { WalletChainSelectionRecord } from "./persistence.js";
 import type { NonEmptyRpcEndpoints } from "./rpc/types.js";
-import { ChainRpc } from "./rpc.js";
+import { RpcEndpoints } from "./rpcEndpoints.js";
 import { clearRpcOverride, setRpcOverride } from "./rpcOverrides.js";
 import { WalletChainSelection } from "./selection.js";
 import { selectChainForWallet, selectNamespaceForWallet } from "./walletSelectionCommands.js";
@@ -20,7 +20,7 @@ export type NetworksChanged = Readonly<{
 export type NetworksContext = Readonly<{
   mutations: CoreMutationQueue;
   definitions: ChainDefinitions;
-  rpc: ChainRpc;
+  rpc: RpcEndpoints;
   walletSelection: WalletChainSelection;
   now(): number;
   /** Publishes committed network changes and must not throw. */
@@ -52,7 +52,7 @@ export const createNetworks = (params: {
     builtinSeeds: params.bootstrap.builtinSeeds,
     customChains: params.bootstrap.customChains,
   });
-  const rpc = new ChainRpc({
+  const rpc = new RpcEndpoints({
     builtinSeeds: params.bootstrap.builtinSeeds,
     customChains: params.bootstrap.customChains,
     overrides: params.bootstrap.rpcOverrides,

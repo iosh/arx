@@ -9,11 +9,7 @@ import {
 } from "./errors.js";
 import type { ChainRef } from "./ids.js";
 import type { NetworksContext } from "./networks.js";
-import {
-  type CustomChainRecord,
-  chainRpcOverridePersistenceType,
-  customChainPersistenceType,
-} from "./persistence.js";
+import { type CustomChainRecord, chainRpcOverridePersistenceType, customChainPersistenceType } from "./persistence.js";
 import { assertNonEmptyRpcEndpoints } from "./rpc/config.js";
 
 export type CustomChainInput = Readonly<{

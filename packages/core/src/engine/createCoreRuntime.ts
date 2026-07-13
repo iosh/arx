@@ -1,5 +1,7 @@
 import { addressFromAccountId } from "../accounts/accountId.js";
 import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
+import { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
+import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
 import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
@@ -11,13 +13,6 @@ import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
 import { createProviderChainSelections } from "../provider/chainSelection.js";
-import { ChainRpcClientPool } from "../rpc/ChainRpcClientPool.js";
-import { JsonRpcResponseError } from "../rpc/jsonRpcError.js";
-import {
-  createEip155RpcClientFactory,
-  type Eip155RpcCapabilities,
-  type Eip155RpcClient,
-} from "../rpc/namespaceClients/eip155.js";
 import { createTransactions, loadTransactionsBootstrap } from "../transactions/index.js";
 import { createEip155TransactionAdapter } from "../transactions/namespace/eip155/adapter.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
@@ -47,12 +42,12 @@ const chainIdFor = (chainRef: string): string => {
 };
 
 const encodeProviderError = (error: unknown): ProviderRpcError => {
-  if (error instanceof JsonRpcResponseError) {
+  if (error instanceof ChainJsonRpcResponseError) {
     return {
       kind: "JsonRpcError",
-      code: error.code,
+      code: error.rpcCode,
       message: error.message,
-      ...(error.data !== undefined ? { data: error.data as JsonValue } : {}),
+      ...(error.rpcData !== undefined ? { data: error.rpcData as JsonValue } : {}),
     };
   }
   if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
@@ -77,7 +72,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const publish = (event: CoreRuntimeChanged) => {
     for (const listener of listeners) listener(event);
   };
-  const endpointListeners = new Set<(event: { chainRef: string }) => void>();
   const walletSelectionDefaults =
     input.defaults?.walletSelection ?? createWalletSelectionDefaults(namespaceDefinitions);
 
@@ -119,9 +113,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     bootstrap: networksBootstrap,
     publishChanged: (change) => {
-      for (const chainRef of change.rpc ?? []) {
-        for (const listener of endpointListeners) listener({ chainRef });
-      }
       publish({ owner: "networks", change });
     },
   });
@@ -136,28 +127,18 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishChanged: () => publish({ owner: "permissions" }),
   });
   const accountSigning = createWalletAccountSigning(wallet);
-  const rpcClients = new ChainRpcClientPool({
+  const chainJsonRpc = new ChainJsonRpc({
     ...(input.rpc?.options ?? {}),
-    chainRpc: {
-      getEndpoints: (chainRef) => networks.getRpcEndpoints(chainRef),
-      onEndpointsChanged: (listener) => {
-        endpointListeners.add(listener);
-        return () => endpointListeners.delete(listener);
-      },
+    endpoints: {
+      getRpcEndpoints: (chainRef) => networks.getRpcEndpoints(chainRef),
     },
   });
-  if (namespaceNames.has("eip155")) {
-    rpcClients.registerFactory("eip155", createEip155RpcClientFactory());
-  }
-  for (const entry of input.rpc?.factories ?? []) rpcClients.registerFactory(entry.namespace, entry.factory);
-
   const transactionAdapters = new Map();
   if (namespaceNames.has("eip155")) {
     transactionAdapters.set(
       "eip155",
       createEip155TransactionAdapter({
-        rpcClientFactory: (chainRef) =>
-          rpcClients.getClient<Eip155RpcCapabilities>("eip155", chainRef) as Eip155RpcClient,
+        chainJsonRpc,
         chains: chainAddressing,
         accountAddressCodecs,
         accountSigning,
@@ -249,8 +230,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
           result = (await buildConnectionState({ origin: request.scope.origin, namespace: request.namespace }))
             .accounts;
         } else {
-          result = await rpcClients.getClient(request.namespace, selection.chainRef).request({
+          result = await chainJsonRpc.request({
+            chainRef: selection.chainRef,
             method,
+            replay: "never",
             ...(request.request.params !== undefined ? { params: request.request.params } : {}),
           });
         }

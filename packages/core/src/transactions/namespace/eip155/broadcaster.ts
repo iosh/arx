@@ -1,13 +1,13 @@
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import { isArxBaseError } from "../../../errors.js";
 import { RpcInternalError } from "../../../rpc/errors.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { SignedTransactionPayload } from "../types.js";
 import type { Eip155BroadcasterContract } from "./types.js";
 
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 
 type BroadcasterDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
+  chainJsonRpc: ChainJsonRpcClient;
 };
 
 export type Eip155Broadcaster = {
@@ -44,18 +44,13 @@ const toCanonicalTransactionHash = (value: unknown): `0x${string}` => {
 export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaster => {
   return {
     async broadcast(context, signed) {
-      let client: Eip155RpcClient;
       try {
-        client = deps.rpcClientFactory(context.chainRef);
-      } catch (error) {
-        throw new RpcInternalError({
-          message: "Failed to create RPC client for the active chain.",
-          cause: error,
+        const hash = await deps.chainJsonRpc.request<`0x${string}`>({
+          chainRef: context.chainRef,
+          method: "eth_sendRawTransaction",
+          params: [signed.raw],
+          replay: "never",
         });
-      }
-
-      try {
-        const hash = await client.sendRawTransaction(signed.raw);
         return { hash: toCanonicalTransactionHash(hash) };
       } catch (error) {
         if (isArxBaseError(error)) {

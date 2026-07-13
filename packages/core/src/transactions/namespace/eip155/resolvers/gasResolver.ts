@@ -1,10 +1,12 @@
 import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
+import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainRef } from "../../../../chains/ids.js";
 import type { Eip155CallParams, Eip155PrepareStepResult, GasResolutionResult } from "../types.js";
 import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 
 type GasResolverParams = {
-  rpc: Eip155RpcCapabilities | null;
+  chainJsonRpc: ChainJsonRpcClient;
+  chainRef: ChainRef;
   callParams: Eip155CallParams;
   gasProvided?: Hex.Hex | null;
 };
@@ -14,7 +16,7 @@ export const deriveGas = async (
 ): Promise<Eip155PrepareStepResult<GasResolutionResult["prepared"]>> => {
   const prepared: GasResolutionResult["prepared"] = {};
 
-  if (!params.gasProvided && params.rpc) {
+  if (!params.gasProvided) {
     try {
       const estimateArgs: Eip155CallParams = {};
       if (params.callParams.from) estimateArgs.from = params.callParams.from;
@@ -22,7 +24,11 @@ export const deriveGas = async (
       if (params.callParams.value) estimateArgs.value = params.callParams.value;
       if (params.callParams.data) estimateArgs.data = params.callParams.data;
 
-      const estimatedGas = await params.rpc.estimateGas(estimateArgs);
+      const estimatedGas = await params.chainJsonRpc.request<string>({
+        chainRef: params.chainRef,
+        method: "eth_estimateGas",
+        params: [estimateArgs],
+      });
       const gasHex = parseOptionalHexQuantity(estimatedGas, "gas");
       if (gasHex) {
         prepared.gas = gasHex;

@@ -1,35 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildChainAddressingByNamespace } from "../../../chains/addressing.js";
 import { eip155ChainAddressing } from "../../../namespaces/eip155/chainAddressing.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./__fixtures__/constants.js";
+import { createChainJsonRpcMock } from "./__mocks__/rpc.js";
 import { createEip155Transaction } from "./transaction.js";
 
-const createRpcClient = (): Eip155RpcClient => ({
-  request: vi.fn(),
-  estimateGas: vi.fn(async () => "0x5208"),
-  getBalance: vi.fn(async () => "0xde0b6b3a7640000"),
-  getTransactionCount: vi.fn(async () => "0x7"),
-  getGasPrice: vi.fn(async () => "0x3b9aca00"),
-  getMaxPriorityFeePerGas: vi.fn(async () => "0x3b9aca00"),
-  getFeeHistory: vi.fn(async () => ({ oldestBlock: "0x1", baseFeePerGas: [], gasUsedRatio: [], reward: [] })),
-  getBlockByNumber: vi.fn(async () => ({ baseFeePerGas: null })),
-  getTransactionReceipt: vi.fn(async () => null),
-  sendRawTransaction: vi.fn(async () => TEST_TX_HASH),
-});
-
-const createAdapter = (overrides?: {
-  getTransactionReceipt?: Eip155RpcClient["getTransactionReceipt"];
-  getTransactionCount?: Eip155RpcClient["getTransactionCount"];
-}) => {
-  const rpc = createRpcClient();
-  if (overrides?.getTransactionReceipt) {
-    rpc.getTransactionReceipt = overrides.getTransactionReceipt;
-  }
-  if (overrides?.getTransactionCount) {
-    rpc.getTransactionCount = overrides.getTransactionCount;
-  }
-
+const createAdapter = (rpcHandler: Parameters<typeof createChainJsonRpcMock>[0] = () => null) => {
+  const rpc = createChainJsonRpcMock(rpcHandler);
   const signer = {
     signTransaction: vi.fn(async () => ({ raw: "0xdeadbeef" })),
   };
@@ -40,11 +17,10 @@ const createAdapter = (overrides?: {
   return {
     adapter: createEip155Transaction({
       chains: buildChainAddressingByNamespace([eip155ChainAddressing]),
-      rpcClientFactory: () => rpc,
+      chainJsonRpc: rpc.client,
       signer,
       broadcaster,
     }),
-    rpc,
     signer,
     broadcaster,
   };
@@ -133,13 +109,11 @@ describe("createEip155Transaction", () => {
   });
 
   it("inspects submitted transactions through the new tracking contract", async () => {
-    const { adapter } = createAdapter({
-      getTransactionReceipt: vi.fn(async () => ({
-        transactionHash: TEST_TX_HASH,
-        status: "0x1",
-        blockNumber: "0x123",
-      })),
-    });
+    const { adapter } = createAdapter(({ method }) =>
+      method === "eth_getTransactionReceipt"
+        ? { transactionHash: TEST_TX_HASH, status: "0x1", blockNumber: "0x123" }
+        : null,
+    );
     if (!adapter.tracking?.inspectSubmittedTransaction) {
       throw new Error("Expected tracking inspection contract");
     }

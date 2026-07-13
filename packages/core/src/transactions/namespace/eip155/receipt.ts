@@ -1,12 +1,12 @@
 import * as Hex from "ox/Hex";
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import { RpcInternalError } from "../../../rpc/errors.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { SubmittedTransactionInspection } from "../types.js";
 import type { Eip155TransactionReceipt } from "./transactionTypes.js";
 import type { Eip155TrackingContext } from "./types.js";
 
 type ReceiptDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
+  chainJsonRpc: ChainJsonRpcClient;
 };
 
 type RawReceipt = {
@@ -89,25 +89,17 @@ export type Eip155ReceiptService = {
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {
-  const getClient = (chainRef: string) => {
-    try {
-      return deps.rpcClientFactory(chainRef);
-    } catch (error) {
-      throw new RpcInternalError({
-        message: "Failed to create RPC client for receipt tracking.",
-        cause: error,
-      });
-    }
-  };
-
   const querySubmittedReceipt = async (context: Eip155TrackingContext): Promise<ReceiptLookupResult | null> => {
     const submitted = context.submitted;
     const hash = submitted.hash;
     if (!hash) {
       return null;
     }
-    const client = getClient(context.chainRef);
-    const rawReceipt = (await client.getTransactionReceipt(hash)) as RawReceipt | null;
+    const rawReceipt = await deps.chainJsonRpc.request<RawReceipt | null>({
+      chainRef: context.chainRef,
+      method: "eth_getTransactionReceipt",
+      params: [hash],
+    });
     if (!rawReceipt) {
       return null;
     }
@@ -129,8 +121,11 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
 
     const originalNonceHex = context.submitted.nonce;
 
-    const client = getClient(context.chainRef);
-    const latestNonceHex = await client.getTransactionCount(from, { blockTag: "latest" });
+    const latestNonceHex = await deps.chainJsonRpc.request<string>({
+      chainRef: context.chainRef,
+      method: "eth_getTransactionCount",
+      params: [from, "latest"],
+    });
     if (typeof latestNonceHex !== "string") {
       return null;
     }

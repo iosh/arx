@@ -6,7 +6,7 @@ import { assertNonEmptyRpcEndpoints, cloneNonEmptyRpcEndpoints } from "./rpc/con
 import type { NonEmptyRpcEndpoints } from "./rpc/types.js";
 
 /** Owns default RPC endpoints and user overrides for available chains. */
-export class ChainRpc {
+export class RpcEndpoints {
   readonly #defaults = new Map<ChainRef, NonEmptyRpcEndpoints>();
   readonly #overrides = new Map<ChainRef, NonEmptyRpcEndpoints>();
 

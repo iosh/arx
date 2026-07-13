@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
+import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
-import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
@@ -26,7 +26,7 @@ import {
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
+  chainJsonRpc: ChainJsonRpcClient;
   chains: ChainAddressingByNamespace;
   signer: Pick<Eip155Signer, "signTransaction">;
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
@@ -64,20 +64,21 @@ const higherFee = (left: Hex.Hex, right: Hex.Hex): Hex.Hex =>
 const priceReplacementFees = async (
   transaction: Eip155UnsignedTransaction,
   chainRef: string,
-  deps: Pick<AdapterDeps, "rpcClientFactory">,
+  deps: Pick<AdapterDeps, "chainJsonRpc">,
 ): Promise<Pick<Eip155TransactionPayload, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">> => {
-  const rpc = deps.rpcClientFactory(chainRef);
   if (transaction.type === "legacy") {
     const raisedGasPrice = raiseReplacementFee(transaction.gasPrice);
-    const latestGasPrice = await rpc.getGasPrice().catch(() => null);
+    const latestGasPrice = await deps.chainJsonRpc
+      .request<Hex.Hex>({ chainRef, method: "eth_gasPrice" })
+      .catch(() => null);
     return {
-      gasPrice: latestGasPrice === null ? raisedGasPrice : higherFee(raisedGasPrice, latestGasPrice),
+      gasPrice: latestGasPrice === null ? raisedGasPrice : higherFee(raisedGasPrice, latestGasPrice as `0x${string}`),
     };
   }
 
   const raisedMaxFeePerGas = raiseReplacementFee(transaction.maxFeePerGas);
   const raisedMaxPriorityFeePerGas = raiseReplacementFee(transaction.maxPriorityFeePerGas);
-  const suggestion = await createEip155FeeOracle({ rpc })
+  const suggestion = await createEip155FeeOracle({ chainJsonRpc: deps.chainJsonRpc, chainRef })
     .suggestFees()
     .catch(() => null);
   if (suggestion?.mode !== "eip1559") {
@@ -95,7 +96,7 @@ const priceReplacementFees = async (
 
 export const createEip155ReplacementRequest = async (
   context: Eip155ReplacementRequestContext,
-  deps: Pick<AdapterDeps, "rpcClientFactory">,
+  deps: Pick<AdapterDeps, "chainJsonRpc">,
 ): Promise<Eip155TransactionRequest> => {
   const target = context.targetApprovedPayload;
   const fees = await priceReplacementFees(target, context.chainRef, deps);
@@ -166,10 +167,13 @@ const deriveLocalNextNonce = (context: Eip155FinalizeSubmitContext): `0x${string
 
 export const finalizeEip155Submit = async (
   context: Eip155FinalizeSubmitContext,
-  deps: Pick<AdapterDeps, "rpcClientFactory">,
+  deps: Pick<AdapterDeps, "chainJsonRpc">,
 ): Promise<Eip155FinalizeSubmitResult> => {
-  const rpc = deps.rpcClientFactory(context.chainRef);
-  const pendingNonce = await rpc.getTransactionCount(context.from, { blockTag: "pending" });
+  const pendingNonce = await deps.chainJsonRpc.request<`0x${string}`>({
+    chainRef: context.chainRef,
+    method: "eth_getTransactionCount",
+    params: [context.from, "pending"],
+  });
   const preparedPayload = context.preparedPayload;
 
   if (preparedPayload.nonce === undefined) {
@@ -238,10 +242,10 @@ export const finalizeEip155Submit = async (
 export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction<"eip155"> => {
   const validateRequest = createEip155RequestValidator({ chains: deps.chains });
   const prepareTransaction = createEip155PrepareTransaction({
-    rpcClientFactory: deps.rpcClientFactory,
+    chainJsonRpc: deps.chainJsonRpc,
     chains: deps.chains,
   });
-  const receiptService = createEip155ReceiptService({ rpcClientFactory: deps.rpcClientFactory });
+  const receiptService = createEip155ReceiptService({ chainJsonRpc: deps.chainJsonRpc });
 
   return {
     request: {

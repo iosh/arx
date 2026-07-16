@@ -83,6 +83,7 @@ export type {
   SingletonPersistenceType,
 } from "./definition.js";
 export { defineKeyedPersistenceType, defineSingletonPersistenceType } from "./definition.js";
+export { PersistenceCommitError, PersistenceReadError } from "./errors.js";
 export type { OriginNamespaceKey } from "./keys.js";
 export type { CoreMutationQueue } from "./mutationQueue.js";
 export { createCoreMutationQueue } from "./mutationQueue.js";

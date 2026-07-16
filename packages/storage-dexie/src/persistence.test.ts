@@ -3,13 +3,16 @@ import "fake-indexeddb/auto";
 import {
   type AccountRecord,
   type PermissionRecord,
+  PersistenceCommitError,
+  PersistenceReadError,
   persistenceChange,
   persistenceTypes,
   type TransactionRecord,
 } from "@arx/core/persistence";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDexiePersistence } from "./createDexiePersistence.js";
-import { createDexiePersistenceContext } from "./database.js";
+import { ArxPersistenceDatabase, createDexiePersistenceContext } from "./database.js";
+import { createAccountsReader } from "./readers/accounts.js";
 import { createPersistenceWriter } from "./writer.js";
 
 const databaseConnections: Array<{ close(): void | Promise<void> }> = [];
@@ -86,6 +89,46 @@ afterEach(async () => {
 });
 
 describe("createDexiePersistence", () => {
+  it("converts database opening failures to PersistenceReadError", async () => {
+    const failure = new Error("database open failed");
+    const open = vi.spyOn(ArxPersistenceDatabase.prototype, "open").mockRejectedValueOnce(failure);
+    const context = createDexiePersistenceContext(createDatabaseName());
+    databaseConnections.push(context.db);
+    const reader = createAccountsReader(context);
+
+    try {
+      const read = reader.get("eip155:01");
+      await expect(read).rejects.toBeInstanceOf(PersistenceReadError);
+      await expect(read).rejects.toMatchObject({ code: PersistenceReadError.code });
+      await expect(read).rejects.toHaveProperty("cause", failure);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("converts raw reader failures and preserves ArxBaseError instances", async () => {
+    const context = createDexiePersistenceContext(createDatabaseName());
+    databaseConnections.push(context.db);
+    const reader = createAccountsReader(context);
+    await context.ready;
+    const failure = new Error("account read failed");
+    const existingError = new PersistenceCommitError(new Error("owner read error"));
+    const get = vi
+      .spyOn(context.db.accounts, "get")
+      .mockRejectedValueOnce(failure)
+      .mockRejectedValueOnce(existingError);
+
+    try {
+      const rawRead = reader.get("eip155:01");
+      await expect(rawRead).rejects.toBeInstanceOf(PersistenceReadError);
+      await expect(rawRead).rejects.toMatchObject({ code: PersistenceReadError.code });
+      await expect(rawRead).rejects.toHaveProperty("cause", failure);
+      await expect(reader.get("eip155:01")).rejects.toBe(existingError);
+    } finally {
+      get.mockRestore();
+    }
+  });
+
   it("commits canonical records across stores and maps physical rows back", async () => {
     const persistence = createTestPersistence();
     const account = hdAccount({
@@ -146,7 +189,9 @@ describe("createDexiePersistence", () => {
       ),
     ]);
 
-    await expect(commit).rejects.toBe(failure);
+    await expect(commit).rejects.toBeInstanceOf(PersistenceCommitError);
+    await expect(commit).rejects.toMatchObject({ code: PersistenceCommitError.code });
+    await expect(commit).rejects.toHaveProperty("cause", failure);
     putAccount.mockRestore();
     expect(await context.db.settings.get("autoLock")).toBeUndefined();
   });

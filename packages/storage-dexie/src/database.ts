@@ -1,3 +1,5 @@
+import { isArxBaseError } from "@arx/core";
+import { PersistenceCommitError, PersistenceReadError } from "@arx/core/persistence";
 import { Dexie, type Table } from "dexie";
 import type {
   AccountRow,
@@ -54,13 +56,37 @@ export class ArxPersistenceDatabase extends Dexie {
 
 export type DexiePersistenceContext = Readonly<{
   db: ArxPersistenceDatabase;
-  ready: ReturnType<ArxPersistenceDatabase["open"]>;
+  ready: Promise<void>;
+  read<T>(operation: () => Promise<T>): Promise<T>;
+  commit<T>(operation: () => Promise<T>): Promise<T>;
 }>;
+
+const read = async <T>(operation: () => Promise<T>): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isArxBaseError(error)) throw error;
+    throw new PersistenceReadError(error);
+  }
+};
+
+const commit = async <T>(operation: () => Promise<T>): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isArxBaseError(error)) throw error;
+    throw new PersistenceCommitError(error);
+  }
+};
 
 export const createDexiePersistenceContext = (databaseName: string): DexiePersistenceContext => {
   const db = new ArxPersistenceDatabase(databaseName);
   return {
     db,
-    ready: db.open(),
+    ready: read(async () => {
+      await db.open();
+    }),
+    read,
+    commit,
   };
 };

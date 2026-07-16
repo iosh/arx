@@ -109,28 +109,30 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
 
 export const createPersistenceWriter = (context: DexiePersistenceContext): PersistenceWriter => ({
   async commit(changes) {
-    await context.ready;
-    await context.db.transaction(
-      "rw",
-      [
-        context.db.encryptedVault,
-        context.db.settings,
-        context.db.keySources,
-        context.db.hdKeyrings,
-        context.db.accounts,
-        context.db.accountSelections,
-        context.db.permissions,
-        context.db.customChains,
-        context.db.chainRpcOverrides,
-        context.db.walletChainSelection,
-        context.db.providerChainSelections,
-        context.db.transactions,
-      ],
-      async () => {
-        for (const change of changes) {
-          await applyChange(context, change);
-        }
-      },
-    );
+    await context.commit(async () => {
+      await context.ready;
+      await context.db.transaction(
+        "rw",
+        [
+          context.db.encryptedVault,
+          context.db.settings,
+          context.db.keySources,
+          context.db.hdKeyrings,
+          context.db.accounts,
+          context.db.accountSelections,
+          context.db.permissions,
+          context.db.customChains,
+          context.db.chainRpcOverrides,
+          context.db.walletChainSelection,
+          context.db.providerChainSelections,
+          context.db.transactions,
+        ],
+        async () => {
+          for (const change of changes) {
+            await applyChange(context, change);
+          }
+        },
+      );
+    });
   },
 });

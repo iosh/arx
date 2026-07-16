@@ -196,7 +196,7 @@ export class SubmittedTransactionMonitor {
 
   async #refreshTransaction(transactionId: string, now: number): Promise<void> {
     const aggregate = await this.#transactions.loadTransactionAggregate(transactionId);
-    if (!aggregate || aggregate.record.status !== "submitted") {
+    if (aggregate?.record.status !== "submitted") {
       this.#entries.delete(transactionId);
       return;
     }

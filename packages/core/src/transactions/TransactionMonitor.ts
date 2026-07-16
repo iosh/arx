@@ -100,7 +100,7 @@ export class TransactionMonitor {
 
   async #inspect(entry: MonitorEntry, now: number): Promise<void> {
     const record = await this.#readers.transactions.get(entry.transactionId);
-    if (!record || record.status !== "submitted") {
+    if (record?.status !== "submitted") {
       this.#entries.delete(entry.transactionId);
       return;
     }
@@ -137,7 +137,7 @@ export class TransactionMonitor {
   ): Promise<readonly string[]> {
     return await this.#mutations.run(async (commit) => {
       const current = await this.#readers.transactions.get(transactionId);
-      if (!current || current.status !== "submitted") return [];
+      if (current?.status !== "submitted") return [];
       const changes: TransactionRecord[] = [];
       if (inspection.status === "confirmed") {
         changes.push(confirmTransaction(current, inspection.confirmation));

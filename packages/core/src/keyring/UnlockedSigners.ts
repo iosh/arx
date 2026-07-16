@@ -64,7 +64,7 @@ export const createUnlockedSignersDraft = (params: {
         const keyring = keyrings.get(record.origin.keyringId);
         if (!keyring) throw new KeyringNotFoundError(record.origin.keyringId);
         const source = sources.get(keyring.keySourceId);
-        if (!source || source.type !== "bip39") throw new KeyringSourceNotFoundError(keyring.keySourceId);
+        if (source?.type !== "bip39") throw new KeyringSourceNotFoundError(keyring.keySourceId);
         signers.push(
           getKeyringNamespaceAdapter(params.adapters, keyring.namespace).deriveAccount({
             source,
@@ -76,7 +76,7 @@ export const createUnlockedSignersDraft = (params: {
       }
 
       const source = sources.get(record.origin.keySourceId);
-      if (!source || source.type !== "private-key") {
+      if (source?.type !== "private-key") {
         throw new KeyringSourceNotFoundError(record.origin.keySourceId);
       }
       signers.push(getKeyringNamespaceAdapter(params.adapters, source.namespace).importPrivateKey(source));

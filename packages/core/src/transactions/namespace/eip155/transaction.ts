@@ -135,7 +135,7 @@ const isReplacingSubmittedNonce = (context: Eip155FinalizeSubmitContext, nonce: 
   const replaced = context.localActiveTransactions.find(
     (transaction) => transaction.transactionId === replacement.transactionId,
   );
-  if (!replaced || replaced.status !== "submitted") {
+  if (replaced?.status !== "submitted") {
     return false;
   }
 

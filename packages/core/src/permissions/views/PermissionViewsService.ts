@@ -1,7 +1,8 @@
-import type { AccountSelectionService } from "../../accounts/selection/types.js";
+import type { Accounts } from "../../accounts/Accounts.js";
+import type { AccountId } from "../../accounts/accountId.js";
+import { AccountNotFoundError } from "../../accounts/errors.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountId } from "../../storage/records.js";
 import { PermissionNotConnectedError } from "../errors.js";
 import type { PermissionsReader } from "../service/types.js";
 import type {
@@ -12,7 +13,7 @@ import type {
 } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
-  accounts: Pick<AccountSelectionService, "getOwnedAccount">;
+  accounts: Pick<Accounts, "getAccount" | "getAddress">;
   permissions: Pick<PermissionsReader, "getAuthorization" | "getState">;
 };
 
@@ -36,7 +37,7 @@ const uniqAccountIds = (values: readonly AccountId[]): AccountId[] => {
 };
 
 class DefaultPermissionViewsService implements PermissionViewsService {
-  readonly #accounts: Pick<AccountSelectionService, "getOwnedAccount">;
+  readonly #accounts: Pick<Accounts, "getAccount" | "getAddress">;
   readonly #permissions: Pick<PermissionsReader, "getAuthorization" | "getState">;
 
   constructor(options: CreatePermissionViewsServiceOptions) {
@@ -50,7 +51,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     const authorization = this.#permissions.getAuthorization(origin, { namespace });
     const permittedChainRefs = sortChainRefs(Object.keys(authorization?.chains ?? {}) as ChainRef[]);
     const rawAccountIds = authorization?.chains[chainRef]?.accountIds ?? [];
-    const accounts = this.#resolveAccounts(namespace, chainRef, rawAccountIds);
+    const accounts = this.#resolveAccounts(chainRef, rawAccountIds);
     const permittedAccountIds = accounts.map((account) => account.accountId);
     const isPermittedChain = permittedChainRefs.includes(chainRef);
 
@@ -100,11 +101,9 @@ class DefaultPermissionViewsService implements PermissionViewsService {
             sortChainRefs(Object.keys(namespaceState.chains) as ChainRef[]).map((chainRef) => [
               chainRef,
               {
-                accountIds: this.#resolveAccounts(
-                  namespace,
-                  chainRef,
-                  namespaceState.chains[chainRef]?.accountIds ?? [],
-                ).map((account) => account.accountId),
+                accountIds: this.#resolveAccounts(chainRef, namespaceState.chains[chainRef]?.accountIds ?? []).map(
+                  (account) => account.accountId,
+                ),
               },
             ]),
           ),
@@ -117,23 +116,20 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     return { origins };
   }
 
-  #resolveAccounts(namespace: string, chainRef: ChainRef, accountIds: readonly AccountId[]): PermittedAccountView[] {
+  #resolveAccounts(chainRef: ChainRef, accountIds: readonly AccountId[]): PermittedAccountView[] {
     const accounts: PermittedAccountView[] = [];
 
     for (const accountId of uniqAccountIds(accountIds)) {
-      try {
-        const account = this.#accounts.getOwnedAccount({ namespace, chainRef, accountId });
-        if (!account) {
-          continue;
-        }
-        accounts.push({
-          accountId: account.accountId,
-          canonicalAddress: account.canonicalAddress,
-          displayAddress: account.displayAddress,
-        });
-      } catch {
-        // Ignore stale or invalid account references and keep projecting the remaining record.
-      }
+      const account = this.#accounts.getAccount(accountId);
+      if (!account) throw new AccountNotFoundError(accountId);
+      if (account.hidden) continue;
+
+      const address = this.#accounts.getAddress({ chainRef, accountId });
+      accounts.push({
+        accountId: address.accountId,
+        canonicalAddress: address.canonicalAddress,
+        displayAddress: address.displayAddress,
+      });
     }
 
     return accounts;

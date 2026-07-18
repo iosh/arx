@@ -1,6 +1,5 @@
 import type { PersistenceChange, PersistenceWriter } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "./database.js";
-import { accountToRow } from "./mappers/accounts.js";
 import { permissionToRow } from "./mappers/permissions.js";
 import { encryptedVaultToRow, walletChainSelectionToRow } from "./mappers/singletons.js";
 import { ENCRYPTED_VAULT_ROW_KEY, WALLET_CHAIN_SELECTION_ROW_KEY } from "./rows.js";
@@ -41,7 +40,7 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
 
     case "account":
       if (change.operation === "put") {
-        await context.db.accounts.put(accountToRow(change.value));
+        await context.db.accounts.put(change.value);
       } else {
         await context.db.accounts.delete(change.key);
       }

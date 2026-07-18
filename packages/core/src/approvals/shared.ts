@@ -1,4 +1,4 @@
-import type { AccountSelectionService } from "../accounts/selection/types.js";
+import type { Accounts } from "../accounts/Accounts.js";
 import type { ApprovalAccountSelectionDecision, ApprovalRecord } from "../approvals/queue/types.js";
 import { PermissionDeniedError } from "../permissions/errors.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";
@@ -25,23 +25,13 @@ const requireAccountSelectionDecision = (
 export const getApprovalSelectableAccounts = (
   record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
   deps: {
-    accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+    accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   },
   options?: DeriveApprovalReviewContextOptions,
 ) => {
   const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, options);
-  const selectableAccounts = deps.accounts.listOwnedForNamespace({
-    namespace,
-    chainRef: reviewChainRef,
-  });
-  const activeAccount = deps.accounts.getActiveAccountForNamespace({
-    namespace,
-    chainRef: reviewChainRef,
-  });
-  const recommendedAccountId =
-    activeAccount && selectableAccounts.some((account) => account.accountId === activeAccount.accountId)
-      ? activeAccount.accountId
-      : (selectableAccounts[0]?.accountId ?? null);
+  const selectableAccounts = deps.accounts.listSelectableAddresses(reviewChainRef);
+  const recommendedAccountId = deps.accounts.getSelectedAddress(reviewChainRef).accountId;
 
   return {
     namespace,

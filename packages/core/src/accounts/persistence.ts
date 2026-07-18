@@ -1,10 +1,11 @@
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
+import type { Namespace } from "../namespaces/types.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
 import type { AccountId } from "./accountId.js";
 
 export type HdAccountOrigin = Readonly<{
   type: "hd";
-  keyringId: HdKeyringId;
+  hdKeyringId: HdKeyringId;
   derivationIndex: number;
 }>;
 
@@ -20,26 +21,17 @@ export type AccountRecord = Readonly<{
   origin: AccountOrigin;
   alias?: string;
   hidden: boolean;
-  createAt: number;
+  createdAt: number;
 }>;
 
 export type AccountSelectionRecord = Readonly<{
-  namespace: string;
+  namespace: Namespace;
   accountId: AccountId;
 }>;
 
-export type NamespaceAccounts = Readonly<{
-  accounts: readonly AccountRecord[];
-  selection: AccountSelectionRecord;
-}>;
-
 export interface AccountsReader {
-  get(accountId: AccountId): Promise<AccountRecord | null>;
-  getMany(accountIds: readonly AccountId[]): Promise<AccountRecord[]>;
-  getNamespaceAccounts(namespace: string): Promise<NamespaceAccounts | null>;
-  listByKeyringIds(keyringIds: readonly HdKeyringId[]): Promise<AccountRecord[]>;
-  listByPrivateKeySourceIds(keySourceIds: readonly KeySourceId[]): Promise<AccountRecord[]>;
-  listIds(): Promise<AccountId[]>;
+  listRecords(): Promise<AccountRecord[]>;
+  listSelections(): Promise<AccountSelectionRecord[]>;
 }
 
 export const accountPersistenceType: KeyedPersistenceType<"account", AccountRecord, AccountId> =

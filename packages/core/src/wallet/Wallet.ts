@@ -1,4 +1,6 @@
+import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
+import type { AccountsChanged } from "../accounts/types.js";
 import type { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
@@ -7,7 +9,6 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { VaultBootstrap } from "../vault/bootstrap.js";
 import { Vault, type VaultStatus } from "../vault/Vault.js";
 import { AutoLockTimer } from "./AutoLockTimer.js";
-import { renameAccount, selectAccount, setAccountHidden } from "./accounts.js";
 import { addHdKeyring, deriveHdAccount, removeHdKeyring } from "./keyrings.js";
 import {
   addNewMnemonic,
@@ -22,21 +23,23 @@ import { initializeFromMnemonic, initializeFromPrivateKey, initializeWithNewMnem
 
 export type WalletChanged = Readonly<{
   vault?: boolean;
-  accounts?: readonly AccountId[];
   autoLock?: boolean;
 }>;
 
 export type WalletContext = Readonly<{
-  readers: Pick<CorePersistenceReaders, "encryptedVault" | "accounts" | "permissions">;
+  readers: Pick<CorePersistenceReaders, "encryptedVault" | "permissions">;
   mutations: CoreMutationQueue;
   vault: Vault;
   keyring: Keyring;
+  accounts: Accounts;
   autoLock: AutoLockTimer;
   adapters: KeyringNamespaceAdapters;
   /** Publishes committed wallet changes and must not throw. */
   publishChanged(change: WalletChanged): void;
   /** Publishes committed key source/HD keyring record changes and must not throw. */
   publishKeyringChanged(): void;
+  /** Publishes committed account record/selection changes and must not throw. */
+  publishAccountsChanged(change: AccountsChanged): void;
 }>;
 
 export type Wallet = Readonly<{
@@ -51,7 +54,6 @@ export type Wallet = Readonly<{
   setAutoLockDuration(durationMs: number): Promise<void>;
   accounts: Readonly<{
     rename(params: { accountId: AccountId; alias?: string }): Promise<void>;
-    setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
     select(accountId: AccountId): Promise<void>;
   }>;
   keySources: Readonly<{
@@ -73,12 +75,15 @@ export const createWallet = (params: {
   readers: WalletContext["readers"];
   mutations: CoreMutationQueue;
   keyring: Keyring;
+  accounts: Accounts;
   adapters: KeyringNamespaceAdapters;
   bootstrap: VaultBootstrap;
   /** Publishes committed wallet changes and must not throw. */
   publishChanged(change: WalletChanged): void;
   /** Publishes committed key source/HD keyring record changes and must not throw. */
   publishKeyringChanged(): void;
+  /** Publishes committed account record/selection changes and must not throw. */
+  publishAccountsChanged(change: AccountsChanged): void;
 }): Wallet => {
   const vault = new Vault(params.bootstrap.encryptedVault);
   const keyring = params.keyring;
@@ -92,10 +97,12 @@ export const createWallet = (params: {
     mutations: params.mutations,
     vault,
     keyring,
+    accounts: params.accounts,
     autoLock,
     adapters: params.adapters,
     publishChanged: params.publishChanged,
     publishKeyringChanged: params.publishKeyringChanged,
+    publishAccountsChanged: params.publishAccountsChanged,
   };
   expire = () => {
     void lock(context);
@@ -112,9 +119,8 @@ export const createWallet = (params: {
     changePassword: (input) => changePassword(context, input),
     setAutoLockDuration: (durationMs) => setAutoLockDuration(context, durationMs),
     accounts: {
-      rename: (input) => renameAccount(context, input),
-      setHidden: (input) => setAccountHidden(context, input),
-      select: (accountId) => selectAccount(context, accountId),
+      rename: (input) => params.accounts.rename(input),
+      select: (accountId) => params.accounts.select(accountId),
     },
     keySources: {
       addMnemonic: (input) => addNewMnemonic(context, input),

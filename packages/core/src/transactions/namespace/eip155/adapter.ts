@@ -1,5 +1,4 @@
-import type { AccountAddressCodecs } from "../../../accounts/accountAddressCodec.js";
-import { addressFromAccountId } from "../../../accounts/accountId.js";
+import type { Accounts } from "../../../accounts/Accounts.js";
 import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155AccountSigning } from "../../../namespaces/eip155/accountSigning.js";
@@ -29,14 +28,9 @@ import type { Eip155PreparedTransaction, Eip155UnsignedTransaction } from "./uns
 const asJsonObject = (value: object): TransactionJsonObject => value as unknown as TransactionJsonObject;
 
 const eip155AddressForAccount = (
-  accountAddressCodecs: AccountAddressCodecs,
+  accounts: Pick<Accounts, "getAddress">,
   input: { chainRef: string; accountId: string },
-): string =>
-  addressFromAccountId({
-    chainRef: input.chainRef,
-    accountId: input.accountId,
-    accountAddressCodecs,
-  });
+): string => accounts.getAddress(input).canonicalAddress;
 
 const toLocalActiveTransactions = (records: readonly TransactionRecord[]) =>
   records.flatMap((record) => {
@@ -55,7 +49,7 @@ const buildFinalizationContext = (input: {
   transactionId: string;
   submission: TransactionSubmissionInput;
   activeTransactions: readonly TransactionRecord[];
-  accountAddressCodecs: AccountAddressCodecs;
+  accounts: Pick<Accounts, "getAddress">;
 }): Eip155FinalizeSubmitContext => {
   const { transactionId, submission, activeTransactions } = input;
   const preparedPayload = submission.finalizationPayload as Eip155PreparedTransaction;
@@ -65,7 +59,7 @@ const buildFinalizationContext = (input: {
     chainRef: submission.chainRef,
     origin: submission.origin,
     accountId: submission.accountId,
-    from: eip155AddressForAccount(input.accountAddressCodecs, submission),
+    from: eip155AddressForAccount(input.accounts, submission),
     request: { namespace: "eip155", chainRef: submission.chainRef, payload: preparedPayload },
     preparedPayload,
     replacement: submission.replacementTargetId
@@ -118,7 +112,7 @@ const retryInspectionDelay = (attempt: number): number => {
 export const createEip155TransactionAdapter = (params: {
   chainJsonRpc: ChainJsonRpcClient;
   chains: ChainAddressingByNamespace;
-  accountAddressCodecs: AccountAddressCodecs;
+  accounts: Pick<Accounts, "getAddress">;
   accountSigning: Eip155AccountSigning;
 }): TransactionNamespaceAdapter => {
   const signer = createEip155Signer({ accountSigning: params.accountSigning });
@@ -133,7 +127,7 @@ export const createEip155TransactionAdapter = (params: {
         transactionId,
         submission,
         activeTransactions,
-        accountAddressCodecs: params.accountAddressCodecs,
+        accounts: params.accounts,
       });
       const finalized = await finalizeEip155Submit(context, { chainJsonRpc: params.chainJsonRpc });
       return toFinalizationResult(finalized);
@@ -146,7 +140,7 @@ export const createEip155TransactionAdapter = (params: {
           chainRef: target.chainRef,
           origin: target.origin,
           accountId: target.accountId,
-          from: eip155AddressForAccount(params.accountAddressCodecs, target),
+          from: eip155AddressForAccount(params.accounts, target),
           type: type === "speed-up" ? "speed_up" : type,
           targetTransactionId: target.transactionId,
           targetRequest: { namespace: "eip155", chainRef: target.chainRef, payload: approved },
@@ -163,7 +157,7 @@ export const createEip155TransactionAdapter = (params: {
           namespace: "eip155",
           chainRef,
           origin: "wallet",
-          from: eip155AddressForAccount(params.accountAddressCodecs, { chainRef, accountId }),
+          from: eip155AddressForAccount(params.accounts, { chainRef, accountId }),
           request: { namespace: "eip155", chainRef, payload: approved },
         },
         approved,

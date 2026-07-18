@@ -1,16 +1,15 @@
-import type { AccountSelectionService } from "../../../../accounts/selection/types.js";
+import type { Accounts } from "../../../../accounts/Accounts.js";
+import type { AccountId } from "../../../../accounts/accountId.js";
 import { deriveApprovalReviewContext } from "../../../../approvals/chainContext.js";
 import type { ApprovalRecord } from "../../../../approvals/queue/types.js";
 import { getApprovalSelectableAccounts, resolveApprovalSelectedAccounts } from "../../../../approvals/shared.js";
 import type { ChainRef } from "../../../../chains/ids.js";
-import { PermissionDeniedError } from "../../../../permissions/errors.js";
 import type { PermissionsWriter } from "../../../../permissions/service/types.js";
-import type { AccountId } from "../../../../storage/records.js";
 
 type ConnectionApprovalRecord = Pick<ApprovalRecord, "approvalId" | "kind" | "origin" | "namespace" | "chainRef">;
 
 type GrantAccountsForConnectionApprovalDeps = {
-  accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
 };
 
@@ -25,10 +24,6 @@ export const grantAccountsForConnectionApproval = async (args: {
   const { namespace, chainRef, selectableAccounts } = getApprovalSelectableAccounts(approval, deps, {
     request: { chainRef: selectionChainRef },
   });
-
-  if (selectableAccounts.length === 0) {
-    throw new PermissionDeniedError();
-  }
 
   const selectedAccounts = resolveApprovalSelectedAccounts({
     record: approval,

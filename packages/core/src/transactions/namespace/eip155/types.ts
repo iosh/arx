@@ -1,5 +1,4 @@
 import type { Hex } from "ox/Hex";
-import type { AccountAddress } from "../../../accounts/selection/types.js";
 import type { TransactionConflictKey } from "../../aggregate/types.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type {
@@ -94,7 +93,7 @@ export type Eip155BroadcastContext = Omit<TransactionBroadcastContext<"eip155">,
 
 export type Eip155SignContext = Omit<TransactionSignContext, "namespace" | "request" | "from"> & {
   namespace: "eip155";
-  from: AccountAddress;
+  from: string;
   request: Eip155TransactionRequest;
 };
 

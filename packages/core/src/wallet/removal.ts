@@ -1,32 +1,11 @@
-import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
-import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
+import { accountsChangedFromUpdate } from "../accounts/Accounts.js";
+import type { AccountId } from "../accounts/accountId.js";
 import { removeAccountsFromPermissions } from "../permissions/permissionRecord.js";
 import { permissionPersistenceType } from "../permissions/persistence.js";
 import { persistenceChange } from "../persistence/change.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
-import { WalletOperationRejectedError } from "./errors.js";
 import { requireKeyringSecrets } from "./unlocked.js";
 import type { WalletContext } from "./Wallet.js";
-
-export const selectionChangesForRemovedAccounts = async (
-  wallet: WalletContext,
-  removedAccountIds: readonly AccountId[],
-) => {
-  const removed = new Set(removedAccountIds);
-  const namespaces = [...new Set(removedAccountIds.map(getAccountIdNamespace))];
-  const changes = [];
-  for (const namespace of namespaces) {
-    const state = await wallet.readers.accounts.getNamespaceAccounts(namespace);
-    if (!state) continue;
-    const remaining = state.accounts.filter((account) => !removed.has(account.accountId));
-    if (remaining.length === 0) {
-      changes.push(persistenceChange.remove(accountSelectionPersistenceType, namespace));
-    } else if (removed.has(state.selection.accountId)) {
-      throw new WalletOperationRejectedError("selected_account_must_be_changed_before_removal");
-    }
-  }
-  return changes;
-};
 
 export const permissionChangesForRemovedAccounts = async (wallet: WalletContext, accountIds: readonly AccountId[]) => {
   if (accountIds.length === 0) return [];
@@ -40,17 +19,13 @@ export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
   await wallet.mutations.run(async (commit) => {
     wallet.vault.requireUnlocked();
     requireKeyringSecrets(wallet);
-    const [accountIds, permissions] = await Promise.all([
-      wallet.readers.accounts.listIds(),
-      wallet.readers.permissions.listAll(),
-    ]);
-    const namespaces = [...new Set(accountIds.map(getAccountIdNamespace))];
+    const permissions = await wallet.readers.permissions.listAll();
+    const accountsUpdate = wallet.accounts.prepareReset();
     const keyringUpdate = wallet.keyring.prepareReset();
     await commit([
       persistenceChange.remove(encryptedVaultPersistenceType),
       ...keyringUpdate.persistenceChanges,
-      ...accountIds.map((accountId) => persistenceChange.remove(accountPersistenceType, accountId)),
-      ...namespaces.map((namespace) => persistenceChange.remove(accountSelectionPersistenceType, namespace)),
+      ...(accountsUpdate?.persistenceChanges ?? []),
       ...permissions.map((permission) =>
         persistenceChange.remove(permissionPersistenceType, {
           origin: permission.origin,
@@ -60,12 +35,11 @@ export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
     ]);
     wallet.autoLock.stop();
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.lock();
     wallet.vault.activateDeleted();
-    wallet.publishChanged({
-      vault: true,
-      accounts: accountIds,
-    });
+    wallet.publishChanged({ vault: true });
     wallet.publishKeyringChanged();
+    if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   });
 };

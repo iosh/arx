@@ -1,4 +1,6 @@
-import { addressFromAccountId } from "../accounts/accountId.js";
+import { Accounts } from "../accounts/Accounts.js";
+import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
+import { AccountNotFoundError } from "../accounts/errors.js";
 import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
 import { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
@@ -62,8 +64,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const namespaceDefinitions = [...input.namespaces.definitions];
   if (namespaceDefinitions.length === 0) throw new NamespaceDefinitionRequiredError();
   const namespaceNames = new Set(namespaceDefinitions.map((definition) => definition.namespace));
-  const accountAddressCodecs = new Map(
-    namespaceDefinitions.map((definition) => [definition.namespace, definition.accountAddressCodec]),
+  const accountsAdapters = Object.fromEntries(
+    namespaceDefinitions.map((definition) => [definition.namespace, definition.accounts]),
   );
   const chainAddressing = buildChainAddressingByNamespace(
     namespaceDefinitions.map((definition) => definition.chainAddressing),
@@ -77,28 +79,37 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const walletSelectionDefaults =
     input.defaults?.walletSelection ?? createWalletSelectionDefaults(namespaceDefinitions);
 
-  const [vaultBootstrap, keyringBootstrap, networksBootstrap, transactionsBootstrap] = await Promise.all([
-    loadVaultBootstrap({
-      readers: input.persistence.readers,
-      defaultAutoLockDurationMs: input.defaults?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
-    }),
-    loadKeyringBootstrap(input.persistence.readers),
-    loadNetworksBootstrap({
-      readers: input.persistence.readers,
-      builtinSeeds: builtinChains,
-      walletSelectionDefaults,
-    }),
-    loadTransactionsBootstrap(input.persistence.readers),
-  ]);
+  const [vaultBootstrap, keyringBootstrap, accountsBootstrap, networksBootstrap, transactionsBootstrap] =
+    await Promise.all([
+      loadVaultBootstrap({
+        readers: input.persistence.readers,
+        defaultAutoLockDurationMs: input.defaults?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
+      }),
+      loadKeyringBootstrap(input.persistence.readers),
+      loadAccountsBootstrap(input.persistence.readers),
+      loadNetworksBootstrap({
+        readers: input.persistence.readers,
+        builtinSeeds: builtinChains,
+        walletSelectionDefaults,
+      }),
+      loadTransactionsBootstrap(input.persistence.readers),
+    ]);
 
   let previousWalletStatus = vaultBootstrap.encryptedVault ? "locked" : "uninitialized";
   const unlockedListeners = new Set<(payload: { at: number }) => void>();
   const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
   const keyring = new Keyring(keyringBootstrap);
+  const accounts = new Accounts({
+    adapters: accountsAdapters,
+    bootstrap: accountsBootstrap,
+    mutations,
+    publishChanged: (change) => publish({ owner: "accounts", change }),
+  });
   const wallet = createWallet({
     readers: input.persistence.readers,
     mutations,
     keyring,
+    accounts,
     adapters: new Map(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
     bootstrap: vaultBootstrap,
     publishChanged: (change) => {
@@ -114,6 +125,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       publish({ owner: "wallet", change });
     },
     publishKeyringChanged: () => publish({ owner: "keyring", change: { type: "keyringChanged" } }),
+    publishAccountsChanged: (change) => publish({ owner: "accounts", change }),
   });
   const networks = createNetworks({
     mutations,
@@ -142,14 +154,14 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   if (namespaceNames.has("eip155")) {
     const accountSigning = createEip155AccountSigning({
       keyring,
-      accounts: input.persistence.readers.accounts,
+      accounts,
     });
     transactionAdapters.set(
       "eip155",
       createEip155TransactionAdapter({
         chainJsonRpc,
         chains: chainAddressing,
-        accountAddressCodecs,
+        accounts,
         accountSigning,
       }),
     );
@@ -178,15 +190,15 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const buildConnectionState = async (query: ProviderConnectionQuery): Promise<ProviderConnectionState> => {
     const selection = (await providerChainSelections.get(query)) ?? (await providerChainSelections.initialize(query));
     const accountIds = await permissions.listAccountIds({ ...query, chainRef: selection.chainRef });
-    const accounts =
+    const addresses =
       wallet.getStatus() === "unlocked"
-        ? accountIds.map((accountId) =>
-            addressFromAccountId({
-              accountId,
-              chainRef: selection.chainRef,
-              accountAddressCodecs,
-            }),
-          )
+        ? accountIds.flatMap((accountId) => {
+            const account = accounts.getAccount(accountId);
+            if (!account) throw new AccountNotFoundError(accountId);
+            if (account.hidden) return [];
+
+            return [accounts.getAddress({ accountId, chainRef: selection.chainRef }).canonicalAddress];
+          })
         : [];
     return {
       snapshot: {
@@ -194,7 +206,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
         chain: { chainRef: selection.chainRef, chainId: chainIdFor(selection.chainRef) },
         isUnlocked: wallet.getStatus() === "unlocked",
       },
-      accounts,
+      accounts: addresses,
     };
   };
 

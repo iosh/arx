@@ -1,6 +1,6 @@
+import type { AccountId } from "../accounts/accountId.js";
 import type { ChainRef } from "../chains/ids.js";
 import { eventTopic } from "../messenger/topic.js";
-import type { AccountId } from "../storage/records.js";
 
 export type OwnerChangedEvent =
   | { topic: "session"; change: "state" }

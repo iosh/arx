@@ -1,11 +1,15 @@
+import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
+import { Accounts } from "../accounts/Accounts.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { AccountRecord, AccountSelectionRecord } from "../accounts/persistence.js";
+import type { AccountsChanged } from "../accounts/types.js";
 import { Keyring, type KeyringChanged } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";
 import type { PrivateKeySourceSecret } from "../keyring/secrets.js";
+import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import type { PermissionRecord } from "../permissions/persistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
@@ -39,7 +43,8 @@ const emptyState = (): State => ({
 });
 
 const accountIdFor = (sourceId: string, index: number): AccountId => {
-  const payload = `${sourceId.replaceAll("-", "")}${index.toString(16).padStart(8, "0")}`.slice(0, 40).padEnd(40, "0");
+  const sourcePayload = bytesToHex(keccak_256(new TextEncoder().encode(sourceId))).slice(0, 32);
+  const payload = `${sourcePayload}${index.toString(16).padStart(8, "0")}`;
   return `eip155:${payload}`;
 };
 
@@ -116,37 +121,6 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   });
   const readers: WalletContext["readers"] = {
     encryptedVault: { get: vi.fn(async () => state.encryptedVault) },
-    accounts: {
-      get: vi.fn(async (accountId) => state.accounts.get(accountId) ?? null),
-      getMany: vi.fn(async (accountIds) =>
-        accountIds.flatMap((accountId) => {
-          const account = state.accounts.get(accountId);
-          return account ? [account] : [];
-        }),
-      ),
-      getNamespaceAccounts: vi.fn(async (namespace) => {
-        const accounts = [...state.accounts.values()].filter(
-          (account) => getAccountIdNamespace(account.accountId) === namespace,
-        );
-        if (accounts.length === 0) return null;
-        const selection = state.selections.get(namespace);
-        if (!selection) throw new Error("missing test selection");
-        return { accounts, selection };
-      }),
-      listByKeyringIds: vi.fn(async (keyringIds) => {
-        const ids = new Set(keyringIds);
-        return [...state.accounts.values()].filter(
-          (account) => account.origin.type === "hd" && ids.has(account.origin.keyringId),
-        );
-      }),
-      listByPrivateKeySourceIds: vi.fn(async (keySourceIds) => {
-        const ids = new Set(keySourceIds);
-        return [...state.accounts.values()].filter(
-          (account) => account.origin.type === "private-key" && ids.has(account.origin.keySourceId),
-        );
-      }),
-      listIds: vi.fn(async () => [...state.accounts.keys()]),
-    },
     permissions: {
       get: vi.fn(async (key) => state.permissions.get(permissionKey(key)) ?? null),
       listByOrigin: vi.fn(async (origin) =>
@@ -171,10 +145,25 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   });
   const changes: WalletChanged[] = [];
   const keyringChanges: KeyringChanged[] = [];
+  const accountChanges: AccountsChanged[] = [];
+  const mutations = createCoreMutationQueue({ commit });
+  const publishAccountsChanged = (change: AccountsChanged): void => {
+    accountChanges.push(change);
+  };
+  const accounts = new Accounts({
+    adapters: { eip155: eip155AccountsAdapter },
+    bootstrap: {
+      records: [...state.accounts.values()],
+      selections: [...state.selections.values()],
+    },
+    mutations,
+    publishChanged: publishAccountsChanged,
+  });
   const wallet = createWallet({
     readers,
-    mutations: createCoreMutationQueue({ commit }),
+    mutations,
     keyring,
+    accounts,
     adapters: new Map([[adapter.namespace, adapter]]),
     bootstrap: {
       encryptedVault: state.encryptedVault,
@@ -182,14 +171,17 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     },
     publishChanged: (change) => changes.push(change),
     publishKeyringChanged: () => keyringChanges.push({ type: "keyringChanged" }),
+    publishAccountsChanged,
   });
   return {
     wallet,
+    accounts,
     state,
     commits,
     commit,
     changes,
     keyringChanges,
+    accountChanges,
     keyring,
     deriveAccount,
     importPrivateKey,
@@ -204,7 +196,7 @@ afterEach(() => vi.useRealTimers());
 
 describe("Wallet", () => {
   it("initializes a mnemonic wallet with one five-record commit", async () => {
-    const { wallet, commits, keyring, keyringChanges, state } = createHarness();
+    const { wallet, accounts, accountChanges, commits, keyring, keyringChanges, state } = createHarness();
 
     const accountId = await wallet.initializeWithNewMnemonic({
       password: "password",
@@ -222,6 +214,7 @@ describe("Wallet", () => {
     ]);
     expect(wallet.getStatus()).toBe("unlocked");
     expect(state.accounts.has(accountId)).toBe(true);
+    expect(accounts.getAccountRecord(accountId)).not.toBeNull();
     expect(keyring.getSecrets()?.keySources).toHaveLength(1);
     expect([...state.keySources.values()][0]).toMatchObject({
       type: "bip39",
@@ -230,6 +223,13 @@ describe("Wallet", () => {
     });
     expect([...state.keyrings.values()][0]).toMatchObject({ createdAt: expect.any(Number) });
     expect(keyringChanges).toEqual([{ type: "keyringChanged" }]);
+    expect(accountChanges).toEqual([
+      {
+        type: "accountsChanged",
+        accountIds: [accountId],
+        namespaces: ["eip155"],
+      },
+    ]);
   });
 
   it("rejects an invalid mnemonic before commit or activation", async () => {
@@ -291,7 +291,7 @@ describe("Wallet", () => {
 
   it("does not activate wallet state when the initial commit fails", async () => {
     const failure = new Error("commit failed");
-    const { wallet, keyring } = createHarness({ rejectCommit: failure });
+    const { wallet, accounts, keyring } = createHarness({ rejectCommit: failure });
 
     await expect(
       wallet.initializeWithNewMnemonic({
@@ -306,10 +306,11 @@ describe("Wallet", () => {
     expect(keyring.listKeySources()).toEqual([]);
     expect(keyring.listHdKeyrings()).toEqual([]);
     expect(keyring.getSecrets()).toBeNull();
+    expect(accounts.listAccountRecords()).toEqual([]);
   });
 
   it("commits a derived account and the advanced cursor together", async () => {
-    const { wallet, commits, state } = createHarness();
+    const { wallet, accounts, commits, state } = createHarness();
     await wallet.initializeWithNewMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
@@ -325,6 +326,7 @@ describe("Wallet", () => {
       operation: "put",
       value: { hdKeyringId: keyring.hdKeyringId, nextDerivationIndex: 2 },
     });
+    expect(accounts.listAccountRecords()).toHaveLength(2);
   });
 
   it("confirms mnemonic backup while locked without reading the secret", async () => {
@@ -378,22 +380,9 @@ describe("Wallet", () => {
     expect(keyring.getHdKeyring(removable.hdKeyringId)).toBeNull();
   });
 
-  it("rejects hiding the selected account", async () => {
-    const { wallet } = createHarness();
-    const accountId = await wallet.initializeWithNewMnemonic({
-      password: "password",
-      mnemonic: PRIMARY_MNEMONIC,
-      namespace: "eip155",
-    });
-
-    await expect(wallet.accounts.setHidden({ accountId, hidden: true })).rejects.toMatchObject({
-      code: "account.operation_rejected",
-    });
-  });
-
-  it("stores private keys with an explicit namespace and does not allow hiding them", async () => {
+  it("stores private keys with an explicit namespace without deriving accounts on unlock", async () => {
     const { wallet, state, keyring, deriveAccount, importPrivateKey } = createHarness();
-    const accountId = await wallet.initializeFromPrivateKey({
+    await wallet.initializeFromPrivateKey({
       password: "password",
       privateKey: "private-key",
       namespace: "eip155",
@@ -406,9 +395,6 @@ describe("Wallet", () => {
     });
     const source = [...state.keySources.values()][0];
     if (!source) throw new Error("missing test source");
-    await expect(wallet.accounts.setHidden({ accountId, hidden: true })).rejects.toMatchObject({
-      details: { reason: "only_hd_accounts_can_be_hidden" },
-    });
 
     deriveAccount.mockClear();
     importPrivateKey.mockClear();
@@ -422,7 +408,7 @@ describe("Wallet", () => {
   });
 
   it("removes a source and its dependent records in one commit", async () => {
-    const { wallet, commits, keyring, state } = createHarness();
+    const { wallet, accounts, commits, keyring, state } = createHarness();
     const firstAccountId = await wallet.initializeWithNewMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
@@ -437,10 +423,9 @@ describe("Wallet", () => {
     const permission: PermissionRecord = {
       origin: "https://example.test",
       namespace: "eip155",
-      chainScopes: { "eip155:1": [firstAccountId] },
+      chainScopes: { "eip155:1": [firstAccountId, secondAccountId] },
     };
     state.permissions.set(permissionKey(permission), permission);
-    await wallet.accounts.select(secondAccountId);
 
     await wallet.keySources.remove(firstSource.keySourceId);
 
@@ -449,14 +434,17 @@ describe("Wallet", () => {
       "keySource.remove",
       "hdKeyring.remove",
       "account.remove",
+      "accountSelection.put",
       "permission.put",
     ]);
     expect(state.keySources.has(firstSource.keySourceId)).toBe(false);
     expect(state.accounts.has(firstAccountId)).toBe(false);
+    expect(accounts.getAccountRecord(firstAccountId)).toBeNull();
+    expect(accounts.getSelectedAccountId("eip155")).toBe(secondAccountId);
     expect(keyring.getSecrets()?.keySources.some((source) => source.keySourceId === firstSource.keySourceId)).toBe(
       false,
     );
-    expect([...state.permissions.values()][0]?.chainScopes["eip155:1"]).toEqual([]);
+    expect([...state.permissions.values()][0]?.chainScopes["eip155:1"]).toEqual([secondAccountId]);
   });
 
   it("locks by clearing decoded keyring secrets without committing persistence", async () => {
@@ -548,7 +536,7 @@ describe("Wallet", () => {
   });
 
   it("deletes identity records without deleting transaction history", async () => {
-    const { wallet, state } = createHarness();
+    const { wallet, accounts, state } = createHarness();
     await wallet.initializeWithNewMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
@@ -563,5 +551,6 @@ describe("Wallet", () => {
     expect(state.keyrings.size).toBe(0);
     expect(state.accounts.size).toBe(0);
     expect(state.selections.size).toBe(0);
+    expect(accounts.listAccountRecords()).toEqual([]);
   });
 });

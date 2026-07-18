@@ -1,12 +1,11 @@
-import type { AccountAddressCodecs } from "../../accounts/accountAddressCodec.js";
-import { addressFromAccountId } from "../../accounts/accountId.js";
+import type { Accounts } from "../../accounts/Accounts.js";
 import type { TransactionAggregate } from "../aggregate/index.js";
 import type { TransactionTrackingContext } from "../namespace/types.js";
 import { SubmittedTransactionTrackingInvariantError } from "./errors.js";
 
 export const buildSubmittedTransactionTrackingContext = (
   aggregate: TransactionAggregate,
-  accountAddressCodecs: AccountAddressCodecs,
+  accounts: Pick<Accounts, "getAddress">,
 ): TransactionTrackingContext => {
   if (aggregate.record.status !== "submitted") {
     throw new SubmittedTransactionTrackingInvariantError(
@@ -35,11 +34,10 @@ export const buildSubmittedTransactionTrackingContext = (
     namespace: aggregate.record.namespace,
     chainRef: aggregate.record.chainRef,
     origin: aggregate.record.origin,
-    from: addressFromAccountId({
-      accountAddressCodecs,
+    from: accounts.getAddress({
       chainRef: aggregate.record.chainRef,
       accountId: aggregate.record.accountId,
-    }),
+    }).canonicalAddress,
     submitted: structuredClone(aggregate.record.submitted),
   };
 };

@@ -1,6 +1,6 @@
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
-import type { AccountSelectionService } from "../../accounts/selection/types.js";
+import type { Accounts } from "../../accounts/Accounts.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainActivationService } from "../../chains/activation/types.js";
 import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
@@ -9,6 +9,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
 import type { ChainRpcReader } from "../../chains/rpc/types.js";
 import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
+import type { Namespace } from "../../namespaces/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
@@ -31,7 +32,7 @@ export {
 export type RpcHandlerDeps = {
   chainRpc: ChainRpcReader;
   walletChainSelection: WalletChainSelectionService;
-  accounts: AccountSelectionService;
+  accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   chainActivation: ChainActivationService;
@@ -151,7 +152,7 @@ export type MethodDefinition<P = unknown> = {
   handler: MethodHandler<P>;
 };
 
-export type Namespace = string;
+export type { Namespace } from "../../namespaces/types.js";
 
 export const defineMethod = <P>(definition: MethodDefinition<P>): MethodDefinition<P> => definition;
 

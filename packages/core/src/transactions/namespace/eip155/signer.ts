@@ -5,17 +5,14 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { accountIdFromAddress } from "../../../accounts/accountId.js";
-import { eip155AccountAddressCodec } from "../../../namespaces/eip155/accountAddressCodec.js";
 import type { Eip155AccountSigning } from "../../../namespaces/eip155/accountSigning.js";
+import { eip155AccountsAdapter } from "../../../namespaces/eip155/accounts.js";
 import { RpcInvalidParamsError, RpcInvalidRequestError } from "../../../rpc/errors.js";
-import { EIP155_NAMESPACE } from "../../../rpc/handlers/namespaces/eip155/constants.js";
 import { Eip155SigningAbortedError } from "./errors.js";
 import type { Eip155SignerContract } from "./types.js";
 import type { Eip155UnsignedTransaction } from "./unsignedTransaction.js";
 
 const textEncoder = new TextEncoder();
-const EIP155_ACCOUNT_ADDRESS_CODECS = new Map([[EIP155_NAMESPACE, eip155AccountAddressCodec]]);
 
 type SignerDeps = {
   accountSigning: Pick<Eip155AccountSigning, "signDigest">;
@@ -115,11 +112,7 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
 };
 
 const toEip155AccountId = (params: { chainRef: string; address: string }) => {
-  return accountIdFromAddress({
-    chainRef: params.chainRef,
-    address: params.address,
-    accountAddressCodecs: EIP155_ACCOUNT_ADDRESS_CODECS,
-  });
+  return eip155AccountsAdapter.accountIdFromAddress(params);
 };
 
 const toPersonalMessageHex = (message: HexType | string): HexType => {

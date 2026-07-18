@@ -10,11 +10,11 @@ describe("persistenceChange", () => {
       accountId: "eip155:01",
       origin: {
         type: "hd",
-        keyringId: "keyring-1",
+        hdKeyringId: "keyring-1",
         derivationIndex: 0,
       },
       hidden: false,
-      createAt: 1,
+      createdAt: 1,
     };
 
     const put = persistenceChange.put(accountPersistenceType, account);

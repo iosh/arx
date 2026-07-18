@@ -1,9 +1,10 @@
+import type { AccountId } from "../../accounts/accountId.js";
 import { getAccountIdNamespace } from "../../accounts/accountId.js";
-import type { ChainNamespace } from "../../accounts/selection/types.js";
 import { CAIP2_NAMESPACE_PATTERN, parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
+import type { Namespace } from "../../namespaces/types.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
-import { type AccountId, AccountIdSchema, type PermissionRecord } from "../../storage/records.js";
+import type { PermissionRecord } from "../persistence.js";
 import type {
   AuthorizationChainInput,
   ChainPermissionState,
@@ -50,7 +51,7 @@ export const clonePermissionsState = (state: PermissionsState): PermissionsState
   ),
 });
 
-export const parsePermissionNamespace = (namespace: string): ChainNamespace => {
+export const parsePermissionNamespace = (namespace: string): Namespace => {
   if (typeof namespace !== "string" || namespace.length === 0) {
     throw new RpcInvalidRequestError({
       message: "Permission namespace is required",
@@ -65,10 +66,10 @@ export const parsePermissionNamespace = (namespace: string): ChainNamespace => {
     });
   }
 
-  return namespace as ChainNamespace;
+  return namespace;
 };
 
-export const parsePermissionChainRefForNamespace = (namespace: ChainNamespace, chainRef: ChainRef): ChainRef => {
+export const parsePermissionChainRefForNamespace = (namespace: Namespace, chainRef: ChainRef): ChainRef => {
   const parsed = parseCaipChainRef(chainRef);
   if (parsed.namespace !== namespace) {
     throw new RpcInvalidRequestError({
@@ -81,34 +82,25 @@ export const parsePermissionChainRefForNamespace = (namespace: ChainNamespace, c
 };
 
 export const parsePermissionAccountIdsForNamespace = (
-  namespace: ChainNamespace,
+  namespace: Namespace,
   accountIds: readonly AccountId[],
 ): AccountId[] => {
   return uniqSorted(
     accountIds.map((value) => {
-      const parsed = AccountIdSchema.safeParse(value);
-      if (!parsed.success) {
-        throw new RpcInvalidRequestError({
-          message: "Permission accountId is invalid",
-          details: { namespace },
-        });
-      }
-
-      const accountId = parsed.data;
-      if (getAccountIdNamespace(accountId) !== namespace) {
+      if (getAccountIdNamespace(value) !== namespace) {
         throw new RpcInvalidRequestError({
           message: `Permission account does not belong to namespace "${namespace}"`,
           details: { namespace },
         });
       }
 
-      return accountId;
+      return value;
     }),
   );
 };
 
 export const buildValidatedPermissionChainStates = (
-  namespace: ChainNamespace,
+  namespace: Namespace,
   chains: readonly AuthorizationChainInput[],
 ): Record<ChainRef, ChainPermissionState> => {
   if (chains.length === 0) {
@@ -171,7 +163,7 @@ export const arePermissionChainStatesEqual = (
 
 export const buildPermissionRecordFromChainStates = (
   origin: string,
-  namespace: ChainNamespace,
+  namespace: Namespace,
   chains: Record<ChainRef, ChainPermissionState>,
 ): PermissionRecord => {
   return {
@@ -211,7 +203,7 @@ export const buildPermissionsStateFromRecords = (records: readonly PermissionRec
 
 export const buildPermissionAuthorization = (
   origin: string,
-  namespace: ChainNamespace,
+  namespace: Namespace,
   chains: Record<ChainRef, ChainPermissionState>,
 ): PermissionAuthorization => {
   return {

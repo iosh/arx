@@ -1,8 +1,8 @@
-import type { ChainNamespace } from "../../accounts/selection/types.js";
+import type { AccountId } from "../../accounts/accountId.js";
 import type { ChainDefinition, RpcEndpoint } from "../../chains/definition.js";
 import type { ChainRef } from "../../chains/ids.js";
+import type { Namespace } from "../../namespaces/types.js";
 import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";
-import type { AccountId } from "../../storage/records.js";
 import type { TransactionReadyProposal } from "../../transactions/TransactionsService.js";
 import type { ApprovalSource } from "../source.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
@@ -48,7 +48,7 @@ export type ApprovalQueueItem = {
   source: ApprovalSource;
   scope: ApprovalScope;
   origin: string;
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chainRef: ChainRef;
   createdAt: number;
 };
@@ -92,7 +92,7 @@ export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   approvalId: string;
   kind: K;
   origin: string;
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chainRef: ChainRef;
   scope: ApprovalScope;
   request: ApprovalRequest<K>;
@@ -125,7 +125,7 @@ export type ApprovalFinishedEvent = {
 
   kind?: ApprovalKind | undefined;
   origin?: string | undefined;
-  namespace?: ChainNamespace | undefined;
+  namespace?: Namespace | undefined;
   chainRef?: ChainRef | undefined;
 
   error?: ApprovalFinishedErrorSummary | undefined;

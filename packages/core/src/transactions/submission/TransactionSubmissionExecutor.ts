@@ -1,4 +1,4 @@
-import type { AccountAddressCodecs } from "../../accounts/accountAddressCodec.js";
+import type { Accounts } from "../../accounts/Accounts.js";
 import { isArxBaseError } from "../../errors.js";
 import type { TransactionAggregate, TransactionTerminalReason } from "../aggregate/index.js";
 import { buildTransactionTerminalReason, type TransactionAggregateStore } from "../aggregate/index.js";
@@ -23,7 +23,7 @@ type TransactionSubmissionExecutorDeps = {
     | "failSubmission"
   >;
   namespaces: Pick<NamespaceTransactions, "require">;
-  accountAddressCodecs: AccountAddressCodecs;
+  accounts: Pick<Accounts, "getAddress">;
   resourceLock: TransactionResourceLock;
 };
 
@@ -46,13 +46,13 @@ export class TransactionSubmissionExecutor {
     | "failSubmission"
   >;
   #namespaces: Pick<NamespaceTransactions, "require">;
-  #accountAddressCodecs: AccountAddressCodecs;
+  #accounts: Pick<Accounts, "getAddress">;
   #resourceLock: TransactionResourceLock;
 
   constructor(deps: TransactionSubmissionExecutorDeps) {
     this.#transactions = deps.transactions;
     this.#namespaces = deps.namespaces;
-    this.#accountAddressCodecs = deps.accountAddressCodecs;
+    this.#accounts = deps.accounts;
     this.#resourceLock = deps.resourceLock;
   }
 
@@ -89,7 +89,7 @@ export class TransactionSubmissionExecutor {
     let broadcastArtifact: BroadcastArtifact;
     try {
       broadcastArtifact = await submission.createBroadcastArtifact(
-        buildBroadcastArtifactContext(signing, this.#accountAddressCodecs),
+        buildBroadcastArtifactContext(signing, this.#accounts),
       );
     } catch (error) {
       await this.#failSubmission({
@@ -112,7 +112,7 @@ export class TransactionSubmissionExecutor {
     let broadcastResult: BroadcastResult;
     try {
       broadcastResult = await submission.broadcast(
-        buildBroadcastContext(broadcasting, broadcastArtifact, this.#accountAddressCodecs),
+        buildBroadcastContext(broadcasting, broadcastArtifact, this.#accounts),
       );
     } catch (error) {
       await this.#failSubmission({

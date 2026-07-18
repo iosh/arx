@@ -1,4 +1,4 @@
-import type { AccountAddressCodecs } from "../accounts/accountAddressCodec.js";
+import type { Accounts } from "../accounts/Accounts.js";
 import type { Messenger } from "../messenger/index.js";
 import type { TransactionAggregateStore } from "./aggregate/index.js";
 import type { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
@@ -14,7 +14,7 @@ import { SubmittedTransactionTracker } from "./tracking/SubmittedTransactionTrac
 type CreateTransactionServicesOptions = {
   aggregateStore: TransactionAggregateStore;
   namespaces: NamespaceTransactions;
-  accountAddressCodecs: AccountAddressCodecs;
+  accounts: Pick<Accounts, "getAddress">;
   resourceLock?: TransactionResourceLock;
   messenger?: Messenger;
 };
@@ -34,14 +34,14 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   const submission = new TransactionSubmissionExecutor({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountAddressCodecs: options.accountAddressCodecs,
+    accounts: options.accounts,
     resourceLock,
   });
   const transactions = new TransactionsService({
     aggregateStore: transactionsStore,
     namespaces: options.namespaces,
     submission,
-    accountAddressCodecs: options.accountAddressCodecs,
+    accounts: options.accounts,
     resourceLock,
     transactionChanges,
   });
@@ -49,13 +49,13 @@ export const createTransactionServices = (options: CreateTransactionServicesOpti
   const tracker = new SubmittedTransactionTracker({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountAddressCodecs: options.accountAddressCodecs,
+    accounts: options.accounts,
     resourceLock,
   });
   const monitor = new SubmittedTransactionMonitor({
     transactions: transactionsStore,
     namespaces: options.namespaces,
-    accountAddressCodecs: options.accountAddressCodecs,
+    accounts: options.accounts,
     tracker,
   });
   transactionChanges.onTransactionRecordsCommitted((transactionIds) => monitor.refresh({ transactionIds }));

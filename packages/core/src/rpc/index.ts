@@ -19,7 +19,6 @@ export {
 } from "./handlers/namespaces/index.js";
 export {
   type MethodDefinition,
-  type Namespace,
   NO_RPC_EXECUTION_CONTEXT,
   type RpcExecutionContext,
   RpcExecutionContextKinds,

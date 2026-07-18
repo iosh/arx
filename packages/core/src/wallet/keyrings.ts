@@ -1,14 +1,12 @@
+import { accountsChangedFromUpdate } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import { createAccountRecord } from "../accounts/accountRecord.js";
-import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
+import type { AccountRecord } from "../accounts/persistence.js";
 import { deriveBip39Seed } from "../keyring/bip39.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
 import { type Bip39KeySourceSecret, findKeySourceSecret, type KeyringSecrets } from "../keyring/secrets.js";
-import { persistenceChange } from "../persistence/change.js";
-import { WalletOperationRejectedError } from "./errors.js";
-import { permissionChangesForRemovedAccounts, selectionChangesForRemovedAccounts } from "./removal.js";
+import { permissionChangesForRemovedAccounts } from "./removal.js";
 import { requireKeyringSecrets } from "./unlocked.js";
 import type { WalletContext } from "./Wallet.js";
 
@@ -42,36 +40,21 @@ export const addHdKeyring = async (
     });
     const seed = await deriveBip39Seed(source);
     const identity = adapter.deriveAccount({ seed, derivationProfileId, derivationIndex: 0 });
-    if (await wallet.readers.accounts.get(identity.accountId)) {
-      throw new WalletOperationRejectedError("account_already_exists");
-    }
-
-    const account = createAccountRecord({
+    const account: Omit<AccountRecord, "hidden"> = {
       accountId: identity.accountId,
-      origin: { type: "hd", keyringId: hdKeyringId, derivationIndex: 0 },
-      createAt: createdAt,
-    });
-    const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
-    const selectionChanges = namespaceState
-      ? []
-      : [
-          persistenceChange.put(accountSelectionPersistenceType, {
-            namespace: params.namespace,
-            accountId: account.accountId,
-          }),
-        ];
-    const changes = [
-      ...keyringUpdate.persistenceChanges,
-      persistenceChange.put(accountPersistenceType, account),
-      ...selectionChanges,
-    ];
+      origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
+      createdAt,
+    };
+    const accountsUpdate = wallet.accounts.prepareAddAccount(account);
+    const changes = [...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges];
 
     await commit(changes);
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.autoLock.restart();
-    wallet.publishChanged({ accounts: [account.accountId] });
     wallet.publishKeyringChanged();
+    wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
     return account.accountId;
   });
@@ -92,20 +75,22 @@ export const deriveHdAccount = async (wallet: WalletContext, hdKeyringId: HdKeyr
       derivationProfileId: hdKeyring.derivationProfileId,
       derivationIndex: hdKeyring.nextDerivationIndex,
     });
-    const account = createAccountRecord({
+    const account: Omit<AccountRecord, "hidden"> = {
       accountId: identity.accountId,
-      origin: { type: "hd", keyringId: hdKeyringId, derivationIndex: hdKeyring.nextDerivationIndex },
-      createAt: Date.now(),
-    });
+      origin: { type: "hd", hdKeyringId, derivationIndex: hdKeyring.nextDerivationIndex },
+      createdAt: Date.now(),
+    };
     const keyringUpdate = wallet.keyring.prepareAdvanceHdKeyring(hdKeyringId);
-    const changes = [persistenceChange.put(accountPersistenceType, account), ...keyringUpdate.persistenceChanges];
+    const accountsUpdate = wallet.accounts.prepareAddAccount(account);
+    const changes = [...accountsUpdate.persistenceChanges, ...keyringUpdate.persistenceChanges];
 
     await commit(changes);
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.autoLock.restart();
-    wallet.publishChanged({ accounts: [account.accountId] });
     wallet.publishKeyringChanged();
+    wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
     return account.accountId;
   });
@@ -116,23 +101,22 @@ export const removeHdKeyring = async (wallet: WalletContext, hdKeyringId: HdKeyr
     const hdKeyring = wallet.keyring.getHdKeyring(hdKeyringId);
     if (!hdKeyring) throw new HdKeyringNotFoundError(hdKeyringId);
 
-    const accounts = await wallet.readers.accounts.listByKeyringIds([hdKeyringId]);
-    const accountIds = accounts.map((account) => account.accountId);
-    const selectionChanges = await selectionChangesForRemovedAccounts(wallet, accountIds);
+    const accountsUpdate = wallet.accounts.prepareRemoveHdAccounts([hdKeyringId]);
+    const accountIds = accountsUpdate?.removedAccountIds ?? [];
     const permissionChanges = await permissionChangesForRemovedAccounts(wallet, accountIds);
     const keyringUpdate = wallet.keyring.prepareRemoveHdKeyring(hdKeyringId);
     const changes = [
       ...keyringUpdate.persistenceChanges,
-      ...accountIds.map((accountId) => persistenceChange.remove(accountPersistenceType, accountId)),
-      ...selectionChanges,
+      ...(accountsUpdate?.persistenceChanges ?? []),
       ...permissionChanges,
     ];
 
     await commit(changes);
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.autoLock.restart();
-    wallet.publishChanged({ accounts: accountIds });
     wallet.publishKeyringChanged();
+    if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   });
 };

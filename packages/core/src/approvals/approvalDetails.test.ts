@@ -49,24 +49,23 @@ const CHAIN_VIEWS = {
 } as const;
 
 const ACCOUNTS = {
-  listOwnedForNamespace: () => [
+  listSelectableAddresses: (chainRef: string) => [
     {
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      namespace: "eip155",
+      chainRef,
       canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       displayAddress: "0xaaaa...aaaa",
     },
     {
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      namespace: "eip155",
+      chainRef,
       canonicalAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       displayAddress: "0xbbbb...bbbb",
     },
   ],
-  getActiveAccountForNamespace: () => ({
+  getSelectedAddress: (chainRef: string) => ({
     accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    namespace: "eip155",
-    chainRef: "eip155:1",
+    chainRef,
     canonicalAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     displayAddress: "0xbbbb...bbbb",
   }),

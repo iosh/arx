@@ -1,3 +1,4 @@
+import type { AccountsChanged } from "../accounts/types.js";
 import type { ApprovalQueueService } from "../approvals/queue/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
 import type { Networks, NetworksChanged } from "../chains/networks.js";
@@ -22,6 +23,7 @@ export type CoreUnsubscribe = () => void;
 export type CoreRuntimeChanged =
   | Readonly<{ owner: "wallet"; change: WalletChanged }>
   | Readonly<{ owner: "keyring"; change: KeyringChanged }>
+  | Readonly<{ owner: "accounts"; change: AccountsChanged }>
   | Readonly<{ owner: "networks"; change: NetworksChanged }>
   | Readonly<{ owner: "transactions"; change: TransactionsChanged }>
   | Readonly<{ owner: "permissions" }>

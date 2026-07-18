@@ -8,7 +8,7 @@ describe("builtin namespaces", () => {
 
     const [definition] = builtinNamespaces;
     expect(definition?.chainAddressing.namespace).toBe("eip155");
-    expect(definition?.accountAddressCodec.namespace).toBe("eip155");
+    expect(definition?.accounts.namespace).toBe("eip155");
     expect(definition?.keyring.namespace).toBe("eip155");
     expect(
       definition?.builtinChains.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),

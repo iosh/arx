@@ -1,8 +1,8 @@
-import type { AccountSelectionService } from "../accounts/selection/types.js";
+import type { Accounts } from "../accounts/Accounts.js";
+import type { AccountId } from "../accounts/accountId.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainViewsService } from "../chains/views/types.js";
 import { chainIdFromChainRef } from "../namespaces/eip155/chainId.js";
-import type { AccountId } from "../storage/records.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import * as Hex from "../utils/hex.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
@@ -45,12 +45,12 @@ type ApprovalDetailBase<K extends ApprovalKind, Request, Review> = {
 
 type RequestAccountsRequest = {
   selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountId: AccountId | null;
+  recommendedAccountId: AccountId;
 };
 
 type RequestPermissionsRequest = {
   selectableAccounts: ApprovalSelectableAccount[];
-  recommendedAccountId: AccountId | null;
+  recommendedAccountId: AccountId;
   requestedGrants: Array<{
     grantKind: string;
     chainRef: ChainRef;
@@ -119,7 +119,7 @@ export type ApprovalDetailsDeps = {
     get(approvalId: string): ApprovalRecord | undefined;
     getState(): { pending: ApprovalQueueItem[] };
   };
-  accounts: Pick<AccountSelectionService, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   chainViews: Pick<ChainViewsService, "findAvailableChainView" | "requireChainDefinition">;
 };
 
@@ -187,7 +187,7 @@ const buildSelectionDetail = (
       ...toDetailMeta(record),
       kind: ApprovalKinds.RequestAccounts,
       actions: {
-        canApprove: selectableAccounts.length > 0,
+        canApprove: true,
         canReject: true,
       },
       request: {
@@ -202,7 +202,7 @@ const buildSelectionDetail = (
     ...toDetailMeta(record),
     kind: ApprovalKinds.RequestPermissions,
     actions: {
-      canApprove: selectableAccounts.length > 0,
+      canApprove: true,
       canReject: true,
     },
     request: {

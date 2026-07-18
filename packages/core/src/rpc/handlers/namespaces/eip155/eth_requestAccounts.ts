@@ -15,9 +15,7 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   handler: async (context) => {
     const { deps, executionContext, invocation } = context;
     const chainRef = invocation.chainRef;
-    const suggested = deps.accounts
-      .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
-      .map((account) => account.displayAddress);
+    const suggested = deps.accounts.listSelectableAddresses(chainRef).map((account) => account.displayAddress);
 
     try {
       const approval = await requestProviderApproval({

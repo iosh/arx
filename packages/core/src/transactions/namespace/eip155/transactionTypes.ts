@@ -1,17 +1,16 @@
 import type { Hex } from "ox/Hex";
-import type { AccountAddress } from "../../../accounts/selection/types.js";
 import type { Eip155TransactionCoreFields } from "./unsignedTransaction.js";
 
 export type Eip155TransactionAccessListEntry = {
-  address: AccountAddress;
+  address: string;
   storageKeys: Hex[];
 };
 
 /** JSON form of an EIP-155 transaction request before approval. */
 export type Eip155TransactionPayload = {
   chainId?: Hex;
-  from?: AccountAddress;
-  to?: AccountAddress | null;
+  from?: string;
+  to?: string | null;
   value?: Hex;
   data?: Hex;
   gas?: Hex;
@@ -22,7 +21,7 @@ export type Eip155TransactionPayload = {
 };
 
 /** Request payload with a resolved sender. */
-export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
+export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: string };
 
 /** Durable JSON form of the submitted transaction facts. */
 export type Eip155SubmittedTransaction = Eip155TransactionCoreFields & {

@@ -1,4 +1,3 @@
-import type { AccountAddress } from "../../accounts/selection/types.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { JsonObject } from "../aggregate/json.js";
 import type { TransactionConflictKey, TransactionReplacementType, TransactionResourceKey } from "../aggregate/types.js";
@@ -86,7 +85,7 @@ export type TransactionPrepareContext<TNamespace extends string = string> = {
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
+  from: string | null;
   request: TransactionRequest<TNamespace>;
 };
 
@@ -96,7 +95,7 @@ export type TransactionSignContext<TNamespace extends string = string> = Omit<
   TransactionPrepareContext<TNamespace>,
   "from"
 > & {
-  from: AccountAddress;
+  from: string;
 };
 
 export type TransactionProposalStateContext<TNamespace extends string = string> = {
@@ -104,7 +103,7 @@ export type TransactionProposalStateContext<TNamespace extends string = string> 
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress;
+  from: string;
   request: TransactionRequest<TNamespace>;
 };
 
@@ -113,7 +112,7 @@ export type TransactionRecordContext<TNamespace extends string = string> = {
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
+  from: string | null;
 };
 
 export type TransactionTrackingContext<TNamespace extends string = string> = TransactionRecordContext<TNamespace> & {
@@ -137,7 +136,7 @@ export type TransactionReviewContext<TNamespace extends string = string> = {
   namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress;
+  from: string;
   request: TransactionRequest<TNamespace>;
   /** Latest prepared snapshot available to the review builder. */
   reviewSnapshot: TransactionReviewSnapshot<TNamespace> | null;
@@ -149,7 +148,7 @@ export type TransactionResourceKeyContext<TNamespace extends string = string> = 
   chainRef: ChainRef;
   origin: string;
   accountId: string;
-  from: AccountAddress;
+  from: string;
   request: TransactionRequest<TNamespace>;
   preparedPayload: TransactionPrepared<TNamespace>;
   replacement: {
@@ -163,7 +162,7 @@ export type TransactionReplacementRequestContext<TNamespace extends string = str
   chainRef: ChainRef;
   origin: string;
   accountId: string;
-  from: AccountAddress;
+  from: string;
   type: TransactionReplacementType;
   targetTransactionId: string;
   targetRequest: TransactionRequest<TNamespace>;
@@ -176,7 +175,7 @@ export type TransactionFinalizeSubmitContext<TNamespace extends string = string>
   chainRef: ChainRef;
   origin: string;
   accountId: string;
-  from: AccountAddress;
+  from: string;
   request: TransactionRequest<TNamespace>;
   preparedPayload: TransactionPrepared<TNamespace>;
   replacement: {
@@ -214,7 +213,7 @@ export type TransactionBroadcastArtifactContext<TNamespace extends string = stri
   chainRef: ChainRef;
   origin: string;
   accountId: string;
-  from: AccountAddress;
+  from: string;
   request: TransactionRequest<TNamespace>;
   approvedPayload: TransactionApproved<TNamespace>;
 };

@@ -1,6 +1,6 @@
+import type { Accounts } from "../../accounts/Accounts.js";
 import { type AccountId, getAccountIdNamespace } from "../../accounts/accountId.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
-import type { AccountsReader } from "../../accounts/persistence.js";
 import { deriveBip39Seed } from "../../keyring/bip39.js";
 import {
   HdKeyringNotFoundError,
@@ -8,6 +8,7 @@ import {
   KeySourceNotFoundError,
 } from "../../keyring/errors.js";
 import type { Keyring } from "../../keyring/Keyring.js";
+import type { KeySourceId } from "../../keyring/persistence.js";
 import { findKeySourceSecret, type KeySourceSecret } from "../../keyring/secrets.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import { type Eip155DigestSignature, signEip155HdDigest, signEip155PrivateKeyDigest } from "./keyring.js";
@@ -18,92 +19,58 @@ export type Eip155AccountSigning = Readonly<{
   signDigest(params: { accountId: AccountId; digest: Uint8Array }): Promise<Eip155DigestSignature>;
 }>;
 
-type SigningReaders = Readonly<{
-  accounts: Pick<AccountsReader, "get">;
-  keyring: Pick<Keyring, "getHdKeyring" | "getKeySource">;
-}>;
+const getKeySourceSecret = (keyring: Pick<Keyring, "getSecrets">, keySourceId: KeySourceId): KeySourceSecret => {
+  const secrets = keyring.getSecrets();
+  if (!secrets) throw new WalletLockedError();
 
-/** Non-secret signing inputs resolved before the current unlocked secrets are read. */
-type Eip155SigningTarget =
-  | Readonly<{
-      type: "hd";
-      keySourceId: string;
-      derivationProfileId: string;
-      derivationIndex: number;
-    }>
-  | Readonly<{
-      type: "private-key";
-      keySourceId: string;
-    }>;
+  const source = findKeySourceSecret(secrets, keySourceId);
+  if (!source) throw new KeySourceNotFoundError(keySourceId);
 
-const loadSigningTarget = async (readers: SigningReaders, accountId: AccountId): Promise<Eip155SigningTarget> => {
-  if (getAccountIdNamespace(accountId) !== EIP155_NAMESPACE) throw new AccountNotFoundError(accountId);
-
-  const account = await readers.accounts.get(accountId);
-  if (!account) throw new AccountNotFoundError(accountId);
-
-  if (account.origin.type === "hd") {
-    const hdKeyring = readers.keyring.getHdKeyring(account.origin.keyringId);
-    if (!hdKeyring) throw new HdKeyringNotFoundError(account.origin.keyringId);
-    if (hdKeyring.namespace !== EIP155_NAMESPACE) {
-      throw new KeyringUnsupportedNamespaceError(hdKeyring.namespace);
-    }
-
-    return {
-      type: "hd",
-      keySourceId: hdKeyring.keySourceId,
-      derivationProfileId: hdKeyring.derivationProfileId,
-      derivationIndex: account.origin.derivationIndex,
-    };
-  }
-
-  const sourceRecord = readers.keyring.getKeySource(account.origin.keySourceId);
-  if (sourceRecord?.type !== "private-key") {
-    throw new KeySourceNotFoundError(account.origin.keySourceId);
-  }
-  if (sourceRecord.namespace !== EIP155_NAMESPACE) {
-    throw new KeyringUnsupportedNamespaceError(sourceRecord.namespace);
-  }
-
-  return { type: "private-key", keySourceId: account.origin.keySourceId };
+  return source;
 };
 
-const signTargetDigest = async (
-  accountId: AccountId,
-  target: Eip155SigningTarget,
-  source: KeySourceSecret,
-  digest: Uint8Array,
-): Promise<Eip155DigestSignature> => {
-  if (target.type === "hd") {
-    if (source.type !== "bip39") throw new KeySourceNotFoundError(target.keySourceId);
-
-    const seed = await deriveBip39Seed(source);
-    return signEip155HdDigest({
-      accountId,
-      seed,
-      derivationProfileId: target.derivationProfileId,
-      derivationIndex: target.derivationIndex,
-      digest,
-    });
-  }
-
-  if (source.type !== "private-key") throw new KeySourceNotFoundError(target.keySourceId);
-  return signEip155PrivateKeyDigest({ accountId, source, digest });
-};
-
-export const createEip155AccountSigning = (params: {
+export const createEip155AccountSigning = ({
+  keyring,
+  accounts,
+}: {
   keyring: Keyring;
-  accounts: Pick<AccountsReader, "get">;
+  accounts: Pick<Accounts, "getAccountRecord">;
 }): Eip155AccountSigning => ({
   signDigest: async ({ accountId, digest }) => {
-    const target = await loadSigningTarget(params, accountId);
+    if (getAccountIdNamespace(accountId) !== EIP155_NAMESPACE) throw new AccountNotFoundError(accountId);
 
-    const secrets = params.keyring.getSecrets();
-    if (!secrets) throw new WalletLockedError();
+    const account = accounts.getAccountRecord(accountId);
+    if (!account) throw new AccountNotFoundError(accountId);
 
-    const source = findKeySourceSecret(secrets, target.keySourceId);
-    if (!source) throw new KeySourceNotFoundError(target.keySourceId);
+    if (account.origin.type === "hd") {
+      const hdKeyring = keyring.getHdKeyring(account.origin.hdKeyringId);
+      if (!hdKeyring) throw new HdKeyringNotFoundError(account.origin.hdKeyringId);
+      if (hdKeyring.namespace !== EIP155_NAMESPACE) {
+        throw new KeyringUnsupportedNamespaceError(hdKeyring.namespace);
+      }
 
-    return await signTargetDigest(accountId, target, source, digest);
+      const source = getKeySourceSecret(keyring, hdKeyring.keySourceId);
+      if (source.type !== "bip39") throw new KeySourceNotFoundError(hdKeyring.keySourceId);
+
+      const seed = await deriveBip39Seed(source);
+      return signEip155HdDigest({
+        accountId,
+        seed,
+        derivationProfileId: hdKeyring.derivationProfileId,
+        derivationIndex: account.origin.derivationIndex,
+        digest,
+      });
+    }
+
+    const sourceRecord = keyring.getKeySource(account.origin.keySourceId);
+    if (sourceRecord?.type !== "private-key") throw new KeySourceNotFoundError(account.origin.keySourceId);
+    if (sourceRecord.namespace !== EIP155_NAMESPACE) {
+      throw new KeyringUnsupportedNamespaceError(sourceRecord.namespace);
+    }
+
+    const source = getKeySourceSecret(keyring, sourceRecord.keySourceId);
+    if (source.type !== "private-key") throw new KeySourceNotFoundError(sourceRecord.keySourceId);
+
+    return signEip155PrivateKeyDigest({ accountId, source, digest });
   },
 });

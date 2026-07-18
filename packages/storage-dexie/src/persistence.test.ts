@@ -30,18 +30,18 @@ const createTestPersistence = (): ReturnType<typeof createDexiePersistence> => {
 
 const hdAccount = (params: {
   accountId: string;
-  keyringId: string;
-  createAt: number;
+  hdKeyringId: string;
+  createdAt: number;
   hidden?: boolean;
 }): AccountRecord => ({
   accountId: params.accountId,
   origin: {
     type: "hd",
-    keyringId: params.keyringId,
+    hdKeyringId: params.hdKeyringId,
     derivationIndex: 0,
   },
   hidden: params.hidden ?? false,
-  createAt: params.createAt,
+  createdAt: params.createdAt,
 });
 
 const transaction = (params: {
@@ -99,7 +99,7 @@ describe("createDexiePersistence", () => {
     const reader = createAccountsReader(context);
 
     try {
-      const read = reader.get("eip155:01");
+      const read = reader.listRecords();
       await expect(read).rejects.toBeInstanceOf(PersistenceReadError);
       await expect(read).rejects.toMatchObject({ code: PersistenceReadError.code });
       await expect(read).rejects.toHaveProperty("cause", failure);
@@ -115,19 +115,19 @@ describe("createDexiePersistence", () => {
     await context.ready;
     const failure = new Error("account read failed");
     const existingError = new PersistenceCommitError(new Error("owner read error"));
-    const get = vi
-      .spyOn(context.db.accounts, "get")
+    const toArray = vi
+      .spyOn(context.db.accounts, "toArray")
       .mockRejectedValueOnce(failure)
       .mockRejectedValueOnce(existingError);
 
     try {
-      const rawRead = reader.get("eip155:01");
+      const rawRead = reader.listRecords();
       await expect(rawRead).rejects.toBeInstanceOf(PersistenceReadError);
       await expect(rawRead).rejects.toMatchObject({ code: PersistenceReadError.code });
       await expect(rawRead).rejects.toHaveProperty("cause", failure);
-      await expect(reader.get("eip155:01")).rejects.toBe(existingError);
+      await expect(reader.listRecords()).rejects.toBe(existingError);
     } finally {
-      get.mockRestore();
+      toArray.mockRestore();
     }
   });
 
@@ -149,8 +149,8 @@ describe("createDexiePersistence", () => {
     };
     const account = hdAccount({
       accountId: "eip155:01",
-      keyringId: hdKeyring.hdKeyringId,
-      createAt: 1,
+      hdKeyringId: hdKeyring.hdKeyringId,
+      createdAt: 1,
     });
     const permission = {
       origin: "https://dapp.example",
@@ -176,7 +176,7 @@ describe("createDexiePersistence", () => {
     expect(await persistence.readers.encryptedVault.get()).toEqual(encryptedVault);
     expect(await persistence.readers.keySources.listAll()).toEqual([source]);
     expect(await persistence.readers.hdKeyrings.listAll()).toEqual([hdKeyring]);
-    expect(await persistence.readers.accounts.get(account.accountId)).toEqual(account);
+    expect(await persistence.readers.accounts.listRecords()).toEqual([account]);
     expect(await persistence.readers.permissions.listReferencingAccountIds([account.accountId])).toEqual([permission]);
     expect(await persistence.readers.permissions.listReferencingChainRef("eip155:1")).toEqual([permission]);
   });
@@ -188,6 +188,15 @@ describe("createDexiePersistence", () => {
 
     expect(context.db.hdKeyrings.schema.primKey.keyPath).toBe("hdKeyringId");
     expect(context.db.hdKeyrings.schema.indexes).toEqual([]);
+  });
+
+  it("uses the account identity primary key without owner-specific query indexes", async () => {
+    const context = createDexiePersistenceContext(createDatabaseName());
+    databaseConnections.push(context.db);
+    await context.ready;
+
+    expect(context.db.accounts.schema.primKey.keyPath).toBe("accountId");
+    expect(context.db.accounts.schema.indexes).toEqual([]);
   });
 
   it("rolls back earlier writes when a later store operation fails", async () => {
@@ -205,7 +214,7 @@ describe("createDexiePersistence", () => {
       }),
       persistenceChange.put(
         persistenceTypes.account,
-        hdAccount({ accountId: "eip155:02", keyringId: "keyring-1", createAt: 2 }),
+        hdAccount({ accountId: "eip155:02", hdKeyringId: "keyring-1", createdAt: 2 }),
       ),
     ]);
 
@@ -216,13 +225,13 @@ describe("createDexiePersistence", () => {
     expect(await context.db.settings.get("autoLock")).toBeUndefined();
   });
 
-  it("reads namespace accounts and required selection in one logical query", async () => {
+  it("loads account records and selections independently for Accounts bootstrap", async () => {
     const persistence = createTestPersistence();
-    const first = hdAccount({ accountId: "eip155:01", keyringId: "keyring-1", createAt: 1 });
+    const first = hdAccount({ accountId: "eip155:01", hdKeyringId: "keyring-1", createdAt: 1 });
     const second = hdAccount({
       accountId: "eip155:02",
-      keyringId: "keyring-1",
-      createAt: 2,
+      hdKeyringId: "keyring-1",
+      createdAt: 2,
       hidden: true,
     });
     const selection = {
@@ -236,10 +245,8 @@ describe("createDexiePersistence", () => {
       persistenceChange.put(persistenceTypes.accountSelection, selection),
     ]);
 
-    const namespaceAccounts = await persistence.readers.accounts.getNamespaceAccounts("eip155");
-    expect(namespaceAccounts?.selection).toEqual(selection);
-    expect(namespaceAccounts?.accounts).toEqual(expect.arrayContaining([first, second]));
-    expect(await persistence.readers.accounts.getNamespaceAccounts("solana")).toBeNull();
+    expect(await persistence.readers.accounts.listRecords()).toEqual(expect.arrayContaining([first, second]));
+    expect(await persistence.readers.accounts.listSelections()).toEqual([selection]);
   });
 
   it("queries transaction history cursors, statuses, and conflict groups", async () => {

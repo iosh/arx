@@ -1,22 +1,18 @@
-export type { AccountAddressCodec, AccountAddressCodecs } from "./accountAddressCodec.js";
-export { getAccountAddressCodec } from "./accountAddressCodec.js";
+export type { AccountsRemovalUpdate, AccountsUpdate } from "./Accounts.js";
+export { Accounts, accountsChangedFromUpdate } from "./Accounts.js";
 export type { AccountId } from "./accountId.js";
-export {
-  accountIdFromAddress,
-  addressFromAccountId,
-  getAccountIdNamespace,
-  parseAccountId,
-} from "./accountId.js";
-export { createAccountRecord, renameAccount, selectAccount, setAccountHidden } from "./accountRecord.js";
-export type { AccountsChangedPayload, AccountsService, ListAccountsParams } from "./accountsTypes.js";
+export { accountIdFromParts, getAccountIdNamespace, parseAccountId } from "./accountId.js";
+export type { AccountsBootstrap } from "./bootstrap.js";
+export { loadAccountsBootstrap } from "./bootstrap.js";
 export * from "./errors.js";
+export type { AccountsNamespaceAdapter, AccountsNamespaceAdapters } from "./namespaceAdapter.js";
+export { getAccountsNamespaceAdapter } from "./namespaceAdapter.js";
 export type {
   AccountOrigin,
   AccountRecord,
   AccountSelectionRecord,
   AccountsReader,
   HdAccountOrigin,
-  NamespaceAccounts,
   PrivateKeyAccountOrigin,
 } from "./persistence.js";
-export * from "./selection/index.js";
+export type { Account, AccountAddress, AccountsChanged } from "./types.js";

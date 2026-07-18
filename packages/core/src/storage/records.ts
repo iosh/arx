@@ -1,20 +1,6 @@
-import { z } from "zod";
+import type { AccountId } from "../accounts/accountId.js";
 import type { RpcEndpoint } from "../chains/definition.js";
 import type { ChainRef } from "../chains/ids.js";
-
-export type AccountNamespace = string;
-
-// External input parser for account keys. Storage records themselves are typed
-// values and are not runtime-validated through zod.
-export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
-  error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
-});
-export type AccountId = string;
-
-export type AccountSelectionStateRecord = {
-  id: "account-selection";
-  selectedAccountIdsByNamespace: Record<string, AccountId>;
-};
 
 export type ChainRpcEndpointOverrideRecord = {
   chainRef: ChainRef;
@@ -41,15 +27,6 @@ export type ProviderChainSelectionRecord = {
   namespace: string;
   chainRef: ChainRef;
   updatedAt: number;
-};
-
-export type AccountRecord = {
-  accountId: AccountId;
-  keyringId: string;
-  derivationIndex?: number | undefined;
-  alias?: string | undefined;
-  hidden?: boolean | undefined;
-  createdAt: number;
 };
 
 // Empty means the origin is connected to the chain but has no account access on it.

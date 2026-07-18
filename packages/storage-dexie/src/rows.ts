@@ -23,13 +23,7 @@ export type EncryptedVaultRow = EncryptedVaultRecord & {
 export type SettingRow = SettingRecord;
 export type KeySourceRow = KeySourceRecord;
 export type HdKeyringRow = HdKeyringRecord;
-
-export type AccountRow = AccountRecord & {
-  namespace: string;
-  hdKeyringId?: string;
-  privateKeySourceId?: string;
-};
-
+export type AccountRow = AccountRecord;
 export type AccountSelectionRow = AccountSelectionRecord;
 
 export type PermissionRow = PermissionRecord & {

@@ -4,7 +4,6 @@ export type {
   AccountSelectionRecord,
   AccountsReader,
   HdAccountOrigin,
-  NamespaceAccounts,
   PrivateKeyAccountOrigin,
 } from "../accounts/persistence.js";
 export type {

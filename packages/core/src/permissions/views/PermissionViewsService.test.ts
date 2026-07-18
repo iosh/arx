@@ -1,110 +1,79 @@
 import { describe, expect, it } from "vitest";
+import type { AccountId } from "../../accounts/accountId.js";
+import { AccountNotFoundError } from "../../accounts/errors.js";
 import { createPermissionViewsService } from "./PermissionViewsService.js";
 
 const ORIGIN = "https://example.com";
-const VALID_ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const STALE_ACCOUNT_ID = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const CHAIN_REF = "eip155:1";
+const ACCOUNT_ID: AccountId = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const MISSING_ACCOUNT_ID: AccountId = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-describe("createPermissionViewsService", () => {
-  it("filters stale accounts across connection and UI projections", async () => {
-    const service = createPermissionViewsService({
-      permissions: {
-        getAuthorization: (origin, options) => {
-          if (origin !== ORIGIN || options.namespace !== "eip155") {
-            return null;
-          }
-
-          return {
-            origin,
-            namespace: "eip155",
-            chains: {
-              "eip155:1": {
-                accountIds: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
-              },
-              "eip155:10": {
-                accountIds: [STALE_ACCOUNT_ID],
-              },
-            },
-          };
-        },
-        getState: () => ({
-          origins: {
-            [ORIGIN]: {
-              eip155: {
-                chains: {
-                  "eip155:1": {
-                    accountIds: [VALID_ACCOUNT_ID, STALE_ACCOUNT_ID],
-                  },
-                  "eip155:10": {
-                    accountIds: [STALE_ACCOUNT_ID],
-                  },
-                },
-              },
+const createService = (accountIds: readonly AccountId[]) =>
+  createPermissionViewsService({
+    permissions: {
+      getAuthorization: (origin, options) =>
+        origin === ORIGIN && options.namespace === "eip155"
+          ? {
+              origin,
+              namespace: "eip155",
+              chains: { [CHAIN_REF]: { accountIds: [...accountIds] } },
+            }
+          : null,
+      getState: () => ({
+        origins: {
+          [ORIGIN]: {
+            eip155: {
+              chains: { [CHAIN_REF]: { accountIds: [...accountIds] } },
             },
           },
-        }),
-      },
-      accounts: {
-        getOwnedAccount: ({ accountId }) => {
-          if (accountId !== VALID_ACCOUNT_ID) {
-            return null;
-          }
-
-          return {
-            accountId,
-            namespace: "eip155",
-            canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          };
         },
-      },
-    });
+      }),
+    },
+    accounts: {
+      getAccount: (accountId) =>
+        accountId === ACCOUNT_ID
+          ? {
+              accountId,
+              namespace: "eip155",
+              origin: { type: "private-key", keySourceId: "source-1" },
+              hidden: false,
+              selected: true,
+              createdAt: 1,
+            }
+          : null,
+      getAddress: ({ accountId, chainRef }) => ({
+        accountId,
+        chainRef,
+        canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    },
+  });
 
-    expect(service.getAuthorizationSnapshot(ORIGIN, { chainRef: "eip155:1" })).toEqual({
+describe("createPermissionViewsService", () => {
+  it("projects permitted account addresses", () => {
+    const service = createService([ACCOUNT_ID]);
+
+    expect(service.getAuthorizationSnapshot(ORIGIN, { chainRef: CHAIN_REF })).toEqual({
       namespace: "eip155",
-      chainRef: "eip155:1",
+      chainRef: CHAIN_REF,
       isPermittedChain: true,
-      permittedChainRefs: ["eip155:1", "eip155:10"],
-      permittedAccountIds: [VALID_ACCOUNT_ID],
+      permittedChainRefs: [CHAIN_REF],
+      permittedAccountIds: [ACCOUNT_ID],
       accounts: [
         {
-          accountId: VALID_ACCOUNT_ID,
+          accountId: ACCOUNT_ID,
           canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         },
       ],
       isAuthorized: true,
     });
+  });
 
-    expect(service.getAuthorizationSnapshot(ORIGIN, { chainRef: "eip155:10" })).toMatchObject({
-      namespace: "eip155",
-      chainRef: "eip155:10",
-      isPermittedChain: true,
-      permittedChainRefs: ["eip155:1", "eip155:10"],
-      permittedAccountIds: [],
-      accounts: [],
-      isAuthorized: false,
-    });
+  it("rejects a permission that references a missing account", () => {
+    const service = createService([MISSING_ACCOUNT_ID]);
 
-    await expect(service.assertAuthorized(ORIGIN, { chainRef: "eip155:10" })).rejects.toMatchObject({
-      code: "global.permission.not_connected",
-    });
-
-    expect(service.buildPermissionsSnapshot()).toEqual({
-      origins: {
-        [ORIGIN]: {
-          eip155: {
-            chains: {
-              "eip155:1": {
-                accountIds: [VALID_ACCOUNT_ID],
-              },
-              "eip155:10": {
-                accountIds: [],
-              },
-            },
-          },
-        },
-      },
-    });
+    expect(() => service.getAuthorizationSnapshot(ORIGIN, { chainRef: CHAIN_REF })).toThrow(AccountNotFoundError);
   });
 });

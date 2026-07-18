@@ -1,6 +1,6 @@
+import { accountsChangedFromUpdate } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import { createAccountRecord } from "../accounts/accountRecord.js";
-import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
+import type { AccountRecord } from "../accounts/persistence.js";
 import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
 import { KeyringDuplicateSourceError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
@@ -15,7 +15,7 @@ import { persistenceChange } from "../persistence/change.js";
 import { replaceVaultPlaintext } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
 import { WalletOperationRejectedError } from "./errors.js";
-import { permissionChangesForRemovedAccounts, selectionChangesForRemovedAccounts } from "./removal.js";
+import { permissionChangesForRemovedAccounts } from "./removal.js";
 import { requireKeyringSecrets } from "./unlocked.js";
 import type { WalletContext } from "./Wallet.js";
 
@@ -47,15 +47,11 @@ const addMnemonic = async (
       derivationProfileId: adapter.defaultDerivationProfileId,
       derivationIndex: 0,
     });
-    if (await wallet.readers.accounts.get(identity.accountId)) {
-      throw new WalletOperationRejectedError("account_already_exists");
-    }
-
-    const account = createAccountRecord({
+    const account: Omit<AccountRecord, "hidden"> = {
       accountId: identity.accountId,
-      origin: { type: "hd", keyringId: hdKeyringId, derivationIndex: 0 },
-      createAt: createdAt,
-    });
+      origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
+      createdAt,
+    };
     const keyringUpdate = wallet.keyring.prepareAddBip39Source({
       source: {
         keySourceId,
@@ -71,32 +67,25 @@ const addMnemonic = async (
         createdAt,
       },
     });
-    const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
+    const accountsUpdate = wallet.accounts.prepareAddAccount(account);
     const nextSecrets = createKeyringSecrets([...secrets.keySources, source]);
     const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
-    const selectionChanges = namespaceState
-      ? []
-      : [
-          persistenceChange.put(accountSelectionPersistenceType, {
-            namespace: params.namespace,
-            accountId: account.accountId,
-          }),
-        ];
     const changes = [
       persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
       ...keyringUpdate.persistenceChanges,
-      persistenceChange.put(accountPersistenceType, account),
-      ...selectionChanges,
+      ...accountsUpdate.persistenceChanges,
     ];
 
     await commit(changes);
 
     wallet.vault.activate(nextUnlocked);
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
     wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true, accounts: [account.accountId] });
+    wallet.publishChanged({ vault: true });
     wallet.publishKeyringChanged();
+    wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
     return account.accountId;
   });
@@ -142,47 +131,36 @@ export const importPrivateKey = async (
     if (existingSource) throw new KeyringDuplicateSourceError(existingSource.keySourceId);
 
     const identity = adapter.importPrivateKey(source);
-    if (await wallet.readers.accounts.get(identity.accountId)) {
-      throw new WalletOperationRejectedError("account_already_exists");
-    }
-
-    const account = createAccountRecord({
+    const account: Omit<AccountRecord, "hidden"> = {
       accountId: identity.accountId,
       origin: { type: "private-key", keySourceId },
-      createAt: createdAt,
-    });
+      createdAt,
+    };
     const keyringUpdate = wallet.keyring.prepareAddPrivateKeySource({
       keySourceId,
       type: "private-key",
       namespace: params.namespace,
       createdAt,
     });
-    const namespaceState = await wallet.readers.accounts.getNamespaceAccounts(params.namespace);
+    const accountsUpdate = wallet.accounts.prepareAddAccount(account);
     const nextSecrets = createKeyringSecrets([...secrets.keySources, source]);
     const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
-    const selectionChanges = namespaceState
-      ? []
-      : [
-          persistenceChange.put(accountSelectionPersistenceType, {
-            namespace: params.namespace,
-            accountId: account.accountId,
-          }),
-        ];
     const changes = [
       persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
       ...keyringUpdate.persistenceChanges,
-      persistenceChange.put(accountPersistenceType, account),
-      ...selectionChanges,
+      ...accountsUpdate.persistenceChanges,
     ];
 
     await commit(changes);
 
     wallet.vault.activate(nextUnlocked);
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
     wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true, accounts: [account.accountId] });
+    wallet.publishChanged({ vault: true });
     wallet.publishKeyringChanged();
+    wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
     return account.accountId;
   });
@@ -218,12 +196,11 @@ export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySou
     if (remainingSources.length === 0) throw new WalletOperationRejectedError("last_source_requires_delete_wallet");
 
     const keyrings = sourceRecord.type === "bip39" ? wallet.keyring.listHdKeyringsByKeySourceIds([keySourceId]) : [];
-    const accounts =
+    const accountsUpdate =
       sourceRecord.type === "bip39"
-        ? await wallet.readers.accounts.listByKeyringIds(keyrings.map((keyring) => keyring.hdKeyringId))
-        : await wallet.readers.accounts.listByPrivateKeySourceIds([keySourceId]);
-    const accountIds = accounts.map((account) => account.accountId);
-    const selectionChanges = await selectionChangesForRemovedAccounts(wallet, accountIds);
+        ? wallet.accounts.prepareRemoveHdAccounts(keyrings.map((keyring) => keyring.hdKeyringId))
+        : wallet.accounts.prepareRemovePrivateKeyAccounts([keySourceId]);
+    const accountIds = accountsUpdate?.removedAccountIds ?? [];
     const permissionChanges = await permissionChangesForRemovedAccounts(wallet, accountIds);
     const keyringUpdate = wallet.keyring.prepareRemoveKeySource(keySourceId);
     const nextSecrets = createKeyringSecrets(remainingSources);
@@ -231,8 +208,7 @@ export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySou
     const changes = [
       persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
       ...keyringUpdate.persistenceChanges,
-      ...accountIds.map((accountId) => persistenceChange.remove(accountPersistenceType, accountId)),
-      ...selectionChanges,
+      ...(accountsUpdate?.persistenceChanges ?? []),
       ...permissionChanges,
     ];
 
@@ -240,9 +216,11 @@ export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySou
 
     wallet.vault.activate(nextUnlocked);
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
     wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true, accounts: accountIds });
+    wallet.publishChanged({ vault: true });
     wallet.publishKeyringChanged();
+    if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   });
 };

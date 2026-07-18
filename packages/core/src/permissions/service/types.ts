@@ -1,6 +1,6 @@
-import type { ChainNamespace } from "../../accounts/selection/types.js";
+import type { AccountId } from "../../accounts/accountId.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountId } from "../../storage/records.js";
+import type { Namespace } from "../../namespaces/types.js";
 import type { ConnectionGrantKind } from "../connectionGrantKinds.js";
 
 export type ChainPermissionState = {
@@ -11,7 +11,7 @@ export type NamespacePermissionState = {
   chains: Record<ChainRef, ChainPermissionState>;
 };
 
-export type OriginPermissionState = Record<ChainNamespace, NamespacePermissionState>;
+export type OriginPermissionState = Record<Namespace, NamespacePermissionState>;
 
 export type OriginPermissions = {
   origin: string;
@@ -30,13 +30,13 @@ export type PermissionsState = {
  */
 export type PermissionAuthorization = {
   origin: string;
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chains: Record<ChainRef, ChainPermissionState>;
 };
 
 export type ChainPermissionAuthorization = {
   origin: string;
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chainRef: ChainRef;
   accountIds: AccountId[];
 };
@@ -47,23 +47,23 @@ export type AuthorizationChainInput = {
 };
 
 export type GrantAuthorizationOptions = {
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chains: [AuthorizationChainInput, ...AuthorizationChainInput[]];
 };
 
 export type SetChainAccountIdsOptions = {
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chainRef: ChainRef;
   accountIds: AccountId[];
 };
 
 export type RevokeChainAuthorizationOptions = {
-  namespace: ChainNamespace;
+  namespace: Namespace;
   chainRef: ChainRef;
 };
 
 export type RevokeNamespaceAuthorizationOptions = {
-  namespace: ChainNamespace;
+  namespace: Namespace;
 };
 
 export type RevokePermissionResult = {
@@ -94,10 +94,10 @@ export type RequestPermissionsApprovalResult = {
 
 export type PermissionsReader = {
   getState(): PermissionsState;
-  getAuthorization(origin: string, options: { namespace: ChainNamespace }): PermissionAuthorization | null;
+  getAuthorization(origin: string, options: { namespace: Namespace }): PermissionAuthorization | null;
   getChainAuthorization(
     origin: string,
-    options: { namespace: ChainNamespace; chainRef: ChainRef },
+    options: { namespace: Namespace; chainRef: ChainRef },
   ): ChainPermissionAuthorization | null;
   listOriginPermissions(origin: string): PermissionAuthorization[];
 };

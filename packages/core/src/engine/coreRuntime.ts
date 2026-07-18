@@ -2,6 +2,7 @@ import type { ApprovalQueueService } from "../approvals/queue/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
 import type { Networks, NetworksChanged } from "../chains/networks.js";
 import type { WalletChainSelectionDefaults } from "../chains/selection.js";
+import type { KeyringChanged } from "../keyring/Keyring.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
@@ -20,6 +21,7 @@ export type CoreUnsubscribe = () => void;
 
 export type CoreRuntimeChanged =
   | Readonly<{ owner: "wallet"; change: WalletChanged }>
+  | Readonly<{ owner: "keyring"; change: KeyringChanged }>
   | Readonly<{ owner: "networks"; change: NetworksChanged }>
   | Readonly<{ owner: "transactions"; change: TransactionsChanged }>
   | Readonly<{ owner: "permissions" }>

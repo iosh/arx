@@ -1,15 +1,10 @@
 import type { AccountId } from "../accounts/accountId.js";
 import { createAccountRecord } from "../accounts/accountRecord.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
+import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
-import { type BackupStatus, hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
-import {
-  type Bip39KeySourceSecret,
-  canonicalizeMnemonicWords,
-  createKeyringSecrets,
-  encodeKeyringSecrets,
-  type PrivateKeySourceSecret,
-} from "../keyring/secrets.js";
+import type { BackupStatus } from "../keyring/persistence.js";
+import { createKeyringSecrets, encodeKeyringSecrets, type PrivateKeySourceSecret } from "../keyring/secrets.js";
 import { persistenceChange } from "../persistence/change.js";
 import { createUnlockedVault } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
@@ -21,34 +16,47 @@ const initializeBip39 = async (
   params: {
     password: string;
     mnemonic: string;
-    passphrase?: string;
     namespace: string;
     backupStatus: BackupStatus;
   },
 ): Promise<AccountId> => {
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
-  const keyringId = crypto.randomUUID();
-  const createAt = Date.now();
-  const source: Bip39KeySourceSecret = {
+  const hdKeyringId = crypto.randomUUID();
+  const createdAt = Date.now();
+  const source = importBip39KeySourceSecret({
     keySourceId,
-    type: "bip39",
-    mnemonic: canonicalizeMnemonicWords(params.mnemonic),
-    ...(params.passphrase ? { passphrase: params.passphrase } : {}),
-  };
+    mnemonic: params.mnemonic,
+  });
 
   return await wallet.mutations.run(async (commit) => {
     if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
 
+    const seed = await deriveBip39Seed(source);
     const identity = adapter.deriveAccount({
-      source,
+      seed,
       derivationProfileId: adapter.defaultDerivationProfileId,
       derivationIndex: 0,
     });
     const account = createAccountRecord({
       accountId: identity.accountId,
-      origin: { type: "hd", keyringId, derivationIndex: 0 },
-      createAt,
+      origin: { type: "hd", keyringId: hdKeyringId, derivationIndex: 0 },
+      createAt: createdAt,
+    });
+    const keyringUpdate = wallet.keyring.prepareAddBip39Source({
+      source: {
+        keySourceId,
+        type: "bip39",
+        backupStatus: params.backupStatus,
+        createdAt,
+      },
+      hdKeyring: {
+        hdKeyringId,
+        namespace: params.namespace,
+        derivationProfileId: adapter.defaultDerivationProfileId,
+        nextDerivationIndex: 1,
+        createdAt,
+      },
     });
 
     const secrets = createKeyringSecrets([source]);
@@ -58,20 +66,7 @@ const initializeBip39 = async (
     });
     const changes = [
       persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
-      persistenceChange.put(keySourcePersistenceType, {
-        keySourceId,
-        type: "bip39",
-        backupStatus: params.backupStatus,
-        createAt,
-      }),
-      persistenceChange.put(hdKeyringPersistenceType, {
-        keyringId,
-        keySourceId,
-        namespace: params.namespace,
-        derivationProfileId: adapter.defaultDerivationProfileId,
-        nextDerivationIndex: 1,
-        createAt,
-      }),
+      ...keyringUpdate.persistenceChanges,
       persistenceChange.put(accountPersistenceType, account),
       persistenceChange.put(accountSelectionPersistenceType, {
         namespace: params.namespace,
@@ -82,9 +77,11 @@ const initializeBip39 = async (
     await commit(changes);
 
     wallet.vault.activate(unlocked);
-    wallet.keyring.activate(secrets);
+    wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
-    wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+    wallet.publishChanged({ vault: true, accounts: [account.accountId] });
+    wallet.publishKeyringChanged();
 
     return account.accountId;
   });
@@ -92,12 +89,12 @@ const initializeBip39 = async (
 
 export const initializeWithNewMnemonic = async (
   wallet: WalletContext,
-  params: { password: string; mnemonic: string; passphrase?: string; namespace: string },
+  params: { password: string; mnemonic: string; namespace: string },
 ): Promise<AccountId> => await initializeBip39(wallet, { ...params, backupStatus: "pending" });
 
 export const initializeFromMnemonic = async (
   wallet: WalletContext,
-  params: { password: string; mnemonic: string; passphrase?: string; namespace: string },
+  params: { password: string; mnemonic: string; namespace: string },
 ): Promise<AccountId> => await initializeBip39(wallet, { ...params, backupStatus: "confirmed" });
 
 export const initializeFromPrivateKey = async (
@@ -106,7 +103,7 @@ export const initializeFromPrivateKey = async (
 ): Promise<AccountId> => {
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
-  const createAt = Date.now();
+  const createdAt = Date.now();
   const source: PrivateKeySourceSecret = {
     keySourceId,
     type: "private-key",
@@ -120,7 +117,13 @@ export const initializeFromPrivateKey = async (
     const account = createAccountRecord({
       accountId: identity.accountId,
       origin: { type: "private-key", keySourceId },
-      createAt,
+      createAt: createdAt,
+    });
+    const keyringUpdate = wallet.keyring.prepareAddPrivateKeySource({
+      keySourceId,
+      type: "private-key",
+      namespace: params.namespace,
+      createdAt,
     });
 
     const secrets = createKeyringSecrets([source]);
@@ -130,12 +133,7 @@ export const initializeFromPrivateKey = async (
     });
     const changes = [
       persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
-      persistenceChange.put(keySourcePersistenceType, {
-        keySourceId,
-        type: "private-key",
-        namespace: params.namespace,
-        createAt,
-      }),
+      ...keyringUpdate.persistenceChanges,
       persistenceChange.put(accountPersistenceType, account),
       persistenceChange.put(accountSelectionPersistenceType, {
         namespace: params.namespace,
@@ -146,9 +144,11 @@ export const initializeFromPrivateKey = async (
     await commit(changes);
 
     wallet.vault.activate(unlocked);
-    wallet.keyring.activate(secrets);
+    wallet.keyring.applyCommittedUpdate(keyringUpdate);
+    wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
-    wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+    wallet.publishChanged({ vault: true, accounts: [account.accountId] });
+    wallet.publishKeyringChanged();
 
     return account.accountId;
   });

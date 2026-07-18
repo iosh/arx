@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createKeyringSecrets, decodeKeyringSecrets, encodeKeyringSecrets } from "./secrets.js";
 
 describe("keyring secrets codec", () => {
-  it("roundtrips BIP39 and private-key secrets without metadata fields", () => {
+  it("roundtrips BIP39 and private-key secrets without non-secret record fields", () => {
     const secrets = createKeyringSecrets([
       {
         keySourceId: "source-bip39",
         type: "bip39",
         mnemonic: "test mnemonic",
-        passphrase: "passphrase",
       },
       {
         keySourceId: "source-private-key",

@@ -1,15 +1,9 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { HDKey } from "@scure/bip32";
-import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english";
 import type { AccountId } from "../../accounts/accountId.js";
-import {
-  KeyringInvalidMnemonicError,
-  KeyringSecretUnavailableError,
-  KeyringUnsupportedDerivationProfileError,
-} from "../../keyring/errors.js";
+import { KeyringUnsupportedDerivationProfileError } from "../../keyring/errors.js";
 import type { KeyringNamespaceAdapter } from "../../keyring/namespaceAdapter.js";
-import type { Bip39KeySourceSecret, PrivateKeySourceSecret } from "../../keyring/secrets.js";
+import type { PrivateKeySourceSecret } from "../../keyring/secrets.js";
 import { Eip155SigningAccountMismatchError } from "./errors.js";
 import { parsePrivateKeyBytes, privateKeyToEvmAddress } from "./keyringCrypto.js";
 
@@ -27,7 +21,7 @@ export type Eip155DigestSignature = Readonly<{
 /** Keeps derived private-key material inside a synchronous callback. */
 const withHdPrivateKey = <T>(
   params: {
-    source: Bip39KeySourceSecret;
+    seed: Uint8Array;
     derivationProfileId: string;
     derivationIndex: number;
   },
@@ -36,25 +30,18 @@ const withHdPrivateKey = <T>(
   if (params.derivationProfileId !== "bip44") {
     throw new KeyringUnsupportedDerivationProfileError("eip155", params.derivationProfileId);
   }
-  if (!validateMnemonic(params.source.mnemonic, wordlist)) {
-    throw new KeyringInvalidMnemonicError();
-  }
 
-  const seed = mnemonicToSeedSync(params.source.mnemonic, params.source.passphrase);
   let root: HDKey | undefined;
   let node: HDKey | undefined;
 
   try {
-    root = HDKey.fromMasterSeed(seed);
+    root = HDKey.fromMasterSeed(params.seed);
     node = root.derive(`${DERIVATION_PREFIX}/${params.derivationIndex}`);
 
-    const privateKey = node.privateKey;
-    if (!privateKey) throw new KeyringSecretUnavailableError();
-    return use(privateKey);
+    return use(node.privateKey as Uint8Array);
   } finally {
     node?.wipePrivateData();
     root?.wipePrivateData();
-    seed.fill(0);
   }
 };
 
@@ -103,7 +90,7 @@ export const eip155KeyringAdapter: KeyringNamespaceAdapter = {
 
 export const signEip155HdDigest = (params: {
   accountId: AccountId;
-  source: Bip39KeySourceSecret;
+  seed: Uint8Array;
   derivationProfileId: string;
   derivationIndex: number;
   digest: Uint8Array;

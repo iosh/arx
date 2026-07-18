@@ -41,7 +41,7 @@ export class ArxPersistenceDatabase extends Dexie {
       encryptedVault: "&key",
       settings: "&key",
       keySources: "&keySourceId",
-      hdKeyrings: "&keyringId, keySourceId, namespace",
+      hdKeyrings: "&hdKeyringId",
       accounts: "&accountId, namespace, hdKeyringId, privateKeySourceId",
       accountSelections: "&namespace",
       permissions: "[origin+namespace], origin, *indexedAccountIds, *indexedChainRefs",

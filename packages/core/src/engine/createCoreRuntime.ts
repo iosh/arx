@@ -7,6 +7,7 @@ import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
 import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { JsonValue } from "../errors.js";
+import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { Keyring } from "../keyring/Keyring.js";
 import { createMessenger } from "../messenger/Messenger.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
@@ -76,11 +77,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const walletSelectionDefaults =
     input.defaults?.walletSelection ?? createWalletSelectionDefaults(namespaceDefinitions);
 
-  const [vaultBootstrap, networksBootstrap, transactionsBootstrap] = await Promise.all([
+  const [vaultBootstrap, keyringBootstrap, networksBootstrap, transactionsBootstrap] = await Promise.all([
     loadVaultBootstrap({
       readers: input.persistence.readers,
       defaultAutoLockDurationMs: input.defaults?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
     }),
+    loadKeyringBootstrap(input.persistence.readers),
     loadNetworksBootstrap({
       readers: input.persistence.readers,
       builtinSeeds: builtinChains,
@@ -92,7 +94,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   let previousWalletStatus = vaultBootstrap.encryptedVault ? "locked" : "uninitialized";
   const unlockedListeners = new Set<(payload: { at: number }) => void>();
   const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
-  const keyring = new Keyring();
+  const keyring = new Keyring(keyringBootstrap);
   const wallet = createWallet({
     readers: input.persistence.readers,
     mutations,
@@ -111,6 +113,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       }
       publish({ owner: "wallet", change });
     },
+    publishKeyringChanged: () => publish({ owner: "keyring", change: { type: "keyringChanged" } }),
   });
   const networks = createNetworks({
     mutations,
@@ -140,8 +143,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     const accountSigning = createEip155AccountSigning({
       keyring,
       accounts: input.persistence.readers.accounts,
-      keySources: input.persistence.readers.keySources,
-      hdKeyrings: input.persistence.readers.hdKeyrings,
     });
     transactionAdapters.set(
       "eip155",

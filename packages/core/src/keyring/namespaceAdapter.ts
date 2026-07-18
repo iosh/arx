@@ -1,6 +1,6 @@
 import type { AccountId } from "../accounts/accountId.js";
 import { KeyringUnsupportedNamespaceError } from "./errors.js";
-import type { Bip39KeySourceSecret, PrivateKeySourceSecret } from "./secrets.js";
+import type { PrivateKeySourceSecret } from "./secrets.js";
 
 export type KeyringAccountIdentity = Readonly<{ accountId: AccountId }>;
 
@@ -9,7 +9,7 @@ export interface KeyringNamespaceAdapter {
   namespace: string;
   defaultDerivationProfileId: string;
   deriveAccount(params: {
-    source: Bip39KeySourceSecret;
+    seed: Uint8Array;
     derivationProfileId: string;
     derivationIndex: number;
   }): KeyringAccountIdentity;

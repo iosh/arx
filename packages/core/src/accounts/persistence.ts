@@ -1,10 +1,10 @@
-import type { KeyringId, KeySourceId } from "../keyring/persistence.js";
+import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
 import type { AccountId } from "./accountId.js";
 
 export type HdAccountOrigin = Readonly<{
   type: "hd";
-  keyringId: KeyringId;
+  keyringId: HdKeyringId;
   derivationIndex: number;
 }>;
 
@@ -37,7 +37,7 @@ export interface AccountsReader {
   get(accountId: AccountId): Promise<AccountRecord | null>;
   getMany(accountIds: readonly AccountId[]): Promise<AccountRecord[]>;
   getNamespaceAccounts(namespace: string): Promise<NamespaceAccounts | null>;
-  listByKeyringIds(keyringIds: readonly KeyringId[]): Promise<AccountRecord[]>;
+  listByKeyringIds(keyringIds: readonly HdKeyringId[]): Promise<AccountRecord[]>;
   listByPrivateKeySourceIds(keySourceIds: readonly KeySourceId[]): Promise<AccountRecord[]>;
   listIds(): Promise<AccountId[]>;
 }

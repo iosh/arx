@@ -38,19 +38,26 @@ const createSigningFixture = (params: {
   sourceRecord?: KeySourceRecord;
   hdKeyring?: HdKeyringRecord;
 }) => {
-  const keyring = new Keyring();
-  keyring.activate(createKeyringSecrets([params.source]));
+  const sourceRecord =
+    params.sourceRecord ??
+    (params.source.type === "bip39"
+      ? {
+          keySourceId: params.source.keySourceId,
+          type: "bip39" as const,
+          backupStatus: "confirmed" as const,
+          createdAt: 1,
+        }
+      : undefined);
+  const keyring = new Keyring({
+    keySources: sourceRecord ? [sourceRecord] : [],
+    hdKeyrings: params.hdKeyring ? [params.hdKeyring] : [],
+  });
+  keyring.activateSecrets(createKeyringSecrets([params.source]));
 
   const signing = createEip155AccountSigning({
     keyring,
     accounts: {
       get: async (accountId) => (accountId === params.account.accountId ? params.account : null),
-    },
-    keySources: {
-      get: async (keySourceId) => (params.sourceRecord?.keySourceId === keySourceId ? params.sourceRecord : null),
-    },
-    hdKeyrings: {
-      get: async (keyringId) => (params.hdKeyring?.keyringId === keyringId ? params.hdKeyring : null),
     },
   });
 
@@ -58,7 +65,7 @@ const createSigningFixture = (params: {
 };
 
 describe("Eip155AccountSigning", () => {
-  it("signs with the imported private key selected by account metadata", async () => {
+  it("signs with the imported private key selected by the account record", async () => {
     const source: KeySourceSecret = {
       keySourceId: "private-source",
       type: "private-key",
@@ -77,7 +84,7 @@ describe("Eip155AccountSigning", () => {
         keySourceId: source.keySourceId,
         type: "private-key",
         namespace: "eip155",
-        createAt: 1,
+        createdAt: 1,
       },
     });
 
@@ -94,16 +101,16 @@ describe("Eip155AccountSigning", () => {
       mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     };
     const hdKeyring: HdKeyringRecord = {
-      keyringId: "hd-keyring",
+      hdKeyringId: "hd-keyring",
       keySourceId: source.keySourceId,
       namespace: "eip155",
       derivationProfileId: "bip44",
       nextDerivationIndex: 4,
-      createAt: 1,
+      createdAt: 1,
     };
     const account: AccountRecord = {
       accountId: HD_ACCOUNT_ID,
-      origin: { type: "hd", keyringId: hdKeyring.keyringId, derivationIndex: 3 },
+      origin: { type: "hd", keyringId: hdKeyring.hdKeyringId, derivationIndex: 3 },
       hidden: false,
       createAt: 1,
     };
@@ -115,7 +122,7 @@ describe("Eip155AccountSigning", () => {
     expect(recoverAccountId(signature)).toBe(HD_ACCOUNT_ID);
   });
 
-  it("rejects imported-key metadata that points at a different account", async () => {
+  it("rejects an imported-key record that points at a different account", async () => {
     const source: KeySourceSecret = {
       keySourceId: "private-source",
       type: "private-key",
@@ -134,7 +141,7 @@ describe("Eip155AccountSigning", () => {
         keySourceId: source.keySourceId,
         type: "private-key",
         namespace: "eip155",
-        createAt: 1,
+        createdAt: 1,
       },
     });
 
@@ -144,23 +151,23 @@ describe("Eip155AccountSigning", () => {
     });
   });
 
-  it("rejects HD metadata that derives a different account", async () => {
+  it("rejects an HD record that derives a different account", async () => {
     const source: KeySourceSecret = {
       keySourceId: "mnemonic-source",
       type: "bip39",
       mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     };
     const hdKeyring: HdKeyringRecord = {
-      keyringId: "hd-keyring",
+      hdKeyringId: "hd-keyring",
       keySourceId: source.keySourceId,
       namespace: "eip155",
       derivationProfileId: "bip44",
       nextDerivationIndex: 4,
-      createAt: 1,
+      createdAt: 1,
     };
     const account: AccountRecord = {
       accountId: PRIVATE_ACCOUNT_ID,
-      origin: { type: "hd", keyringId: hdKeyring.keyringId, derivationIndex: 3 },
+      origin: { type: "hd", keyringId: hdKeyring.hdKeyringId, derivationIndex: 3 },
       hidden: false,
       createAt: 1,
     };
@@ -172,7 +179,7 @@ describe("Eip155AccountSigning", () => {
     });
   });
 
-  it("observes a lock that happens while account metadata is loading", async () => {
+  it("observes a lock that happens while the account record is loading", async () => {
     const source: KeySourceSecret = {
       keySourceId: "private-source",
       type: "private-key",
@@ -185,20 +192,21 @@ describe("Eip155AccountSigning", () => {
       createAt: 1,
     };
     const accountRead = deferred<AccountRecord | null>();
-    const keyring = new Keyring();
-    keyring.activate(createKeyringSecrets([source]));
-    const signing = createEip155AccountSigning({
-      keyring,
-      accounts: { get: async () => await accountRead.promise },
-      keySources: {
-        get: async () => ({
+    const keyring = new Keyring({
+      keySources: [
+        {
           keySourceId: source.keySourceId,
           type: "private-key",
           namespace: "eip155",
-          createAt: 1,
-        }),
-      },
-      hdKeyrings: { get: async () => null },
+          createdAt: 1,
+        },
+      ],
+      hdKeyrings: [],
+    });
+    keyring.activateSecrets(createKeyringSecrets([source]));
+    const signing = createEip155AccountSigning({
+      keyring,
+      accounts: { get: async () => await accountRead.promise },
     });
 
     const pendingSignature = signing.signDigest({ accountId: account.accountId, digest: DIGEST });

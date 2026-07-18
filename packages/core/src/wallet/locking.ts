@@ -19,7 +19,7 @@ export const unlock = async (wallet: WalletContext, password: string): Promise<v
     }
 
     wallet.vault.activate(draft.unlocked);
-    wallet.keyring.activate(secrets);
+    wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
     wallet.publishChanged({ vault: true });
   });

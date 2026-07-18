@@ -1,12 +1,13 @@
+import type { KeySourceId } from "./persistence.js";
+
 export type Bip39KeySourceSecret = Readonly<{
-  keySourceId: string;
+  keySourceId: KeySourceId;
   type: "bip39";
   mnemonic: string;
-  passphrase?: string;
 }>;
 
 export type PrivateKeySourceSecret = Readonly<{
-  keySourceId: string;
+  keySourceId: KeySourceId;
   type: "private-key";
   privateKey: string;
 }>;
@@ -20,13 +21,11 @@ export type KeyringSecrets = Readonly<{
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export const canonicalizeMnemonicWords = (mnemonic: string): string => mnemonic.trim().replace(/\s+/g, " ");
-
 export const createKeyringSecrets = (keySources: readonly KeySourceSecret[]): KeyringSecrets => ({
   keySources: [...keySources],
 });
 
-export const findKeySourceSecret = (secrets: KeyringSecrets, keySourceId: string): KeySourceSecret | undefined =>
+export const findKeySourceSecret = (secrets: KeyringSecrets, keySourceId: KeySourceId): KeySourceSecret | undefined =>
   secrets.keySources.find((source) => source.keySourceId === keySourceId);
 
 export const encodeKeyringSecrets = (secrets: KeyringSecrets): Uint8Array => encoder.encode(JSON.stringify(secrets));

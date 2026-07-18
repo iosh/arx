@@ -1,6 +1,5 @@
 import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
-import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
 import { removeAccountsFromPermissions } from "../permissions/permissionRecord.js";
 import { permissionPersistenceType } from "../permissions/persistence.js";
 import { persistenceChange } from "../persistence/change.js";
@@ -41,17 +40,15 @@ export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
   await wallet.mutations.run(async (commit) => {
     wallet.vault.requireUnlocked();
     requireKeyringSecrets(wallet);
-    const [sources, keyrings, accountIds, permissions] = await Promise.all([
-      wallet.readers.keySources.listAll(),
-      wallet.readers.hdKeyrings.listAll(),
+    const [accountIds, permissions] = await Promise.all([
       wallet.readers.accounts.listIds(),
       wallet.readers.permissions.listAll(),
     ]);
     const namespaces = [...new Set(accountIds.map(getAccountIdNamespace))];
+    const keyringUpdate = wallet.keyring.prepareReset();
     await commit([
       persistenceChange.remove(encryptedVaultPersistenceType),
-      ...sources.map((source) => persistenceChange.remove(keySourcePersistenceType, source.keySourceId)),
-      ...keyrings.map((keyring) => persistenceChange.remove(hdKeyringPersistenceType, keyring.keyringId)),
+      ...keyringUpdate.persistenceChanges,
       ...accountIds.map((accountId) => persistenceChange.remove(accountPersistenceType, accountId)),
       ...namespaces.map((namespace) => persistenceChange.remove(accountSelectionPersistenceType, namespace)),
       ...permissions.map((permission) =>
@@ -62,12 +59,13 @@ export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
       ),
     ]);
     wallet.autoLock.stop();
+    wallet.keyring.applyCommittedUpdate(keyringUpdate);
     wallet.keyring.lock();
     wallet.vault.activateDeleted();
     wallet.publishChanged({
       vault: true,
       accounts: accountIds,
-      keySources: sources.map((source) => source.keySourceId),
     });
+    wallet.publishKeyringChanged();
   });
 };

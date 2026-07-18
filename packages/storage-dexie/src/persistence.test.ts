@@ -2,6 +2,8 @@ import "fake-indexeddb/auto";
 
 import {
   type AccountRecord,
+  type Bip39KeySourceRecord,
+  type HdKeyringRecord,
   type PermissionRecord,
   PersistenceCommitError,
   PersistenceReadError,
@@ -131,9 +133,23 @@ describe("createDexiePersistence", () => {
 
   it("commits canonical records across stores and maps physical rows back", async () => {
     const persistence = createTestPersistence();
+    const source: Bip39KeySourceRecord = {
+      keySourceId: "source-1",
+      type: "bip39",
+      backupStatus: "pending",
+      createdAt: 1,
+    };
+    const hdKeyring: HdKeyringRecord = {
+      hdKeyringId: "hd-keyring-1",
+      keySourceId: source.keySourceId,
+      namespace: "eip155",
+      derivationProfileId: "bip44",
+      nextDerivationIndex: 1,
+      createdAt: 1,
+    };
     const account = hdAccount({
       accountId: "eip155:01",
-      keyringId: "keyring-1",
+      keyringId: hdKeyring.hdKeyringId,
       createAt: 1,
     });
     const permission = {
@@ -151,14 +167,27 @@ describe("createDexiePersistence", () => {
 
     await persistence.writer.commit([
       persistenceChange.put(persistenceTypes.encryptedVault, encryptedVault),
+      persistenceChange.put(persistenceTypes.keySource, source),
+      persistenceChange.put(persistenceTypes.hdKeyring, hdKeyring),
       persistenceChange.put(persistenceTypes.account, account),
       persistenceChange.put(persistenceTypes.permission, permission),
     ]);
 
     expect(await persistence.readers.encryptedVault.get()).toEqual(encryptedVault);
+    expect(await persistence.readers.keySources.listAll()).toEqual([source]);
+    expect(await persistence.readers.hdKeyrings.listAll()).toEqual([hdKeyring]);
     expect(await persistence.readers.accounts.get(account.accountId)).toEqual(account);
     expect(await persistence.readers.permissions.listReferencingAccountIds([account.accountId])).toEqual([permission]);
     expect(await persistence.readers.permissions.listReferencingChainRef("eip155:1")).toEqual([permission]);
+  });
+
+  it("uses the target HD keyring primary key without secondary query indexes", async () => {
+    const context = createDexiePersistenceContext(createDatabaseName());
+    databaseConnections.push(context.db);
+    await context.ready;
+
+    expect(context.db.hdKeyrings.schema.primKey.keyPath).toBe("hdKeyringId");
+    expect(context.db.hdKeyrings.schema.indexes).toEqual([]);
   });
 
   it("rolls back earlier writes when a later store operation fails", async () => {

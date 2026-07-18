@@ -37,3 +37,14 @@ export class WalletLockedError extends ArxBaseError {
     super("Wallet is locked.", { code: WalletLockedError.code });
   }
 }
+
+export class WalletUnlockFailedError extends ArxBaseError {
+  static readonly code = "wallet.unlock_failed";
+
+  constructor(cause: unknown) {
+    super("Wallet could not be unlocked.", {
+      code: WalletUnlockFailedError.code,
+      cause,
+    });
+  }
+}

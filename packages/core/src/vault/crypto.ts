@@ -1,134 +1,158 @@
-import { isArxBaseError } from "../errors.js";
-import { VaultInvalidPasswordError } from "./errors.js";
-import type { EncryptedVaultRecord } from "./persistence.js";
-import { decodeVaultSecrets, encodeVaultSecrets, type VaultSecrets } from "./secrets.js";
-import type { VaultConfig } from "./types.js";
+import { gcm } from "@noble/ciphers/aes.js";
+import { scryptAsync } from "@noble/hashes/scrypt.js";
+import { randomBytes } from "@noble/hashes/utils.js";
+import * as Base64 from "ox/Base64";
 import {
-  aesGcmDecrypt,
-  aesGcmEncrypt,
-  deriveKeyMaterial,
-  fromBase64,
-  importPasswordKey,
-  randomBytes,
-  toBase64,
-} from "./utils.js";
+  VaultCryptoOperationError,
+  VaultIncorrectPasswordError,
+  VaultPasswordTooShortError,
+  VaultRecordDecodeError,
+} from "./errors.js";
+import { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "./passwordPolicy.js";
+import type { EncryptedVaultRecord } from "./persistence.js";
 
-type ResolvedVaultConfig = Readonly<{
-  iterations: number;
-  saltBytes: number;
-  ivBytes: number;
-}>;
+/**
+ * Vault password-derivation profile.
+ *
+ * N=2^16, r=8, p=2 is the 64 MiB scrypt profile recommended for reducing peak
+ * memory while retaining comparable work to N=2^17, r=8, p=1. dkLen=32
+ * derives the AES-256 key. Persisted records rely on these implicit parameters,
+ * so changing them requires an explicit format migration.
+ *
+ * @see https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt
+ */
+const SCRYPT_OPTIONS = {
+  N: 2 ** 16,
+  r: 8,
+  p: 2,
+  dkLen: 32,
+} as const;
+const SALT_BYTES = 16;
+const IV_BYTES = 12;
 
 export type UnlockedVault = Readonly<{
   record: EncryptedVaultRecord;
-  secrets: VaultSecrets;
-  keyMaterial: Uint8Array;
+  encryptionKey: Uint8Array;
 }>;
 
-const DEFAULT_CONFIG: ResolvedVaultConfig = {
-  iterations: 100_000,
-  saltBytes: 16,
-  ivBytes: 12,
+export type VaultUnlockDraft = Readonly<{
+  plaintext: Uint8Array;
+  unlocked: UnlockedVault;
+}>;
+
+const decodeRecord = (record: EncryptedVaultRecord) => {
+  try {
+    return {
+      salt: Base64.toBytes(record.salt),
+      iv: Base64.toBytes(record.iv),
+      ciphertext: Base64.toBytes(record.ciphertext),
+    };
+  } catch (cause) {
+    throw new VaultRecordDecodeError(cause);
+  }
 };
 
-const resolveConfig = (config?: VaultConfig): ResolvedVaultConfig => ({
-  iterations: config?.iterations ?? DEFAULT_CONFIG.iterations,
-  saltBytes: config?.saltBytes ?? DEFAULT_CONFIG.saltBytes,
-  ivBytes: config?.ivBytes ?? DEFAULT_CONFIG.ivBytes,
-});
-
-const derivePasswordKey = async (password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> => {
-  const passwordKey = await importPasswordKey(password);
-  return await deriveKeyMaterial(passwordKey, salt, iterations);
+const createRandomBytes = (size: number): Uint8Array => {
+  try {
+    return randomBytes(size);
+  } catch (cause) {
+    throw new VaultCryptoOperationError("random-bytes", cause);
+  }
 };
 
-const encrypt = async (params: {
-  secrets: VaultSecrets;
-  keyMaterial: Uint8Array;
+const deriveEncryptionKey = async (password: string, salt: Uint8Array): Promise<Uint8Array> => {
+  try {
+    return await scryptAsync(password, salt, SCRYPT_OPTIONS);
+  } catch (cause) {
+    throw new VaultCryptoOperationError("derive-encryption-key", cause);
+  }
+};
+
+const assertNewVaultPassword = (password: string): void => {
+  const actualLength = getVaultPasswordLength(password);
+  if (actualLength < VAULT_PASSWORD_MIN_LENGTH) {
+    throw new VaultPasswordTooShortError(VAULT_PASSWORD_MIN_LENGTH, actualLength);
+  }
+};
+
+const encrypt = (encryptionKey: Uint8Array, iv: Uint8Array, plaintext: Uint8Array): Uint8Array => {
+  try {
+    return gcm(encryptionKey, iv).encrypt(plaintext);
+  } catch (cause) {
+    throw new VaultCryptoOperationError("encrypt", cause);
+  }
+};
+
+const createUnlockedVaultWithSalt = async (params: {
+  password: string;
+  plaintext: Uint8Array;
   salt: Uint8Array;
-  iterations: number;
-  ivBytes: number;
-}): Promise<EncryptedVaultRecord> => {
-  const { cipher, iv } = await aesGcmEncrypt(params.keyMaterial, encodeVaultSecrets(params.secrets), params.ivBytes);
+}): Promise<UnlockedVault> => {
+  const encryptionKey = await deriveEncryptionKey(params.password, params.salt);
+  const iv = createRandomBytes(IV_BYTES);
+  const ciphertext = encrypt(encryptionKey, iv, params.plaintext);
   return {
-    version: 1,
-    kdf: {
-      name: "pbkdf2",
-      hash: "sha256",
-      salt: toBase64(params.salt),
-      iterations: params.iterations,
+    record: {
+      salt: Base64.fromBytes(params.salt),
+      iv: Base64.fromBytes(iv),
+      ciphertext: Base64.fromBytes(ciphertext),
     },
-    cipher: {
-      name: "aes-gcm",
-      iv: toBase64(iv),
-      data: toBase64(cipher),
-    },
+    encryptionKey,
   };
 };
 
 export const createUnlockedVault = async (params: {
   password: string;
-  secrets: VaultSecrets;
-  config?: VaultConfig;
+  plaintext: Uint8Array;
 }): Promise<UnlockedVault> => {
-  const config = resolveConfig(params.config);
-  const salt = randomBytes(config.saltBytes);
-  const keyMaterial = await derivePasswordKey(params.password, salt, config.iterations);
-  const secrets = structuredClone(params.secrets);
-  const record = await encrypt({
-    secrets,
-    keyMaterial,
-    salt,
-    iterations: config.iterations,
-    ivBytes: config.ivBytes,
+  assertNewVaultPassword(params.password);
+
+  return await createUnlockedVaultWithSalt({
+    password: params.password,
+    plaintext: params.plaintext,
+    salt: createRandomBytes(SALT_BYTES),
   });
-  return { record, secrets, keyMaterial };
 };
 
-export const unlockVaultRecord = async (record: EncryptedVaultRecord, password: string): Promise<UnlockedVault> => {
+export const unlockVaultRecord = async (record: EncryptedVaultRecord, password: string): Promise<VaultUnlockDraft> => {
+  const decoded = decodeRecord(record);
+  const encryptionKey = await deriveEncryptionKey(password, decoded.salt);
+  let plaintext: Uint8Array;
   try {
-    const keyMaterial = await derivePasswordKey(password, fromBase64(record.kdf.salt), record.kdf.iterations);
-    const plaintext = await aesGcmDecrypt(keyMaterial, fromBase64(record.cipher.data), fromBase64(record.cipher.iv));
-    return {
-      record: structuredClone(record),
-      secrets: decodeVaultSecrets(plaintext),
-      keyMaterial,
-    };
-  } catch (error) {
-    if (isArxBaseError(error) && error.code === "vault.invalid_ciphertext") {
-      throw new VaultInvalidPasswordError();
-    }
-    throw error;
+    plaintext = gcm(encryptionKey, decoded.iv).decrypt(decoded.ciphertext);
+  } catch {
+    throw new VaultIncorrectPasswordError();
   }
+  return {
+    plaintext,
+    unlocked: {
+      record,
+      encryptionKey,
+    },
+  };
 };
 
-export const replaceVaultSecrets = async (
-  unlocked: UnlockedVault,
-  secrets: VaultSecrets,
-  config?: VaultConfig,
-): Promise<UnlockedVault> => {
-  const resolved = resolveConfig(config);
-  const nextSecrets = structuredClone(secrets);
-  const record = await encrypt({
-    secrets: nextSecrets,
-    keyMaterial: unlocked.keyMaterial,
-    salt: fromBase64(unlocked.record.kdf.salt),
-    iterations: unlocked.record.kdf.iterations,
-    ivBytes: resolved.ivBytes,
-  });
-  return { record, secrets: nextSecrets, keyMaterial: unlocked.keyMaterial };
+export const replaceVaultPlaintext = async (unlocked: UnlockedVault, plaintext: Uint8Array): Promise<UnlockedVault> => {
+  const iv = createRandomBytes(IV_BYTES);
+  const ciphertext = encrypt(unlocked.encryptionKey, iv, plaintext);
+  return {
+    record: {
+      salt: unlocked.record.salt,
+      iv: Base64.fromBytes(iv),
+      ciphertext: Base64.fromBytes(ciphertext),
+    },
+    encryptionKey: unlocked.encryptionKey,
+  };
 };
 
 export const changeVaultPassword = async (params: {
   unlocked: UnlockedVault;
   currentPassword: string;
   newPassword: string;
-  config?: VaultConfig;
 }): Promise<UnlockedVault> => {
-  await unlockVaultRecord(params.unlocked.record, params.currentPassword);
+  const current = await unlockVaultRecord(params.unlocked.record, params.currentPassword);
   return await createUnlockedVault({
     password: params.newPassword,
-    secrets: params.unlocked.secrets,
-    ...(params.config ? { config: params.config } : {}),
+    plaintext: current.plaintext,
   });
 };

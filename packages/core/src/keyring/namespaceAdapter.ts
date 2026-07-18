@@ -1,17 +1,19 @@
-import type { Bip39KeySource, PrivateKeySource } from "../vault/secrets.js";
+import type { AccountId } from "../accounts/accountId.js";
 import { KeyringUnsupportedNamespaceError } from "./errors.js";
-import type { UnlockedSigner } from "./UnlockedSigners.js";
+import type { Bip39KeySourceSecret, PrivateKeySourceSecret } from "./secrets.js";
 
-/** Derives namespace-specific signers without exposing keyring implementations to the wallet. */
+export type KeyringAccountIdentity = Readonly<{ accountId: AccountId }>;
+
+/** Derives namespace-specific account identities without retaining private key material. */
 export interface KeyringNamespaceAdapter {
   namespace: string;
   defaultDerivationProfileId: string;
   deriveAccount(params: {
-    source: Bip39KeySource;
+    source: Bip39KeySourceSecret;
     derivationProfileId: string;
     derivationIndex: number;
-  }): UnlockedSigner;
-  importPrivateKey(source: PrivateKeySource): UnlockedSigner;
+  }): KeyringAccountIdentity;
+  importPrivateKey(source: PrivateKeySourceSecret): KeyringAccountIdentity;
 }
 
 export type KeyringNamespaceAdapters = ReadonlyMap<string, KeyringNamespaceAdapter>;

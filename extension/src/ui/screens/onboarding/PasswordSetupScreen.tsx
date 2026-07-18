@@ -1,3 +1,4 @@
+import { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "@arx/core";
 import { LockKeyhole } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Form, Paragraph, useTheme, YStack } from "tamagui";
@@ -16,7 +17,6 @@ type PasswordStrength = {
   color: "$danger" | "$yellow10" | "$accent" | "$success";
 };
 
-const MIN_PASSWORD_LENGTH = 8;
 const RECOMMENDED_PASSWORD_LENGTH = 12;
 
 const hasAscendingRun = (value: string, runLength: number): boolean => {
@@ -38,10 +38,12 @@ const hasAscendingRun = (value: string, runLength: number): boolean => {
 };
 
 const getPasswordStrength = (value: string) => {
-  if (value.length < MIN_PASSWORD_LENGTH) {
+  const passwordLength = getVaultPasswordLength(value);
+
+  if (passwordLength < VAULT_PASSWORD_MIN_LENGTH) {
     return {
       valid: false,
-      message: `Must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      message: `Must be at least ${VAULT_PASSWORD_MIN_LENGTH} characters`,
       color: "$danger",
     } satisfies PasswordStrength;
   }
@@ -56,8 +58,8 @@ const getPasswordStrength = (value: string) => {
   const hasSequence = hasAscendingRun(value, 4);
 
   let score = 0;
-  if (value.length >= RECOMMENDED_PASSWORD_LENGTH) score += 1;
-  if (value.length >= 16) score += 1;
+  if (passwordLength >= RECOMMENDED_PASSWORD_LENGTH) score += 1;
+  if (passwordLength >= 16) score += 1;
   if (charClassCount >= 2) score += 1;
   if (charClassCount >= 3) score += 1;
   if (tooRepetitive) score -= 1;
@@ -134,7 +136,7 @@ export function PasswordSetupScreen({ onSubmit }: PasswordSetupScreenProps) {
           <YStack gap="$4">
             <PasswordInput
               label="New Password"
-              placeholder="Enter at least 8 characters"
+              placeholder={`Enter at least ${VAULT_PASSWORD_MIN_LENGTH} characters`}
               value={password}
               onChangeText={(t) => {
                 setPassword(t);

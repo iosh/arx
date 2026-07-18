@@ -7,11 +7,17 @@ import {
 } from "../rows.js";
 
 export const encryptedVaultToRow = (record: EncryptedVaultRecord): EncryptedVaultRow => ({
-  ...record,
   key: ENCRYPTED_VAULT_ROW_KEY,
+  salt: record.salt,
+  iv: record.iv,
+  ciphertext: record.ciphertext,
 });
 
-export const encryptedVaultFromRow = ({ key: _key, ...record }: EncryptedVaultRow): EncryptedVaultRecord => record;
+export const encryptedVaultFromRow = (row: EncryptedVaultRow): EncryptedVaultRecord => ({
+  salt: row.salt,
+  iv: row.iv,
+  ciphertext: row.ciphertext,
+});
 
 export const walletChainSelectionToRow = (record: WalletChainSelectionRecord): WalletChainSelectionRow => ({
   ...record,

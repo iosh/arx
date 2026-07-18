@@ -1,7 +1,7 @@
 import type { AccountId } from "../accounts/accountId.js";
+import type { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import type { KeySourceId } from "../keyring/persistence.js";
-import { type UnlockedSigner, UnlockedSigners } from "../keyring/UnlockedSigners.js";
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { VaultBootstrap } from "../vault/bootstrap.js";
@@ -31,7 +31,7 @@ export type WalletContext = Readonly<{
   readers: Pick<CorePersistenceReaders, "encryptedVault" | "keySources" | "hdKeyrings" | "accounts" | "permissions">;
   mutations: CoreMutationQueue;
   vault: Vault;
-  signers: UnlockedSigners;
+  keyring: Keyring;
   autoLock: AutoLockTimer;
   adapters: KeyringNamespaceAdapters;
   /** Publishes committed wallet changes and must not throw. */
@@ -41,7 +41,6 @@ export type WalletContext = Readonly<{
 export type Wallet = Readonly<{
   getStatus(): VaultStatus;
   getAutoLock(): Readonly<{ durationMs: number; deadline: number | null }>;
-  getSigner(accountId: AccountId): UnlockedSigner | null;
   initializeWithNewMnemonic(params: {
     password: string;
     mnemonic: string;
@@ -56,7 +55,7 @@ export type Wallet = Readonly<{
   }): Promise<AccountId>;
   initializeFromPrivateKey(params: { password: string; privateKey: string; namespace: string }): Promise<AccountId>;
   unlock(password: string): Promise<void>;
-  lock(): boolean;
+  lock(): Promise<void>;
   changePassword(params: { currentPassword: string; newPassword: string }): Promise<void>;
   setAutoLockDuration(durationMs: number): Promise<void>;
   accounts: Readonly<{
@@ -82,13 +81,14 @@ export type Wallet = Readonly<{
 export const createWallet = (params: {
   readers: WalletContext["readers"];
   mutations: CoreMutationQueue;
+  keyring: Keyring;
   adapters: KeyringNamespaceAdapters;
   bootstrap: VaultBootstrap;
   /** Publishes committed wallet changes and must not throw. */
   publishChanged(change: WalletChanged): void;
 }): Wallet => {
   const vault = new Vault(params.bootstrap.encryptedVault);
-  const signers = new UnlockedSigners();
+  const keyring = params.keyring;
   let expire = (): void => {};
   const autoLock = new AutoLockTimer({
     durationMs: params.bootstrap.autoLockDurationMs,
@@ -98,19 +98,18 @@ export const createWallet = (params: {
     readers: params.readers,
     mutations: params.mutations,
     vault,
-    signers,
+    keyring,
     autoLock,
     adapters: params.adapters,
     publishChanged: params.publishChanged,
   };
   expire = () => {
-    lock(context);
+    void lock(context);
   };
 
   return {
     getStatus: () => vault.getStatus(),
     getAutoLock: () => ({ durationMs: autoLock.getDuration(), deadline: autoLock.getDeadline() }),
-    getSigner: (accountId) => signers.get(accountId),
     initializeWithNewMnemonic: (input) => initializeWithNewMnemonic(context, input),
     initializeFromMnemonic: (input) => initializeFromMnemonic(context, input),
     initializeFromPrivateKey: (input) => initializeFromPrivateKey(context, input),

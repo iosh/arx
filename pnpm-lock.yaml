@@ -129,6 +129,9 @@ importers:
       '@metamask/utils':
         specifier: 11.8.0
         version: 11.8.0
+      '@noble/ciphers':
+        specifier: 1.3.0
+        version: 1.3.0
       '@noble/curves':
         specifier: 1.9.1
         version: 1.9.1

@@ -48,7 +48,16 @@ type HarnessOptions = {
   records?: readonly TransactionRecord[];
   bootstrap?: readonly TransactionRecord[];
   inspect?: TransactionNamespaceAdapter["inspect"];
+  sign?: TransactionNamespaceAdapter["sign"];
   onBroadcast?: (records: Map<string, TransactionRecord>) => void;
+};
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
 };
 
 const createHarness = async (options: HarnessOptions = {}) => {
@@ -82,7 +91,7 @@ const createHarness = async (options: HarnessOptions = {}) => {
       conflictKey: CONFLICT_KEY,
     })),
     createReplacementPayload: vi.fn(async ({ target, type }) => ({ target: target.transactionId, type })),
-    sign: vi.fn(async () => ({ raw: "0xsigned" })),
+    sign: options.sign ?? vi.fn(async () => ({ raw: "0xsigned" })),
     broadcast: vi.fn(async () => {
       options.onBroadcast?.(records);
       return { status: "submitted" as const, networkSubmission: { hash: "0xsubmitted" } };
@@ -93,23 +102,24 @@ const createHarness = async (options: HarnessOptions = {}) => {
     getRetryInspectionDelay: () => 1_000,
   };
   const changed: string[][] = [];
+  const mutations = createCoreMutationQueue({
+    commit: async (changes) => {
+      (commits as PersistenceChange[][]).push([...changes]);
+      for (const change of changes) {
+        if (change.persistenceType !== "transaction") continue;
+        if (change.operation === "put") records.set(change.value.transactionId, change.value);
+        else records.delete(change.key);
+      }
+    },
+  });
   const transactions = await createTransactions({
     readers,
-    mutations: createCoreMutationQueue({
-      commit: async (changes) => {
-        (commits as PersistenceChange[][]).push([...changes]);
-        for (const change of changes) {
-          if (change.persistenceType !== "transaction") continue;
-          if (change.operation === "put") records.set(change.value.transactionId, change.value);
-          else records.delete(change.key);
-        }
-      },
-    }),
+    mutations,
     adapters: new Map([[adapter.namespace, adapter]]),
     bootstrap: { activeTransactions: options.bootstrap ?? [] },
     publishChanged: ({ transactionIds }) => changed.push([...transactionIds]),
   });
-  return { transactions, records, commits, readers, adapter, changed };
+  return { transactions, records, commits, readers, adapter, changed, mutations };
 };
 
 const submission = (replacementTargetId?: string) => ({
@@ -137,6 +147,52 @@ describe("Transactions", () => {
       "broadcasting",
       "submitted",
     ]);
+  });
+
+  it("commits a signing failure without invoking the broadcaster", async () => {
+    const harness = await createHarness({
+      sign: vi.fn(async () => {
+        throw new Error("signing failed");
+      }),
+    });
+
+    const result = await harness.transactions.submit(submission());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      phase: "submitting",
+      reason: { code: "transaction.signing_failed", message: "signing failed" },
+    });
+    expect(harness.commits.map((changes) => (changes[0] as { value: TransactionRecord }).value.status)).toEqual([
+      "submitting",
+      "failed",
+    ]);
+    expect(harness.adapter.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("commits broadcasting before a competing core mutation can run", async () => {
+    const signStarted = deferred<void>();
+    const releaseSign = deferred<void>();
+    const harness = await createHarness({
+      sign: vi.fn(async () => {
+        signStarted.resolve();
+        await releaseSign.promise;
+        return { raw: "0xsigned" };
+      }),
+    });
+
+    const submissionResult = harness.transactions.submit(submission());
+    await signStarted.promise;
+
+    let statusObservedByCompetingMutation: TransactionRecord["status"] | undefined;
+    const competingMutation = harness.mutations.run(async () => {
+      statusObservedByCompetingMutation = [...harness.records.values()][0]?.status;
+    });
+
+    releaseSign.resolve();
+    await Promise.all([submissionResult, competingMutation]);
+
+    expect(statusObservedByCompetingMutation).toBe("broadcasting");
   });
 
   it("blocks creation when an active transaction owns the conflict key", async () => {

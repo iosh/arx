@@ -1,17 +1,9 @@
 import { defineSingletonPersistenceType, type SingletonPersistenceType } from "../persistence/definition.js";
+
 export type EncryptedVaultRecord = Readonly<{
-  version: 1;
-  kdf: Readonly<{
-    name: "pbkdf2";
-    hash: "sha256";
-    salt: string;
-    iterations: number;
-  }>;
-  cipher: Readonly<{
-    name: "aes-gcm";
-    iv: string;
-    data: string;
-  }>;
+  salt: string;
+  iv: string;
+  ciphertext: string;
 }>;
 
 export interface EncryptedVaultReader {

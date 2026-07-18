@@ -1,7 +1,6 @@
-export type { AccountSigningService } from "./accountSigning.js";
-export { createWalletAccountSigning } from "./accountSigning.js";
 export * from "./errors.js";
-export type { KeyringNamespaceAdapter, KeyringNamespaceAdapters } from "./namespaceAdapter.js";
+export { Keyring } from "./Keyring.js";
+export type { KeyringAccountIdentity, KeyringNamespaceAdapter, KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 export { getKeyringNamespaceAdapter } from "./namespaceAdapter.js";
 export type {
   BackupStatus,
@@ -15,5 +14,3 @@ export type {
   KeySourcesReader,
   PrivateKeySourceRecord,
 } from "./persistence.js";
-export type { UnlockedSigner, UnlockedSignersDraft } from "./UnlockedSigners.js";
-export { createUnlockedSignersDraft, UnlockedSigners } from "./UnlockedSigners.js";

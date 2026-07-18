@@ -2,7 +2,7 @@ import type { AccountAddressCodecs } from "../../../accounts/accountAddressCodec
 import { addressFromAccountId } from "../../../accounts/accountId.js";
 import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
-import type { AccountSigningService } from "../../../keyring/accountSigning.js";
+import type { Eip155AccountSigning } from "../../../namespaces/eip155/accountSigning.js";
 import type { TransactionJsonObject, TransactionRecord } from "../../persistence.js";
 import type {
   TransactionFinalizationResult,
@@ -119,7 +119,7 @@ export const createEip155TransactionAdapter = (params: {
   chainJsonRpc: ChainJsonRpcClient;
   chains: ChainAddressingByNamespace;
   accountAddressCodecs: AccountAddressCodecs;
-  accountSigning: AccountSigningService;
+  accountSigning: Eip155AccountSigning;
 }): TransactionNamespaceAdapter => {
   const signer = createEip155Signer({ accountSigning: params.accountSigning });
   const broadcaster = createEip155Broadcaster({ chainJsonRpc: params.chainJsonRpc });

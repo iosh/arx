@@ -14,65 +14,54 @@ export class VaultLockedError extends ArxBaseError {
   static readonly code = "vault.locked";
 
   constructor() {
-    super("Vault secret is not available.", {
+    super("Vault is locked.", {
       code: VaultLockedError.code,
     });
   }
 }
 
-export class VaultInvalidCiphertextError extends ArxBaseError {
-  static readonly code = "vault.invalid_ciphertext";
-
-  constructor(cause?: unknown) {
-    super("Vault ciphertext is invalid or corrupted.", {
-      code: VaultInvalidCiphertextError.code,
-      ...(cause !== undefined ? { cause } : {}),
-    });
-  }
-}
-
-export class VaultInvalidPasswordError extends ArxBaseError {
-  static readonly code = "vault.invalid_password";
+export class VaultIncorrectPasswordError extends ArxBaseError {
+  static readonly code = "vault.incorrect_password";
 
   constructor() {
-    super("Vault password is missing or incorrect.", {
-      code: VaultInvalidPasswordError.code,
+    super("Vault password is incorrect.", {
+      code: VaultIncorrectPasswordError.code,
     });
   }
 }
 
-export class VaultPlatformUnavailableError extends ArxBaseError {
-  static readonly code = "vault.platform_unavailable";
+export class VaultPasswordTooShortError extends ArxBaseError {
+  static readonly code = "vault.password_too_short";
 
-  constructor(platform: string) {
-    super(`Vault platform API "${platform}" is not available.`, {
-      code: VaultPlatformUnavailableError.code,
-      details: { platform },
+  constructor(minimumLength: number, actualLength: number) {
+    super(`Vault password must contain at least ${minimumLength} characters.`, {
+      code: VaultPasswordTooShortError.code,
+      details: { minimumLength, actualLength },
     });
   }
 }
 
-export class VaultInvariantViolationError extends ArxBaseError {
-  static readonly code = "vault.invariant_violation";
+export class VaultRecordDecodeError extends ArxBaseError {
+  static readonly code = "vault.record_decode_failed";
 
-  constructor(invariant: string) {
-    super("Vault internal state is inconsistent.", {
-      code: VaultInvariantViolationError.code,
-      details: { invariant },
+  constructor(cause: unknown) {
+    super("Stored vault record could not be decoded.", {
+      code: VaultRecordDecodeError.code,
+      cause,
     });
   }
 }
 
-export class VaultConfigError extends ArxBaseError {
-  static readonly code = "vault.config_invalid";
+export type VaultCryptoOperation = "random-bytes" | "derive-encryption-key" | "encrypt";
 
-  constructor(field: "randomBytes" | "iterations" | "saltBytes" | "ivBytes") {
-    super("Vault configuration is invalid.", {
-      code: VaultConfigError.code,
-      details: {
-        field,
-        reason: "positive_integer_required",
-      },
+export class VaultCryptoOperationError extends ArxBaseError {
+  static readonly code = "vault.crypto_operation_failed";
+
+  constructor(operation: VaultCryptoOperation, cause: unknown) {
+    super("Vault cryptographic operation failed.", {
+      code: VaultCryptoOperationError.code,
+      details: { operation },
+      cause,
     });
   }
 }

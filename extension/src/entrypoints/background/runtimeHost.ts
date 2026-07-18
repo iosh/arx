@@ -10,7 +10,6 @@ type BackgroundRuntimeCache = { core: CoreRuntime };
 const createWalletHandlers = (wallet: CoreRuntime["wallet"]): MethodHandlerTree<CoreRuntime["wallet"]> => ({
   getStatus: () => wallet.getStatus(),
   getAutoLock: () => wallet.getAutoLock(),
-  getSigner: (accountId) => wallet.getSigner(accountId),
   initializeWithNewMnemonic: (input) => wallet.initializeWithNewMnemonic(input),
   initializeFromMnemonic: (input) => wallet.initializeFromMnemonic(input),
   initializeFromPrivateKey: (input) => wallet.initializeFromPrivateKey(input),

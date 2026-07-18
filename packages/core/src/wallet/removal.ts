@@ -6,6 +6,7 @@ import { permissionPersistenceType } from "../permissions/persistence.js";
 import { persistenceChange } from "../persistence/change.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
 import { WalletOperationRejectedError } from "./errors.js";
+import { requireKeyringSecrets } from "./unlocked.js";
 import type { WalletContext } from "./Wallet.js";
 
 export const selectionChangesForRemovedAccounts = async (
@@ -39,6 +40,7 @@ export const permissionChangesForRemovedAccounts = async (wallet: WalletContext,
 export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
   await wallet.mutations.run(async (commit) => {
     wallet.vault.requireUnlocked();
+    requireKeyringSecrets(wallet);
     const [sources, keyrings, accountIds, permissions] = await Promise.all([
       wallet.readers.keySources.listAll(),
       wallet.readers.hdKeyrings.listAll(),
@@ -60,8 +62,8 @@ export const deleteWallet = async (wallet: WalletContext): Promise<void> => {
       ),
     ]);
     wallet.autoLock.stop();
-    wallet.signers.clear();
-    wallet.vault.clear();
+    wallet.keyring.lock();
+    wallet.vault.activateDeleted();
     wallet.publishChanged({
       vault: true,
       accounts: accountIds,

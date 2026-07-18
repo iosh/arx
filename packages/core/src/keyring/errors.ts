@@ -83,18 +83,3 @@ export class KeyringSourceNotFoundError extends ArxBaseError {
     });
   }
 }
-
-export class KeyringInvalidSigningPayloadError extends ArxBaseError {
-  static readonly code = "keyring.signing_payload_invalid";
-
-  constructor(actualBytes: number) {
-    super("Signing payload must be a 32-byte digest.", {
-      code: KeyringInvalidSigningPayloadError.code,
-      details: {
-        field: "digest",
-        expectedBytes: 32,
-        actualBytes,
-      },
-    });
-  }
-}

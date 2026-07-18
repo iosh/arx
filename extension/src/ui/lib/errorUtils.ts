@@ -60,7 +60,7 @@ const getMessageText = (value: unknown) => {
 
 export const getUnlockErrorMessage = (error: unknown): string => {
   if (isWalletError(error)) {
-    if (getWalletErrorCode(error) === "vault.invalid_password") {
+    if (getWalletErrorCode(error) === "vault.incorrect_password") {
       return "Incorrect password. Please try again.";
     }
     return getErrorMessage(error);

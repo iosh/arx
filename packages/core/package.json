@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@metamask/utils": "11.8.0",
+    "@noble/ciphers": "1.3.0",
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
     "@scure/bip32": "1.7.0",

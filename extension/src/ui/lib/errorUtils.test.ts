@@ -72,7 +72,7 @@ describe("errorUtils", () => {
   it("keeps remote code handling for unlock and init flows", () => {
     expect(
       getUnlockErrorMessage(
-        createWalletError("vault.invalid_password", "Invalid password", "VaultInvalidPasswordError"),
+        createWalletError("vault.incorrect_password", "Vault password is incorrect", "VaultIncorrectPasswordError"),
       ),
     ).toBe("Incorrect password. Please try again.");
 
@@ -81,5 +81,15 @@ describe("errorUtils", () => {
         createWalletError("vault.not_initialized", "Vault is not initialized", "VaultNotInitializedError"),
       ),
     ).toBe("Vault is not initialized");
+
+    expect(
+      getInitErrorMessage(
+        createWalletError(
+          "vault.password_too_short",
+          "Vault password must contain at least 8 characters.",
+          "VaultPasswordTooShortError",
+        ),
+      ),
+    ).toBe("Vault password must contain at least 8 characters.");
   });
 });

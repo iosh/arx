@@ -143,30 +143,36 @@ export const submitTransaction = async (params: {
     return draft;
   });
 
-  let signedPayload: TransactionJsonObject;
-  try {
-    signedPayload = await adapter.sign({
-      accountId: params.input.accountId,
-      chainRef: params.input.chainRef,
-      signingPayload: finalized.signingPayload,
-    });
-  } catch (error) {
-    return await params.mutations.run(async (commit) => {
+  // Keep account-state rechecks, signing, and the broadcasting commit in one serialized operation.
+  const signing = await params.mutations.run(async (commit) => {
+    let signedPayload: TransactionJsonObject;
+    try {
+      signedPayload = await adapter.sign({
+        accountId: params.input.accountId,
+        chainRef: params.input.chainRef,
+        signingPayload: finalized.signingPayload,
+      });
+    } catch (error) {
       const failed = failTransactionBeforeSubmission(await requireCurrent(params.readers, transactionId), {
         phase: "submitting",
         reason: failureFromError(error, "transaction.signing_failed", "Transaction signing failed."),
       });
+
       await commit([persistenceChange.put(transactionPersistenceType, failed)]);
       params.publishChanged([transactionId]);
-      return failed;
-    });
-  }
 
-  await params.mutations.run(async (commit) => {
+      return { status: "failed" as const, record: failed };
+    }
+
     const next = markTransactionBroadcasting(await requireCurrent(params.readers, transactionId));
     await commit([persistenceChange.put(transactionPersistenceType, next)]);
     params.publishChanged([transactionId]);
+
+    return { status: "signed" as const, signedPayload };
   });
+
+  if (signing.status === "failed") return signing.record;
+  const signedPayload = signing.signedPayload;
 
   let outcome: TransactionBroadcastOutcome;
   try {

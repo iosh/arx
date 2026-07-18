@@ -4,9 +4,9 @@ import { loadVaultBootstrap } from "./bootstrap.js";
 import type { EncryptedVaultRecord } from "./persistence.js";
 
 const encryptedVault: EncryptedVaultRecord = {
-  version: 1,
-  kdf: { name: "pbkdf2", hash: "sha256", salt: "salt", iterations: 1 },
-  cipher: { name: "aes-gcm", iv: "iv", data: "data" },
+  salt: "AAECAwQFBgcICQoLDA0ODw==",
+  iv: "EBESExQVFhcYGRob",
+  ciphertext: "zp/Hc7X9pGfcMMMdmr+Fmv+RHSNqR5YnwEDSEQ==",
 };
 
 describe("loadVaultBootstrap", () => {

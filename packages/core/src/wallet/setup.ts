@@ -3,11 +3,16 @@ import { createAccountRecord } from "../accounts/accountRecord.js";
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import { type BackupStatus, hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
-import type { UnlockedSigner } from "../keyring/UnlockedSigners.js";
+import {
+  type Bip39KeySourceSecret,
+  canonicalizeMnemonicWords,
+  createKeyringSecrets,
+  encodeKeyringSecrets,
+  type PrivateKeySourceSecret,
+} from "../keyring/secrets.js";
 import { persistenceChange } from "../persistence/change.js";
 import { createUnlockedVault } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
-import { type Bip39KeySource, joinMnemonicWords, type PrivateKeySource } from "../vault/secrets.js";
 import { WalletAlreadyInitializedError } from "./errors.js";
 import type { WalletContext } from "./Wallet.js";
 
@@ -25,61 +30,64 @@ const initializeBip39 = async (
   const keySourceId = crypto.randomUUID();
   const keyringId = crypto.randomUUID();
   const createAt = Date.now();
-  const source: Bip39KeySource = {
+  const source: Bip39KeySourceSecret = {
     keySourceId,
     type: "bip39",
-    mnemonic: joinMnemonicWords(params.mnemonic),
+    mnemonic: canonicalizeMnemonicWords(params.mnemonic),
     ...(params.passphrase ? { passphrase: params.passphrase } : {}),
   };
-  const signer = adapter.deriveAccount({
-    source,
-    derivationProfileId: adapter.defaultDerivationProfileId,
-    derivationIndex: 0,
-  });
-  const account = createAccountRecord({
-    accountId: signer.accountId,
-    origin: { type: "hd", keyringId, derivationIndex: 0 },
-    createAt,
-  });
-  const unlocked = await createUnlockedVault({ password: params.password, secrets: { keySources: [source] } });
-  let signerOwnedByDraft = true;
 
-  try {
-    await wallet.mutations.run(async (commit) => {
-      if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
-      await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
-        persistenceChange.put(keySourcePersistenceType, {
-          keySourceId,
-          type: "bip39",
-          backupStatus: params.backupStatus,
-          createAt,
-        }),
-        persistenceChange.put(hdKeyringPersistenceType, {
-          keyringId,
-          keySourceId,
-          namespace: params.namespace,
-          derivationProfileId: adapter.defaultDerivationProfileId,
-          nextDerivationIndex: 1,
-          createAt,
-        }),
-        persistenceChange.put(accountPersistenceType, account),
-        persistenceChange.put(accountSelectionPersistenceType, {
-          namespace: params.namespace,
-          accountId: account.accountId,
-        }),
-      ]);
-      wallet.vault.replaceUnlocked(unlocked);
-      wallet.signers.replace({ signers: [signer] });
-      signerOwnedByDraft = false;
-      wallet.autoLock.start();
-      wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+  return await wallet.mutations.run(async (commit) => {
+    if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
+
+    const identity = adapter.deriveAccount({
+      source,
+      derivationProfileId: adapter.defaultDerivationProfileId,
+      derivationIndex: 0,
     });
+    const account = createAccountRecord({
+      accountId: identity.accountId,
+      origin: { type: "hd", keyringId, derivationIndex: 0 },
+      createAt,
+    });
+
+    const secrets = createKeyringSecrets([source]);
+    const unlocked = await createUnlockedVault({
+      password: params.password,
+      plaintext: encodeKeyringSecrets(secrets),
+    });
+    const changes = [
+      persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
+      persistenceChange.put(keySourcePersistenceType, {
+        keySourceId,
+        type: "bip39",
+        backupStatus: params.backupStatus,
+        createAt,
+      }),
+      persistenceChange.put(hdKeyringPersistenceType, {
+        keyringId,
+        keySourceId,
+        namespace: params.namespace,
+        derivationProfileId: adapter.defaultDerivationProfileId,
+        nextDerivationIndex: 1,
+        createAt,
+      }),
+      persistenceChange.put(accountPersistenceType, account),
+      persistenceChange.put(accountSelectionPersistenceType, {
+        namespace: params.namespace,
+        accountId: account.accountId,
+      }),
+    ];
+
+    await commit(changes);
+
+    wallet.vault.activate(unlocked);
+    wallet.keyring.activate(secrets);
+    wallet.autoLock.start();
+    wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+
     return account.accountId;
-  } catch (error) {
-    if (signerOwnedByDraft) signer.clear();
-    throw error;
-  }
+  });
 };
 
 export const initializeWithNewMnemonic = async (
@@ -99,47 +107,49 @@ export const initializeFromPrivateKey = async (
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
   const createAt = Date.now();
-  const source: PrivateKeySource = {
+  const source: PrivateKeySourceSecret = {
     keySourceId,
     type: "private-key",
-    namespace: params.namespace,
     privateKey: params.privateKey,
   };
-  const signer: UnlockedSigner = adapter.importPrivateKey(source);
-  const account = createAccountRecord({
-    accountId: signer.accountId,
-    origin: { type: "private-key", keySourceId },
-    createAt,
-  });
-  const unlocked = await createUnlockedVault({ password: params.password, secrets: { keySources: [source] } });
-  let signerOwnedByDraft = true;
 
-  try {
-    await wallet.mutations.run(async (commit) => {
-      if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
-      await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
-        persistenceChange.put(keySourcePersistenceType, {
-          keySourceId,
-          type: "private-key",
-          namespace: params.namespace,
-          createAt,
-        }),
-        persistenceChange.put(accountPersistenceType, account),
-        persistenceChange.put(accountSelectionPersistenceType, {
-          namespace: params.namespace,
-          accountId: account.accountId,
-        }),
-      ]);
-      wallet.vault.replaceUnlocked(unlocked);
-      wallet.signers.replace({ signers: [signer] });
-      signerOwnedByDraft = false;
-      wallet.autoLock.start();
-      wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+  return await wallet.mutations.run(async (commit) => {
+    if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
+
+    const identity = adapter.importPrivateKey(source);
+    const account = createAccountRecord({
+      accountId: identity.accountId,
+      origin: { type: "private-key", keySourceId },
+      createAt,
     });
+
+    const secrets = createKeyringSecrets([source]);
+    const unlocked = await createUnlockedVault({
+      password: params.password,
+      plaintext: encodeKeyringSecrets(secrets),
+    });
+    const changes = [
+      persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
+      persistenceChange.put(keySourcePersistenceType, {
+        keySourceId,
+        type: "private-key",
+        namespace: params.namespace,
+        createAt,
+      }),
+      persistenceChange.put(accountPersistenceType, account),
+      persistenceChange.put(accountSelectionPersistenceType, {
+        namespace: params.namespace,
+        accountId: account.accountId,
+      }),
+    ];
+
+    await commit(changes);
+
+    wallet.vault.activate(unlocked);
+    wallet.keyring.activate(secrets);
+    wallet.autoLock.start();
+    wallet.publishChanged({ vault: true, accounts: [account.accountId], keySources: [keySourceId] });
+
     return account.accountId;
-  } catch (error) {
-    if (signerOwnedByDraft) signer.clear();
-    throw error;
-  }
+  });
 };

@@ -25,10 +25,7 @@ describe("eip155 signer (vectors)", () => {
     const secret = Hex.toBytes(privateKey);
 
     const accountSigning = {
-      assertAccountUnlocked: async (key: string) => {
-        expect(key).toBe(accountId);
-      },
-      signDigestByAccountId: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
+      signDigest: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
         expect(key).toBe(accountId);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
@@ -54,10 +51,7 @@ describe("eip155 signer (vectors)", () => {
     const secret = Hex.toBytes(privateKey);
 
     const accountSigning = {
-      assertAccountUnlocked: async (key: string) => {
-        expect(key).toBe(accountId);
-      },
-      signDigestByAccountId: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
+      signDigest: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
         expect(key).toBe(accountId);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
@@ -108,10 +102,7 @@ describe("eip155 signer (vectors)", () => {
     const secret = Hex.toBytes(privateKey);
 
     const accountSigning = {
-      assertAccountUnlocked: async (key: string) => {
-        expect(key).toBe(accountId);
-      },
-      signDigestByAccountId: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
+      signDigest: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
         expect(key).toBe(accountId);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
@@ -164,10 +155,7 @@ describe("eip155 signer (vectors)", () => {
     const secret = Hex.toBytes(privateKey);
 
     const accountSigning = {
-      assertAccountUnlocked: async (key: string) => {
-        expect(key).toBe(accountId);
-      },
-      signDigestByAccountId: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
+      signDigest: async ({ accountId: key, digest }: { accountId: string; digest: Uint8Array }) => {
         expect(key).toBe(accountId);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };

@@ -4,43 +4,43 @@ import type { EncryptedVaultRecord } from "./persistence.js";
 
 export type VaultStatus = "uninitialized" | "locked" | "unlocked";
 
+type VaultState =
+  | Readonly<{ status: "uninitialized" }>
+  | Readonly<{ status: "locked"; record: EncryptedVaultRecord }>
+  | Readonly<{ status: "unlocked"; unlocked: UnlockedVault }>;
+
 /** Owns the encrypted vault and sensitive material for the current unlocked period. */
 export class Vault {
-  #record: EncryptedVaultRecord | null;
-  #unlocked: UnlockedVault | null = null;
+  #state: VaultState;
 
   constructor(record: EncryptedVaultRecord | null) {
-    this.#record = record;
+    this.#state = record ? { status: "locked", record } : { status: "uninitialized" };
   }
 
   getStatus(): VaultStatus {
-    if (this.#unlocked) return "unlocked";
-    return this.#record ? "locked" : "uninitialized";
+    return this.#state.status;
   }
 
   requireRecord(): EncryptedVaultRecord {
-    if (!this.#record) throw new VaultNotInitializedError();
-    return this.#record;
+    if (this.#state.status === "uninitialized") throw new VaultNotInitializedError();
+    return this.#state.status === "locked" ? this.#state.record : this.#state.unlocked.record;
   }
 
   requireUnlocked(): UnlockedVault {
-    if (!this.#unlocked) throw new VaultLockedError();
-    return this.#unlocked;
+    if (this.#state.status !== "unlocked") throw new VaultLockedError();
+    return this.#state.unlocked;
   }
 
-  replaceUnlocked(unlocked: UnlockedVault): void {
-    this.#record = unlocked.record;
-    this.#unlocked = unlocked;
+  activate(unlocked: UnlockedVault): void {
+    this.#state = { status: "unlocked", unlocked };
   }
 
-  lock(): boolean {
-    if (!this.#unlocked) return false;
-    this.#unlocked = null;
-    return true;
+  lock(): void {
+    if (this.#state.status !== "unlocked") return;
+    this.#state = { status: "locked", record: this.#state.unlocked.record };
   }
 
-  clear(): void {
-    this.#unlocked = null;
-    this.#record = null;
+  activateDeleted(): void {
+    this.#state = { status: "uninitialized" };
   }
 }

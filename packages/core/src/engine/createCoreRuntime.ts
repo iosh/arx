@@ -7,8 +7,9 @@ import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
 import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { JsonValue } from "../errors.js";
-import { createWalletAccountSigning } from "../keyring/accountSigning.js";
+import { Keyring } from "../keyring/Keyring.js";
 import { createMessenger } from "../messenger/Messenger.js";
+import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
@@ -91,9 +92,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   let previousWalletStatus = vaultBootstrap.encryptedVault ? "locked" : "uninitialized";
   const unlockedListeners = new Set<(payload: { at: number }) => void>();
   const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
+  const keyring = new Keyring();
   const wallet = createWallet({
     readers: input.persistence.readers,
     mutations,
+    keyring,
     adapters: new Map(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
     bootstrap: vaultBootstrap,
     publishChanged: (change) => {
@@ -126,7 +129,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     publishChanged: () => publish({ owner: "permissions" }),
   });
-  const accountSigning = createWalletAccountSigning(wallet);
   const chainJsonRpc = new ChainJsonRpc({
     ...(input.rpc?.options ?? {}),
     endpoints: {
@@ -135,6 +137,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   });
   const transactionAdapters = new Map();
   if (namespaceNames.has("eip155")) {
+    const accountSigning = createEip155AccountSigning({
+      keyring,
+      accounts: input.persistence.readers.accounts,
+      keySources: input.persistence.readers.keySources,
+      hdKeyrings: input.persistence.readers.hdKeyrings,
+    });
     transactionAdapters.set(
       "eip155",
       createEip155TransactionAdapter({

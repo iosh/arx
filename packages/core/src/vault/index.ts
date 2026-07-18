@@ -1,18 +1,12 @@
 export type { VaultBootstrap } from "./bootstrap.js";
 export { loadVaultBootstrap } from "./bootstrap.js";
-export type { UnlockedVault } from "./crypto.js";
-export { changeVaultPassword, createUnlockedVault, replaceVaultSecrets, unlockVaultRecord } from "./crypto.js";
 export {
-  VaultInvalidCiphertextError,
-  VaultInvalidPasswordError,
-  VaultInvariantViolationError,
+  VaultCryptoOperationError,
+  VaultIncorrectPasswordError,
   VaultLockedError,
   VaultNotInitializedError,
-  VaultPlatformUnavailableError,
+  VaultPasswordTooShortError,
+  VaultRecordDecodeError,
 } from "./errors.js";
+export { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "./passwordPolicy.js";
 export type { EncryptedVaultReader, EncryptedVaultRecord } from "./persistence.js";
-export type { Bip39KeySource, LocalKeySource, PrivateKeySource, VaultSecrets } from "./secrets.js";
-export { decodeVaultSecrets, encodeVaultSecrets, joinMnemonicWords } from "./secrets.js";
-export type { VaultConfig } from "./types.js";
-export type { VaultStatus } from "./Vault.js";
-export { Vault } from "./Vault.js";

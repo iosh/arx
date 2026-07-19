@@ -8,17 +8,6 @@ export class WalletAlreadyInitializedError extends ArxBaseError {
   }
 }
 
-export class WalletRecordNotFoundError extends ArxBaseError {
-  static readonly code = "wallet.record_not_found";
-
-  constructor(recordType: string, id: string) {
-    super("Required wallet record was not found.", {
-      code: WalletRecordNotFoundError.code,
-      details: { recordType, id },
-    });
-  }
-}
-
 export class WalletOperationRejectedError extends ArxBaseError {
   static readonly code = "wallet.operation_rejected";
 
@@ -45,6 +34,17 @@ export class WalletUnlockFailedError extends ArxBaseError {
     super("Wallet could not be unlocked.", {
       code: WalletUnlockFailedError.code,
       cause,
+    });
+  }
+}
+
+export class AutoLockDurationOutOfRangeError extends ArxBaseError {
+  static readonly code = "wallet.auto_lock_duration_out_of_range";
+
+  constructor(durationMs: number) {
+    super("Auto-lock duration is outside the supported range.", {
+      code: AutoLockDurationOutOfRangeError.code,
+      details: { durationMs },
     });
   }
 }

@@ -17,14 +17,14 @@ import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
 import { createProviderChainSelections } from "../provider/chainSelection.js";
+import { systemTime } from "../runtime/time.js";
 import { createTransactions, loadTransactionsBootstrap } from "../transactions/index.js";
 import { createEip155TransactionAdapter } from "../transactions/namespace/eip155/adapter.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
+import { loadWalletBootstrap } from "../wallet/bootstrap.js";
 import { createWallet } from "../wallet/Wallet.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { NamespaceDefinitionRequiredError } from "./errors.js";
-
-const DEFAULT_AUTO_LOCK_DURATION_MS = 15 * 60_000;
 
 const createWalletSelectionDefaults = (
   definitions: CreateCoreRuntimeInput["namespaces"]["definitions"],
@@ -79,23 +79,26 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const walletSelectionDefaults =
     input.defaults?.walletSelection ?? createWalletSelectionDefaults(namespaceDefinitions);
 
-  const [vaultBootstrap, keyringBootstrap, accountsBootstrap, networksBootstrap, transactionsBootstrap] =
-    await Promise.all([
-      loadVaultBootstrap({
-        readers: input.persistence.readers,
-        defaultAutoLockDurationMs: input.defaults?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
-      }),
-      loadKeyringBootstrap(input.persistence.readers),
-      loadAccountsBootstrap(input.persistence.readers),
-      loadNetworksBootstrap({
-        readers: input.persistence.readers,
-        builtinSeeds: builtinChains,
-        walletSelectionDefaults,
-      }),
-      loadTransactionsBootstrap(input.persistence.readers),
-    ]);
+  const [
+    vaultBootstrap,
+    walletBootstrap,
+    keyringBootstrap,
+    accountsBootstrap,
+    networksBootstrap,
+    transactionsBootstrap,
+  ] = await Promise.all([
+    loadVaultBootstrap(input.persistence.readers),
+    loadWalletBootstrap(input.persistence.readers),
+    loadKeyringBootstrap(input.persistence.readers),
+    loadAccountsBootstrap(input.persistence.readers),
+    loadNetworksBootstrap({
+      readers: input.persistence.readers,
+      builtinSeeds: builtinChains,
+      walletSelectionDefaults,
+    }),
+    loadTransactionsBootstrap(input.persistence.readers),
+  ]);
 
-  let previousWalletStatus = vaultBootstrap.encryptedVault ? "locked" : "uninitialized";
   const unlockedListeners = new Set<(payload: { at: number }) => void>();
   const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
   const keyring = new Keyring(keyringBootstrap);
@@ -111,17 +114,19 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     keyring,
     accounts,
     adapters: Object.fromEntries(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
-    bootstrap: vaultBootstrap,
-    publishChanged: (change) => {
-      const nextStatus = wallet.getStatus();
-      if (previousWalletStatus !== nextStatus) {
-        const at = Date.now();
-        if (nextStatus === "unlocked") for (const listener of unlockedListeners) listener({ at });
-        if (previousWalletStatus === "unlocked") {
+    time: systemTime,
+    vaultBootstrap,
+    walletBootstrap,
+    publishStatusChanged: (change) => {
+      if (change.type === "walletStatusChanged") {
+        const at = systemTime.now();
+        if (change.status === "unlocked") {
+          for (const listener of unlockedListeners) listener({ at });
+        } else if (change.status === "locked") {
           for (const listener of lockedListeners) listener({ at, reason: "manual" });
         }
-        previousWalletStatus = nextStatus;
       }
+
       publish({ owner: "wallet", change });
     },
     publishKeyringChanged: () => publish({ owner: "keyring", change: { type: "keyringChanged" } }),
@@ -276,7 +281,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     },
     close: () => {
       transactions.monitor.stop();
-      wallet.lock();
+      void wallet.lock();
       listeners.clear();
       connectionListeners.clear();
       unlockedListeners.clear();

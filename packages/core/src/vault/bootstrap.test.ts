@@ -10,17 +10,12 @@ const encryptedVault: EncryptedVaultRecord = {
 };
 
 describe("loadVaultBootstrap", () => {
-  it("loads only the vault record and auto-lock setting, using the configured default when absent", async () => {
+  it("loads the encrypted vault record", async () => {
     const readers = {
       encryptedVault: { get: vi.fn(async () => encryptedVault) },
-      settings: { get: vi.fn(async () => null) },
-    } satisfies Pick<CorePersistenceReaders, "encryptedVault" | "settings">;
+    } satisfies Pick<CorePersistenceReaders, "encryptedVault">;
 
-    await expect(loadVaultBootstrap({ readers, defaultAutoLockDurationMs: 900_000 })).resolves.toEqual({
-      encryptedVault,
-      autoLockDurationMs: 900_000,
-    });
+    await expect(loadVaultBootstrap(readers)).resolves.toEqual({ encryptedVault });
     expect(readers.encryptedVault.get).toHaveBeenCalledOnce();
-    expect(readers.settings.get).toHaveBeenCalledWith("autoLock");
   });
 });

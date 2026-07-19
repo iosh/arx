@@ -36,11 +36,14 @@ export type {
 } from "../provider/persistence.js";
 export type {
   AutoLockSetting,
-  AutoLockSettingRecord,
   SettingKey,
   SettingRecord,
   SettingRecordFor,
   SettingsReader,
+} from "../settings/persistence.js";
+export {
+  AUTO_LOCK_SETTING_KEY,
+  settingPersistenceType,
 } from "../settings/persistence.js";
 export type {
   BroadcastingTransactionRecord,

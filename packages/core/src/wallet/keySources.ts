@@ -25,7 +25,7 @@ const addMnemonic = async (
 ): Promise<AccountId> => {
   const keySourceId = crypto.randomUUID();
   const hdKeyringId = crypto.randomUUID();
-  const createdAt = Date.now();
+  const createdAt = wallet.time.now();
   const source = importBip39KeySourceSecret({
     keySourceId,
     mnemonic: params.mnemonic,
@@ -80,8 +80,7 @@ const addMnemonic = async (
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
-    wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true });
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
@@ -104,7 +103,7 @@ export const importPrivateKey = async (
   params: { privateKey: string; namespace: string },
 ): Promise<AccountId> => {
   const keySourceId = crypto.randomUUID();
-  const createdAt = Date.now();
+  const createdAt = wallet.time.now();
   const source: PrivateKeySourceSecret = {
     keySourceId,
     type: "private-key",
@@ -155,8 +154,7 @@ export const importPrivateKey = async (
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
-    wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true });
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
@@ -216,8 +214,7 @@ export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySou
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(nextSecrets);
-    wallet.autoLock.restart();
-    wallet.publishChanged({ vault: true });
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   });

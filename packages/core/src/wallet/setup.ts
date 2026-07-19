@@ -1,5 +1,4 @@
 import { accountsChangedFromUpdate } from "../accounts/Accounts.js";
-import type { AccountId } from "../accounts/accountId.js";
 import type { AccountRecord } from "../accounts/persistence.js";
 import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
@@ -9,7 +8,14 @@ import { persistenceChange } from "../persistence/change.js";
 import { createUnlockedVault } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
 import { WalletAlreadyInitializedError } from "./errors.js";
-import type { WalletContext } from "./Wallet.js";
+import type {
+  Bip39WalletCreated,
+  CreateFromMnemonicInput,
+  CreateFromPrivateKeyInput,
+  PrivateKeyWalletCreated,
+  RestoreFromMnemonicInput,
+  WalletContext,
+} from "./Wallet.js";
 
 const initializeBip39 = async (
   wallet: WalletContext,
@@ -19,18 +25,18 @@ const initializeBip39 = async (
     namespace: string;
     backupStatus: BackupStatus;
   },
-): Promise<AccountId> => {
+): Promise<Bip39WalletCreated> => {
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
   const hdKeyringId = crypto.randomUUID();
-  const createdAt = Date.now();
+  const createdAt = wallet.time.now();
   const source = importBip39KeySourceSecret({
     keySourceId,
     mnemonic: params.mnemonic,
   });
 
   return await wallet.mutations.run(async (commit) => {
-    if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
+    if (wallet.vault.getStatus() !== "uninitialized") throw new WalletAlreadyInitializedError();
 
     const seed = await deriveBip39Seed(source);
     const accountId = adapter.deriveHdAccountId({
@@ -76,31 +82,31 @@ const initializeBip39 = async (
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
-    wallet.publishChanged({ vault: true });
+    wallet.publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
-    return account.accountId;
+    return { keySourceId, hdKeyringId, accountId: account.accountId };
   });
 };
 
-export const initializeWithNewMnemonic = async (
+export const createFromMnemonic = async (
   wallet: WalletContext,
-  params: { password: string; mnemonic: string; namespace: string },
-): Promise<AccountId> => await initializeBip39(wallet, { ...params, backupStatus: "pending" });
+  params: CreateFromMnemonicInput,
+): Promise<Bip39WalletCreated> => await initializeBip39(wallet, { ...params, backupStatus: "pending" });
 
-export const initializeFromMnemonic = async (
+export const restoreFromMnemonic = async (
   wallet: WalletContext,
-  params: { password: string; mnemonic: string; namespace: string },
-): Promise<AccountId> => await initializeBip39(wallet, { ...params, backupStatus: "confirmed" });
+  params: RestoreFromMnemonicInput,
+): Promise<Bip39WalletCreated> => await initializeBip39(wallet, { ...params, backupStatus: "confirmed" });
 
-export const initializeFromPrivateKey = async (
+export const createFromPrivateKey = async (
   wallet: WalletContext,
-  params: { password: string; privateKey: string; namespace: string },
-): Promise<AccountId> => {
+  params: CreateFromPrivateKeyInput,
+): Promise<PrivateKeyWalletCreated> => {
   const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
   const keySourceId = crypto.randomUUID();
-  const createdAt = Date.now();
+  const createdAt = wallet.time.now();
   const source: PrivateKeySourceSecret = {
     keySourceId,
     type: "private-key",
@@ -108,7 +114,7 @@ export const initializeFromPrivateKey = async (
   };
 
   return await wallet.mutations.run(async (commit) => {
-    if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
+    if (wallet.vault.getStatus() !== "uninitialized") throw new WalletAlreadyInitializedError();
 
     const accountId = adapter.accountIdFromPrivateKey(source.privateKey);
     const account: Omit<AccountRecord, "hidden"> = {
@@ -142,10 +148,10 @@ export const initializeFromPrivateKey = async (
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
     wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
-    wallet.publishChanged({ vault: true });
+    wallet.publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
-    return account.accountId;
+    return { keySourceId, accountId: account.accountId };
   });
 };

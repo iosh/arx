@@ -1,14 +1,16 @@
 import { decodeKeyringSecrets, type KeyringSecrets } from "../keyring/secrets.js";
 import { persistenceChange } from "../persistence/change.js";
-import { settingPersistenceType } from "../settings/persistence.js";
+import { AUTO_LOCK_SETTING_KEY, settingPersistenceType } from "../settings/persistence.js";
 import { changeVaultPassword, unlockVaultRecord } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
-import { assertAutoLockDuration } from "./AutoLockTimer.js";
+import { assertAutoLockDuration, DEFAULT_AUTO_LOCK_DURATION_MS } from "./AutoLockController.js";
 import { WalletUnlockFailedError } from "./errors.js";
 import type { WalletContext } from "./Wallet.js";
 
 export const unlock = async (wallet: WalletContext, password: string): Promise<void> => {
   await wallet.mutations.run(async () => {
+    if (wallet.vault.getStatus() === "unlocked") return;
+
     const draft = await unlockVaultRecord(wallet.vault.requireRecord(), password);
 
     let secrets: KeyringSecrets;
@@ -21,7 +23,7 @@ export const unlock = async (wallet: WalletContext, password: string): Promise<v
     wallet.vault.activate(draft.unlocked);
     wallet.keyring.activateSecrets(secrets);
     wallet.autoLock.start();
-    wallet.publishChanged({ vault: true });
+    wallet.publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
   });
 };
 
@@ -32,7 +34,7 @@ export const lock = async (wallet: WalletContext): Promise<void> => {
     wallet.autoLock.stop();
     wallet.keyring.lock();
     wallet.vault.lock();
-    wallet.publishChanged({ vault: true });
+    wallet.publishStatusChanged({ type: "walletStatusChanged", status: "locked" });
   });
 };
 
@@ -50,8 +52,7 @@ export const changePassword = async (
     await commit([persistenceChange.put(encryptedVaultPersistenceType, draft.record)]);
 
     wallet.vault.activate(draft);
-    wallet.autoLock.start();
-    wallet.publishChanged({ vault: true });
+    wallet.autoLock.recordActivity();
   });
 };
 
@@ -61,14 +62,16 @@ export const setAutoLockDuration = async (wallet: WalletContext, durationMs: num
   await wallet.mutations.run(async (commit) => {
     if (wallet.autoLock.getDuration() === durationMs) return;
 
-    await commit([
-      persistenceChange.put(settingPersistenceType, {
-        key: "autoLock",
-        value: { durationMs },
-      }),
-    ]);
+    const change =
+      durationMs === DEFAULT_AUTO_LOCK_DURATION_MS
+        ? persistenceChange.remove(settingPersistenceType, AUTO_LOCK_SETTING_KEY)
+        : persistenceChange.put(settingPersistenceType, {
+            key: AUTO_LOCK_SETTING_KEY,
+            durationMs,
+          });
 
-    wallet.autoLock.updateDuration(durationMs);
-    wallet.publishChanged({ autoLock: true });
+    await commit([change]);
+
+    wallet.autoLock.applyDuration(durationMs);
   });
 };

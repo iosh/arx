@@ -16,12 +16,12 @@ import type {
   ProviderRpcResponse,
 } from "../provider/access/types.js";
 import type { Transactions, TransactionsChanged } from "../transactions/Transactions.js";
-import type { Wallet, WalletChanged } from "../wallet/Wallet.js";
+import type { Wallet, WalletStatusChanged } from "../wallet/Wallet.js";
 
 export type CoreUnsubscribe = () => void;
 
 export type CoreRuntimeChanged =
-  | Readonly<{ owner: "wallet"; change: WalletChanged }>
+  | Readonly<{ owner: "wallet"; change: WalletStatusChanged }>
   | Readonly<{ owner: "keyring"; change: KeyringChanged }>
   | Readonly<{ owner: "accounts"; change: AccountsChanged }>
   | Readonly<{ owner: "networks"; change: NetworksChanged }>
@@ -33,7 +33,6 @@ export type CreateCoreRuntimeInput = Readonly<{
   namespaces: Readonly<{ definitions: readonly NamespaceDefinition[] }>;
   persistence: CorePersistence;
   defaults?: Readonly<{
-    autoLockDurationMs?: number;
     walletSelection?: WalletChainSelectionDefaults;
   }>;
   rpc?: Readonly<{

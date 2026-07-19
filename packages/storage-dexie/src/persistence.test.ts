@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 
 import {
   type AccountRecord,
+  AUTO_LOCK_SETTING_KEY,
   type Bip39KeySourceRecord,
   type HdKeyringRecord,
   type PermissionRecord,
@@ -163,9 +164,11 @@ describe("createDexiePersistence", () => {
       iv: "EBESExQVFhcYGRob",
       ciphertext: "zp/Hc7X9pGfcMMMdmr+Fmv+RHSNqR5YnwEDSEQ==",
     } as const;
+    const autoLock = { key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 } as const;
 
     await persistence.writer.commit([
       persistenceChange.put(persistenceTypes.encryptedVault, encryptedVault),
+      persistenceChange.put(persistenceTypes.setting, autoLock),
       persistenceChange.put(persistenceTypes.keySource, source),
       persistenceChange.put(persistenceTypes.hdKeyring, hdKeyring),
       persistenceChange.put(persistenceTypes.account, account),
@@ -173,6 +176,7 @@ describe("createDexiePersistence", () => {
     ]);
 
     expect(await persistence.readers.encryptedVault.get()).toEqual(encryptedVault);
+    expect(await persistence.readers.settings.get(AUTO_LOCK_SETTING_KEY)).toEqual(autoLock);
     expect(await persistence.readers.keySources.listAll()).toEqual([source]);
     expect(await persistence.readers.hdKeyrings.listAll()).toEqual([hdKeyring]);
     expect(await persistence.readers.accounts.listRecords()).toEqual([account]);
@@ -208,8 +212,8 @@ describe("createDexiePersistence", () => {
 
     const commit = writer.commit([
       persistenceChange.put(persistenceTypes.setting, {
-        key: "autoLock",
-        value: { durationMs: 60_000 },
+        key: AUTO_LOCK_SETTING_KEY,
+        durationMs: 60_000,
       }),
       persistenceChange.put(
         persistenceTypes.account,
@@ -221,7 +225,7 @@ describe("createDexiePersistence", () => {
     await expect(commit).rejects.toMatchObject({ code: PersistenceCommitError.code });
     await expect(commit).rejects.toHaveProperty("cause", failure);
     putAccount.mockRestore();
-    expect(await context.db.settings.get("autoLock")).toBeUndefined();
+    expect(await context.db.settings.get(AUTO_LOCK_SETTING_KEY)).toBeUndefined();
   });
 
   it("loads account records and selections independently for Accounts bootstrap", async () => {

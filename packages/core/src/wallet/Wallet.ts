@@ -6,9 +6,11 @@ import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import type { CoreTime } from "../runtime/time.js";
 import type { VaultBootstrap } from "../vault/bootstrap.js";
-import { Vault, type VaultStatus } from "../vault/Vault.js";
-import { AutoLockTimer } from "./AutoLockTimer.js";
+import { Vault } from "../vault/Vault.js";
+import { AutoLockController } from "./AutoLockController.js";
+import type { WalletBootstrap } from "./bootstrap.js";
 import { addHdKeyring, deriveHdAccount, removeHdKeyring } from "./keyrings.js";
 import {
   addNewMnemonic,
@@ -18,24 +20,51 @@ import {
   removeKeySource,
 } from "./keySources.js";
 import { changePassword, lock, setAutoLockDuration, unlock } from "./locking.js";
-import { deleteWallet } from "./removal.js";
-import { initializeFromMnemonic, initializeFromPrivateKey, initializeWithNewMnemonic } from "./setup.js";
+import { createFromMnemonic, createFromPrivateKey, restoreFromMnemonic } from "./setup.js";
 
-export type WalletChanged = Readonly<{
-  vault?: boolean;
-  autoLock?: boolean;
+export type WalletStatus = "uninitialized" | "locked" | "unlocked";
+
+export type WalletStatusChanged = Readonly<{
+  type: "walletStatusChanged";
+  status: WalletStatus;
+}>;
+
+export type Bip39WalletCreated = Readonly<{
+  keySourceId: KeySourceId;
+  hdKeyringId: HdKeyringId;
+  accountId: AccountId;
+}>;
+
+export type PrivateKeyWalletCreated = Readonly<{
+  keySourceId: KeySourceId;
+  accountId: AccountId;
+}>;
+
+export type CreateFromMnemonicInput = Readonly<{
+  password: string;
+  mnemonic: string;
+  namespace: string;
+}>;
+
+export type RestoreFromMnemonicInput = CreateFromMnemonicInput;
+
+export type CreateFromPrivateKeyInput = Readonly<{
+  password: string;
+  privateKey: string;
+  namespace: string;
 }>;
 
 export type WalletContext = Readonly<{
-  readers: Pick<CorePersistenceReaders, "encryptedVault" | "permissions">;
+  readers: Pick<CorePersistenceReaders, "permissions">;
   mutations: CoreMutationQueue;
+  time: CoreTime;
   vault: Vault;
   keyring: Keyring;
   accounts: Accounts;
-  autoLock: AutoLockTimer;
+  autoLock: AutoLockController;
   adapters: KeyringNamespaceAdapters;
-  /** Publishes committed wallet changes and must not throw. */
-  publishChanged(change: WalletChanged): void;
+  /** Publishes a committed Wallet status change and must not throw. */
+  publishStatusChanged(change: WalletStatusChanged): void;
   /** Publishes committed key source/HD keyring record changes and must not throw. */
   publishKeyringChanged(): void;
   /** Publishes committed account record/selection changes and must not throw. */
@@ -43,11 +72,11 @@ export type WalletContext = Readonly<{
 }>;
 
 export type Wallet = Readonly<{
-  getStatus(): VaultStatus;
-  getAutoLock(): Readonly<{ durationMs: number; deadline: number | null }>;
-  initializeWithNewMnemonic(params: { password: string; mnemonic: string; namespace: string }): Promise<AccountId>;
-  initializeFromMnemonic(params: { password: string; mnemonic: string; namespace: string }): Promise<AccountId>;
-  initializeFromPrivateKey(params: { password: string; privateKey: string; namespace: string }): Promise<AccountId>;
+  getStatus(): WalletStatus;
+  getAutoLockDuration(): number;
+  createFromMnemonic(params: CreateFromMnemonicInput): Promise<Bip39WalletCreated>;
+  restoreFromMnemonic(params: RestoreFromMnemonicInput): Promise<Bip39WalletCreated>;
+  createFromPrivateKey(params: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletCreated>;
   unlock(password: string): Promise<void>;
   lock(): Promise<void>;
   changePassword(params: { currentPassword: string; newPassword: string }): Promise<void>;
@@ -68,7 +97,6 @@ export type Wallet = Readonly<{
     deriveAccount(hdKeyringId: HdKeyringId): Promise<AccountId>;
     remove(hdKeyringId: HdKeyringId): Promise<void>;
   }>;
-  deleteIdentity(): Promise<void>;
 }>;
 
 export const createWallet = (params: {
@@ -77,43 +105,45 @@ export const createWallet = (params: {
   keyring: Keyring;
   accounts: Accounts;
   adapters: KeyringNamespaceAdapters;
-  bootstrap: VaultBootstrap;
-  /** Publishes committed wallet changes and must not throw. */
-  publishChanged(change: WalletChanged): void;
+  time: CoreTime;
+  vaultBootstrap: VaultBootstrap;
+  walletBootstrap: WalletBootstrap;
+  /** Publishes a committed Wallet status change and must not throw. */
+  publishStatusChanged(change: WalletStatusChanged): void;
   /** Publishes committed key source/HD keyring record changes and must not throw. */
   publishKeyringChanged(): void;
   /** Publishes committed account record/selection changes and must not throw. */
   publishAccountsChanged(change: AccountsChanged): void;
 }): Wallet => {
-  const vault = new Vault(params.bootstrap.encryptedVault);
+  const vault = new Vault(params.vaultBootstrap.encryptedVault);
   const keyring = params.keyring;
-  let expire = (): void => {};
-  const autoLock = new AutoLockTimer({
-    durationMs: params.bootstrap.autoLockDurationMs,
-    onExpire: () => expire(),
+  const autoLock = new AutoLockController({
+    durationMs: params.walletBootstrap.autoLockDurationMs,
+    time: params.time,
+    lock: () => {
+      void lock(context);
+    },
   });
   const context: WalletContext = {
     readers: params.readers,
     mutations: params.mutations,
+    time: params.time,
     vault,
     keyring,
     accounts: params.accounts,
     autoLock,
     adapters: params.adapters,
-    publishChanged: params.publishChanged,
+    publishStatusChanged: params.publishStatusChanged,
     publishKeyringChanged: params.publishKeyringChanged,
     publishAccountsChanged: params.publishAccountsChanged,
-  };
-  expire = () => {
-    void lock(context);
   };
 
   return {
     getStatus: () => vault.getStatus(),
-    getAutoLock: () => ({ durationMs: autoLock.getDuration(), deadline: autoLock.getDeadline() }),
-    initializeWithNewMnemonic: (input) => initializeWithNewMnemonic(context, input),
-    initializeFromMnemonic: (input) => initializeFromMnemonic(context, input),
-    initializeFromPrivateKey: (input) => initializeFromPrivateKey(context, input),
+    getAutoLockDuration: () => autoLock.getDuration(),
+    createFromMnemonic: (input) => createFromMnemonic(context, input),
+    restoreFromMnemonic: (input) => restoreFromMnemonic(context, input),
+    createFromPrivateKey: (input) => createFromPrivateKey(context, input),
     unlock: (password) => unlock(context, password),
     lock: () => lock(context),
     changePassword: (input) => changePassword(context, input),
@@ -134,6 +164,5 @@ export const createWallet = (params: {
       deriveAccount: (hdKeyringId) => deriveHdAccount(context, hdKeyringId),
       remove: (hdKeyringId) => removeHdKeyring(context, hdKeyringId),
     },
-    deleteIdentity: () => deleteWallet(context),
   };
 };

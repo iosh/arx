@@ -1,9 +1,11 @@
-export { AutoLockDurationOutOfRangeError } from "./errors.js";
 export type {
   AutoLockSetting,
-  AutoLockSettingRecord,
   SettingKey,
   SettingRecord,
   SettingRecordFor,
   SettingsReader,
+} from "./persistence.js";
+export {
+  AUTO_LOCK_SETTING_KEY,
+  settingPersistenceType,
 } from "./persistence.js";

@@ -11,7 +11,7 @@ import type {
   KeySourceRow,
   PermissionRow,
   ProviderChainSelectionRow,
-  SettingRow,
+  SettingsRow,
   TransactionRow,
   WalletChainSelectionRow,
 } from "./rows.js";
@@ -23,7 +23,7 @@ const TRANSACTIONS_SCHEMA =
 
 export class ArxPersistenceDatabase extends Dexie {
   encryptedVault!: Table<EncryptedVaultRow, string>;
-  settings!: Table<SettingRow, string>;
+  settings!: Table<SettingsRow, string>;
   keySources!: Table<KeySourceRow, string>;
   hdKeyrings!: Table<HdKeyringRow, string>;
   accounts!: Table<AccountRow, string>;

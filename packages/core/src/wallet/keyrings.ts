@@ -21,7 +21,7 @@ export const addHdKeyring = async (
   params: { keySourceId: KeySourceId; namespace: string },
 ): Promise<AccountId> => {
   const hdKeyringId = crypto.randomUUID();
-  const createdAt = Date.now();
+  const createdAt = wallet.time.now();
 
   return await wallet.mutations.run(async (commit) => {
     wallet.vault.requireUnlocked();
@@ -50,7 +50,7 @@ export const addHdKeyring = async (
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
-    wallet.autoLock.restart();
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
@@ -75,7 +75,7 @@ export const deriveHdAccount = async (wallet: WalletContext, hdKeyringId: HdKeyr
     const account: Omit<AccountRecord, "hidden"> = {
       accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: hdKeyring.nextDerivationIndex },
-      createdAt: Date.now(),
+      createdAt: wallet.time.now(),
     };
     const keyringUpdate = wallet.keyring.prepareAdvanceHdKeyring(hdKeyringId);
     const accountsUpdate = wallet.accounts.prepareAddAccount(account);
@@ -85,7 +85,7 @@ export const deriveHdAccount = async (wallet: WalletContext, hdKeyringId: HdKeyr
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     wallet.accounts.applyCommittedUpdate(accountsUpdate);
-    wallet.autoLock.restart();
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
@@ -112,7 +112,7 @@ export const removeHdKeyring = async (wallet: WalletContext, hdKeyringId: HdKeyr
 
     wallet.keyring.applyCommittedUpdate(keyringUpdate);
     if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
-    wallet.autoLock.restart();
+    wallet.autoLock.recordActivity();
     wallet.publishKeyringChanged();
     if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   });

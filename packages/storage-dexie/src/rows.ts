@@ -20,7 +20,8 @@ export type EncryptedVaultRow = EncryptedVaultRecord & {
   key: typeof ENCRYPTED_VAULT_ROW_KEY;
 };
 
-export type SettingRow = SettingRecord;
+export type SettingsRow = SettingRecord;
+
 export type KeySourceRow = KeySourceRecord;
 export type HdKeyringRow = HdKeyringRecord;
 export type AccountRow = AccountRecord;

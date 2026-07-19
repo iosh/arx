@@ -120,7 +120,7 @@ export type ApprovalDetailsDeps = {
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
-  chainViews: Pick<ChainViewsService, "findAvailableChainView" | "requireChainDefinition">;
+  chainViews: Pick<ChainViewsService, "requireChainDefinition">;
 };
 
 export type ApprovalDetails = Readonly<{
@@ -167,8 +167,8 @@ const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableA
     displayAddress: account.displayAddress,
   }));
 
-const toChainDisplayName = (chain: { displayName: string }): string | undefined => {
-  const name = chain.displayName.trim();
+const toChainDisplayName = (value: string): string | undefined => {
+  const name = value.trim();
   return name.length > 0 ? name : undefined;
 };
 
@@ -260,10 +260,8 @@ const buildStaticDetail = (
 
     case ApprovalKinds.SwitchChain: {
       const context = deriveApprovalReviewContext(record, { request: record.request });
-      const target =
-        deps.chainViews.findAvailableChainView({ chainRef: context.reviewChainRef }) ??
-        deps.chainViews.requireChainDefinition(context.reviewChainRef);
-      const displayName = toChainDisplayName(target);
+      const definition = deps.chainViews.requireChainDefinition(context.reviewChainRef);
+      const displayName = toChainDisplayName(definition.name);
 
       return {
         ...toDetailMeta(record),
@@ -284,11 +282,9 @@ const buildStaticDetail = (
     case ApprovalKinds.AddChain: {
       const definition = record.request.definition;
       const rpcUrls = Array.from(
-        new Set(record.request.defaultRpcEndpoints.map((entry) => entry.url.trim()).filter(Boolean)),
+        new Set(record.request.defaultRpcEndpoints.map((endpoint) => endpoint.trim()).filter(Boolean)),
       );
-      const blockExplorerUrl =
-        definition.blockExplorers?.find((entry) => entry.type === "default")?.url ??
-        definition.blockExplorers?.[0]?.url;
+      const blockExplorerUrl = definition.blockExplorers?.[0]?.url;
 
       return {
         ...toDetailMeta(record),
@@ -300,7 +296,7 @@ const buildStaticDetail = (
         request: {
           chainRef: record.chainRef,
           chainId: Hex.fromNumber(chainIdFromChainRef(definition.chainRef)),
-          displayName: definition.displayName,
+          displayName: definition.name,
           rpcUrls,
           ...(definition.nativeCurrency
             ? {

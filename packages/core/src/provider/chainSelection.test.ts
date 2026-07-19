@@ -25,7 +25,7 @@ describe("ProviderChainSelections", () => {
           source: "builtin",
           definition: {
             chainRef: "eip155:1",
-            displayName: "Ethereum",
+            name: "Ethereum",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
           },
         }),

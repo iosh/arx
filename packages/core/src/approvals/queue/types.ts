@@ -1,7 +1,7 @@
 import type { AccountId } from "../../accounts/accountId.js";
-import type { ChainDefinition, RpcEndpoint } from "../../chains/definition.js";
 import type { Namespace } from "../../namespaces/types.js";
 import type { ChainRef } from "../../networks/chainRef.js";
+import type { ChainDefinition, RpcEndpoint } from "../../networks/types.js";
 import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";
 import type { TransactionReadyProposal } from "../../transactions/TransactionsService.js";
 import type { ApprovalSource } from "../source.js";

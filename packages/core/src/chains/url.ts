@@ -12,4 +12,3 @@ export const isUrlWithProtocols = (value: string, allowed: readonly string[]): b
 };
 
 export const HTTP_PROTOCOLS = ["http:", "https:"] as const;
-export const RPC_PROTOCOLS = ["http:", "https:", "ws:", "wss:"] as const;

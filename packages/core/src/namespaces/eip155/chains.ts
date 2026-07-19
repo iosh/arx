@@ -1,141 +1,82 @@
-import { type ChainDefinitionSeed, defineChainDefinitionSeeds, type RpcEndpoint } from "../../chains/definition.js";
+import { defineBuiltinNetworkSeeds } from "../../networks/types.js";
 
-const defineRpcChainDefinitionSeeds = <const TSeeds extends readonly ChainDefinitionSeed<RpcEndpoint>[]>(
-  seeds: TSeeds,
-): TSeeds => defineChainDefinitionSeeds(seeds);
-
-export const EIP155_MAINNET_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
+export const EIP155_MAINNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
   {
     definition: {
       chainRef: "eip155:1",
-      displayName: "Ethereum Mainnet",
-      shortName: "eth",
+      name: "Ethereum Mainnet",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://etherscan.io", title: "Etherscan" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://etherscan.io", name: "Etherscan" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://cloudflare-eth.com", type: "public" },
-      { url: "https://eth.drpc.org", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://cloudflare-eth.com", "https://eth.drpc.org"],
   },
-
   {
     definition: {
       chainRef: "eip155:10",
-      displayName: "Optimism",
-      shortName: "op",
+      name: "Optimism",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://optimistic.etherscan.io", title: "Etherscan (Optimism)" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://optimistic.etherscan.io", name: "Etherscan (Optimism)" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://mainnet.optimism.io", type: "public" },
-      { url: "https://optimism-rpc.publicnode.com", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://mainnet.optimism.io", "https://optimism-rpc.publicnode.com"],
   },
-
   {
     definition: {
       chainRef: "eip155:137",
-      displayName: "Polygon PoS",
-      shortName: "matic",
+      name: "Polygon PoS",
       nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://polygonscan.com", title: "Polygonscan" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://polygonscan.com", name: "Polygonscan" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://polygon-rpc.com", type: "public" },
-      { url: "https://polygon.drpc.org", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://polygon-rpc.com", "https://polygon.drpc.org"],
   },
-
   {
     definition: {
       chainRef: "eip155:42161",
-      displayName: "Arbitrum One",
-      shortName: "arb",
+      name: "Arbitrum One",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://arbiscan.io", title: "Arbiscan" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://arbiscan.io", name: "Arbiscan" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://arb1.arbitrum.io/rpc", type: "public" },
-      { url: "https://arbitrum-one-rpc.publicnode.com", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
   },
-
   {
     definition: {
       chainRef: "eip155:1030",
-      displayName: "Conflux eSpace",
-      shortName: "cfxe",
+      name: "Conflux eSpace",
       nativeCurrency: { name: "CFX", symbol: "CFX", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://evm.confluxscan.net", title: "ConfluxScan eSpace" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://evm.confluxscan.net", name: "ConfluxScan eSpace" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://evm.confluxrpc.com", type: "public" },
-      { url: "https://evmmain-global.confluxrpc.com", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://evm.confluxrpc.com", "https://evmmain-global.confluxrpc.com"],
   },
 ]);
 
-export const EIP155_TESTNET_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
+export const EIP155_TESTNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
   {
     definition: {
       chainRef: "eip155:11155111",
-      displayName: "Sepolia Testnet",
-      shortName: "sep",
+      name: "Sepolia Testnet",
       nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://sepolia.etherscan.io", title: "Etherscan (Sepolia)" }],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://sepolia.etherscan.io", name: "Etherscan (Sepolia)" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://1rpc.io/sepolia", type: "public" },
-      { url: "https://sepolia.drpc.org", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://1rpc.io/sepolia", "https://sepolia.drpc.org"],
   },
   {
     definition: {
       chainRef: "eip155:71",
-      displayName: "Conflux eSpace Testnet",
-      shortName: "cfxe-test",
+      name: "Conflux eSpace Testnet",
       nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
-      blockExplorers: [
-        { type: "default", url: "https://evmtestnet.confluxscan.net", title: "ConfluxScan eSpace Testnet" },
-      ],
-      icon: {
-        url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
-        format: "png",
-      },
+      blockExplorers: [{ url: "https://evmtestnet.confluxscan.net", name: "ConfluxScan eSpace Testnet" }],
+      iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
     },
-    defaultRpcEndpoints: [
-      { url: "https://evmtestnet.confluxrpc.com", type: "public" },
-      { url: "https://evmtest.confluxrpc.com", type: "public" },
-    ],
+    defaultRpcEndpoints: ["https://evmtestnet.confluxrpc.com", "https://evmtest.confluxrpc.com"],
   },
 ]);
 
-export const EIP155_CHAIN_DEFINITION_SEEDS = defineRpcChainDefinitionSeeds([
-  ...EIP155_MAINNET_DEFINITION_SEEDS,
-  ...EIP155_TESTNET_DEFINITION_SEEDS,
+export const EIP155_BUILTIN_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
+  ...EIP155_MAINNET_NETWORK_SEEDS,
+  ...EIP155_TESTNET_NETWORK_SEEDS,
 ]);

@@ -1,5 +1,6 @@
 import type { ChainRef } from "../../networks/chainRef.js";
-import { type ChainDefinition, isSameChainDefinition, normalizeChainDefinition } from "../definition.js";
+import { cloneChainDefinition, isSameChainDefinition, validateChainDefinition } from "../../networks/definition.js";
+import type { ChainDefinition } from "../../networks/types.js";
 import type { ChainDefinitionEntity, ChainDefinitionsState } from "./types.js";
 
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
@@ -39,7 +40,7 @@ export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, ne
 };
 
 export const prepareChainDefinitionForStorage = (definition: ChainDefinition) => {
-  return normalizeChainDefinition(definition);
+  return cloneChainDefinition(validateChainDefinition(definition));
 };
 
 export const parseEntity = (params: {

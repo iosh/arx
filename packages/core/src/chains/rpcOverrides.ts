@@ -1,6 +1,6 @@
 import type { ChainRef } from "../networks/chainRef.js";
+import type { RpcEndpoint } from "../networks/types.js";
 import { persistenceChange } from "../persistence/change.js";
-import type { RpcEndpoint } from "./definition.js";
 import { ChainNotFoundError } from "./errors.js";
 import type { NetworksContext } from "./networks.js";
 import { chainRpcOverridePersistenceType } from "./persistence.js";

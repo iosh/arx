@@ -1,7 +1,8 @@
 import type { ChainRef } from "../networks/chainRef.js";
 import { parseChainRef } from "../networks/chainRef.js";
+import { cloneChainDefinition, validateChainDefinition } from "../networks/definition.js";
+import type { ChainDefinition } from "../networks/types.js";
 import { persistenceChange } from "../persistence/change.js";
-import { type ChainDefinition, cloneChainDefinition, validateChainDefinition } from "./definition.js";
 import {
   ChainDefinitionConflictError,
   CustomChainAlreadyExistsError,

@@ -1,7 +1,7 @@
 import type { AccountsNamespaceAdapter } from "../accounts/namespaceAdapter.js";
-import type { ChainDefinitionSeed, RpcEndpoint } from "../chains/definition.js";
 import type { NamespaceChainAddressing } from "../chains/types.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
+import type { BuiltinNetworkSeed } from "../networks/types.js";
 
 /** Pure namespace-specific implementations required by Accounts, Wallet, and Networks. */
 export type NamespaceDefinition<TNamespace extends string = string> = Readonly<{
@@ -9,5 +9,5 @@ export type NamespaceDefinition<TNamespace extends string = string> = Readonly<{
   accounts: AccountsNamespaceAdapter;
   chainAddressing: NamespaceChainAddressing;
   keyring: KeyringNamespaceAdapter<TNamespace>;
-  builtinChains: readonly ChainDefinitionSeed<RpcEndpoint>[];
+  builtinChains: readonly BuiltinNetworkSeed[];
 }>;

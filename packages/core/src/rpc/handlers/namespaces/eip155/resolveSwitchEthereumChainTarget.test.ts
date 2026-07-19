@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { ChainDefinition } from "../../../../chains/definition.js";
+import type { ChainDefinition } from "../../../../networks/types.js";
 import { resolveSwitchEthereumChainTarget } from "./resolveSwitchEthereumChainTarget.js";
 
 const MAINNET = {
   chainRef: "eip155:1",
   namespace: "eip155",
   chainId: "0x1",
-  displayName: "Ethereum",
+  name: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
@@ -14,7 +14,7 @@ const BASE = {
   chainRef: "eip155:8453",
   namespace: "eip155",
   chainId: "0x2105",
-  displayName: "Base",
+  name: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
@@ -22,7 +22,7 @@ const SOLANA = {
   chainRef: "eip155:101",
   namespace: "solana",
   chainId: "101",
-  displayName: "Solana Mainnet",
+  name: "Solana Mainnet",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
 };
 

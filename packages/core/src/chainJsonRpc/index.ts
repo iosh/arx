@@ -13,6 +13,4 @@ export {
   createJsonRpcHttpTransport,
   type JsonRpcHttpRequest,
   type JsonRpcHttpTransport,
-  JsonRpcProtocolError,
-  JsonRpcTransportError,
 } from "./JsonRpcHttpTransport.js";

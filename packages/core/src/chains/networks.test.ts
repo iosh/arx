@@ -1,27 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainRef } from "../networks/chainRef.js";
+import type { BuiltinNetworkSeed, RpcEndpoint } from "../networks/types.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { loadNetworksBootstrap } from "./bootstrap.js";
-import type { ChainDefinitionSeed, RpcEndpoint } from "./definition.js";
 import { createNetworks, type NetworksChanged } from "./networks.js";
 import type { ChainRpcOverrideRecord, CustomChainRecord, WalletChainSelectionRecord } from "./persistence.js";
 
-const endpoint = (url: string): RpcEndpoint => ({ url, type: "public" });
+const endpoint = (url: string): RpcEndpoint => url;
 
-const chain = (chainRef: ChainRef, displayName: string, rpcUrl: string): ChainDefinitionSeed<RpcEndpoint> => ({
+const chain = (chainRef: ChainRef, name: string, rpcUrl: string): BuiltinNetworkSeed => ({
   definition: {
     chainRef,
-    displayName,
+    name,
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
   defaultRpcEndpoints: [endpoint(rpcUrl)],
 });
 
-const customChain = (chainRef: ChainRef, displayName: string, rpcUrl: string): CustomChainRecord => ({
+const customChain = (chainRef: ChainRef, name: string, rpcUrl: string): CustomChainRecord => ({
   definition: {
     chainRef,
-    displayName,
+    name,
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
   defaultRpcEndpoints: [endpoint(rpcUrl)],
@@ -61,7 +61,7 @@ const applyChanges = (state: State, changes: readonly PersistenceChange[]): void
 const createHarness = (
   params: {
     state?: State;
-    builtinSeeds?: readonly ChainDefinitionSeed<RpcEndpoint>[];
+    builtinSeeds?: readonly BuiltinNetworkSeed[];
     walletSelection?: WalletChainSelectionRecord;
   } = {},
 ) => {
@@ -131,7 +131,7 @@ describe("Networks", () => {
       operation: "put",
       value: { definition: record.definition, defaultRpcEndpoints: record.defaultRpcEndpoints, createAt: 100 },
     });
-    expect(networks.getRpcEndpoints("eip155:10")[0].url).toBe("https://optimism.example");
+    expect(networks.getRpcEndpoints("eip155:10")[0]).toBe("https://optimism.example");
   });
 
   it("updates an existing custom chain while preserving its creation time", async () => {
@@ -144,9 +144,9 @@ describe("Networks", () => {
     expect(commits[0]?.[0]).toMatchObject({
       persistenceType: "customChain",
       operation: "put",
-      value: { createAt: 1, definition: { displayName: "OP Mainnet" } },
+      value: { createAt: 1, definition: { name: "OP Mainnet" } },
     });
-    expect(networks.getRpcEndpoints("eip155:10")[0].url).toBe("https://new.example");
+    expect(networks.getRpcEndpoints("eip155:10")[0]).toBe("https://new.example");
   });
 
   it("lists builtin chains before custom chains", async () => {
@@ -173,10 +173,10 @@ describe("Networks", () => {
       chainRef: "eip155:1",
       endpoints: [endpoint("https://override.example")],
     });
-    expect(networks.getRpcEndpoints("eip155:1")[0].url).toBe("https://override.example");
+    expect(networks.getRpcEndpoints("eip155:1")[0]).toBe("https://override.example");
 
     await networks.clearRpcOverride("eip155:1");
-    expect(networks.getRpcEndpoints("eip155:1")[0].url).toBe("https://builtin.example");
+    expect(networks.getRpcEndpoints("eip155:1")[0]).toBe("https://builtin.example");
   });
 
   it("removes a custom chain and its RPC override without changing other owners", async () => {

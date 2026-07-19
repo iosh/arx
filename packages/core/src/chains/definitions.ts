@@ -1,5 +1,6 @@
 import type { ChainRef } from "../networks/chainRef.js";
-import { type ChainDefinition, type ChainDefinitionSeed, cloneChainDefinition } from "./definition.js";
+import { cloneChainDefinition } from "../networks/definition.js";
+import type { BuiltinNetworkSeed, ChainDefinition } from "../networks/types.js";
 import { ChainDefinitionConflictError, DuplicateBuiltinChainDefinitionError } from "./errors.js";
 import type { CustomChainRecord } from "./persistence.js";
 
@@ -16,7 +17,7 @@ export class ChainDefinitions {
   readonly #custom = new Map<ChainRef, CustomChainRecord>();
 
   constructor(params: {
-    builtinSeeds: readonly ChainDefinitionSeed[];
+    builtinSeeds: readonly BuiltinNetworkSeed[];
     customChains: readonly CustomChainRecord[];
   }) {
     for (const seed of params.builtinSeeds) {

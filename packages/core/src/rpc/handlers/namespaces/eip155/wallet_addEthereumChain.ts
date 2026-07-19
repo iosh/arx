@@ -1,15 +1,11 @@
 import { ZodError } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import { ChainNotCompatibleError, ChainNotSupportedError } from "../../../../chains/errors.js";
-import {
-  type ChainDefinitionSeed,
-  createEip155DefinitionSeedFromEip3085,
-  isSameChainDefinition,
-  type RpcEndpoint,
-} from "../../../../chains/index.js";
+import { type CustomChainInput, createEip155DefinitionSeedFromEip3085 } from "../../../../chains/index.js";
 import { areRpcEndpointsEqual } from "../../../../chains/rpc/config.js";
 import { EIP155_NAMESPACE } from "../../../../namespaces/eip155/constants.js";
 import { parseChainRef } from "../../../../networks/chainRef.js";
+import { isSameChainDefinition } from "../../../../networks/definition.js";
 import { RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -17,7 +13,7 @@ import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js
 import { toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
 
-export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<ChainDefinitionSeed<RpcEndpoint>>({
+export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<CustomChainInput>({
   requestKind: RpcRequestKinds.ChainManagement,
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
@@ -48,7 +44,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
   },
   handler: async (context) => {
     const { params: seed, deps, executionContext } = context;
-    const { definition, defaultRpcEndpoints = [] } = seed;
+    const { definition, defaultRpcEndpoints } = seed;
     if (parseChainRef(definition.chainRef).namespace !== EIP155_NAMESPACE) {
       throw new ChainNotCompatibleError("Requested chain is not compatible with wallet_addEthereumChain");
     }

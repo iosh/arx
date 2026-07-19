@@ -1,6 +1,7 @@
 import type { ChainRef } from "../../networks/chainRef.js";
 import { parseChainRef } from "../../networks/chainRef.js";
-import { type ChainDefinition, cloneChainDefinition } from "../definition.js";
+import { cloneChainDefinition } from "../../networks/definition.js";
+import type { ChainDefinition } from "../../networks/types.js";
 import type { ChainDefinitionsService } from "../definitions/types.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../errors.js";
 import type { ChainRpcReader } from "../rpc/types.js";
@@ -16,9 +17,9 @@ type CreateChainViewsServiceOptions = {
 const toChainView = (definition: ChainDefinition): ChainView => ({
   chainRef: definition.chainRef,
   namespace: parseChainRef(definition.chainRef).namespace,
-  displayName: definition.displayName,
-  shortName: definition.shortName ?? null,
-  icon: definition.icon?.url ?? null,
+  displayName: definition.name,
+  shortName: null,
+  icon: definition.iconUrl ?? null,
   nativeCurrency: {
     name: definition.nativeCurrency.name,
     symbol: definition.nativeCurrency.symbol,

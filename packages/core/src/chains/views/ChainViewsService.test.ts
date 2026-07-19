@@ -1,29 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { parseChainRef } from "../../networks/chainRef.js";
-import { type ChainDefinition, cloneChainDefinition } from "../definition.js";
+import { cloneChainDefinition } from "../../networks/definition.js";
+import type { ChainDefinition } from "../../networks/types.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
 const MAINNET: ChainDefinition = {
   chainRef: "eip155:1",
-  displayName: "Ethereum",
+  name: "Ethereum",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
 const OPTIMISM: ChainDefinition = {
   chainRef: "eip155:10",
-  displayName: "Optimism",
+  name: "Optimism",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
 const BASE: ChainDefinition = {
   chainRef: "eip155:8453",
-  displayName: "Base",
+  name: "Base",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
 const SOLANA: ChainDefinition = {
   chainRef: "solana:101",
-  displayName: "Solana Mainnet",
+  name: "Solana Mainnet",
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
 };
 

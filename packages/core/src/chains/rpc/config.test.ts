@@ -2,33 +2,17 @@ import { describe, expect, it } from "vitest";
 import { areRpcEndpointsEqual, assertNonEmptyRpcEndpoints, cloneNonEmptyRpcEndpoints } from "./config.js";
 
 describe("chain RPC endpoint helpers", () => {
-  it("clones non-empty RPC endpoints", () => {
-    const endpoints = assertNonEmptyRpcEndpoints("eip155:1", [
-      {
-        url: "https://rpc.ethereum.example",
-        type: "authenticated",
-        headers: { Authorization: "Bearer token", "X-Client": "arx" },
-      },
-    ]);
-
+  it("clones non-empty RPC endpoint arrays", () => {
+    const endpoints = assertNonEmptyRpcEndpoints("eip155:1", ["https://rpc.ethereum.example"]);
     const cloned = cloneNonEmptyRpcEndpoints(endpoints);
-    endpoints[0].headers.Authorization = "Changed";
 
-    expect(cloned).toEqual([
-      {
-        url: "https://rpc.ethereum.example",
-        type: "authenticated",
-        headers: { Authorization: "Bearer token", "X-Client": "arx" },
-      },
-    ]);
+    expect(cloned).toEqual(["https://rpc.ethereum.example"]);
+    expect(cloned).not.toBe(endpoints);
   });
 
-  it("compares endpoint fields directly", () => {
-    const a = [{ url: "https://rpc.ethereum.example", headers: { Authorization: "a", "X-Client": "arx" } }];
-    const b = [{ url: "https://rpc.ethereum.example", headers: { "X-Client": "arx", Authorization: "a" } }];
-
-    expect(areRpcEndpointsEqual(a, b)).toBe(true);
-    expect(areRpcEndpointsEqual(a, [{ url: "https://rpc.other.example" }])).toBe(false);
+  it("compares endpoint strings directly", () => {
+    expect(areRpcEndpointsEqual(["https://rpc.ethereum.example"], ["https://rpc.ethereum.example"])).toBe(true);
+    expect(areRpcEndpointsEqual(["https://rpc.ethereum.example"], ["https://rpc.other.example"])).toBe(false);
   });
 
   it("rejects empty endpoint lists with an owner-local error", () => {

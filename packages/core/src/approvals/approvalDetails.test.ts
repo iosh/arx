@@ -21,25 +21,9 @@ const CHAIN_VIEWS = {
       },
     };
   },
-  findAvailableChainView: ({ chainRef }: { chainRef?: string }) =>
-    chainRef
-      ? {
-          namespace: chainRef.split(":")[0] ?? "eip155",
-          chainRef,
-          displayName: `Chain ${chainRef}`,
-          shortName: null,
-          icon: null,
-          nativeCurrency: {
-            name: "Ether",
-            symbol: "ETH",
-            decimals: 18,
-          },
-        }
-      : null,
   requireChainDefinition: (chainRef: string) => ({
     chainRef,
-    displayName: `Chain ${chainRef}`,
-    shortName: null,
+    name: `Chain ${chainRef}`,
     nativeCurrency: {
       name: "Ether",
       symbol: "ETH",

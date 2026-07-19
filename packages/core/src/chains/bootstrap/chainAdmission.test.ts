@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import type { ChainDefinitionSeed, RpcEndpoint } from "../../definition.js";
+import type { BuiltinNetworkSeed } from "../../../networks/types.js";
 import { buildChainAdmission } from "./chainAdmission.js";
 
-const BASE_MAINNET: ChainDefinitionSeed<RpcEndpoint> = {
+const BASE_MAINNET: BuiltinNetworkSeed = {
   definition: {
     chainRef: "eip155:8453",
-    displayName: "Base",
+    name: "Base",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
-  defaultRpcEndpoints: [{ url: "https://rpc.base.example", type: "public" }],
+  defaultRpcEndpoints: ["https://rpc.base.example"],
 };
 
-const SOLANA_MAINNET: ChainDefinitionSeed<RpcEndpoint> = {
+const SOLANA_MAINNET: BuiltinNetworkSeed = {
   definition: {
     chainRef: "solana:101",
-    displayName: "Solana",
+    name: "Solana",
     nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
   },
-  defaultRpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
+  defaultRpcEndpoints: ["https://rpc.solana.example"],
 };
 
 describe("buildChainAdmission", () => {
@@ -40,12 +40,8 @@ describe("buildChainAdmission", () => {
       admittedChainSeeds: [BASE_MAINNET],
     });
 
-    const admittedDefaultEndpoint = admission.admittedChainSeeds[0].defaultRpcEndpoints?.[0];
-    expect(admittedDefaultEndpoint).toBeDefined();
-
-    admittedDefaultEndpoint.url = "https://mutated.example";
-
-    expect(BASE_MAINNET.defaultRpcEndpoints?.[0]?.url).toBe("https://rpc.base.example");
+    expect(admission.admittedChainSeeds[0]?.defaultRpcEndpoints).toEqual(["https://rpc.base.example"]);
+    expect(admission.admittedChainSeeds[0]?.defaultRpcEndpoints).not.toBe(BASE_MAINNET.defaultRpcEndpoints);
   });
 
   it("rejects empty admission with an owner-local chain config error", () => {

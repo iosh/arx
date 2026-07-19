@@ -1,7 +1,8 @@
-import { type ChainDefinition, cloneChainDefinition } from "../../../../chains/definition.js";
 import { ChainNotCompatibleError, ChainNotFoundError } from "../../../../chains/errors.js";
 import { chainRefFromChainId } from "../../../../namespaces/eip155/chainId.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
+import { cloneChainDefinition } from "../../../../networks/definition.js";
+import type { ChainDefinition } from "../../../../networks/types.js";
 import * as Hex from "../../../../utils/hex.js";
 
 export type ResolveSwitchEthereumChainTargetParams = {

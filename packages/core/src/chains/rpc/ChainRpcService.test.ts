@@ -11,8 +11,8 @@ const createService = () => {
       {
         chainRef: "eip155:1",
         endpoints: assertNonEmptyRpcEndpoints("eip155:1", [
-          { url: "https://rpc.primary.example", type: "public" },
-          { url: "https://rpc.backup.example", type: "public" },
+          "https://rpc.primary.example",
+          "https://rpc.backup.example",
         ]),
       },
     ],
@@ -24,11 +24,12 @@ describe("ChainRpcService", () => {
     const service = createService();
 
     const endpoints = service.getEndpoints("eip155:1");
-    endpoints[0].url = "https://mutated.example";
+    const nextEndpoints = service.getEndpoints("eip155:1");
 
     expect(service.hasEndpoints("eip155:1")).toBe(true);
     expect(service.listChainRefs()).toEqual(["eip155:1"]);
-    expect(service.getEndpoints("eip155:1")[0].url).toBe("https://rpc.primary.example");
+    expect(nextEndpoints).toEqual(endpoints);
+    expect(nextEndpoints).not.toBe(endpoints);
     expect(service.getState()).toMatchObject({
       accesses: [{ chainRef: "eip155:1" }],
     });
@@ -42,17 +43,17 @@ describe("ChainRpcService", () => {
     service.replaceAccesses([
       {
         chainRef: "eip155:1",
-        endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.next.example", type: "public" }]),
+        endpoints: assertNonEmptyRpcEndpoints("eip155:1", ["https://rpc.next.example"]),
       },
       {
         chainRef: "eip155:10",
-        endpoints: assertNonEmptyRpcEndpoints("eip155:10", [{ url: "https://rpc.optimism.example", type: "public" }]),
+        endpoints: assertNonEmptyRpcEndpoints("eip155:10", ["https://rpc.optimism.example"]),
       },
     ]);
 
     expect(changed).toEqual(["eip155:1", "eip155:10"]);
     expect(service.listChainRefs()).toEqual(["eip155:1", "eip155:10"]);
-    expect(service.getEndpoints("eip155:1")[0].url).toBe("https://rpc.next.example");
+    expect(service.getEndpoints("eip155:1")[0]).toBe("https://rpc.next.example");
   });
 
   it("does not publish when replacement keeps endpoints unchanged", () => {
@@ -76,11 +77,11 @@ describe("ChainRpcService", () => {
       service.replaceAccesses([
         {
           chainRef: "eip155:1",
-          endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.one.example" }]),
+          endpoints: assertNonEmptyRpcEndpoints("eip155:1", ["https://rpc.one.example"]),
         },
         {
           chainRef: "eip155:1",
-          endpoints: assertNonEmptyRpcEndpoints("eip155:1", [{ url: "https://rpc.two.example" }]),
+          endpoints: assertNonEmptyRpcEndpoints("eip155:1", ["https://rpc.two.example"]),
         },
       ]),
     ).toThrowError(

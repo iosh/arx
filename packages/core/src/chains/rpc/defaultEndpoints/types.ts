@@ -1,7 +1,7 @@
 import type { Unsubscribe } from "../../../messenger/index.js";
 import type { ChainRef } from "../../../networks/chainRef.js";
+import type { RpcEndpoint } from "../../../networks/types.js";
 import type { ChainRpcDefaultEndpointsRecord } from "../../../storage/records.js";
-import type { RpcEndpoint } from "../../definition.js";
 
 export type ChainRpcDefaultEndpointsChangedPayload = {
   chainRef: ChainRef;

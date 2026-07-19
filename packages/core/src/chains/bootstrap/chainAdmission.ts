@@ -1,7 +1,7 @@
 import type { ChainRef } from "../../networks/chainRef.js";
 import { parseChainRef } from "../../networks/chainRef.js";
-import type { RpcEndpoint } from "../definition.js";
-import { type ChainDefinitionSeed, cloneChainDefinition } from "../definition.js";
+import { cloneChainDefinition } from "../../networks/definition.js";
+import type { BuiltinNetworkSeed } from "../../networks/types.js";
 import { ChainAdmissionConfigError } from "../errors.js";
 
 export type WalletChainSelectionDefaults = {
@@ -10,12 +10,12 @@ export type WalletChainSelectionDefaults = {
 };
 
 export type ChainAdmission = {
-  admittedChainSeeds: ChainDefinitionSeed<RpcEndpoint>[];
+  admittedChainSeeds: BuiltinNetworkSeed[];
   selectionDefaults: WalletChainSelectionDefaults;
 };
 
 const createChainRefDefaults = (
-  admittedChainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[],
+  admittedChainSeeds: readonly BuiltinNetworkSeed[],
   selectedUiChainRef: ChainRef,
 ): Record<string, ChainRef> => {
   const next: Record<string, ChainRef> = {};
@@ -31,12 +31,10 @@ const createChainRefDefaults = (
   return next;
 };
 
-export const buildChainAdmission = (params: {
-  admittedChainSeeds: readonly ChainDefinitionSeed<RpcEndpoint>[];
-}): ChainAdmission => {
+export const buildChainAdmission = (params: { admittedChainSeeds: readonly BuiltinNetworkSeed[] }): ChainAdmission => {
   const admittedChainSeeds = params.admittedChainSeeds.map((seed) => ({
     definition: cloneChainDefinition(seed.definition),
-    ...(seed.defaultRpcEndpoints ? { defaultRpcEndpoints: structuredClone(seed.defaultRpcEndpoints) } : {}),
+    defaultRpcEndpoints: [...seed.defaultRpcEndpoints] as const,
   }));
   const primarySeed = admittedChainSeeds[0];
   if (!primarySeed) {

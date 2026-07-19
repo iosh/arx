@@ -1,15 +1,14 @@
 import type { ChainRef } from "../networks/chainRef.js";
+import type { ChainDefinition, NonEmptyRpcEndpoints } from "../networks/types.js";
 import {
   defineKeyedPersistenceType,
   defineSingletonPersistenceType,
   type KeyedPersistenceType,
   type SingletonPersistenceType,
 } from "../persistence/definition.js";
-import type { ChainDefinition, RpcEndpoint } from "./definition.js";
-
 export type CustomChainRecord = Readonly<{
   definition: ChainDefinition;
-  defaultRpcEndpoints: readonly [RpcEndpoint, ...RpcEndpoint[]];
+  defaultRpcEndpoints: NonEmptyRpcEndpoints;
   createAt: number;
 }>;
 
@@ -22,7 +21,7 @@ export const customChainPersistenceType: KeyedPersistenceType<"customChain", Cus
 
 export type ChainRpcOverrideRecord = Readonly<{
   chainRef: ChainRef;
-  endpoints: readonly [RpcEndpoint, ...RpcEndpoint[]];
+  endpoints: NonEmptyRpcEndpoints;
 }>;
 
 export interface ChainRpcOverridesReader {

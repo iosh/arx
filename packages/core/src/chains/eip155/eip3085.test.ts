@@ -19,13 +19,19 @@ describe("EIP-3085 chain import", () => {
 
     expect(seed.definition).toEqual({
       chainRef: "eip155:8453",
-      displayName: "Base",
+      name: "Base",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      blockExplorers: [{ type: "default", url: "https://basescan.org", title: "Base" }],
+      blockExplorers: [{ url: "https://basescan.org" }],
     });
-    expect(seed.definition).not.toHaveProperty("namespace");
-    expect(seed.definition).not.toHaveProperty("chainId");
-    expect(seed.definition).not.toHaveProperty("rpcEndpoints");
-    expect(seed.defaultRpcEndpoints).toEqual([{ url: "https://mainnet.base.org", type: "public" }]);
+    expect(seed.defaultRpcEndpoints).toEqual(["https://mainnet.base.org"]);
+  });
+
+  it("rejects non-HTTP RPC endpoints", () => {
+    expect(() =>
+      createEip155DefinitionSeedFromEip3085({
+        ...baseRequest,
+        rpcUrls: ["wss://mainnet.base.org"],
+      }),
+    ).toThrow();
   });
 });

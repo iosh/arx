@@ -1,7 +1,5 @@
 import type { ChainRef } from "../../networks/chainRef.js";
-import type { RpcEndpoint } from "../definition.js";
-
-export type NonEmptyRpcEndpoints = [RpcEndpoint, ...RpcEndpoint[]];
+import type { NonEmptyRpcEndpoints } from "../../networks/types.js";
 
 export type ChainRpcAccess = {
   chainRef: ChainRef;

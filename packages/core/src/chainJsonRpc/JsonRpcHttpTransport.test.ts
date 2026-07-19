@@ -1,53 +1,78 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  type ChainJsonRpcHttpProtocolError,
+  type ChainJsonRpcHttpTransportError,
   createJsonRpcHttpTransport,
-  type JsonRpcProtocolError,
-  type JsonRpcTransportError,
 } from "./JsonRpcHttpTransport.js";
 
-const endpoint = { url: "https://rpc.example", headers: { Authorization: "Bearer token" } };
+const endpoint = "https://rpc.example";
+
+const requestBody = (init?: RequestInit): Record<string, unknown> => JSON.parse(init?.body as string);
 
 describe("JsonRpcHttpTransport", () => {
-  it("sends and parses one JSON-RPC request", async () => {
-    const fetch = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ jsonrpc: "2.0", id: 7, result: "0x1" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-    );
+  it("allocates an internal ID and parses one JSON-RPC request", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestBody(init);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: "0x1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
     const transport = createJsonRpcHttpTransport({ fetch });
 
     await expect(
-      transport.request(endpoint, {
-        id: 7,
+      transport.request({
+        endpoint,
         method: "eth_chainId",
         params: [],
         timeoutMs: 1_000,
       }),
     ).resolves.toBe("0x1");
+
     expect(fetch).toHaveBeenCalledWith(
-      endpoint.url,
+      endpoint,
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer token" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "eth_chainId", params: [] }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
       }),
     );
   });
 
   it("recognizes an explicit JSON-RPC error in a non-successful HTTP response", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestBody(init);
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "rejected" } }),
+        { status: 400 },
+      );
+    });
+    const transport = createJsonRpcHttpTransport({ fetch });
+
+    await expect(
+      transport.request({ endpoint, method: "eth_call", timeoutMs: 1_000 }),
+    ).rejects.toMatchObject<ChainJsonRpcHttpProtocolError>({
+      code: "chain_json_rpc.http_protocol",
+      rpcCode: -32000,
+      message: "rejected",
+    });
+  });
+
+  it("rejects a response with a different request ID", async () => {
     const fetch = vi.fn(
       async () =>
-        new Response(JSON.stringify({ jsonrpc: "2.0", id: 7, error: { code: -32000, message: "rejected" } }), {
-          status: 400,
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: 999, result: "0x1" }), {
+          status: 200,
         }),
     );
     const transport = createJsonRpcHttpTransport({ fetch });
 
     await expect(
-      transport.request(endpoint, { id: 7, method: "eth_call", timeoutMs: 1_000 }),
-    ).rejects.toMatchObject<JsonRpcProtocolError>({ code: -32000, message: "rejected" });
+      transport.request({ endpoint, method: "eth_chainId", timeoutMs: 1_000 }),
+    ).rejects.toMatchObject<ChainJsonRpcHttpTransportError>({
+      code: "chain_json_rpc.http_transport",
+      message: "JSON-RPC response does not match the request.",
+    });
   });
 
   it("reports an aborted request as a timeout", async () => {
@@ -59,8 +84,11 @@ describe("JsonRpcHttpTransport", () => {
     );
     const transport = createJsonRpcHttpTransport({ fetch });
 
-    await expect(transport.request(endpoint, { id: 7, method: "eth_chainId", timeoutMs: 1 })).rejects.toEqual(
-      expect.objectContaining<JsonRpcTransportError>({ message: "RPC request timed out." }),
+    await expect(transport.request({ endpoint, method: "eth_chainId", timeoutMs: 1 })).rejects.toEqual(
+      expect.objectContaining<ChainJsonRpcHttpTransportError>({
+        code: "chain_json_rpc.http_transport",
+        message: "RPC request timed out.",
+      }),
     );
   });
 });

@@ -50,9 +50,8 @@ export class HdKeyringAlreadyExistsError extends ArxBaseError {
     existingHdKeyringId: string;
     keySourceId: string;
     namespace: string;
-    derivationProfileId: string;
   }) {
-    super("An HD keyring already exists for this source, namespace, and derivation profile.", {
+    super("An HD keyring already exists for this source and namespace.", {
       code: HdKeyringAlreadyExistsError.code,
       details: params,
     });
@@ -92,26 +91,6 @@ export class KeySourceBackupUnsupportedError extends ArxBaseError {
   }
 }
 
-export class KeyringInvalidPrivateKeyError extends ArxBaseError {
-  static readonly code = "keyring.invalid_private_key";
-
-  constructor() {
-    super("Private key must be a 32-byte hex value.", {
-      code: KeyringInvalidPrivateKeyError.code,
-    });
-  }
-}
-
-export class KeyringInvalidAddressError extends ArxBaseError {
-  static readonly code = "keyring.invalid_address";
-
-  constructor() {
-    super("Address is invalid or malformed.", {
-      code: KeyringInvalidAddressError.code,
-    });
-  }
-}
-
 export class KeyringUnsupportedNamespaceError extends ArxBaseError {
   static readonly code = "keyring.namespace_unsupported";
 
@@ -119,17 +98,6 @@ export class KeyringUnsupportedNamespaceError extends ArxBaseError {
     super(`Namespace "${namespace}" is not supported by keyring.`, {
       code: KeyringUnsupportedNamespaceError.code,
       details: { namespace },
-    });
-  }
-}
-
-export class KeyringUnsupportedDerivationProfileError extends ArxBaseError {
-  static readonly code = "keyring.derivation_profile_unsupported";
-
-  constructor(namespace: string, derivationProfileId: string) {
-    super(`Derivation profile "${derivationProfileId}" is not supported by namespace "${namespace}".`, {
-      code: KeyringUnsupportedDerivationProfileError.code,
-      details: { namespace, derivationProfileId },
     });
   }
 }

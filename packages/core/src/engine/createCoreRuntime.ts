@@ -110,7 +110,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     keyring,
     accounts,
-    adapters: new Map(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
+    adapters: Object.fromEntries(namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring])),
     bootstrap: vaultBootstrap,
     publishChanged: (change) => {
       const nextStatus = wallet.getStatus();

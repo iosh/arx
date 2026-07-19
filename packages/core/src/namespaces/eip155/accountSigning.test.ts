@@ -14,6 +14,7 @@ import type { Eip155DigestSignature } from "./keyring.js";
 const DIGEST = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const PRIVATE_ACCOUNT_ID = "eip155:fcad0b19bb29d4674531d6f115237e16afce377c";
 const HD_ACCOUNT_ID = "eip155:f3f50213c1d2e255e4b2bad430f8a38eef8d718e";
+const MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 const recoverAccountId = (signature: Eip155DigestSignature): AccountId => {
   const publicKey = secp256k1.Signature.fromCompact(signature.bytes)
@@ -90,13 +91,12 @@ describe("Eip155AccountSigning", () => {
     const source: KeySourceSecret = {
       keySourceId: "mnemonic-source",
       type: "bip39",
-      mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      mnemonic: MNEMONIC,
     };
     const hdKeyring: HdKeyringRecord = {
       hdKeyringId: "hd-keyring",
       keySourceId: source.keySourceId,
       namespace: "eip155",
-      derivationProfileId: "bip44",
       nextDerivationIndex: 4,
       createdAt: 1,
     };
@@ -112,6 +112,33 @@ describe("Eip155AccountSigning", () => {
 
     expect(signature.bytes).toHaveLength(64);
     expect(recoverAccountId(signature)).toBe(HD_ACCOUNT_ID);
+  });
+
+  it("does not finish an HD signature after the keyring is locked", async () => {
+    const source: KeySourceSecret = {
+      keySourceId: "mnemonic-source",
+      type: "bip39",
+      mnemonic: MNEMONIC,
+    };
+    const hdKeyring: HdKeyringRecord = {
+      hdKeyringId: "hd-keyring",
+      keySourceId: source.keySourceId,
+      namespace: "eip155",
+      nextDerivationIndex: 4,
+      createdAt: 1,
+    };
+    const account: AccountRecord = {
+      accountId: HD_ACCOUNT_ID,
+      origin: { type: "hd", hdKeyringId: hdKeyring.hdKeyringId, derivationIndex: 3 },
+      hidden: false,
+      createdAt: 1,
+    };
+    const { keyring, signing } = createSigningFixture({ account, source, hdKeyring });
+
+    const pendingSignature = signing.signDigest({ accountId: account.accountId, digest: DIGEST });
+    keyring.lock();
+
+    await expect(pendingSignature).rejects.toMatchObject({ code: "wallet.locked" });
   });
 
   it("rejects an imported-key record that points at a different account", async () => {
@@ -147,13 +174,12 @@ describe("Eip155AccountSigning", () => {
     const source: KeySourceSecret = {
       keySourceId: "mnemonic-source",
       type: "bip39",
-      mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      mnemonic: MNEMONIC,
     };
     const hdKeyring: HdKeyringRecord = {
       hdKeyringId: "hd-keyring",
       keySourceId: source.keySourceId,
       namespace: "eip155",
-      derivationProfileId: "bip44",
       nextDerivationIndex: 4,
       createdAt: 1,
     };

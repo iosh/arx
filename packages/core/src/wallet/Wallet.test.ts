@@ -2,13 +2,13 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Accounts } from "../accounts/Accounts.js";
-import type { AccountId } from "../accounts/accountId.js";
+import { type AccountId, formatAccountId, parseAccountId } from "../accounts/accountId.js";
+import type { AccountsNamespaceAdapter } from "../accounts/namespaceAdapter.js";
 import type { AccountRecord, AccountSelectionRecord } from "../accounts/persistence.js";
 import type { AccountsChanged } from "../accounts/types.js";
 import { Keyring, type KeyringChanged } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";
-import type { PrivateKeySourceSecret } from "../keyring/secrets.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import type { PermissionRecord } from "../permissions/persistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
@@ -21,6 +21,8 @@ import { createWallet, type WalletChanged, type WalletContext } from "./Wallet.j
 const PRIMARY_MNEMONIC =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const SECONDARY_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const EIP155_NAMESPACE = "eip155";
+const SECOND_NAMESPACE = "test";
 
 type State = {
   encryptedVault: EncryptedVaultRecord | null;
@@ -42,36 +44,32 @@ const emptyState = (): State => ({
   autoLockDurationMs: null,
 });
 
-const accountIdFor = (sourceId: string, index: number): AccountId => {
+const accountIdFor = (sourceId: string, index: number, namespace = EIP155_NAMESPACE): AccountId => {
   const sourcePayload = bytesToHex(keccak_256(new TextEncoder().encode(sourceId))).slice(0, 32);
   const payload = `${sourcePayload}${index.toString(16).padStart(8, "0")}`;
-  return `eip155:${payload}`;
+  return formatAccountId({ namespace, payload });
 };
 
-const createAdapter = () => {
-  const deriveAccount = vi.fn(
-    ({
-      seed,
-      derivationProfileId,
-      derivationIndex,
-    }: {
-      seed: Uint8Array;
-      derivationProfileId: string;
-      derivationIndex: number;
-    }) => ({
-      accountId: accountIdFor(`${bytesToHex(seed.slice(0, 16))}-${derivationProfileId}`, derivationIndex),
-    }),
+const createAdapter = (namespace = EIP155_NAMESPACE) => {
+  const deriveHdAccountId = vi.fn(({ seed, derivationIndex }: { seed: Uint8Array; derivationIndex: number }) =>
+    accountIdFor(bytesToHex(seed.slice(0, 16)), derivationIndex, namespace),
   );
-  const importPrivateKey = vi.fn((source: PrivateKeySourceSecret) => ({
-    accountId: accountIdFor(source.keySourceId, 0),
-  }));
+  const accountIdFromPrivateKey = vi.fn((privateKey: string) => accountIdFor(privateKey, 0, namespace));
   const adapter: KeyringNamespaceAdapter = {
-    namespace: "eip155",
-    defaultDerivationProfileId: "default",
-    deriveAccount,
-    importPrivateKey,
+    namespace,
+    deriveHdAccountId,
+    accountIdFromPrivateKey,
   };
-  return { adapter, deriveAccount, importPrivateKey };
+  return { adapter, deriveHdAccountId, accountIdFromPrivateKey };
+};
+
+const secondAccountsAdapter: AccountsNamespaceAdapter = {
+  namespace: SECOND_NAMESPACE,
+  accountIdFromAddress: ({ address }) => formatAccountId({ namespace: SECOND_NAMESPACE, payload: address }),
+  addressForAccountId: ({ accountId }) => {
+    const address = parseAccountId(accountId).payload;
+    return { canonicalAddress: address, displayAddress: address };
+  },
 };
 
 const permissionKey = (record: Pick<PermissionRecord, "origin" | "namespace">): string =>
@@ -138,7 +136,8 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
       listAll: vi.fn(async () => [...state.permissions.values()]),
     },
   };
-  const { adapter, deriveAccount, importPrivateKey } = createAdapter();
+  const { adapter, deriveHdAccountId, accountIdFromPrivateKey } = createAdapter();
+  const { adapter: secondKeyringAdapter } = createAdapter(SECOND_NAMESPACE);
   const keyring = new Keyring({
     keySources: [...state.keySources.values()],
     hdKeyrings: [...state.keyrings.values()],
@@ -151,7 +150,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     accountChanges.push(change);
   };
   const accounts = new Accounts({
-    adapters: { eip155: eip155AccountsAdapter },
+    adapters: { [EIP155_NAMESPACE]: eip155AccountsAdapter, [SECOND_NAMESPACE]: secondAccountsAdapter },
     bootstrap: {
       records: [...state.accounts.values()],
       selections: [...state.selections.values()],
@@ -164,7 +163,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     mutations,
     keyring,
     accounts,
-    adapters: new Map([[adapter.namespace, adapter]]),
+    adapters: { [adapter.namespace]: adapter, [secondKeyringAdapter.namespace]: secondKeyringAdapter },
     bootstrap: {
       encryptedVault: state.encryptedVault,
       autoLockDurationMs: state.autoLockDurationMs ?? 60_000,
@@ -183,8 +182,8 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     keyringChanges,
     accountChanges,
     keyring,
-    deriveAccount,
-    importPrivateKey,
+    deriveHdAccountId,
+    accountIdFromPrivateKey,
     setCommitFailure: (failure: Error | null) => {
       commitFailure = failure;
     },
@@ -356,7 +355,7 @@ describe("Wallet", () => {
   });
 
   it("removes a non-final HD keyring while locked", async () => {
-    const { wallet, keyring, state } = createHarness();
+    const { wallet, accounts, keyring, state } = createHarness();
     await wallet.initializeWithNewMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
@@ -364,13 +363,24 @@ describe("Wallet", () => {
     });
     const source = keyring.listKeySources()[0];
     if (!source) throw new Error("missing test source");
-    await wallet.keyrings.add({
+
+    const removable: HdKeyringRecord = {
+      hdKeyringId: "removable-hd-keyring",
       keySourceId: source.keySourceId,
-      namespace: "eip155",
-      derivationProfileId: "alternate",
+      namespace: SECOND_NAMESPACE,
+      nextDerivationIndex: 1,
+      createdAt: Date.now(),
+    };
+    const keyringUpdate = keyring.prepareAddHdKeyring(removable);
+    const accountsUpdate = accounts.prepareAddAccount({
+      accountId: accountIdFor(removable.hdKeyringId, 0, SECOND_NAMESPACE),
+      origin: { type: "hd", hdKeyringId: removable.hdKeyringId, derivationIndex: 0 },
+      createdAt: removable.createdAt,
     });
-    const removable = keyring.listHdKeyrings().find((candidate) => candidate.derivationProfileId === "alternate");
-    if (!removable) throw new Error("missing test HD keyring");
+    applyChanges(state, [...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges]);
+    keyring.applyCommittedUpdate(keyringUpdate);
+    accounts.applyCommittedUpdate(accountsUpdate);
+
     await wallet.lock();
 
     await wallet.keyrings.remove(removable.hdKeyringId);
@@ -381,7 +391,7 @@ describe("Wallet", () => {
   });
 
   it("stores private keys with an explicit namespace without deriving accounts on unlock", async () => {
-    const { wallet, state, keyring, deriveAccount, importPrivateKey } = createHarness();
+    const { wallet, state, keyring, deriveHdAccountId, accountIdFromPrivateKey } = createHarness();
     await wallet.initializeFromPrivateKey({
       password: "password",
       privateKey: "private-key",
@@ -396,15 +406,15 @@ describe("Wallet", () => {
     const source = [...state.keySources.values()][0];
     if (!source) throw new Error("missing test source");
 
-    deriveAccount.mockClear();
-    importPrivateKey.mockClear();
+    deriveHdAccountId.mockClear();
+    accountIdFromPrivateKey.mockClear();
     await wallet.lock();
     await wallet.unlock("password");
     expect(keyring.getSecrets()?.keySources).toEqual([
       expect.objectContaining({ keySourceId: source.keySourceId, type: "private-key" }),
     ]);
-    expect(deriveAccount).not.toHaveBeenCalled();
-    expect(importPrivateKey).not.toHaveBeenCalled();
+    expect(deriveHdAccountId).not.toHaveBeenCalled();
+    expect(accountIdFromPrivateKey).not.toHaveBeenCalled();
   });
 
   it("removes a source and its dependent records in one commit", async () => {

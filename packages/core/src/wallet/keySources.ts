@@ -42,13 +42,12 @@ const addMnemonic = async (
 
     const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
     const seed = await deriveBip39Seed(source);
-    const identity = adapter.deriveAccount({
+    const accountId = adapter.deriveHdAccountId({
       seed,
-      derivationProfileId: adapter.defaultDerivationProfileId,
       derivationIndex: 0,
     });
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
       createdAt,
     };
@@ -62,7 +61,6 @@ const addMnemonic = async (
       hdKeyring: {
         hdKeyringId,
         namespace: params.namespace,
-        derivationProfileId: adapter.defaultDerivationProfileId,
         nextDerivationIndex: 1,
         createdAt,
       },
@@ -130,9 +128,9 @@ export const importPrivateKey = async (
     });
     if (existingSource) throw new KeyringDuplicateSourceError(existingSource.keySourceId);
 
-    const identity = adapter.importPrivateKey(source);
+    const accountId = adapter.accountIdFromPrivateKey(source.privateKey);
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "private-key", keySourceId },
       createdAt,
     };

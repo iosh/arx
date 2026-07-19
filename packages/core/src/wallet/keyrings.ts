@@ -18,7 +18,7 @@ const requireBip39Source = (secrets: KeyringSecrets, keySourceId: KeySourceId): 
 
 export const addHdKeyring = async (
   wallet: WalletContext,
-  params: { keySourceId: KeySourceId; namespace: string; derivationProfileId?: string },
+  params: { keySourceId: KeySourceId; namespace: string },
 ): Promise<AccountId> => {
   const hdKeyringId = crypto.randomUUID();
   const createdAt = Date.now();
@@ -29,19 +29,17 @@ export const addHdKeyring = async (
 
     const source = requireBip39Source(secrets, params.keySourceId);
     const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
-    const derivationProfileId = params.derivationProfileId ?? adapter.defaultDerivationProfileId;
     const keyringUpdate = wallet.keyring.prepareAddHdKeyring({
       hdKeyringId,
       keySourceId: params.keySourceId,
       namespace: params.namespace,
-      derivationProfileId,
       nextDerivationIndex: 1,
       createdAt,
     });
     const seed = await deriveBip39Seed(source);
-    const identity = adapter.deriveAccount({ seed, derivationProfileId, derivationIndex: 0 });
+    const accountId = adapter.deriveHdAccountId({ seed, derivationIndex: 0 });
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
       createdAt,
     };
@@ -70,13 +68,12 @@ export const deriveHdAccount = async (wallet: WalletContext, hdKeyringId: HdKeyr
 
     const source = requireBip39Source(secrets, hdKeyring.keySourceId);
     const seed = await deriveBip39Seed(source);
-    const identity = getKeyringNamespaceAdapter(wallet.adapters, hdKeyring.namespace).deriveAccount({
+    const accountId = getKeyringNamespaceAdapter(wallet.adapters, hdKeyring.namespace).deriveHdAccountId({
       seed,
-      derivationProfileId: hdKeyring.derivationProfileId,
       derivationIndex: hdKeyring.nextDerivationIndex,
     });
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: hdKeyring.nextDerivationIndex },
       createdAt: Date.now(),
     };

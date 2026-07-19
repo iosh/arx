@@ -143,7 +143,6 @@ describe("createDexiePersistence", () => {
       hdKeyringId: "hd-keyring-1",
       keySourceId: source.keySourceId,
       namespace: "eip155",
-      derivationProfileId: "bip44",
       nextDerivationIndex: 1,
       createdAt: 1,
     };

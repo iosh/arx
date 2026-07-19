@@ -64,7 +64,7 @@ export type Wallet = Readonly<{
     remove(keySourceId: KeySourceId): Promise<void>;
   }>;
   keyrings: Readonly<{
-    add(params: { keySourceId: KeySourceId; namespace: string; derivationProfileId?: string }): Promise<AccountId>;
+    add(params: { keySourceId: KeySourceId; namespace: string }): Promise<AccountId>;
     deriveAccount(hdKeyringId: HdKeyringId): Promise<AccountId>;
     remove(hdKeyringId: HdKeyringId): Promise<void>;
   }>;

@@ -1,5 +1,5 @@
 import type { Accounts } from "../../accounts/Accounts.js";
-import { type AccountId, getAccountIdNamespace } from "../../accounts/accountId.js";
+import type { AccountId } from "../../accounts/accountId.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
 import { deriveBip39Seed } from "../../keyring/bip39.js";
 import {
@@ -33,12 +33,10 @@ export const createEip155AccountSigning = ({
   keyring,
   accounts,
 }: {
-  keyring: Keyring;
+  keyring: Pick<Keyring, "getHdKeyring" | "getKeySource" | "getSecrets">;
   accounts: Pick<Accounts, "getAccountRecord">;
 }): Eip155AccountSigning => ({
   signDigest: async ({ accountId, digest }) => {
-    if (getAccountIdNamespace(accountId) !== EIP155_NAMESPACE) throw new AccountNotFoundError(accountId);
-
     const account = accounts.getAccountRecord(accountId);
     if (!account) throw new AccountNotFoundError(accountId);
 
@@ -53,10 +51,11 @@ export const createEip155AccountSigning = ({
       if (source.type !== "bip39") throw new KeySourceNotFoundError(hdKeyring.keySourceId);
 
       const seed = await deriveBip39Seed(source);
+      if (!keyring.getSecrets()) throw new WalletLockedError();
+
       return signEip155HdDigest({
         accountId,
         seed,
-        derivationProfileId: hdKeyring.derivationProfileId,
         derivationIndex: account.origin.derivationIndex,
         digest,
       });
@@ -71,6 +70,6 @@ export const createEip155AccountSigning = ({
     const source = getKeySourceSecret(keyring, sourceRecord.keySourceId);
     if (source.type !== "private-key") throw new KeySourceNotFoundError(sourceRecord.keySourceId);
 
-    return signEip155PrivateKeyDigest({ accountId, source, digest });
+    return signEip155PrivateKeyDigest({ accountId, privateKey: source.privateKey, digest });
   },
 });

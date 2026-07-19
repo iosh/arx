@@ -2,7 +2,6 @@ import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persis
 
 export type KeySourceId = string;
 export type HdKeyringId = string;
-export type DerivationProfileId = string;
 export type BackupStatus = "pending" | "confirmed";
 
 export type Bip39KeySourceRecord = Readonly<{
@@ -25,7 +24,6 @@ export type HdKeyringRecord = Readonly<{
   hdKeyringId: HdKeyringId;
   keySourceId: KeySourceId;
   namespace: string;
-  derivationProfileId: DerivationProfileId;
   /** Monotonic index reserved for the next HD derivation. */
   nextDerivationIndex: number;
   createdAt: number;

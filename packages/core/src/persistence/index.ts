@@ -17,7 +17,6 @@ export type {
 export type {
   BackupStatus,
   Bip39KeySourceRecord,
-  DerivationProfileId,
   HdKeyringId,
   HdKeyringRecord,
   HdKeyringsReader,

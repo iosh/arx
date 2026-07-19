@@ -33,13 +33,12 @@ const initializeBip39 = async (
     if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
 
     const seed = await deriveBip39Seed(source);
-    const identity = adapter.deriveAccount({
+    const accountId = adapter.deriveHdAccountId({
       seed,
-      derivationProfileId: adapter.defaultDerivationProfileId,
       derivationIndex: 0,
     });
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
       createdAt,
     };
@@ -53,7 +52,6 @@ const initializeBip39 = async (
       hdKeyring: {
         hdKeyringId,
         namespace: params.namespace,
-        derivationProfileId: adapter.defaultDerivationProfileId,
         nextDerivationIndex: 1,
         createdAt,
       },
@@ -112,9 +110,9 @@ export const initializeFromPrivateKey = async (
   return await wallet.mutations.run(async (commit) => {
     if (await wallet.readers.encryptedVault.get()) throw new WalletAlreadyInitializedError();
 
-    const identity = adapter.importPrivateKey(source);
+    const accountId = adapter.accountIdFromPrivateKey(source.privateKey);
     const account: Omit<AccountRecord, "hidden"> = {
-      accountId: identity.accountId,
+      accountId,
       origin: { type: "private-key", keySourceId },
       createdAt,
     };

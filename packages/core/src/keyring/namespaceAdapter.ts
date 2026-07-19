@@ -1,28 +1,21 @@
 import type { AccountId } from "../accounts/accountId.js";
+import type { Namespace } from "../namespaces/types.js";
 import { KeyringUnsupportedNamespaceError } from "./errors.js";
-import type { PrivateKeySourceSecret } from "./secrets.js";
-
-export type KeyringAccountIdentity = Readonly<{ accountId: AccountId }>;
 
 /** Derives namespace-specific account identities without retaining private key material. */
-export interface KeyringNamespaceAdapter {
-  namespace: string;
-  defaultDerivationProfileId: string;
-  deriveAccount(params: {
-    seed: Uint8Array;
-    derivationProfileId: string;
-    derivationIndex: number;
-  }): KeyringAccountIdentity;
-  importPrivateKey(source: PrivateKeySourceSecret): KeyringAccountIdentity;
-}
+export type KeyringNamespaceAdapter<TNamespace extends Namespace = Namespace> = Readonly<{
+  namespace: TNamespace;
+  deriveHdAccountId(params: { seed: Uint8Array; derivationIndex: number }): AccountId;
+  accountIdFromPrivateKey(privateKey: string): AccountId;
+}>;
 
-export type KeyringNamespaceAdapters = ReadonlyMap<string, KeyringNamespaceAdapter>;
+export type KeyringNamespaceAdapters = Readonly<Record<Namespace, KeyringNamespaceAdapter | undefined>>;
 
 export const getKeyringNamespaceAdapter = (
   adapters: KeyringNamespaceAdapters,
-  namespace: string,
+  namespace: Namespace,
 ): KeyringNamespaceAdapter => {
-  const adapter = adapters.get(namespace);
+  const adapter = adapters[namespace];
   if (!adapter) throw new KeyringUnsupportedNamespaceError(namespace);
   return adapter;
 };

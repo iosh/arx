@@ -1,4 +1,4 @@
-import { accountIdFromParts, parseAccountId } from "../../accounts/accountId.js";
+import { formatAccountId, parseAccountId } from "../../accounts/accountId.js";
 import type { AccountsNamespaceAdapter } from "../../accounts/namespaceAdapter.js";
 import { createEip155AddressFormat } from "./address.js";
 
@@ -10,7 +10,7 @@ export const eip155AccountsAdapter: AccountsNamespaceAdapter = {
 
   accountIdFromAddress({ chainRef, address }) {
     const { canonical } = addressFormat.canonicalize({ chainRef, value: address });
-    return accountIdFromParts({ namespace: EIP155_NAMESPACE, payload: canonical.slice(2) });
+    return formatAccountId({ namespace: EIP155_NAMESPACE, payload: canonical.slice(2) });
   },
 
   addressForAccountId({ chainRef, accountId }) {

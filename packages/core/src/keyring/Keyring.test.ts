@@ -28,7 +28,6 @@ const hdKeyring = (params: Partial<HdKeyringRecord> = {}): HdKeyringRecord => ({
   hdKeyringId: "hd-keyring-1",
   keySourceId: "source-1",
   namespace: "eip155",
-  derivationProfileId: "bip44",
   nextDerivationIndex: 1,
   createdAt: 1,
   ...params,
@@ -64,7 +63,7 @@ describe("Keyring records", () => {
     expect(() => keyring.prepareAddHdKeyring(hdKeyring())).toThrow(HdKeyringRequiresBip39SourceError);
   });
 
-  it("rejects an HD keyring with an existing source, namespace, and profile combination", () => {
+  it("rejects an HD keyring with an existing source and namespace", () => {
     const keyring = new Keyring({
       keySources: [bip39Source()],
       hdKeyrings: [hdKeyring()],

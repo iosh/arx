@@ -34,9 +34,7 @@ type KeyringUpdate = Readonly<{
 const EMPTY_BOOTSTRAP: KeyringBootstrap = { keySources: [], hdKeyrings: [] };
 
 const sharesDerivationSequence = (left: HdKeyringRecord, right: HdKeyringRecord): boolean =>
-  left.keySourceId === right.keySourceId &&
-  left.namespace === right.namespace &&
-  left.derivationProfileId === right.derivationProfileId;
+  left.keySourceId === right.keySourceId && left.namespace === right.namespace;
 
 /** Owns key source/HD keyring records and decoded secrets for the current runtime. */
 export class Keyring {
@@ -145,7 +143,6 @@ export class Keyring {
         existingHdKeyringId: existing.hdKeyringId,
         keySourceId: hdKeyring.keySourceId,
         namespace: hdKeyring.namespace,
-        derivationProfileId: hdKeyring.derivationProfileId,
       });
     }
 

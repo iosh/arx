@@ -14,5 +14,5 @@ export const parseAccountId = (accountId: AccountId): { namespace: Namespace; pa
 
 export const getAccountIdNamespace = (accountId: AccountId): Namespace => parseAccountId(accountId).namespace;
 
-export const accountIdFromParts = (params: { namespace: Namespace; payload: string }): AccountId =>
+export const formatAccountId = (params: { namespace: Namespace; payload: string }): AccountId =>
   `${params.namespace}:${params.payload}`;

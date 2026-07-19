@@ -8,6 +8,6 @@ export type NamespaceDefinition<TNamespace extends string = string> = Readonly<{
   namespace: TNamespace;
   accounts: AccountsNamespaceAdapter;
   chainAddressing: NamespaceChainAddressing;
-  keyring: KeyringNamespaceAdapter;
+  keyring: KeyringNamespaceAdapter<TNamespace>;
   builtinChains: readonly ChainDefinitionSeed<RpcEndpoint>[];
 }>;

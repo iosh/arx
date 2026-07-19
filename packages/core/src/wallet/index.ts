@@ -21,4 +21,3 @@ export type {
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
-export { createWallet } from "./Wallet.js";

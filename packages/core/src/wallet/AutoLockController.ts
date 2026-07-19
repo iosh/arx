@@ -19,14 +19,13 @@ export const assertAutoLockDuration = (durationMs: number): void => {
 export class AutoLockController {
   #durationMs: number;
   #cancelScheduledLock: (() => void) | null = null;
+  #lock: (() => void) | null = null;
 
   readonly #time: CoreTime;
-  readonly #lock: () => void;
 
-  constructor(params: { durationMs: number; time: CoreTime; lock: () => void }) {
+  constructor(params: { durationMs: number; time: CoreTime }) {
     this.#durationMs = params.durationMs;
     this.#time = params.time;
-    this.#lock = params.lock;
   }
 
   getDuration(): number {
@@ -35,24 +34,33 @@ export class AutoLockController {
 
   applyDuration(durationMs: number): void {
     this.#durationMs = durationMs;
-    if (this.#cancelScheduledLock) this.start();
+    if (this.#cancelScheduledLock) this.schedule();
   }
 
-  start(): void {
-    this.stop();
-
-    this.#cancelScheduledLock = this.#time.schedule(this.#durationMs, () => {
-      this.#cancelScheduledLock = null;
-      this.#lock();
-    });
+  start(lock: () => void): void {
+    this.#lock = lock;
+    this.schedule();
   }
 
   recordActivity(): void {
-    if (this.#cancelScheduledLock) this.start();
+    if (this.#cancelScheduledLock) this.schedule();
   }
 
   stop(): void {
     this.#cancelScheduledLock?.();
     this.#cancelScheduledLock = null;
+    this.#lock = null;
+  }
+
+  private schedule(): void {
+    const lock = this.#lock;
+    if (!lock) return;
+
+    this.#cancelScheduledLock?.();
+
+    this.#cancelScheduledLock = this.#time.schedule(this.#durationMs, () => {
+      this.#cancelScheduledLock = null;
+      lock();
+    });
   }
 }

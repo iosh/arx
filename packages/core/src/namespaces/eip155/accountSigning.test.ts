@@ -42,8 +42,10 @@ const createSigningFixture = (params: {
         }
       : undefined);
   const keyring = new Keyring({
-    keySources: sourceRecord ? [sourceRecord] : [],
-    hdKeyrings: params.hdKeyring ? [params.hdKeyring] : [],
+    bootstrap: {
+      keySources: sourceRecord ? [sourceRecord] : [],
+      hdKeyrings: params.hdKeyring ? [params.hdKeyring] : [],
+    },
   });
   keyring.activateSecrets(createKeyringSecrets([params.source]));
 

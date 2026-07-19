@@ -1,3 +1,5 @@
+import type { AccountId } from "../accounts/accountId.js";
+import type { Namespace } from "../namespaces/types.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { KeyringBootstrap } from "./bootstrap.js";
@@ -9,6 +11,7 @@ import {
   KeySourceNotFoundError,
   KeySourceRequiresHdKeyringError,
 } from "./errors.js";
+import { getKeyringNamespaceAdapter, type KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 import {
   type Bip39KeySourceRecord,
   type HdKeyringId,
@@ -29,18 +32,37 @@ type KeyringUpdate = Readonly<{
 
 const EMPTY_BOOTSTRAP: KeyringBootstrap = { keySources: [], hdKeyrings: [] };
 
+type KeyringOptions = Readonly<{
+  bootstrap?: KeyringBootstrap;
+  namespaceAdapters?: KeyringNamespaceAdapters;
+}>;
+
 const sharesDerivationSequence = (left: HdKeyringRecord, right: HdKeyringRecord): boolean =>
   left.keySourceId === right.keySourceId && left.namespace === right.namespace;
 
 /** Owns key source/HD keyring records and decoded secrets for the current runtime. */
 export class Keyring {
+  readonly #namespaceAdapters: KeyringNamespaceAdapters;
   #keySources: ReadonlyMap<KeySourceId, KeySourceRecord>;
   #hdKeyrings: ReadonlyMap<HdKeyringId, HdKeyringRecord>;
   #secrets: KeyringSecrets | null = null;
 
-  constructor(bootstrap: KeyringBootstrap = EMPTY_BOOTSTRAP) {
+  constructor(options: KeyringOptions = {}) {
+    const bootstrap = options.bootstrap ?? EMPTY_BOOTSTRAP;
+
+    this.#namespaceAdapters = options.namespaceAdapters ?? {};
     this.#keySources = new Map(bootstrap.keySources.map((source) => [source.keySourceId, source]));
     this.#hdKeyrings = new Map(bootstrap.hdKeyrings.map((hdKeyring) => [hdKeyring.hdKeyringId, hdKeyring]));
+  }
+
+  deriveHdAccountId(params: { namespace: Namespace; seed: Uint8Array; derivationIndex: number }): AccountId {
+    return getKeyringNamespaceAdapter(this.#namespaceAdapters, params.namespace).deriveHdAccountId(params);
+  }
+
+  accountIdFromPrivateKey(params: { namespace: Namespace; privateKey: string }): AccountId {
+    return getKeyringNamespaceAdapter(this.#namespaceAdapters, params.namespace).accountIdFromPrivateKey(
+      params.privateKey,
+    );
   }
 
   getKeySource(keySourceId: KeySourceId): KeySourceRecord | null {

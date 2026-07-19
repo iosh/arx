@@ -1,19 +1,9 @@
-export { generateBip39Mnemonic, importBip39KeySourceSecret } from "./bip39.js";
-export type { KeyringBootstrap } from "./bootstrap.js";
-export { loadKeyringBootstrap } from "./bootstrap.js";
 export * from "./errors.js";
-export { Keyring } from "./Keyring.js";
-export type { KeyringNamespaceAdapter, KeyringNamespaceAdapters } from "./namespaceAdapter.js";
-export { getKeyringNamespaceAdapter } from "./namespaceAdapter.js";
 export type {
   BackupStatus,
-  Bip39KeySourceRecord,
+  HdKeyring,
   HdKeyringId,
-  HdKeyringRecord,
-  HdKeyringsReader,
+  KeyringChanged,
+  KeySource,
   KeySourceId,
-  KeySourceRecord,
-  KeySourcesReader,
-  PrivateKeySourceRecord,
-} from "./persistence.js";
-export type { HdKeyring, KeyringChanged, KeySource } from "./types.js";
+} from "./types.js";

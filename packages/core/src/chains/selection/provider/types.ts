@@ -1,6 +1,6 @@
 import type { Unsubscribe } from "../../../messenger/index.js";
+import type { ChainRef } from "../../../networks/chainRef.js";
 import type { ProviderChainSelectionRecord } from "../../../storage/records.js";
-import type { ChainRef } from "../../ids.js";
 
 export type ProviderChainSelectionKey = {
   origin: string;

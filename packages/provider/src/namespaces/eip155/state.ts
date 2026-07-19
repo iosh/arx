@@ -203,7 +203,7 @@ export class Eip155ProviderState {
     if (typeof chainRef === "string" && chainRef.length > 0) {
       this.#chainRef = chainRef;
       try {
-        this.#namespace = parseChainRef(chainRef as never).namespace;
+        this.#namespace = parseChainRef(chainRef).namespace;
       } catch {
         this.#namespace = EIP155_NAMESPACE;
       }
@@ -218,7 +218,7 @@ export class Eip155ProviderState {
     if (typeof candidate !== "string" || candidate.length === 0) return null;
     let reference = candidate;
     try {
-      reference = parseChainRef(candidate as never).reference;
+      reference = parseChainRef(candidate).reference;
     } catch {
       // Fall back to legacy plain numeric strings.
     }

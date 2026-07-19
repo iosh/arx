@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import { parseChainRef } from "../../../../chains/caip.js";
+import { parseChainRef } from "../../../../networks/chainRef.js";
 
 // Derive numeric chainId from CAIP-2 chainRef
 export const deriveExpectedChainId = (chainRef: string): Hex.Hex | null => {

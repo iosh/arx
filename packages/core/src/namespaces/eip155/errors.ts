@@ -21,3 +21,16 @@ export class Eip155SigningAccountMismatchError extends ArxBaseError {
     });
   }
 }
+
+export type Eip155InvalidChainIdReason = "negative" | "non_canonical" | "too_long";
+
+export class Eip155InvalidChainIdError extends ArxBaseError {
+  static readonly code = "eip155.invalid_chain_id";
+
+  constructor(input: { value: string; reason: Eip155InvalidChainIdReason }) {
+    super("Invalid EIP-155 chain ID.", {
+      code: Eip155InvalidChainIdError.code,
+      details: input,
+    });
+  }
+}

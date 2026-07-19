@@ -1,6 +1,6 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "./definition.js";
 import { ChainRpcAccessConfigError } from "./errors.js";
-import type { ChainRef } from "./ids.js";
 import type { ChainRpcOverrideRecord, CustomChainRecord } from "./persistence.js";
 import { assertNonEmptyRpcEndpoints, cloneNonEmptyRpcEndpoints } from "./rpc/config.js";
 import type { NonEmptyRpcEndpoints } from "./rpc/types.js";

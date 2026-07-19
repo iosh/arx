@@ -1,8 +1,8 @@
-import { assertNamespace } from "../chains/caip.js";
 import { ChainNotFoundError, WalletChainSelectionUnavailableError } from "../chains/errors.js";
-import type { ChainRef } from "../chains/ids.js";
 import type { Networks } from "../chains/networks.js";
 import { ProviderChainSelectionInvalidKeyError } from "../chains/selection/provider/errors.js";
+import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
+import { ChainNamespaceMismatchError } from "../networks/errors.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { OriginNamespaceKey } from "../persistence/keys.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
@@ -56,7 +56,14 @@ export const createProviderChainSelections = (params: {
     },
     select: async (input) => {
       const key = readKey(input);
-      assertNamespace(input.chainRef, key.namespace);
+      const { namespace } = parseChainRef(input.chainRef);
+      if (namespace !== key.namespace) {
+        throw new ChainNamespaceMismatchError({
+          chainRef: input.chainRef,
+          expectedNamespace: key.namespace,
+          actualNamespace: namespace,
+        });
+      }
       await params.mutations.run(async (commit) => {
         requireAvailableChain(input.chainRef);
         const current = await params.reader.get(key);

@@ -1,24 +1,5 @@
 import { ArxBaseError } from "../errors.js";
 
-export type ChainInvalidRefRule =
-  | "type"
-  | "namespace:reference"
-  | "single_colon"
-  | "namespace"
-  | "reference"
-  | "pattern";
-
-export class ChainInvalidRefError extends ArxBaseError {
-  static readonly code = "chain.invalid_ref";
-
-  constructor(rule: ChainInvalidRefRule) {
-    super("Invalid CAIP-2 chainRef.", {
-      code: ChainInvalidRefError.code,
-      details: { rule },
-    });
-  }
-}
-
 export class ChainNotFoundError extends ArxBaseError {
   static readonly code = "chain.not_found";
 
@@ -76,21 +57,6 @@ export class ChainNotCompatibleError extends ArxBaseError {
   constructor(message = "Requested chain is not compatible with this operation.") {
     super(message, {
       code: ChainNotCompatibleError.code,
-    });
-  }
-}
-
-export class ChainNamespaceMismatchError extends ArxBaseError {
-  static readonly code = "chain.namespace_mismatch";
-
-  constructor(params: { chainRef: string; expected: string; actual: string }) {
-    super(`Chain ${params.chainRef} does not belong to namespace "${params.expected}".`, {
-      code: ChainNamespaceMismatchError.code,
-      details: {
-        chainRef: params.chainRef,
-        expectedNamespace: params.expected,
-        actualNamespace: params.actual,
-      },
     });
   }
 }

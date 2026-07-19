@@ -1,5 +1,5 @@
+import type { ChainRef } from "../../networks/chainRef.js";
 import { type ChainDefinition, isSameChainDefinition, normalizeChainDefinition } from "../definition.js";
-import type { ChainRef } from "../ids.js";
 import type { ChainDefinitionEntity, ChainDefinitionsState } from "./types.js";
 
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {

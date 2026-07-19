@@ -1,4 +1,4 @@
-import type { ChainRef } from "../../../../chains/ids.js";
+import type { ChainRef } from "../../../../networks/chainRef.js";
 import type {
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,

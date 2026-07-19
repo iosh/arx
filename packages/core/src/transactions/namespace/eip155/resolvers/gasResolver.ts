@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
 import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
-import type { ChainRef } from "../../../../chains/ids.js";
+import type { ChainRef } from "../../../../networks/chainRef.js";
 import type { Eip155CallParams, Eip155PrepareStepResult, GasResolutionResult } from "../types.js";
 import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 

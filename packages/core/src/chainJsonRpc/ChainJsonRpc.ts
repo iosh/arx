@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import { normalizeChainRef } from "../chains/caip.js";
 import type { RpcEndpoint } from "../chains/definition.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "./errors.js";
 import { createJsonRpcHttpTransport, type JsonRpcHttpTransport, JsonRpcProtocolError } from "./JsonRpcHttpTransport.js";
 
@@ -58,7 +58,8 @@ export class ChainJsonRpc implements ChainJsonRpcClient {
   }
 
   async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
-    const chainRef = normalizeChainRef(input.chainRef);
+    parseChainRef(input.chainRef);
+    const chainRef = input.chainRef;
     const endpoints = this.#endpoints.getRpcEndpoints(chainRef);
     const canReplay = input.replay !== "never";
     const attemptEndpoints = canReplay ? endpoints : endpoints.slice(0, 1);

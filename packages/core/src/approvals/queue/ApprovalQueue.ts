@@ -1,6 +1,6 @@
-import { parseChainRef } from "../../chains/caip.js";
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../rpc/errors.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import {

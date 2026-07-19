@@ -1,8 +1,8 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainRef } from "../chains/ids.js";
 import type { ChainViewsService } from "../chains/views/types.js";
 import { chainIdFromChainRef } from "../namespaces/eip155/chainId.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import * as Hex from "../utils/hex.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";

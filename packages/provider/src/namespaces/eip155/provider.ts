@@ -64,11 +64,12 @@ const EIP155_UNRECOGNIZED_CHAIN_CODES = new Set([
   "chain.not_available",
   "chain.not_compatible",
   "chain.not_supported",
-  "chain.namespace_mismatch",
+  "network.chain_namespace_mismatch",
 ]);
 
 const EIP155_INVALID_PARAMS_CODES = new Set([
-  "chain.invalid_ref",
+  "network.invalid_chain_ref",
+  "eip155.invalid_chain_id",
   "chain.address_namespace_not_supported",
   "chain.address.invalid",
   "chain.invalid_address",

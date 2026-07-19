@@ -1,7 +1,7 @@
 import type { ApprovalKind, ApprovalQueueService, ApprovalRequest } from "../../../../approvals/queue/types.js";
 import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../../../../chains/addressing.js";
-import { parseChainRef } from "../../../../chains/caip.js";
-import type { ChainRef } from "../../../../chains/ids.js";
+import type { ChainRef } from "../../../../networks/chainRef.js";
+import { parseChainRef } from "../../../../networks/chainRef.js";
 import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type { PermissionViewsService, PermittedAccountView } from "../../../../permissions/views/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";

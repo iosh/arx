@@ -1,5 +1,5 @@
-import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { RpcInvalidRequestError } from "./errors.js";
 import type { MethodDefinition, Namespace, RpcHandlerDeps, RpcInvocationHint } from "./handlers/types.js";
 import {
@@ -29,7 +29,7 @@ export type ResolvedRpcInvocationDetails = ResolvedRpcInvocation & {
 const namespaceFromChainRefHint = (chainRef: ChainRef | undefined): Namespace | null => {
   if (chainRef === undefined) return null;
   try {
-    return getChainRefNamespace(chainRef);
+    return parseChainRef(chainRef).namespace;
   } catch {
     return null;
   }
@@ -75,9 +75,9 @@ const parseOptionalInvocationChainRef = (raw: unknown): { kind: "present"; value
     });
   }
 
-  const trimmed = raw.trim();
   try {
-    return { kind: "present", value: normalizeChainRef(trimmed as ChainRef) };
+    parseChainRef(raw);
+    return { kind: "present", value: raw };
   } catch (_error) {
     throw new RpcInvalidRequestError({
       message: "Invalid chainRef identifier",
@@ -91,7 +91,7 @@ const assertInvocationHintConsistency = (hint?: RpcInvocationHint) => {
   let contextChainNamespace: string | null = null;
   if (contextChainRef !== undefined) {
     try {
-      contextChainNamespace = getChainRefNamespace(contextChainRef);
+      contextChainNamespace = parseChainRef(contextChainRef).namespace;
     } catch (_error) {
       throw new RpcInvalidRequestError({
         message: "Invalid chainRef identifier",
@@ -135,7 +135,7 @@ const assertInvocationChainRefMatchesNamespace = (method: string, namespace: Nam
     });
   }
 
-  const chainNamespace = getChainRefNamespace(chainRef);
+  const chainNamespace = parseChainRef(chainRef).namespace;
   if (chainNamespace !== namespace) {
     throw new RpcInvalidRequestError({
       message: `Namespace mismatch for "${method}"`,

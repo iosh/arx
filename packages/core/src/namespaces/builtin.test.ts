@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getChainRefNamespace } from "../chains/caip.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { builtinNamespaces } from "./builtin.js";
 
 describe("builtin namespaces", () => {
@@ -11,7 +11,7 @@ describe("builtin namespaces", () => {
     expect(definition?.accounts.namespace).toBe("eip155");
     expect(definition?.keyring.namespace).toBe("eip155");
     expect(
-      definition?.builtinChains.every((chain) => getChainRefNamespace(chain.definition.chainRef) === "eip155"),
+      definition?.builtinChains.every((chain) => parseChainRef(chain.definition.chainRef).namespace === "eip155"),
     ).toBe(true);
   });
 

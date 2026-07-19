@@ -1,4 +1,4 @@
-import { parseChainRef } from "../../../../chains/caip.js";
+import { parseChainRef } from "../../../../networks/chainRef.js";
 import { RpcInvalidRequestError } from "../../../errors.js";
 import {
   ApprovalRequirements,

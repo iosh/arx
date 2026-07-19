@@ -1,7 +1,7 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../errors.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import { WALLET_UI_ORIGIN } from "../runtime/internalOrigins.js";
 import type {
   CreateTransactionInput,

@@ -1,7 +1,7 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { ApprovalSource } from "../approvals/source.js";
-import { getChainRefNamespace } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import type {
   SubmittedTransactionRecord,
   TransactionConflictKey,
@@ -82,7 +82,7 @@ export const getTransactionNamespaceAdapter = (
   adapters: TransactionNamespaceAdapters,
   chainRef: ChainRef,
 ): TransactionNamespaceAdapter => {
-  const namespace = getChainRefNamespace(chainRef);
+  const { namespace } = parseChainRef(chainRef);
   const adapter = adapters.get(namespace);
   if (!adapter) throw new TransactionNamespaceAdapterNotFoundError(namespace);
   return adapter;

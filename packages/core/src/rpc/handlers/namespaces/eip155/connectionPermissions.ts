@@ -3,7 +3,7 @@ import type { AccountId } from "../../../../accounts/accountId.js";
 import { deriveApprovalReviewContext } from "../../../../approvals/chainContext.js";
 import type { ApprovalRecord } from "../../../../approvals/queue/types.js";
 import { getApprovalSelectableAccounts, resolveApprovalSelectedAccounts } from "../../../../approvals/shared.js";
-import type { ChainRef } from "../../../../chains/ids.js";
+import type { ChainRef } from "../../../../networks/chainRef.js";
 import type { PermissionsWriter } from "../../../../permissions/service/types.js";
 
 type ConnectionApprovalRecord = Pick<ApprovalRecord, "approvalId" | "kind" | "origin" | "namespace" | "chainRef">;

@@ -1,8 +1,8 @@
 import { ZodError } from "zod";
 import type { ChainJsonRpcClient, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
-import type { ChainRef } from "../chains/ids.js";
 import { isArxBaseError } from "../errors.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "./errors.js";
 import type {
   MethodDefinition,

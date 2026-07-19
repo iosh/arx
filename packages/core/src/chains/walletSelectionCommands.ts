@@ -1,6 +1,6 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import { persistenceChange } from "../persistence/change.js";
 import { ChainNotFoundError, WalletChainSelectionUnavailableError } from "./errors.js";
-import type { ChainRef } from "./ids.js";
 import type { NetworksContext } from "./networks.js";
 import { walletChainSelectionPersistenceType } from "./persistence.js";
 import { selectWalletChain, selectWalletNamespace } from "./selection.js";

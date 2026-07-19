@@ -1,4 +1,4 @@
-import type { ChainRef } from "../../chains/ids.js";
+import type { ChainRef } from "../../networks/chainRef.js";
 import type { JsonObject } from "../aggregate/json.js";
 import type { TransactionConflictKey, TransactionReplacementType, TransactionResourceKey } from "../aggregate/types.js";
 import type { TransactionReviewDetails } from "../review.js";

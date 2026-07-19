@@ -11,6 +11,7 @@ import type { KeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
+import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { systemTime } from "../runtime/time.js";
@@ -27,7 +28,6 @@ const PRIMARY_MNEMONIC =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const SECONDARY_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const TERTIARY_MNEMONIC = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
-const EIP155_NAMESPACE = "eip155";
 const SECOND_NAMESPACE = "test";
 
 type State = {

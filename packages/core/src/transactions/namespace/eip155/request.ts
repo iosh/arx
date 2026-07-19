@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
-import { parseChainRef } from "../../../chains/caip.js";
-import type { ChainRef } from "../../../chains/ids.js";
+import type { ChainRef } from "../../../networks/chainRef.js";
+import { parseChainRef } from "../../../networks/chainRef.js";
 import type { Eip155TransactionRequest, WalletTransactionRequest } from "../../types.js";
 import { Eip155ChainRefError } from "./errors.js";
 import type { Eip155TransactionPayload } from "./transactionTypes.js";

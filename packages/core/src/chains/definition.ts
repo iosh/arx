@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { type ParsedChainRef, parseChainRef } from "./caip.js";
-import type { ChainRef } from "./ids.js";
-import { ChainRefSchema } from "./ids.js";
+import { type ChainRef, type ParsedChainRef, parseChainRef } from "../networks/chainRef.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols } from "./url.js";
 
 export interface ChainIcon {
@@ -112,7 +110,7 @@ export const chainIconSchema: z.ZodType<ChainIcon> = z.strictObject({
 });
 
 const chainDefinitionBaseSchema: z.ZodType<ChainDefinition> = z.strictObject({
-  chainRef: ChainRefSchema,
+  chainRef: z.string(),
   displayName: trimmedString(),
   shortName: trimmedString().optional(),
   nativeCurrency: nativeCurrencySchema,

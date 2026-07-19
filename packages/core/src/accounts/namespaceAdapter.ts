@@ -1,5 +1,5 @@
-import type { ChainRef } from "../chains/ids.js";
 import type { Namespace } from "../namespaces/types.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import type { AccountId } from "./accountId.js";
 import { AccountNamespaceUnsupportedError } from "./errors.js";
 

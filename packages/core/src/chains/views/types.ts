@@ -1,5 +1,5 @@
+import type { ChainRef } from "../../networks/chainRef.js";
 import type { ChainDefinition } from "../definition.js";
-import type { ChainRef } from "../ids.js";
 
 export type ChainView = {
   chainRef: ChainRef;

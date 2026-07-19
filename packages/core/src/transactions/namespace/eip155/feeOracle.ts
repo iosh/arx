@@ -1,7 +1,7 @@
 import type { Hex as OxHex } from "ox/Hex";
 import * as Hex from "ox/Hex";
 import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
-import type { ChainRef } from "../../../chains/ids.js";
+import type { ChainRef } from "../../../networks/chainRef.js";
 import { Eip155FeeOracleResponseError } from "./errors.js";
 
 export type Eip155FeeSuggestion =

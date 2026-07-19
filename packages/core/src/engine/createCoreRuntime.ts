@@ -5,7 +5,6 @@ import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
 import { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
-import { parseChainRef } from "../chains/caip.js";
 import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
 import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { JsonValue } from "../errors.js";
@@ -15,6 +14,7 @@ import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/error
 import { Keyring } from "../keyring/Keyring.js";
 import { createMessenger } from "../messenger/Messenger.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";

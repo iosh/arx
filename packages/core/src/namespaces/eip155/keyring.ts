@@ -4,9 +4,9 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
 import { type AccountId, formatAccountId } from "../../accounts/accountId.js";
 import type { KeyringNamespaceAdapter } from "../../keyring/namespaceAdapter.js";
+import { EIP155_NAMESPACE } from "./constants.js";
 import { Eip155InvalidPrivateKeyError, Eip155SigningAccountMismatchError } from "./errors.js";
 
-const EIP155_NAMESPACE = "eip155";
 const DERIVATION_PREFIX = "m/44'/60'/0'/0";
 
 export type Eip155DigestSignature = Readonly<{

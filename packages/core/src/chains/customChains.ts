@@ -1,5 +1,6 @@
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { persistenceChange } from "../persistence/change.js";
-import { getChainRefNamespace } from "./caip.js";
 import { type ChainDefinition, cloneChainDefinition, validateChainDefinition } from "./definition.js";
 import {
   ChainDefinitionConflictError,
@@ -7,7 +8,6 @@ import {
   CustomChainNotFoundError,
   CustomChainRemovalRejectedError,
 } from "./errors.js";
-import type { ChainRef } from "./ids.js";
 import type { NetworksContext } from "./networks.js";
 import { type CustomChainRecord, chainRpcOverridePersistenceType, customChainPersistenceType } from "./persistence.js";
 import { assertNonEmptyRpcEndpoints } from "./rpc/config.js";
@@ -56,7 +56,7 @@ export const updateCustomChain = async (networks: NetworksContext, input: Custom
 export const removeCustomChain = async (networks: NetworksContext, chainRef: ChainRef): Promise<void> => {
   await networks.mutations.run(async (commit) => {
     if (!networks.definitions.getCustom(chainRef)) throw new CustomChainNotFoundError(chainRef);
-    const namespace = getChainRefNamespace(chainRef);
+    const { namespace } = parseChainRef(chainRef);
     const selected = networks.walletSelection.getChainRef(namespace) === chainRef;
     if (selected) throw new CustomChainRemovalRejectedError(chainRef, "wallet_selected");
     const hadOverride = networks.rpc.getOverride(chainRef) !== null;

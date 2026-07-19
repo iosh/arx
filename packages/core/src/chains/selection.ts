@@ -1,5 +1,5 @@
-import { getChainRefNamespace } from "./caip.js";
-import type { ChainRef } from "./ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import type { WalletChainSelectionRecord } from "./persistence.js";
 
 export type WalletChainSelectionDefaults = Readonly<{
@@ -32,7 +32,7 @@ export const selectWalletChain = (
   current: WalletChainSelectionRecord,
   chainRef: ChainRef,
 ): WalletChainSelectionRecord => {
-  const namespace = getChainRefNamespace(chainRef);
+  const { namespace } = parseChainRef(chainRef);
   return {
     activeNamespace: namespace,
     chainRefByNamespace: { ...current.chainRefByNamespace, [namespace]: chainRef },

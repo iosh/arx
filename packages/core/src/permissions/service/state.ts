@@ -1,8 +1,8 @@
 import type { AccountId } from "../../accounts/accountId.js";
 import { getAccountIdNamespace } from "../../accounts/accountId.js";
-import { CAIP2_NAMESPACE_PATTERN, parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
-import type { ChainRef } from "../../chains/ids.js";
-import type { Namespace } from "../../namespaces/types.js";
+import { NAMESPACE_PATTERN, type Namespace } from "../../namespaces/types.js";
+import type { ChainRef } from "../../networks/chainRef.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { RpcInvalidRequestError } from "../../rpc/errors.js";
 import type { PermissionRecord } from "../persistence.js";
 import type {
@@ -59,7 +59,7 @@ export const parsePermissionNamespace = (namespace: string): Namespace => {
     });
   }
 
-  if (namespace.trim() !== namespace || !CAIP2_NAMESPACE_PATTERN.test(namespace)) {
+  if (namespace.trim() !== namespace || !NAMESPACE_PATTERN.test(namespace)) {
     throw new RpcInvalidRequestError({
       message: `Invalid permission namespace "${namespace}"`,
       details: { namespace },
@@ -70,7 +70,7 @@ export const parsePermissionNamespace = (namespace: string): Namespace => {
 };
 
 export const parsePermissionChainRefForNamespace = (namespace: Namespace, chainRef: ChainRef): ChainRef => {
-  const parsed = parseCaipChainRef(chainRef);
+  const parsed = parseChainRef(chainRef);
   if (parsed.namespace !== namespace) {
     throw new RpcInvalidRequestError({
       message: `Permission chainRef "${chainRef}" does not belong to namespace "${namespace}"`,
@@ -78,7 +78,7 @@ export const parsePermissionChainRefForNamespace = (namespace: Namespace, chainR
     });
   }
 
-  return `${parsed.namespace}:${parsed.reference}` as ChainRef;
+  return chainRef;
 };
 
 export const parsePermissionAccountIdsForNamespace = (

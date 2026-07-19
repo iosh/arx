@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ChainRef } from "../networks/chainRef.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { loadNetworksBootstrap } from "./bootstrap.js";
 import type { ChainDefinitionSeed, RpcEndpoint } from "./definition.js";
-import type { ChainRef } from "./ids.js";
 import { createNetworks, type NetworksChanged } from "./networks.js";
 import type { ChainRpcOverrideRecord, CustomChainRecord, WalletChainSelectionRecord } from "./persistence.js";
 

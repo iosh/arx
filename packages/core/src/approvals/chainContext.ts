@@ -1,5 +1,5 @@
-import { parseChainRef } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";
 
 export type ApprovalChainContextRecord = {
@@ -45,7 +45,7 @@ export const deriveApprovalReviewContext = (
   }
 
   return {
-    reviewChainRef: `${parsed.namespace}:${parsed.reference}` as ChainRef,
+    reviewChainRef: resolvedChainRef,
     namespace: parsed.namespace,
     source: options?.request?.chainRef ? "request" : "record",
   };

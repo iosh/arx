@@ -1,6 +1,6 @@
-import type { ChainRef } from "../../chains/ids.js";
 import type { JsonValue } from "../../errors.js";
 import type { Unsubscribe } from "../../messenger/index.js";
+import type { ChainRef } from "../../networks/chainRef.js";
 import type {
   JsonRpcParams,
   JsonRpcRequest,

@@ -11,9 +11,8 @@ import type { Keyring } from "../../keyring/Keyring.js";
 import type { KeySourceId } from "../../keyring/persistence.js";
 import { findKeySourceSecret, type KeySourceSecret } from "../../keyring/secrets.js";
 import { WalletLockedError } from "../../wallet/errors.js";
+import { EIP155_NAMESPACE } from "./constants.js";
 import { type Eip155DigestSignature, signEip155HdDigest, signEip155PrivateKeyDigest } from "./keyring.js";
-
-const EIP155_NAMESPACE = "eip155";
 
 export type Eip155AccountSigning = Readonly<{
   signDigest(params: { accountId: AccountId; digest: Uint8Array }): Promise<Eip155DigestSignature>;

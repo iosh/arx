@@ -1,8 +1,8 @@
-import { getChainRefNamespace } from "../caip.js";
+import type { ChainRef } from "../../networks/chainRef.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import type { RpcEndpoint } from "../definition.js";
 import { type ChainDefinitionSeed, cloneChainDefinition } from "../definition.js";
 import { ChainAdmissionConfigError } from "../errors.js";
-import type { ChainRef } from "../ids.js";
 
 export type WalletChainSelectionDefaults = {
   selectedNamespace: string;
@@ -21,13 +21,13 @@ const createChainRefDefaults = (
   const next: Record<string, ChainRef> = {};
 
   for (const seed of admittedChainSeeds) {
-    const namespace = getChainRefNamespace(seed.definition.chainRef);
+    const { namespace } = parseChainRef(seed.definition.chainRef);
     if (!(namespace in next)) {
       next[namespace] = seed.definition.chainRef;
     }
   }
 
-  next[getChainRefNamespace(selectedUiChainRef)] = selectedUiChainRef;
+  next[parseChainRef(selectedUiChainRef).namespace] = selectedUiChainRef;
   return next;
 };
 
@@ -46,7 +46,7 @@ export const buildChainAdmission = (params: {
   return {
     admittedChainSeeds,
     selectionDefaults: {
-      selectedNamespace: getChainRefNamespace(primarySeed.definition.chainRef),
+      selectedNamespace: parseChainRef(primarySeed.definition.chainRef).namespace,
       chainRefByNamespace: createChainRefDefaults(admittedChainSeeds, primarySeed.definition.chainRef),
     },
   };

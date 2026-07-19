@@ -1,8 +1,8 @@
-import { getChainRefNamespace } from "../caip.js";
+import type { ChainRef } from "../../networks/chainRef.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { type ChainDefinition, cloneChainDefinition } from "../definition.js";
 import type { ChainDefinitionsService } from "../definitions/types.js";
 import { ChainNotAvailableError, ChainNotFoundError, ChainNotSupportedError } from "../errors.js";
-import type { ChainRef } from "../ids.js";
 import type { ChainRpcReader } from "../rpc/types.js";
 import type { WalletChainSelectionService } from "../selection/wallet/types.js";
 import type { ChainView, ChainViewsService, FindAvailableChainViewParams, NetworksSnapshot } from "./types.js";
@@ -15,7 +15,7 @@ type CreateChainViewsServiceOptions = {
 
 const toChainView = (definition: ChainDefinition): ChainView => ({
   chainRef: definition.chainRef,
-  namespace: getChainRefNamespace(definition.chainRef),
+  namespace: parseChainRef(definition.chainRef).namespace,
   displayName: definition.displayName,
   shortName: definition.shortName ?? null,
   icon: definition.icon?.url ?? null,
@@ -128,7 +128,7 @@ class DefaultChainViewsService implements ChainViewsService {
     const grouped = new Map<string, ChainRef[]>();
 
     for (const chainRef of availableChainRefs) {
-      const namespace = getChainRefNamespace(chainRef);
+      const { namespace } = parseChainRef(chainRef);
       const current = grouped.get(namespace);
       if (current) {
         current.push(chainRef);

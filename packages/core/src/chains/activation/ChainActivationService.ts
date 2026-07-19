@@ -1,7 +1,7 @@
+import type { ChainRef } from "../../networks/chainRef.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { RpcInvalidParamsError } from "../../rpc/errors.js";
-import { parseChainRef } from "../caip.js";
 import { ChainNotAvailableError, ChainNotCompatibleError, ChainNotSupportedError } from "../errors.js";
-import type { ChainRef } from "../ids.js";
 import type { ChainRpcReader } from "../rpc/types.js";
 import type { ProviderChainSelectionService } from "../selection/provider/types.js";
 import type { WalletChainSelectionService } from "../selection/wallet/types.js";

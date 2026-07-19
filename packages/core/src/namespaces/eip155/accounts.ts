@@ -1,8 +1,8 @@
 import { formatAccountId, parseAccountId } from "../../accounts/accountId.js";
 import type { AccountsNamespaceAdapter } from "../../accounts/namespaceAdapter.js";
 import { createEip155AddressFormat } from "./address.js";
+import { EIP155_NAMESPACE } from "./constants.js";
 
-const EIP155_NAMESPACE = "eip155";
 const addressFormat = createEip155AddressFormat();
 
 export const eip155AccountsAdapter: AccountsNamespaceAdapter = {

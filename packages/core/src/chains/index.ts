@@ -3,14 +3,12 @@ export * from "./addressing.js";
 export * from "./bootstrap/index.js";
 export type { NetworksBootstrap } from "./bootstrap.js";
 export { loadNetworksBootstrap } from "./bootstrap.js";
-export * from "./caip.js";
 export type { CustomChainInput } from "./customChains.js";
 export * from "./definition.js";
 export * from "./definitions/index.js";
 export type { AvailableChain } from "./definitions.js";
 export { createEip155DefinitionSeedFromEip3085 } from "./eip155/eip3085.js";
 export * from "./errors.js";
-export * from "./ids.js";
 export type { Networks, NetworksChanged } from "./networks.js";
 export { createNetworks } from "./networks.js";
 export type {

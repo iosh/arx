@@ -1,9 +1,9 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { NetworksBootstrap } from "./bootstrap.js";
 import { addCustomChain, type CustomChainInput, removeCustomChain, updateCustomChain } from "./customChains.js";
 import type { RpcEndpoint } from "./definition.js";
 import { type AvailableChain, ChainDefinitions } from "./definitions.js";
-import type { ChainRef } from "./ids.js";
 import type { WalletChainSelectionRecord } from "./persistence.js";
 import type { NonEmptyRpcEndpoints } from "./rpc/types.js";
 import { RpcEndpoints } from "./rpcEndpoints.js";

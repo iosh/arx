@@ -1,7 +1,7 @@
-import { parseChainRef } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
 import type { Namespace } from "../namespaces/types.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";

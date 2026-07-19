@@ -1,3 +1,4 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import {
   defineKeyedPersistenceType,
   defineSingletonPersistenceType,
@@ -5,7 +6,6 @@ import {
   type SingletonPersistenceType,
 } from "../persistence/definition.js";
 import type { ChainDefinition, RpcEndpoint } from "./definition.js";
-import type { ChainRef } from "./ids.js";
 
 export type CustomChainRecord = Readonly<{
   definition: ChainDefinition;

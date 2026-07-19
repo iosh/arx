@@ -1,5 +1,5 @@
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import type { PermissionRecord } from "./persistence.js";
 
 export const removeAccountsFromPermissions = (

@@ -1,4 +1,4 @@
-import { EIP155_NAMESPACE } from "../../handlers/namespaces/eip155/constants.js";
+import { EIP155_NAMESPACE } from "../../../namespaces/eip155/constants.js";
 import { buildEip155Definitions } from "../../handlers/namespaces/eip155/definitions.js";
 import { PASSTHROUGH_CONFIG } from "../../handlers/namespaces/eip155/passthrough.js";
 import type { RpcNamespaceModule } from "../types.js";

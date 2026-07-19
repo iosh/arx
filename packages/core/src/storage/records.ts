@@ -1,6 +1,6 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { RpcEndpoint } from "../chains/definition.js";
-import type { ChainRef } from "../chains/ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
 
 export type ChainRpcEndpointOverrideRecord = {
   chainRef: ChainRef;

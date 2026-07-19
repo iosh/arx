@@ -1,8 +1,8 @@
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
-import type { ChainRef } from "../../chains/ids.js";
 import type { ProviderChainSelectionChangedHandler } from "../../chains/selection/provider/types.js";
 import { isArxBaseError } from "../../errors.js";
 import { eventTopic, type Messenger } from "../../messenger/index.js";
+import type { ChainRef } from "../../networks/chainRef.js";
 import { PermissionNotConnectedError } from "../../permissions/errors.js";
 import {
   isJsonRpcErrorLike,

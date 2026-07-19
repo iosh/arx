@@ -1,6 +1,6 @@
-import { parseChainRef } from "./caip.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { ChainAddressNamespaceNotSupportedError } from "./errors.js";
-import type { ChainRef } from "./ids.js";
 import type {
   CanonicalizeAddressParams,
   CanonicalizedAddressResult,

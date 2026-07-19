@@ -1,7 +1,7 @@
 import { OWNER_CHANGED } from "../../events/ownerChanged.js";
 import type { Messenger } from "../../messenger/index.js";
+import type { ChainRef } from "../../networks/chainRef.js";
 import { ChainNotAvailableError, ChainRpcAccessConfigError } from "../errors.js";
-import type { ChainRef } from "../ids.js";
 import { areRpcEndpointsEqual, cloneChainRpcAccess, cloneNonEmptyRpcEndpoints } from "./config.js";
 import { CHAIN_RPC_ENDPOINTS_CHANGED, CHAIN_RPC_STATE_CHANGED } from "./topics.js";
 import type {

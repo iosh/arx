@@ -1,4 +1,4 @@
-import type { ChainRef } from "./ids.js";
+import type { ChainRef } from "../networks/chainRef.js";
 
 export type CanonicalizeAddressParams = {
   chainRef: ChainRef;

@@ -1,6 +1,6 @@
 import type { AccountId } from "../../accounts/accountId.js";
-import type { ChainRef } from "../../chains/ids.js";
 import type { Namespace } from "../../namespaces/types.js";
+import type { ChainRef } from "../../networks/chainRef.js";
 import type { ConnectionGrantKind } from "../connectionGrantKinds.js";
 
 export type ChainPermissionState = {

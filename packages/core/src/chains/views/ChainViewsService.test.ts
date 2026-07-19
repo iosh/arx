@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getChainRefNamespace } from "../caip.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { type ChainDefinition, cloneChainDefinition } from "../definition.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
@@ -35,14 +35,14 @@ const setup = (params?: {
 }) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
-  const selectedNamespace = params?.selectedNamespace ?? getChainRefNamespace(MAINNET.chainRef);
+  const selectedNamespace = params?.selectedNamespace ?? parseChainRef(MAINNET.chainRef).namespace;
 
   return createChainViewsService({
     chainDefinitions: {
       getState: () => ({
         chains: known.map((definition) => ({
           chainRef: definition.chainRef,
-          namespace: getChainRefNamespace(definition.chainRef),
+          namespace: parseChainRef(definition.chainRef).namespace,
           definition: cloneChainDefinition(definition),
           source: "builtin" as const,
         })),
@@ -52,7 +52,7 @@ const setup = (params?: {
         return definition
           ? {
               chainRef: definition.chainRef,
-              namespace: getChainRefNamespace(definition.chainRef),
+              namespace: parseChainRef(definition.chainRef).namespace,
               definition: cloneChainDefinition(definition),
               source: "builtin" as const,
             }

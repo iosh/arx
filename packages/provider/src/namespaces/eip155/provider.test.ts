@@ -556,8 +556,11 @@ describe("Eip155Provider: error normalization", () => {
       ["approval.superseded", -32603, "Request superseded"],
       ["global.transport.disconnected", 4900, "Disconnected"],
       ["chain.not_found", 4902, "Unrecognized chain"],
+      ["network.chain_namespace_mismatch", 4902, "Unrecognized chain"],
       ["global.rpc.unsupported_method", 4200, "Unsupported method"],
       ["global.rpc.invalid_params", -32602, "Invalid params"],
+      ["network.invalid_chain_ref", -32602, "Invalid params"],
+      ["eip155.invalid_chain_id", -32602, "Invalid params"],
     ] as const;
 
     for (const [coreCode, publicCode, message] of cases) {

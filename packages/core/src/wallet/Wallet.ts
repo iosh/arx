@@ -1,8 +1,8 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { Account, AccountAddress } from "../accounts/types.js";
-import type { ChainRef } from "../chains/ids.js";
 import type { HdKeyring, HdKeyringId, KeySource, KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
+import type { ChainRef } from "../networks/chainRef.js";
 
 export type WalletStatus = "uninitialized" | "locked" | "unlocked";
 

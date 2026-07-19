@@ -4,11 +4,12 @@ import { ChainNotCompatibleError, ChainNotSupportedError } from "../../../../cha
 import {
   type ChainDefinitionSeed,
   createEip155DefinitionSeedFromEip3085,
-  getChainRefNamespace,
   isSameChainDefinition,
   type RpcEndpoint,
 } from "../../../../chains/index.js";
 import { areRpcEndpointsEqual } from "../../../../chains/rpc/config.js";
+import { EIP155_NAMESPACE } from "../../../../namespaces/eip155/constants.js";
+import { parseChainRef } from "../../../../networks/chainRef.js";
 import { RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -48,12 +49,12 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
   handler: async (context) => {
     const { params: seed, deps, executionContext } = context;
     const { definition, defaultRpcEndpoints = [] } = seed;
-    if (getChainRefNamespace(definition.chainRef) !== "eip155") {
+    if (parseChainRef(definition.chainRef).namespace !== EIP155_NAMESPACE) {
       throw new ChainNotCompatibleError("Requested chain is not compatible with wallet_addEthereumChain");
     }
 
     const existing = deps.chainDefinitions.getChain(definition.chainRef);
-    if (existing && existing.namespace !== "eip155") {
+    if (existing && existing.namespace !== EIP155_NAMESPACE) {
       throw new ChainNotCompatibleError("Requested chain conflicts with an existing non-EVM chain");
     }
 

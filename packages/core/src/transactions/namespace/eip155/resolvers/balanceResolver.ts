@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
 import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
-import type { ChainRef } from "../../../../chains/ids.js";
+import type { ChainRef } from "../../../../networks/chainRef.js";
 import type { Eip155PrepareStepResult } from "../types.js";
 import type { Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
 import {

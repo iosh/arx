@@ -1,8 +1,8 @@
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { AccountId } from "../../accounts/accountId.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
-import { parseChainRef } from "../../chains/caip.js";
-import type { ChainRef } from "../../chains/ids.js";
+import type { ChainRef } from "../../networks/chainRef.js";
+import { parseChainRef } from "../../networks/chainRef.js";
 import { PermissionNotConnectedError } from "../errors.js";
 import type { PermissionsReader } from "../service/types.js";
 import type {

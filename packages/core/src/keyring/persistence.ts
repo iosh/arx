@@ -1,33 +1,15 @@
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
+import type { HdKeyring, HdKeyringId, KeySource, KeySourceId } from "./types.js";
 
-export type KeySourceId = string;
-export type HdKeyringId = string;
-export type BackupStatus = "pending" | "confirmed";
+export type { BackupStatus, HdKeyringId, KeySourceId } from "./types.js";
 
-export type Bip39KeySourceRecord = Readonly<{
-  keySourceId: KeySourceId;
-  type: "bip39";
-  backupStatus: BackupStatus;
-  createdAt: number;
-}>;
+export type Bip39KeySourceRecord = Extract<KeySource, { type: "bip39" }>;
 
-export type PrivateKeySourceRecord = Readonly<{
-  keySourceId: KeySourceId;
-  type: "private-key";
-  namespace: string;
-  createdAt: number;
-}>;
+export type PrivateKeySourceRecord = Extract<KeySource, { type: "private-key" }>;
 
-export type KeySourceRecord = Bip39KeySourceRecord | PrivateKeySourceRecord;
+export type KeySourceRecord = KeySource;
 
-export type HdKeyringRecord = Readonly<{
-  hdKeyringId: HdKeyringId;
-  keySourceId: KeySourceId;
-  namespace: string;
-  /** Monotonic index reserved for the next HD derivation. */
-  nextDerivationIndex: number;
-  createdAt: number;
-}>;
+export type HdKeyringRecord = HdKeyring;
 
 export interface KeySourcesReader {
   listAll(): Promise<KeySourceRecord[]>;

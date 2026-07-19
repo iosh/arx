@@ -7,9 +7,14 @@ export type { WalletBootstrap } from "./bootstrap.js";
 export { loadWalletBootstrap } from "./bootstrap.js";
 export * from "./errors.js";
 export type {
+  AddHdKeyringInput,
+  Bip39SourceAdded,
   Bip39WalletCreated,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
+  MnemonicSourceInput,
+  PrivateKeySourceAdded,
+  PrivateKeySourceInput,
   PrivateKeyWalletCreated,
   RestoreFromMnemonicInput,
   Wallet,

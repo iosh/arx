@@ -8,17 +8,6 @@ export class WalletAlreadyInitializedError extends ArxBaseError {
   }
 }
 
-export class WalletOperationRejectedError extends ArxBaseError {
-  static readonly code = "wallet.operation_rejected";
-
-  constructor(reason: string) {
-    super("Wallet operation was rejected.", {
-      code: WalletOperationRejectedError.code,
-      details: { reason },
-    });
-  }
-}
-
 export class WalletLockedError extends ArxBaseError {
   static readonly code = "wallet.locked";
 

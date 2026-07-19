@@ -109,7 +109,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishChanged: (change) => publish({ owner: "accounts", change }),
   });
   const wallet = createWallet({
-    readers: input.persistence.readers,
     mutations,
     keyring,
     accounts,

@@ -1,8 +1,7 @@
 import { accountsChangedFromUpdate } from "../accounts/Accounts.js";
-import type { AccountId } from "../accounts/accountId.js";
 import type { AccountRecord } from "../accounts/persistence.js";
-import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
-import { KeyringDuplicateSourceError, KeySourceNotFoundError } from "../keyring/errors.js";
+import { deriveBip39Seed, generateBip39Mnemonic, importBip39KeySourceSecret } from "../keyring/bip39.js";
+import { KeyringDuplicateSourceError, KeySourceNotFoundError, KeySourceTypeMismatchError } from "../keyring/errors.js";
 import { getKeyringNamespaceAdapter } from "../keyring/namespaceAdapter.js";
 import type { BackupStatus, KeySourceId } from "../keyring/persistence.js";
 import {
@@ -12,28 +11,36 @@ import {
   type PrivateKeySourceSecret,
 } from "../keyring/secrets.js";
 import { persistenceChange } from "../persistence/change.js";
-import { replaceVaultPlaintext } from "../vault/crypto.js";
+import { replaceVaultPlaintext, unlockVaultRecord } from "../vault/crypto.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
-import { WalletOperationRejectedError } from "./errors.js";
-import { permissionChangesForRemovedAccounts } from "./removal.js";
 import { requireKeyringSecrets } from "./unlocked.js";
-import type { WalletContext } from "./Wallet.js";
+import type {
+  Bip39SourceAdded,
+  MnemonicSourceInput,
+  PrivateKeySourceAdded,
+  PrivateKeySourceInput,
+  WalletContext,
+} from "./Wallet.js";
 
-const addMnemonic = async (
+const verifyCurrentPassword = async (wallet: WalletContext, password: string): Promise<void> => {
+  // Re-decrypting the authenticated record verifies the password without changing the active session.
+  await unlockVaultRecord(wallet.vault.requireRecord(), password);
+};
+
+const addBip39Source = async (
   wallet: WalletContext,
-  params: { mnemonic: string; namespace: string; backupStatus: BackupStatus },
-): Promise<AccountId> => {
+  params: MnemonicSourceInput & { backupStatus: BackupStatus },
+): Promise<Bip39SourceAdded> => {
   const keySourceId = crypto.randomUUID();
   const hdKeyringId = crypto.randomUUID();
-  const createdAt = wallet.time.now();
   const source = importBip39KeySourceSecret({
     keySourceId,
     mnemonic: params.mnemonic,
   });
 
   return await wallet.mutations.run(async (commit) => {
-    const unlocked = wallet.vault.requireUnlocked();
     const secrets = requireKeyringSecrets(wallet);
+    const unlocked = wallet.vault.requireUnlocked();
 
     const existingSource = secrets.keySources.find(
       (candidate) => candidate.type === "bip39" && candidate.mnemonic === source.mnemonic,
@@ -46,6 +53,7 @@ const addMnemonic = async (
       seed,
       derivationIndex: 0,
     });
+    const createdAt = wallet.time.now();
     const account: Omit<AccountRecord, "hidden"> = {
       accountId,
       origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
@@ -84,26 +92,25 @@ const addMnemonic = async (
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
-    return account.accountId;
+    return { keySourceId, hdKeyringId, accountId };
   });
 };
 
-export const addNewMnemonic = async (
-  wallet: WalletContext,
-  params: { mnemonic: string; namespace: string },
-): Promise<AccountId> => await addMnemonic(wallet, { ...params, backupStatus: "pending" });
+export const generateMnemonic = (): { mnemonic: string } => ({
+  mnemonic: generateBip39Mnemonic(),
+});
 
-export const importMnemonic = async (
-  wallet: WalletContext,
-  params: { mnemonic: string; namespace: string },
-): Promise<AccountId> => await addMnemonic(wallet, { ...params, backupStatus: "confirmed" });
+export const addMnemonic = async (wallet: WalletContext, params: MnemonicSourceInput): Promise<Bip39SourceAdded> =>
+  await addBip39Source(wallet, { ...params, backupStatus: "pending" });
+
+export const importMnemonic = async (wallet: WalletContext, params: MnemonicSourceInput): Promise<Bip39SourceAdded> =>
+  await addBip39Source(wallet, { ...params, backupStatus: "confirmed" });
 
 export const importPrivateKey = async (
   wallet: WalletContext,
-  params: { privateKey: string; namespace: string },
-): Promise<AccountId> => {
+  params: PrivateKeySourceInput,
+): Promise<PrivateKeySourceAdded> => {
   const keySourceId = crypto.randomUUID();
-  const createdAt = wallet.time.now();
   const source: PrivateKeySourceSecret = {
     keySourceId,
     type: "private-key",
@@ -111,23 +118,16 @@ export const importPrivateKey = async (
   };
 
   return await wallet.mutations.run(async (commit) => {
-    const unlocked = wallet.vault.requireUnlocked();
     const secrets = requireKeyringSecrets(wallet);
+    const unlocked = wallet.vault.requireUnlocked();
     const adapter = getKeyringNamespaceAdapter(wallet.adapters, params.namespace);
-
-    const sourceRecords = new Map(wallet.keyring.listKeySources().map((record) => [record.keySourceId, record]));
-    const existingSource = secrets.keySources.find((candidate) => {
-      const record = sourceRecords.get(candidate.keySourceId);
-      return (
-        candidate.type === "private-key" &&
-        candidate.privateKey === source.privateKey &&
-        record?.type === "private-key" &&
-        record.namespace === params.namespace
-      );
-    });
-    if (existingSource) throw new KeyringDuplicateSourceError(existingSource.keySourceId);
-
     const accountId = adapter.accountIdFromPrivateKey(source.privateKey);
+    const existingAccount = wallet.accounts.getAccountRecord(accountId);
+    if (existingAccount?.origin.type === "private-key") {
+      throw new KeyringDuplicateSourceError(existingAccount.origin.keySourceId);
+    }
+
+    const createdAt = wallet.time.now();
     const account: Omit<AccountRecord, "hidden"> = {
       accountId,
       origin: { type: "private-key", keySourceId },
@@ -158,7 +158,7 @@ export const importPrivateKey = async (
     wallet.publishKeyringChanged();
     wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
-    return account.accountId;
+    return { keySourceId, accountId };
   });
 };
 
@@ -177,45 +177,48 @@ export const confirmMnemonicBackup = async (
   });
 };
 
-export const removeKeySource = async (wallet: WalletContext, keySourceId: KeySourceId): Promise<void> => {
-  await wallet.mutations.run(async (commit) => {
-    const unlocked = wallet.vault.requireUnlocked();
+export const exportMnemonic = async (
+  wallet: WalletContext,
+  params: { keySourceId: KeySourceId; password: string },
+): Promise<{ mnemonic: string }> => {
+  return await wallet.mutations.run(async () => {
     const secrets = requireKeyringSecrets(wallet);
-
-    const sourceRecord = wallet.keyring.getKeySource(keySourceId);
-    if (!sourceRecord) throw new KeySourceNotFoundError(keySourceId);
-    if (!findKeySourceSecret(secrets, keySourceId)) {
-      throw new KeySourceNotFoundError(keySourceId);
+    const source = findKeySourceSecret(secrets, params.keySourceId);
+    if (!source) throw new KeySourceNotFoundError(params.keySourceId);
+    if (source.type !== "bip39") {
+      throw new KeySourceTypeMismatchError({
+        keySourceId: params.keySourceId,
+        expectedType: "bip39",
+        actualType: source.type,
+      });
     }
 
-    const remainingSources = secrets.keySources.filter((source) => source.keySourceId !== keySourceId);
-    if (remainingSources.length === 0) throw new WalletOperationRejectedError("last_source_requires_delete_wallet");
+    await verifyCurrentPassword(wallet, params.password);
 
-    const keyrings = sourceRecord.type === "bip39" ? wallet.keyring.listHdKeyringsByKeySourceIds([keySourceId]) : [];
-    const accountsUpdate =
-      sourceRecord.type === "bip39"
-        ? wallet.accounts.prepareRemoveHdAccounts(keyrings.map((keyring) => keyring.hdKeyringId))
-        : wallet.accounts.prepareRemovePrivateKeyAccounts([keySourceId]);
-    const accountIds = accountsUpdate?.removedAccountIds ?? [];
-    const permissionChanges = await permissionChangesForRemovedAccounts(wallet, accountIds);
-    const keyringUpdate = wallet.keyring.prepareRemoveKeySource(keySourceId);
-    const nextSecrets = createKeyringSecrets(remainingSources);
-    const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
-    const changes = [
-      persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
-      ...keyringUpdate.persistenceChanges,
-      ...(accountsUpdate?.persistenceChanges ?? []),
-      ...permissionChanges,
-    ];
-
-    await commit(changes);
-
-    wallet.vault.activate(nextUnlocked);
-    wallet.keyring.applyCommittedUpdate(keyringUpdate);
-    if (accountsUpdate) wallet.accounts.applyCommittedUpdate(accountsUpdate);
-    wallet.keyring.activateSecrets(nextSecrets);
     wallet.autoLock.recordActivity();
-    wallet.publishKeyringChanged();
-    if (accountsUpdate) wallet.publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+    return { mnemonic: source.mnemonic };
+  });
+};
+
+export const exportPrivateKey = async (
+  wallet: WalletContext,
+  params: { keySourceId: KeySourceId; password: string },
+): Promise<{ privateKey: string }> => {
+  return await wallet.mutations.run(async () => {
+    const secrets = requireKeyringSecrets(wallet);
+    const source = findKeySourceSecret(secrets, params.keySourceId);
+    if (!source) throw new KeySourceNotFoundError(params.keySourceId);
+    if (source.type !== "private-key") {
+      throw new KeySourceTypeMismatchError({
+        keySourceId: params.keySourceId,
+        expectedType: "private-key",
+        actualType: source.type,
+      });
+    }
+
+    await verifyCurrentPassword(wallet, params.password);
+
+    wallet.autoLock.recordActivity();
+    return { privateKey: source.privateKey };
   });
 };

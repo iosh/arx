@@ -43,6 +43,21 @@ export class KeyringDuplicateSourceError extends ArxBaseError {
   }
 }
 
+export class KeySourceTypeMismatchError extends ArxBaseError {
+  static readonly code = "keyring.key_source_type_mismatch";
+
+  constructor(input: {
+    keySourceId: string;
+    expectedType: "bip39" | "private-key";
+    actualType: "bip39" | "private-key";
+  }) {
+    super(`Key source "${input.keySourceId}" is not a ${input.expectedType} source.`, {
+      code: KeySourceTypeMismatchError.code,
+      details: input,
+    });
+  }
+}
+
 export class HdKeyringAlreadyExistsError extends ArxBaseError {
   static readonly code = "keyring.hd_keyring_already_exists";
 

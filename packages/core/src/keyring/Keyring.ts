@@ -21,10 +21,6 @@ import {
 } from "./persistence.js";
 import type { KeyringSecrets } from "./secrets.js";
 
-export type KeyringChanged = Readonly<{
-  type: "keyringChanged";
-}>;
-
 type KeyringUpdate = Readonly<{
   nextKeySources: ReadonlyMap<KeySourceId, KeySourceRecord>;
   nextHdKeyrings: ReadonlyMap<HdKeyringId, HdKeyringRecord>;

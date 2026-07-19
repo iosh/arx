@@ -6,7 +6,7 @@ export type JsonRpcHttpRequest = Readonly<{
   endpoint: RpcEndpoint;
   method: string;
   params?: JsonRpcParams;
-  timeoutMs: number;
+  timeoutMs?: number;
 }>;
 
 export type JsonRpcHttpTransport = Readonly<{
@@ -45,6 +45,7 @@ export class ChainJsonRpcHttpTransportError extends ArxBaseError {
 }
 
 const RPC_ID_MAX = 0xffff_ffff;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 const createIdAllocator = () => {
   let next = 0;
@@ -68,7 +69,7 @@ export const createJsonRpcHttpTransport = (
     async request<TResult = unknown>(request: JsonRpcHttpRequest): Promise<TResult> {
       const requestId = allocateId();
       const abortController = createAbortController();
-      const timer = setTimeout(() => abortController.abort(), request.timeoutMs);
+      const timer = setTimeout(() => abortController.abort(), request.timeoutMs ?? DEFAULT_TIMEOUT_MS);
       try {
         const response = await fetchFn(request.endpoint, {
           method: "POST",

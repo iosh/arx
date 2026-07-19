@@ -1,6 +1,5 @@
 export * from "./activation/index.js";
 export * from "./addressing.js";
-export * from "./bootstrap/index.js";
 export type { NetworksBootstrap } from "./bootstrap.js";
 export { loadNetworksBootstrap } from "./bootstrap.js";
 export type { CustomChainInput } from "./customChains.js";

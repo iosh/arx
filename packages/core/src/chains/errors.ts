@@ -172,17 +172,6 @@ export class ChainBootstrapInvariantError extends ArxBaseError {
   }
 }
 
-export class ChainAdmissionConfigError extends ArxBaseError {
-  static readonly code = "chain.admission_config_invalid";
-
-  constructor(reason: "missing_admitted_chain") {
-    super("Chain admission configuration is invalid.", {
-      code: ChainAdmissionConfigError.code,
-      details: { reason },
-    });
-  }
-}
-
 export class ChainBootstrapHydrationError extends ArxBaseError {
   static readonly code = "chain.bootstrap_hydration_failed";
 

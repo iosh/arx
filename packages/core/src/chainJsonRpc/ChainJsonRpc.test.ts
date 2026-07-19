@@ -19,6 +19,7 @@ describe("ChainJsonRpc", () => {
 
     await expect(rpc.request<string>({ chainRef: "eip155:1", method: "eth_chainId" })).resolves.toBe("0x1");
     expect(transport.request.mock.calls.map(([request]) => request.endpoint)).toEqual([endpointA, endpointB]);
+    expect(transport.request.mock.calls.every(([request]) => !("timeoutMs" in request))).toBe(true);
   });
 
   it("retries a safe request when only one endpoint is configured", async () => {

@@ -25,7 +25,6 @@ describe("JsonRpcHttpTransport", () => {
         endpoint,
         method: "eth_chainId",
         params: [],
-        timeoutMs: 1_000,
       }),
     ).resolves.toBe("0x1");
 
@@ -50,7 +49,7 @@ describe("JsonRpcHttpTransport", () => {
     const transport = createJsonRpcHttpTransport({ fetch });
 
     await expect(
-      transport.request({ endpoint, method: "eth_call", timeoutMs: 1_000 }),
+      transport.request({ endpoint, method: "eth_call" }),
     ).rejects.toMatchObject<ChainJsonRpcHttpProtocolError>({
       code: "chain_json_rpc.http_protocol",
       rpcCode: -32000,
@@ -68,7 +67,7 @@ describe("JsonRpcHttpTransport", () => {
     const transport = createJsonRpcHttpTransport({ fetch });
 
     await expect(
-      transport.request({ endpoint, method: "eth_chainId", timeoutMs: 1_000 }),
+      transport.request({ endpoint, method: "eth_chainId" }),
     ).rejects.toMatchObject<ChainJsonRpcHttpTransportError>({
       code: "chain_json_rpc.http_transport",
       message: "JSON-RPC response does not match the request.",

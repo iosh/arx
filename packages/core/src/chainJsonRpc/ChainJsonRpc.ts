@@ -28,16 +28,13 @@ export type ChainJsonRpcOptions = {
   transport?: JsonRpcHttpTransport;
   fetch?: typeof globalThis.fetch;
   abortController?: () => AbortController;
-  defaultTimeoutMs?: number;
 };
 
-const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SAFE_REQUEST_ROUNDS = 2;
 
 export class ChainJsonRpc implements ChainJsonRpcClient {
   readonly #endpoints: ChainJsonRpcOptions["endpoints"];
   readonly #transport: JsonRpcHttpTransport;
-  readonly #defaultTimeoutMs: number;
 
   constructor(options: ChainJsonRpcOptions) {
     this.#endpoints = options.endpoints;
@@ -47,7 +44,6 @@ export class ChainJsonRpc implements ChainJsonRpcClient {
         ...(options.fetch ? { fetch: options.fetch } : {}),
         ...(options.abortController ? { abortController: options.abortController } : {}),
       });
-    this.#defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
@@ -67,8 +63,8 @@ export class ChainJsonRpc implements ChainJsonRpcClient {
           return await this.#transport.request<TResult>({
             endpoint,
             method: input.method,
-            timeoutMs: input.timeoutMs ?? this.#defaultTimeoutMs,
             ...(input.params !== undefined ? { params: input.params } : {}),
+            ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
           });
         } catch (error) {
           if (error instanceof ChainJsonRpcHttpProtocolError) {

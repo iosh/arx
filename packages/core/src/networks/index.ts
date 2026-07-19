@@ -8,6 +8,7 @@ export {
   validateChainDefinition,
 } from "./definition.js";
 export { ChainNamespaceMismatchError, InvalidChainRefError } from "./errors.js";
+export type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 export type {
   BlockExplorer,
   BuiltinNetworkSeed,

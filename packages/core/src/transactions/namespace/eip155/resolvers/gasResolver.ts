@@ -1,11 +1,11 @@
 import * as Hex from "ox/Hex";
-import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
 import type { Eip155CallParams, Eip155PrepareStepResult, GasResolutionResult } from "../types.js";
 import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 
 type GasResolverParams = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chainRef: ChainRef;
   callParams: Eip155CallParams;
   gasProvided?: Hex.Hex | null;
@@ -28,6 +28,7 @@ export const deriveGas = async (
         chainRef: params.chainRef,
         method: "eth_estimateGas",
         params: [estimateArgs],
+        replay: "allowed",
       });
       const gasHex = parseOptionalHexQuantity(estimatedGas, "gas");
       if (gasHex) {

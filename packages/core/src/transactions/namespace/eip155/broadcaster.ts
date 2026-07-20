@@ -1,4 +1,4 @@
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import { isArxBaseError } from "../../../errors.js";
 import { RpcInternalError } from "../../../rpc/errors.js";
 import type { SignedTransactionPayload } from "../types.js";
@@ -7,7 +7,7 @@ import type { Eip155BroadcasterContract } from "./types.js";
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 
 type BroadcasterDeps = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
 };
 
 export type Eip155Broadcaster = {
@@ -49,7 +49,7 @@ export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaste
           chainRef: context.chainRef,
           method: "eth_sendRawTransaction",
           params: [signed.raw],
-          replay: "never",
+          replay: "forbidden",
         });
         return { hash: toCanonicalTransactionHash(hash) };
       } catch (error) {

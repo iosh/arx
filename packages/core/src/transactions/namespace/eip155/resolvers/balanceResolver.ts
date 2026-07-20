@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
 import type { Eip155PrepareStepResult } from "../types.js";
 import type { Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
@@ -20,7 +20,7 @@ const toBigIntOrNull = (value: string | undefined): bigint | null => {
 };
 
 type BalanceResolverParams = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chainRef: ChainRef;
   prepared: Pick<Eip155UnsignedTransactionDraft, "from" | "gas" | "value" | "gasPrice" | "maxFeePerGas">;
   additionalFeeWei?: bigint;
@@ -63,6 +63,7 @@ export const checkBalanceForMaxCost = async ({
       chainRef,
       method: "eth_getBalance",
       params: [prepared.from, "latest"],
+      replay: "allowed",
     });
   } catch (error) {
     return {

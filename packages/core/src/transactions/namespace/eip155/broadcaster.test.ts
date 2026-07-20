@@ -21,7 +21,7 @@ describe("createEip155Broadcaster", () => {
       chainRef: TEST_CHAINS.MAINNET,
       method: "eth_sendRawTransaction",
       params: [SIGNED.raw],
-      replay: "never",
+      replay: "forbidden",
     });
   });
 

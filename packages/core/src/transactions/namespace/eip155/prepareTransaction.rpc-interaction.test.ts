@@ -31,6 +31,7 @@ describe("prepareTransaction - RPC interaction", () => {
       chainRef: ctx.chainRef,
       method: "eth_getBalance",
       params: [TEST_ADDRESSES.FROM_A, "latest"],
+      replay: "allowed",
     });
     expect(result).toMatchObject({
       status: "blocked",
@@ -73,6 +74,7 @@ describe("prepareTransaction - RPC interaction", () => {
           data: TEST_VALUES.EMPTY_DATA,
         },
       ],
+      replay: "allowed",
     });
   });
 

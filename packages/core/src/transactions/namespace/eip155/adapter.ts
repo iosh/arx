@@ -1,5 +1,5 @@
 import type { Accounts } from "../../../accounts/Accounts.js";
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155AccountSigning } from "../../../namespaces/eip155/accountSigning.js";
 import type { TransactionJsonObject, TransactionRecord } from "../../persistence.js";
@@ -110,7 +110,7 @@ const retryInspectionDelay = (attempt: number): number => {
 };
 
 export const createEip155TransactionAdapter = (params: {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chains: ChainAddressingByNamespace;
   accounts: Pick<Accounts, "getAddress">;
   accountSigning: Eip155AccountSigning;

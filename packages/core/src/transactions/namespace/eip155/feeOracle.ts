@@ -1,6 +1,6 @@
 import type { Hex as OxHex } from "ox/Hex";
 import * as Hex from "ox/Hex";
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainRef } from "../../../networks/chainRef.js";
 import { Eip155FeeOracleResponseError } from "./errors.js";
 
@@ -19,7 +19,7 @@ export type Eip155FeeOracle = {
 };
 
 type FeeOracleDeps = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chainRef: ChainRef;
 };
 
@@ -56,6 +56,7 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
           chainRef: deps.chainRef,
           method: "eth_getBlockByNumber",
           params: ["latest", false],
+          replay: "allowed",
           ...rpcOverrides,
         });
         const baseFee = toBigIntQuantity(baseFeeBlock.baseFeePerGas);
@@ -65,6 +66,7 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
               chainRef: deps.chainRef,
               method: "eth_feeHistory",
               params: [FEE_HISTORY_BLOCK_COUNT, "latest", [...FEE_HISTORY_REWARD_PERCENTILES]],
+              replay: "allowed",
               ...rpcOverrides,
             })
             .catch(() => null);
@@ -80,7 +82,12 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
               ? null
               : toBigIntQuantity(
                   await deps.chainJsonRpc
-                    .request<string>({ chainRef: deps.chainRef, method: "eth_maxPriorityFeePerGas", ...rpcOverrides })
+                    .request<string>({
+                      chainRef: deps.chainRef,
+                      method: "eth_maxPriorityFeePerGas",
+                      replay: "allowed",
+                      ...rpcOverrides,
+                    })
                     .catch(() => null),
                 );
 
@@ -111,6 +118,7 @@ export const createEip155FeeOracle = (deps: FeeOracleDeps): Eip155FeeOracle => {
       const gasPriceHex = await deps.chainJsonRpc.request<string>({
         chainRef: deps.chainRef,
         method: "eth_gasPrice",
+        replay: "allowed",
         ...rpcOverrides,
       });
       const gasPrice = toBigIntQuantity(gasPriceHex);

@@ -1,64 +1,49 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../networks/chainRef.js";
-import { parseChainRef } from "../networks/chainRef.js";
 import type { NetworkRpcEndpointsReader } from "../networks/types.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "./errors.js";
 import {
   ChainJsonRpcHttpProtocolError,
+  ChainJsonRpcHttpTransportError,
   createJsonRpcHttpTransport,
   type JsonRpcHttpTransport,
 } from "./JsonRpcHttpTransport.js";
 
-export type ChainJsonRpcRequest = {
+export type ChainJsonRpcRequest = Readonly<{
   chainRef: ChainRef;
   method: string;
   params?: JsonRpcParams;
   timeoutMs?: number;
-  replay?: "safe" | "never";
-};
+  replay: "allowed" | "forbidden";
+}>;
 
-export type ChainJsonRpcClient = {
+export type ChainJsonRpc = Readonly<{
   request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult>;
-};
+}>;
 
-export type ChainJsonRpcOptions = {
+export type ChainJsonRpcOptions = Readonly<{
   endpoints: NetworkRpcEndpointsReader;
   transport?: JsonRpcHttpTransport;
   fetch?: typeof globalThis.fetch;
   abortController?: () => AbortController;
-};
+}>;
 
-const DEFAULT_SAFE_REQUEST_ROUNDS = 2;
+export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc => {
+  const transport =
+    options.transport ??
+    createJsonRpcHttpTransport({
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      ...(options.abortController ? { abortController: options.abortController } : {}),
+    });
 
-export class ChainJsonRpc implements ChainJsonRpcClient {
-  readonly #endpoints: ChainJsonRpcOptions["endpoints"];
-  readonly #transport: JsonRpcHttpTransport;
+  return {
+    async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
+      const endpoints = options.endpoints.getRpcEndpoints(input.chainRef);
+      let lastTransportError: ChainJsonRpcHttpTransportError | undefined;
 
-  constructor(options: ChainJsonRpcOptions) {
-    this.#endpoints = options.endpoints;
-    this.#transport =
-      options.transport ??
-      createJsonRpcHttpTransport({
-        ...(options.fetch ? { fetch: options.fetch } : {}),
-        ...(options.abortController ? { abortController: options.abortController } : {}),
-      });
-  }
-
-  async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
-    parseChainRef(input.chainRef);
-    const chainRef = input.chainRef;
-    const endpoints = this.#endpoints.getRpcEndpoints(chainRef);
-    const canReplay = input.replay !== "never";
-    const attemptEndpoints = canReplay ? endpoints : endpoints.slice(0, 1);
-    const rounds = canReplay ? DEFAULT_SAFE_REQUEST_ROUNDS : 1;
-    let lastError: unknown;
-    let attemptCount = 0;
-
-    for (let round = 0; round < rounds; round += 1) {
-      for (const endpoint of attemptEndpoints) {
-        attemptCount += 1;
+      for (const endpoint of endpoints) {
         try {
-          return await this.#transport.request<TResult>({
+          return await transport.request<TResult>({
             endpoint,
             method: input.method,
             ...(input.params !== undefined ? { params: input.params } : {}),
@@ -67,30 +52,31 @@ export class ChainJsonRpc implements ChainJsonRpcClient {
         } catch (error) {
           if (error instanceof ChainJsonRpcHttpProtocolError) {
             throw new ChainJsonRpcResponseError({
-              chainRef,
+              chainRef: input.chainRef,
               method: input.method,
               rpcCode: error.rpcCode,
               message: error.message,
               data: error.rpcData,
             });
           }
-          if (!canReplay) {
+          if (!(error instanceof ChainJsonRpcHttpTransportError)) throw error;
+          if (input.replay === "forbidden") {
             throw new ChainJsonRpcOutcomeUnknownError({
-              chainRef,
+              chainRef: input.chainRef,
               method: input.method,
               cause: error,
             });
           }
-          lastError = error;
+          lastTransportError = error;
         }
       }
-    }
 
-    throw new ChainJsonRpcUnavailableError({
-      chainRef,
-      method: input.method,
-      attempts: attemptCount,
-      cause: lastError,
-    });
-  }
-}
+      throw new ChainJsonRpcUnavailableError({
+        chainRef: input.chainRef,
+        method: input.method,
+        attempts: endpoints.length,
+        cause: lastTransportError,
+      });
+    },
+  };
+};

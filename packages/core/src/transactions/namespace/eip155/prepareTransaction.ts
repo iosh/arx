@@ -1,4 +1,4 @@
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
@@ -14,9 +14,9 @@ import type {
 } from "./unsignedTransaction.js";
 
 type PrepareTransactionDeps = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chains: ChainAddressingByNamespace;
-  feeOracleFactory?: (chainJsonRpc: ChainJsonRpcClient, chainRef: string) => Eip155FeeOracle;
+  feeOracleFactory?: (chainJsonRpc: ChainJsonRpc, chainRef: string) => Eip155FeeOracle;
 };
 
 const applyPrepareStep = <TPatch>(

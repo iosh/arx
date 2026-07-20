@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { ChainJsonRpcClient } from "../../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../../chainJsonRpc/ChainJsonRpc.js";
 import { buildChainAddressingByNamespace } from "../../../../chains/addressing.js";
 import { eip155ChainAddressing } from "../../../../namespaces/eip155/chainAddressing.js";
 import type { Eip155FeeOracle, Eip155FeeSuggestion } from "../feeOracle.js";
@@ -7,7 +7,7 @@ import { createEip155PrepareTransaction } from "../prepareTransaction.js";
 import type { Eip155PrepareResult } from "../types.js";
 import type { Eip155UnsignedTransaction, Eip155UnsignedTransactionDraft } from "../unsignedTransaction.js";
 
-const defaultChainJsonRpc: ChainJsonRpcClient = {
+const defaultChainJsonRpc: ChainJsonRpc = {
   async request<TResult = unknown>({ method }): Promise<TResult> {
     const resultByMethod: Readonly<Record<string, unknown>> = {
       eth_estimateGas: "0x5208",

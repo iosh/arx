@@ -74,7 +74,8 @@ describe("JsonRpcHttpTransport", () => {
     });
   });
 
-  it("reports an aborted request as a timeout", async () => {
+  it("times out a request after 60 seconds by default", async () => {
+    vi.useFakeTimers();
     const fetch = vi.fn(
       (_input: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
@@ -83,11 +84,17 @@ describe("JsonRpcHttpTransport", () => {
     );
     const transport = createJsonRpcHttpTransport({ fetch });
 
-    await expect(transport.request({ endpoint, method: "eth_chainId", timeoutMs: 1 })).rejects.toEqual(
-      expect.objectContaining<ChainJsonRpcHttpTransportError>({
-        code: "chain_json_rpc.http_transport",
-        message: "RPC request timed out.",
-      }),
-    );
+    try {
+      const assertion = expect(transport.request({ endpoint, method: "eth_chainId" })).rejects.toEqual(
+        expect.objectContaining<ChainJsonRpcHttpTransportError>({
+          code: "chain_json_rpc.http_transport",
+          message: "RPC request timed out.",
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

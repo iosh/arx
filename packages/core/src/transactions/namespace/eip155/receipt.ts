@@ -1,12 +1,12 @@
 import * as Hex from "ox/Hex";
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import { RpcInternalError } from "../../../rpc/errors.js";
 import type { SubmittedTransactionInspection } from "../types.js";
 import type { Eip155TransactionReceipt } from "./transactionTypes.js";
 import type { Eip155TrackingContext } from "./types.js";
 
 type ReceiptDeps = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
 };
 
 type RawReceipt = {
@@ -99,6 +99,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       chainRef: context.chainRef,
       method: "eth_getTransactionReceipt",
       params: [hash],
+      replay: "allowed",
     });
     if (!rawReceipt) {
       return null;
@@ -125,6 +126,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       chainRef: context.chainRef,
       method: "eth_getTransactionCount",
       params: [from, "latest"],
+      replay: "allowed",
     });
     if (typeof latestNonceHex !== "string") {
       return null;

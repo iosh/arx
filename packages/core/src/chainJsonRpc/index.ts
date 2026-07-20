@@ -1,8 +1,8 @@
 export {
-  ChainJsonRpc,
-  type ChainJsonRpcClient,
+  type ChainJsonRpc,
   type ChainJsonRpcOptions,
   type ChainJsonRpcRequest,
+  createChainJsonRpc,
 } from "./ChainJsonRpc.js";
 export {
   ChainJsonRpcOutcomeUnknownError,

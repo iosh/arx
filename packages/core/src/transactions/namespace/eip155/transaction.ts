@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { ChainJsonRpcClient } from "../../../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc } from "../../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainAddressingByNamespace } from "../../../chains/addressing.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { NamespaceTransaction } from "../types.js";
@@ -26,7 +26,7 @@ import {
 import { createEip155RequestValidator } from "./validateRequest.js";
 
 type AdapterDeps = {
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
   chains: ChainAddressingByNamespace;
   signer: Pick<Eip155Signer, "signTransaction">;
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
@@ -69,7 +69,7 @@ const priceReplacementFees = async (
   if (transaction.type === "legacy") {
     const raisedGasPrice = raiseReplacementFee(transaction.gasPrice);
     const latestGasPrice = await deps.chainJsonRpc
-      .request<Hex.Hex>({ chainRef, method: "eth_gasPrice" })
+      .request<Hex.Hex>({ chainRef, method: "eth_gasPrice", replay: "allowed" })
       .catch(() => null);
     return {
       gasPrice: latestGasPrice === null ? raisedGasPrice : higherFee(raisedGasPrice, latestGasPrice as `0x${string}`),
@@ -173,6 +173,7 @@ export const finalizeEip155Submit = async (
     chainRef: context.chainRef,
     method: "eth_getTransactionCount",
     params: [context.from, "pending"],
+    replay: "allowed",
   });
   const preparedPayload = context.preparedPayload;
 

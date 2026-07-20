@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import type { ChainJsonRpcClient, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
+import type { ChainJsonRpc, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { isArxBaseError } from "../errors.js";
 import type { ChainRef } from "../networks/chainRef.js";
@@ -20,7 +20,7 @@ import { type RpcRouting, rpcPassthroughPolicyForNamespace } from "./routing.js"
 type CreateRpcMethodExecutorOptions = {
   routing: RpcRouting;
   deps: RpcHandlerDeps;
-  chainJsonRpc: ChainJsonRpcClient;
+  chainJsonRpc: ChainJsonRpc;
 };
 
 type RpcExecutorBaseArgs = {
@@ -145,11 +145,9 @@ export const createRpcMethodExecutor = ({ routing, deps, chainJsonRpc }: CreateR
       const rpcPayload: ChainJsonRpcRequest = {
         chainRef: args.chainRef,
         method: args.request.method,
-        replay: "never",
+        replay: "forbidden",
+        ...(args.request.params !== undefined ? { params: args.request.params } : {}),
       };
-      if (args.request.params !== undefined) {
-        rpcPayload.params = args.request.params;
-      }
       const result = await chainJsonRpc.request(rpcPayload);
       return result;
     } catch (error) {

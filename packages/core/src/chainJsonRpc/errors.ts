@@ -19,6 +19,7 @@ export class ChainJsonRpcResponseError extends ArxBaseError {
         chainRef: input.chainRef,
         method: input.method,
         rpcCode: input.rpcCode,
+        ...(rpcData !== undefined ? { rpcData } : {}),
       },
     });
     this.rpcCode = input.rpcCode;

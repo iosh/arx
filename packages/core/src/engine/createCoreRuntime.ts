@@ -2,7 +2,7 @@ import { Accounts } from "../accounts/Accounts.js";
 import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
-import { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
+import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
@@ -201,7 +201,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     publishChanged: () => publish({ owner: "permissions" }),
   });
-  const chainJsonRpc = new ChainJsonRpc({
+  const chainJsonRpc = createChainJsonRpc({
     ...(rpcOptions ?? {}),
     transport: jsonRpcHttpTransport,
     endpoints: networks,
@@ -310,7 +310,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
           result = await chainJsonRpc.request({
             chainRef: selection.chainRef,
             method,
-            replay: "never",
+            replay: "forbidden",
             ...(request.request.params !== undefined ? { params: request.request.params } : {}),
           });
         }

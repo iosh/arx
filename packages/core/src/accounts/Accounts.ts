@@ -5,6 +5,7 @@ import { parseChainRef } from "../networks/chainRef.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { uniqueSortedStrings } from "../utils/array.js";
 import { type AccountId, getAccountIdNamespace } from "./accountId.js";
 import type { AccountsBootstrap } from "./bootstrap.js";
 import {
@@ -47,8 +48,6 @@ const EMPTY_BOOTSTRAP: AccountsBootstrap = { records: [], selections: [] };
 
 const sortRecords = (records: readonly AccountRecord[]): AccountRecord[] =>
   [...records].sort((left, right) => left.createdAt - right.createdAt || left.accountId.localeCompare(right.accountId));
-
-const uniqueSorted = <T extends string>(values: readonly T[]): T[] => [...new Set(values)].sort();
 
 const accountSelectionRecord = (namespace: Namespace, accountId: AccountId): AccountSelectionRecord => ({
   namespace,
@@ -330,7 +329,7 @@ export class Accounts {
     for (const record of records) nextRecords.delete(record.accountId);
 
     const changedAccountIds = records.map((record) => record.accountId);
-    const changedNamespaces = uniqueSorted(records.map((record) => getAccountIdNamespace(record.accountId)));
+    const changedNamespaces = uniqueSortedStrings(records.map((record) => getAccountIdNamespace(record.accountId)));
     const nextSelections = new Map(this.#selections);
     const persistenceChanges: PersistenceChange[] = records.map((record) =>
       persistenceChange.remove(accountPersistenceType, record.accountId),
@@ -365,7 +364,7 @@ export class Accounts {
 
     return {
       ...this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, changedNamespaces),
-      removedAccountIds: uniqueSorted([...removedAccountIds]),
+      removedAccountIds: uniqueSortedStrings([...removedAccountIds]),
     };
   }
 
@@ -389,8 +388,8 @@ export class Accounts {
       nextRecords,
       nextSelections,
       persistenceChanges,
-      changedAccountIds: uniqueSorted(changedAccountIds),
-      changedNamespaces: uniqueSorted(changedNamespaces),
+      changedAccountIds: uniqueSortedStrings(changedAccountIds),
+      changedNamespaces: uniqueSortedStrings(changedNamespaces),
     };
   }
 
@@ -400,7 +399,7 @@ export class Accounts {
       accountNamespaces.add(getAccountIdNamespace(accountId));
     }
 
-    for (const namespace of uniqueSorted([...accountNamespaces])) {
+    for (const namespace of uniqueSortedStrings([...accountNamespaces])) {
       getAccountsNamespaceAdapter(this.#adapters, namespace);
 
       const accountId = this.#selections.get(namespace);

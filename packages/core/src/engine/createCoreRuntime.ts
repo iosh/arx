@@ -188,6 +188,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     adapters: networksAdapters,
     defaultNamespace: eip155NetworksAdapter.namespace,
     bootstrap: networksBootstrap,
+    mutations,
+    publishChanged: (change) => publish({ owner: "networks", change }),
   });
   const providerChainSelections = createProviderChainSelections({
     reader: input.persistence.readers.providerChainSelections,

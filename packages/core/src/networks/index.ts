@@ -11,10 +11,14 @@ export {
 } from "./definition.js";
 export {
   BuiltinNetworkConflictError,
+  BuiltinNetworkImmutableError,
   ChainNamespaceMismatchError,
+  CustomNetworkAlreadyExistsError,
   InvalidChainRefError,
   NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
+  NetworkRpcEndpointInvalidError,
+  NetworkRpcEndpointMismatchError,
   NetworkSelectionMissingError,
 } from "./errors.js";
 export { Networks } from "./Networks.js";

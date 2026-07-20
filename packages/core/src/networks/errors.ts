@@ -69,3 +69,47 @@ export class BuiltinNetworkConflictError extends ArxBaseError {
     });
   }
 }
+
+export class CustomNetworkAlreadyExistsError extends ArxBaseError {
+  static readonly code = "network.custom_already_exists";
+
+  constructor(chainRef: ChainRef) {
+    super(`Custom network "${chainRef}" already exists.`, {
+      code: CustomNetworkAlreadyExistsError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class BuiltinNetworkImmutableError extends ArxBaseError {
+  static readonly code = "network.builtin_immutable";
+
+  constructor(chainRef: ChainRef) {
+    super(`Builtin network "${chainRef}" cannot be changed.`, {
+      code: BuiltinNetworkImmutableError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class NetworkRpcEndpointInvalidError extends ArxBaseError {
+  static readonly code = "network.rpc_endpoint_invalid";
+
+  constructor(endpoint: string) {
+    super("Network RPC endpoint must be an HTTP or HTTPS URL.", {
+      code: NetworkRpcEndpointInvalidError.code,
+      details: { endpoint },
+    });
+  }
+}
+
+export class NetworkRpcEndpointMismatchError extends ArxBaseError {
+  static readonly code = "network.rpc_endpoint_mismatch";
+
+  constructor(input: { endpoint: string; expectedChainRef: ChainRef; actualChainRef: ChainRef }) {
+    super(`Network RPC endpoint reports "${input.actualChainRef}" instead of "${input.expectedChainRef}".`, {
+      code: NetworkRpcEndpointMismatchError.code,
+      details: input,
+    });
+  }
+}

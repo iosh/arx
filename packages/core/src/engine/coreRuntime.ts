@@ -3,7 +3,15 @@ import type { ApprovalQueueService } from "../approvals/queue/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
-import type { NetworkSelectionChanged, NetworksChanged, NetworksReader } from "../networks/types.js";
+import type { Namespace } from "../namespaces/types.js";
+import type { ChainRef } from "../networks/chainRef.js";
+import type {
+  CustomNetworkInput,
+  NetworkSelectionChanged,
+  NetworksChanged,
+  NetworksReader,
+  NonEmptyRpcEndpoints,
+} from "../networks/types.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
   ProviderConnectionQuery,
@@ -61,7 +69,15 @@ export type CoreProviderApi = Readonly<{
 
 export type CoreWallet = Wallet &
   Readonly<{
-    networks: NetworksReader;
+    networks: NetworksReader &
+      Readonly<{
+        addCustom(input: CustomNetworkInput): Promise<void>;
+        updateCustom(input: CustomNetworkInput): Promise<void>;
+        setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void>;
+        clearRpcOverride(chainRef: ChainRef): Promise<void>;
+        selectNetwork(chainRef: ChainRef): Promise<void>;
+        selectNamespace(namespace: Namespace): Promise<void>;
+      }>;
     transactions: Transactions;
     approvals: Pick<ApprovalQueueService, "get" | "listPending" | "resolve" | "cancel">;
   }>;

@@ -1,4 +1,4 @@
-import { ArxBaseError } from "../../../errors.js";
+import { ArxBaseError } from "../errors.js";
 
 export type ProviderChainSelectionInvalidKeyField = "origin" | "namespace";
 

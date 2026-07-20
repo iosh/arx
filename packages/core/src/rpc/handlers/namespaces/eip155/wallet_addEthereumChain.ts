@@ -1,18 +1,18 @@
 import { ZodError } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
-import { ChainNotCompatibleError, ChainNotSupportedError } from "../../../../chains/errors.js";
 import { createEip155DefinitionSeedFromEip3085 } from "../../../../chains/index.js";
-import { areRpcEndpointsEqual } from "../../../../chains/rpc/config.js";
-import { EIP155_NAMESPACE } from "../../../../namespaces/eip155/constants.js";
-import { parseChainRef } from "../../../../networks/chainRef.js";
 import { isSameChainDefinition } from "../../../../networks/definition.js";
-import type { CustomNetworkInput } from "../../../../networks/types.js";
+import { BuiltinNetworkConflictError } from "../../../../networks/errors.js";
+import type { CustomNetworkInput, NonEmptyRpcEndpoints } from "../../../../networks/types.js";
 import { RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
+
+const areRpcEndpointsEqual = (left: NonEmptyRpcEndpoints, right: NonEmptyRpcEndpoints): boolean =>
+  left.length === right.length && left.every((endpoint, index) => endpoint === right[index]);
 
 export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<CustomNetworkInput>({
   requestKind: RpcRequestKinds.ChainManagement,
@@ -46,33 +46,21 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Custo
   handler: async (context) => {
     const { params: seed, deps, executionContext } = context;
     const { definition, defaultRpcEndpoints } = seed;
-    if (parseChainRef(definition.chainRef).namespace !== EIP155_NAMESPACE) {
-      throw new ChainNotCompatibleError("Requested chain is not compatible with wallet_addEthereumChain");
-    }
-
-    const existing = deps.chainDefinitions.getChain(definition.chainRef);
-    if (existing && existing.namespace !== EIP155_NAMESPACE) {
-      throw new ChainNotCompatibleError("Requested chain conflicts with an existing non-EVM chain");
-    }
-
-    if (existing?.source === "builtin") {
-      const definitionMatches = isSameChainDefinition(existing.definition, definition);
-      if (!definitionMatches) {
-        throw new ChainNotSupportedError("Requested chain conflicts with a builtin chain definition");
-      }
-    }
-
+    const existing = deps.networks.get(definition.chainRef);
+    const rpcConfiguration = existing ? deps.networks.getRpcConfiguration(definition.chainRef) : null;
     const isUpdate = existing?.source === "custom";
-    const existingDefaultEndpoints = deps.chainRpcDefaultEndpoints?.readDefaultEndpoints(definition.chainRef) ?? null;
+    const existingDefaultEndpoints =
+      rpcConfiguration?.source === "override" ? rpcConfiguration.defaultEndpoints : rpcConfiguration?.endpoints;
 
     if (
       existing &&
-      isSameChainDefinition(existing.definition, definition) &&
+      isSameChainDefinition(existing, definition) &&
       existingDefaultEndpoints &&
       areRpcEndpointsEqual(existingDefaultEndpoints, defaultRpcEndpoints)
     ) {
       return null;
     }
+    if (existing?.source === "builtin") throw new BuiltinNetworkConflictError(definition.chainRef);
 
     const approval = await requestProviderApproval({
       deps,
@@ -87,8 +75,11 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Custo
       },
     });
     await approval.settled;
-    await deps.chainRpcDefaultEndpoints?.setDefaultEndpoints(definition.chainRef, defaultRpcEndpoints, "request");
-    await deps.chainDefinitions.upsertCustomChain(definition, { createdByOrigin: context.origin });
+    if (isUpdate) {
+      await deps.networks.updateCustom(seed);
+    } else {
+      await deps.networks.addCustom(seed);
+    }
 
     return null;
   },

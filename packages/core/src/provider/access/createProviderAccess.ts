@@ -1,5 +1,4 @@
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
-import type { ProviderChainSelectionChangedHandler } from "../../chains/selection/provider/types.js";
 import { isArxBaseError } from "../../errors.js";
 import { eventTopic, type Messenger } from "../../messenger/index.js";
 import type { ChainRef } from "../../networks/chainRef.js";
@@ -81,8 +80,10 @@ type ProviderAccessDeps = {
   providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: { at: number }) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: { at: number; reason: "manual" }) => void) => () => void;
-  subscribeChainRpcStateChanged: (listener: () => void) => () => void;
-  subscribeProviderChainSelectionChanged: (listener: ProviderChainSelectionChangedHandler) => () => void;
+  subscribeNetworksChanged: (listener: () => void) => () => void;
+  subscribeProviderChainSelectionChanged: (
+    listener: (change: { origin: string; namespace: string }) => void,
+  ) => () => void;
   subscribeAccountsStateChanged: (listener: () => void) => () => void;
   subscribePermissionsStateChanged: (listener: () => void) => () => void;
 };
@@ -202,7 +203,7 @@ export const createProviderAccess = ({
   providerRequests,
   subscribeSessionUnlocked,
   subscribeSessionLocked,
-  subscribeChainRpcStateChanged,
+  subscribeNetworksChanged,
   subscribeProviderChainSelectionChanged,
   subscribeAccountsStateChanged,
   subscribePermissionsStateChanged,
@@ -638,7 +639,7 @@ export const createProviderAccess = ({
       selectActiveConnectionScopes((scope) => scope.origin === payload.origin && scope.namespace === payload.namespace),
     );
   });
-  subscribeChainRpcStateChanged(() => {
+  subscribeNetworksChanged(() => {
     reconcileAllActiveConnectionScopes();
   });
   subscribeSessionUnlocked(() => {

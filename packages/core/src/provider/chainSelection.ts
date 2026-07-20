@@ -1,4 +1,3 @@
-import { ProviderChainSelectionInvalidKeyError } from "../chains/selection/provider/errors.js";
 import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
 import {
   ChainNamespaceMismatchError,
@@ -9,6 +8,7 @@ import type { NetworksReader } from "../networks/types.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { OriginNamespaceKey } from "../persistence/keys.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import { ProviderChainSelectionInvalidKeyError } from "./errors.js";
 import {
   type ProviderChainSelectionRecord,
   type ProviderChainSelectionsReader,

@@ -4,32 +4,31 @@ import type { TransactionReadyProposal } from "../transactions/TransactionsServi
 import { createApprovalDetails } from "./approvalDetails.js";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
 
-const CHAIN_VIEWS = {
-  getApprovalReviewChainView: ({ record, request }: { record: ApprovalRecord; request?: { chainRef?: string } }) => {
-    const chainRef = request?.chainRef ?? record.chainRef;
-    const [namespace] = chainRef.split(":");
-    return {
-      namespace,
-      chainRef,
-      displayName: chainRef,
-      shortName: null,
-      icon: null,
-      nativeCurrency: {
-        name: "Ether",
-        symbol: "ETH",
-        decimals: 18,
-      },
-    };
-  },
-  requireChainDefinition: (chainRef: string) => ({
-    chainRef,
-    name: `Chain ${chainRef}`,
-    nativeCurrency: {
-      name: "Ether",
-      symbol: "ETH",
-      decimals: 18,
-    },
-  }),
+const NETWORKS = {
+  get: (chainRef: string) =>
+    chainRef === "eip155:10"
+      ? {
+          chainRef,
+          namespace: "eip155",
+          source: "custom" as const,
+          name: "Optimism",
+          nativeCurrency: {
+            name: "Ether",
+            symbol: "ETH",
+            decimals: 18,
+          },
+        }
+      : {
+          chainRef,
+          namespace: "eip155",
+          source: "builtin" as const,
+          name: "Ethereum",
+          nativeCurrency: {
+            name: "Ether",
+            symbol: "ETH",
+            decimals: 18,
+          },
+        },
 } as const;
 
 const ACCOUNTS = {
@@ -122,7 +121,7 @@ const createApprovalDetailsHarness = (records: ApprovalRecord[]) => {
       getState: () => ({ pending }),
     },
     accounts: ACCOUNTS,
-    chainViews: CHAIN_VIEWS,
+    networks: NETWORKS,
   });
 };
 
@@ -202,6 +201,31 @@ describe("createApprovalDetails", () => {
         createdAt: 3,
       },
     ]);
+  });
+
+  it("reads switch-chain display metadata from Networks", async () => {
+    const approvalDetails = createApprovalDetailsHarness([
+      createRecord({
+        approvalId: "approval-switch-chain",
+        kind: ApprovalKinds.SwitchChain,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 2,
+        request: {
+          chainRef: "eip155:10",
+        },
+      }),
+    ]);
+
+    await expect(approvalDetails.getDetail("approval-switch-chain")).resolves.toMatchObject({
+      kind: ApprovalKinds.SwitchChain,
+      request: {
+        chainRef: "eip155:10",
+        chainId: "0xa",
+        displayName: "Optimism",
+      },
+    });
   });
 
   it("projects transaction approval detail", async () => {

@@ -1,12 +1,12 @@
 import { ApprovalKinds } from "../../../../approvals/index.js";
-import { NamespaceChainActivationReasons } from "../../../../chains/activation/types.js";
+import { chainRefFromChainId } from "../../../../namespaces/eip155/chainId.js";
+import { NetworkNotFoundError } from "../../../../networks/errors.js";
 import * as Hex from "../../../../utils/hex.js";
-import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
+import { RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { toParamsArray } from "../utils.js";
-import { resolveSwitchEthereumChainTarget } from "./resolveSwitchEthereumChainTarget.js";
 import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
 
 type SwitchEthereumChainParams = {
@@ -76,18 +76,9 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
   parseParams: readSwitchEthereumChainParams,
   handler: async (context) => {
     const { params, deps, executionContext, invocation } = context;
-    const chainDefinitions = deps.chainDefinitions;
-    if (!chainDefinitions) {
-      throw new RpcInternalError({
-        message: "Missing chain definitions service",
-      });
-    }
-
-    const target = resolveSwitchEthereumChainTarget({
-      chainDefinitions,
-      chainRpc: deps.chainRpc,
-      chainId: params.chainId,
-    });
+    const targetChainRef = chainRefFromChainId(Hex.toBigInt(params.chainId));
+    const target = deps.networks.get(targetChainRef);
+    if (!target) throw new NetworkNotFoundError(targetChainRef);
 
     if (invocation.chainRef === target.chainRef) {
       return null;
@@ -104,11 +95,10 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
       },
     });
     await approval.settled;
-    await deps.chainActivation.selectProviderChain({
+    await deps.providerChainSelections.select({
       origin: context.origin,
       namespace: invocation.namespace,
       chainRef: target.chainRef,
-      reason: NamespaceChainActivationReasons.SwitchChain,
     });
     return null;
   },

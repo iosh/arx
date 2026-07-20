@@ -2,16 +2,14 @@ import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
-import type { ChainActivationService } from "../../chains/activation/types.js";
 import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
-import type { ChainDefinitionsService } from "../../chains/definitions/types.js";
-import type { ChainRpcDefaultEndpointsService } from "../../chains/rpc/defaultEndpoints/types.js";
-import type { ChainRpcReader } from "../../chains/rpc/types.js";
-import type { WalletChainSelectionService } from "../../chains/selection/wallet/types.js";
 import type { Namespace } from "../../namespaces/types.js";
 import type { ChainRef } from "../../networks/chainRef.js";
+import type { Networks } from "../../networks/Networks.js";
+import type { NetworksReader } from "../../networks/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
+import type { ProviderChainSelections } from "../../provider/chainSelection.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
@@ -30,14 +28,11 @@ export {
 } from "../executionContext.js";
 
 export type RpcHandlerDeps = {
-  chainRpc: ChainRpcReader;
-  walletChainSelection: WalletChainSelectionService;
+  networks: NetworksReader & Pick<Networks, "addCustom" | "updateCustom">;
+  providerChainSelections: Pick<ProviderChainSelections, "select">;
   accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  chainActivation: ChainActivationService;
-  chainDefinitions: ChainDefinitionsService;
-  chainRpcDefaultEndpoints?: Pick<ChainRpcDefaultEndpointsService, "readDefaultEndpoints" | "setDefaultEndpoints">;
   chainAddressing: ChainAddressingByNamespace;
   permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
   namespaceRuntime: {

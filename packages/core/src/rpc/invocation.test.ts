@@ -14,9 +14,10 @@ const createTable = (entries: Array<{ namespace: string; methodPrefixes: string[
 
 const makeRpcHandlerDeps = (activeChainByNamespace?: Record<string, string>): RpcHandlerDeps => {
   return {
-    chainRpc: {} as never,
-    walletChainSelection: {
-      getSelectedChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
+    networks: {
+      getSelection: () => ({
+        selectedChainRefByNamespace: activeChainByNamespace ?? {},
+      }),
     },
   } as unknown as RpcHandlerDeps;
 };

@@ -1,8 +1,9 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainViewsService } from "../chains/views/types.js";
 import { chainIdFromChainRef } from "../namespaces/eip155/chainId.js";
 import type { ChainRef } from "../networks/chainRef.js";
+import { NetworkNotFoundError } from "../networks/errors.js";
+import type { NetworksReader } from "../networks/types.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import * as Hex from "../utils/hex.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
@@ -120,7 +121,7 @@ export type ApprovalDetailsDeps = {
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
-  chainViews: Pick<ChainViewsService, "requireChainDefinition">;
+  networks: Pick<NetworksReader, "get">;
 };
 
 export type ApprovalDetails = Readonly<{
@@ -166,11 +167,6 @@ const toSelectableAccounts = (accounts: ReturnType<typeof getApprovalSelectableA
     canonicalAddress: account.canonicalAddress,
     displayAddress: account.displayAddress,
   }));
-
-const toChainDisplayName = (value: string): string | undefined => {
-  const name = value.trim();
-  return name.length > 0 ? name : undefined;
-};
 
 const buildSelectionDetail = (
   record:
@@ -260,8 +256,8 @@ const buildStaticDetail = (
 
     case ApprovalKinds.SwitchChain: {
       const context = deriveApprovalReviewContext(record, { request: record.request });
-      const definition = deps.chainViews.requireChainDefinition(context.reviewChainRef);
-      const displayName = toChainDisplayName(definition.name);
+      const network = deps.networks.get(context.reviewChainRef);
+      if (!network) throw new NetworkNotFoundError(context.reviewChainRef);
 
       return {
         ...toDetailMeta(record),
@@ -273,7 +269,7 @@ const buildStaticDetail = (
         request: {
           chainRef: context.reviewChainRef,
           chainId: Hex.fromNumber(chainIdFromChainRef(context.reviewChainRef)),
-          ...(displayName ? { displayName } : {}),
+          displayName: network.name,
         },
         review: null,
       };

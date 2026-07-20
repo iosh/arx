@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../networks/chainRef.js";
 import { parseChainRef } from "../networks/chainRef.js";
-import type { NonEmptyRpcEndpoints } from "../networks/types.js";
+import type { NetworkRpcEndpointsReader } from "../networks/types.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "./errors.js";
 import {
   ChainJsonRpcHttpProtocolError,
@@ -22,9 +22,7 @@ export type ChainJsonRpcClient = {
 };
 
 export type ChainJsonRpcOptions = {
-  endpoints: Readonly<{
-    getRpcEndpoints(chainRef: ChainRef): NonEmptyRpcEndpoints;
-  }>;
+  endpoints: NetworkRpcEndpointsReader;
   transport?: JsonRpcHttpTransport;
   fetch?: typeof globalThis.fetch;
   abortController?: () => AbortController;

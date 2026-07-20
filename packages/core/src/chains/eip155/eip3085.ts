@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { chainRefFromChainId } from "../../namespaces/eip155/chainId.js";
-import type { ChainDefinition } from "../../networks/types.js";
+import type { ChainDefinition, CustomNetworkInput } from "../../networks/types.js";
 import * as Hex from "../../utils/hex.js";
-import type { CustomChainInput } from "../customChains.js";
 import { ChainDefinitionRpcUrlsRequiredError } from "../errors.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols } from "../url.js";
 
@@ -34,7 +33,7 @@ const eip3085Schema = z.object({
 
 const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((value) => value.trim())));
 
-export const createEip155DefinitionSeedFromEip3085 = (input: unknown): CustomChainInput => {
+export const createEip155DefinitionSeedFromEip3085 = (input: unknown): CustomNetworkInput => {
   const payload = eip3085Schema.parse(input);
 
   const chainRef = chainRefFromChainId(Hex.toBigInt(payload.chainId));

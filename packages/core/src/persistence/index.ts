@@ -7,14 +7,6 @@ export type {
   PrivateKeyAccountOrigin,
 } from "../accounts/persistence.js";
 export type {
-  ChainRpcOverrideRecord,
-  ChainRpcOverridesReader,
-  CustomChainRecord,
-  CustomChainsReader,
-  WalletChainSelectionReader,
-  WalletChainSelectionRecord,
-} from "../chains/persistence.js";
-export type {
   BackupStatus,
   Bip39KeySourceRecord,
   HdKeyringId,
@@ -25,6 +17,14 @@ export type {
   KeySourcesReader,
   PrivateKeySourceRecord,
 } from "../keyring/persistence.js";
+export type {
+  CustomNetworkRecord,
+  CustomNetworksReader,
+  NetworkRpcOverrideRecord,
+  NetworkRpcOverridesReader,
+  NetworkSelectionReader,
+  NetworkSelectionRecord,
+} from "../networks/persistence.js";
 export type {
   PermissionChainScopes,
   PermissionRecord,

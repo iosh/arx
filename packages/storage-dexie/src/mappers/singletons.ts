@@ -1,9 +1,9 @@
-import type { EncryptedVaultRecord, WalletChainSelectionRecord } from "@arx/core/persistence";
+import type { EncryptedVaultRecord, NetworkSelectionRecord } from "@arx/core/persistence";
 import {
   ENCRYPTED_VAULT_ROW_KEY,
   type EncryptedVaultRow,
-  WALLET_CHAIN_SELECTION_ROW_KEY,
-  type WalletChainSelectionRow,
+  NETWORK_SELECTION_ROW_KEY,
+  type NetworkSelectionRow,
 } from "../rows.js";
 
 export const encryptedVaultToRow = (record: EncryptedVaultRecord): EncryptedVaultRow => ({
@@ -19,12 +19,10 @@ export const encryptedVaultFromRow = (row: EncryptedVaultRow): EncryptedVaultRec
   ciphertext: row.ciphertext,
 });
 
-export const walletChainSelectionToRow = (record: WalletChainSelectionRecord): WalletChainSelectionRow => ({
+export const networkSelectionToRow = (record: NetworkSelectionRecord): NetworkSelectionRow => ({
   ...record,
-  key: WALLET_CHAIN_SELECTION_ROW_KEY,
+  key: NETWORK_SELECTION_ROW_KEY,
 });
 
-export const walletChainSelectionFromRow = ({
-  key: _key,
-  ...record
-}: WalletChainSelectionRow): WalletChainSelectionRecord => record;
+export const networkSelectionFromRow = ({ key: _key, ...record }: NetworkSelectionRow): NetworkSelectionRecord =>
+  record;

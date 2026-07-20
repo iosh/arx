@@ -1,11 +1,12 @@
 import { ZodError } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import { ChainNotCompatibleError, ChainNotSupportedError } from "../../../../chains/errors.js";
-import { type CustomChainInput, createEip155DefinitionSeedFromEip3085 } from "../../../../chains/index.js";
+import { createEip155DefinitionSeedFromEip3085 } from "../../../../chains/index.js";
 import { areRpcEndpointsEqual } from "../../../../chains/rpc/config.js";
 import { EIP155_NAMESPACE } from "../../../../namespaces/eip155/constants.js";
 import { parseChainRef } from "../../../../networks/chainRef.js";
 import { isSameChainDefinition } from "../../../../networks/definition.js";
+import type { CustomNetworkInput } from "../../../../networks/types.js";
 import { RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
@@ -13,7 +14,7 @@ import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js
 import { toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
 
-export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<CustomChainInput>({
+export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<CustomNetworkInput>({
   requestKind: RpcRequestKinds.ChainManagement,
   authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,

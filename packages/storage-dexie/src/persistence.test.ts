@@ -4,7 +4,10 @@ import {
   type AccountRecord,
   AUTO_LOCK_SETTING_KEY,
   type Bip39KeySourceRecord,
+  type CustomNetworkRecord,
   type HdKeyringRecord,
+  type NetworkRpcOverrideRecord,
+  type NetworkSelectionRecord,
   type PermissionRecord,
   PersistenceCommitError,
   PersistenceReadError,
@@ -250,6 +253,36 @@ describe("createDexiePersistence", () => {
 
     expect(await persistence.readers.accounts.listRecords()).toEqual(expect.arrayContaining([first, second]));
     expect(await persistence.readers.accounts.listSelections()).toEqual([selection]);
+  });
+
+  it("round-trips network records", async () => {
+    const persistence = createTestPersistence();
+    const customNetwork: CustomNetworkRecord = {
+      definition: {
+        chainRef: "eip155:10",
+        name: "Optimism",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      },
+      defaultRpcEndpoints: ["https://optimism.example"],
+    };
+    const rpcOverride: NetworkRpcOverrideRecord = {
+      chainRef: "eip155:1",
+      endpoints: ["https://override.example"],
+    };
+    const selection: NetworkSelectionRecord = {
+      selectedNamespace: "eip155",
+      selectedChainRefByNamespace: { eip155: "eip155:10" },
+    };
+
+    await persistence.writer.commit([
+      persistenceChange.put(persistenceTypes.customNetwork, customNetwork),
+      persistenceChange.put(persistenceTypes.networkRpcOverride, rpcOverride),
+      persistenceChange.put(persistenceTypes.networkSelection, selection),
+    ]);
+
+    expect(await persistence.readers.customNetworks.listAll()).toEqual([customNetwork]);
+    expect(await persistence.readers.networkRpcOverrides.listAll()).toEqual([rpcOverride]);
+    expect(await persistence.readers.networkSelection.get()).toEqual(selection);
   });
 
   it("queries transaction history cursors, statuses, and conflict groups", async () => {

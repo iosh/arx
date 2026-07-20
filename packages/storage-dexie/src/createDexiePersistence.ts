@@ -3,10 +3,10 @@ import { createDexiePersistenceContext } from "./database.js";
 import { createAccountsReader } from "./readers/accounts.js";
 import { createHdKeyringsReader, createKeySourcesReader } from "./readers/keyrings.js";
 import {
-  createChainRpcOverridesReader,
-  createCustomChainsReader,
+  createCustomNetworksReader,
+  createNetworkRpcOverridesReader,
+  createNetworkSelectionReader,
   createProviderChainSelectionsReader,
-  createWalletChainSelectionReader,
 } from "./readers/network.js";
 import { createPermissionsReader } from "./readers/permissions.js";
 import { createSettingsReader } from "./readers/settings.js";
@@ -33,9 +33,9 @@ export const createDexiePersistence = (options: CreateDexiePersistenceOptions): 
       hdKeyrings: createHdKeyringsReader(context),
       accounts: createAccountsReader(context),
       permissions: createPermissionsReader(context),
-      customChains: createCustomChainsReader(context),
-      chainRpcOverrides: createChainRpcOverridesReader(context),
-      walletChainSelection: createWalletChainSelectionReader(context),
+      customNetworks: createCustomNetworksReader(context),
+      networkRpcOverrides: createNetworkRpcOverridesReader(context),
+      networkSelection: createNetworkSelectionReader(context),
       providerChainSelections: createProviderChainSelectionsReader(context),
       transactions: createTransactionsReader(context),
     },

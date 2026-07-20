@@ -6,8 +6,6 @@ import { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
-import { createNetworks, loadNetworksBootstrap } from "../chains/index.js";
-import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { JsonValue } from "../errors.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
@@ -15,10 +13,11 @@ import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/error
 import { Keyring } from "../keyring/Keyring.js";
 import { createMessenger } from "../messenger/Messenger.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
-import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
-import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
-import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
+import { loadNetworksBootstrap } from "../networks/bootstrap.js";
+import { parseChainRef } from "../networks/chainRef.js";
+import { Networks } from "../networks/Networks.js";
+import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { createPermissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
@@ -34,17 +33,6 @@ import type { Wallet } from "../wallet/Wallet.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { NamespaceDefinitionRequiredError } from "./errors.js";
-
-const createWalletSelectionDefaults = (
-  adapters: readonly NetworksNamespaceAdapter[],
-  defaultAdapter: NetworksNamespaceAdapter,
-): WalletChainSelectionDefaults => {
-  const chainRefByNamespace: Record<string, ChainRef> = {};
-  for (const adapter of adapters) {
-    chainRefByNamespace[adapter.namespace] = adapter.defaultChainRef;
-  }
-  return { activeNamespace: defaultAdapter.namespace, chainRefByNamespace };
-};
 
 const chainIdFor = (chainRef: string): string => {
   const parsed = parseChainRef(chainRef);
@@ -80,10 +68,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const eip155NetworksAdapter = createEip155NetworksAdapter({
     transport: jsonRpcHttpTransport,
   });
-  const networksAdapters = {
-    [EIP155_NAMESPACE]: eip155NetworksAdapter,
-  } as const satisfies NetworksNamespaceAdapters;
-  const installedNetworksAdapters = Object.values(networksAdapters);
+  const networksAdapters = [eip155NetworksAdapter] as const satisfies NetworksNamespaceAdapters;
   const namespaceNames = new Set(namespaceDefinitions.map((definition) => definition.namespace));
   const accountsAdapters = Object.fromEntries(
     namespaceDefinitions.map((definition) => [definition.namespace, definition.accounts]),
@@ -94,15 +79,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const chainAddressing = buildChainAddressingByNamespace(
     namespaceDefinitions.map((definition) => definition.chainAddressing),
   );
-  const builtinNetworkSeeds = installedNetworksAdapters.flatMap((adapter) => adapter.builtinNetworks);
   const mutations = createCoreMutationQueue(input.persistence.writer);
   const listeners = new Set<(event: CoreRuntimeChanged) => void>();
   const publish = (event: CoreRuntimeChanged) => {
     for (const listener of listeners) listener(event);
   };
-  const walletSelectionDefaults =
-    input.defaults?.walletSelection ?? createWalletSelectionDefaults(installedNetworksAdapters, eip155NetworksAdapter);
-
   const [
     vaultBootstrap,
     walletBootstrap,
@@ -115,11 +96,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     loadWalletBootstrap(input.persistence.readers),
     loadKeyringBootstrap(input.persistence.readers),
     loadAccountsBootstrap(input.persistence.readers),
-    loadNetworksBootstrap({
-      readers: input.persistence.readers,
-      builtinSeeds: builtinNetworkSeeds,
-      walletSelectionDefaults,
-    }),
+    loadNetworksBootstrap(input.persistence.readers),
     loadTransactionsBootstrap(input.persistence.readers),
   ]);
 
@@ -207,12 +184,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       select: (params) => accounts.select(params.accountId),
     },
   };
-  const networks = createNetworks({
-    mutations,
+  const networks = new Networks({
+    adapters: networksAdapters,
+    defaultNamespace: eip155NetworksAdapter.namespace,
     bootstrap: networksBootstrap,
-    publishChanged: (change) => {
-      publish({ owner: "networks", change });
-    },
   });
   const providerChainSelections = createProviderChainSelections({
     reader: input.persistence.readers.providerChainSelections,
@@ -227,9 +202,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const chainJsonRpc = new ChainJsonRpc({
     ...(rpcOptions ?? {}),
     transport: jsonRpcHttpTransport,
-    endpoints: {
-      getRpcEndpoints: (chainRef) => networks.getRpcEndpoints(chainRef),
-    },
+    endpoints: networks,
   });
   const transactionAdapters = new Map();
   if (namespaceNames.has("eip155")) {

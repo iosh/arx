@@ -1,8 +1,8 @@
 import type { PersistenceChange, PersistenceWriter } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "./database.js";
 import { permissionToRow } from "./mappers/permissions.js";
-import { encryptedVaultToRow, walletChainSelectionToRow } from "./mappers/singletons.js";
-import { ENCRYPTED_VAULT_ROW_KEY, WALLET_CHAIN_SELECTION_ROW_KEY } from "./rows.js";
+import { encryptedVaultToRow, networkSelectionToRow } from "./mappers/singletons.js";
+import { ENCRYPTED_VAULT_ROW_KEY, NETWORK_SELECTION_ROW_KEY } from "./rows.js";
 
 const applyChange = async (context: DexiePersistenceContext, change: PersistenceChange): Promise<void> => {
   switch (change.persistenceType) {
@@ -62,27 +62,27 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
       }
       return;
 
-    case "customChain":
+    case "customNetwork":
       if (change.operation === "put") {
-        await context.db.customChains.put(change.value);
+        await context.db.customNetworks.put(change.value);
       } else {
-        await context.db.customChains.delete(change.key);
+        await context.db.customNetworks.delete(change.key);
       }
       return;
 
-    case "chainRpcOverride":
+    case "networkRpcOverride":
       if (change.operation === "put") {
-        await context.db.chainRpcOverrides.put(change.value);
+        await context.db.networkRpcOverrides.put(change.value);
       } else {
-        await context.db.chainRpcOverrides.delete(change.key);
+        await context.db.networkRpcOverrides.delete(change.key);
       }
       return;
 
-    case "walletChainSelection":
+    case "networkSelection":
       if (change.operation === "put") {
-        await context.db.walletChainSelection.put(walletChainSelectionToRow(change.value));
+        await context.db.networkSelection.put(networkSelectionToRow(change.value));
       } else {
-        await context.db.walletChainSelection.delete(WALLET_CHAIN_SELECTION_ROW_KEY);
+        await context.db.networkSelection.delete(NETWORK_SELECTION_ROW_KEY);
       }
       return;
 
@@ -120,9 +120,9 @@ export const createPersistenceWriter = (context: DexiePersistenceContext): Persi
           context.db.accounts,
           context.db.accountSelections,
           context.db.permissions,
-          context.db.customChains,
-          context.db.chainRpcOverrides,
-          context.db.walletChainSelection,
+          context.db.customNetworks,
+          context.db.networkRpcOverrides,
+          context.db.networkSelection,
           context.db.providerChainSelections,
           context.db.transactions,
         ],

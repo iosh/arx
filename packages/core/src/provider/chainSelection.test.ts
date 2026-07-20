@@ -21,17 +21,17 @@ describe("ProviderChainSelections", () => {
         }),
       }),
       networks: {
-        getChain: () => ({
+        get: () => ({
+          chainRef: "eip155:1",
+          namespace: "eip155",
           source: "builtin",
-          definition: {
-            chainRef: "eip155:1",
-            name: "Ethereum",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-          },
+          name: "Ethereum",
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
         }),
-        getWalletSelection: () => ({
-          activeNamespace: "eip155",
-          chainRefByNamespace: { eip155: "eip155:1" },
+        getSelection: () => ({
+          selectedNamespace: "eip155",
+          selectedChainRef: "eip155:1",
+          selectedChainRefByNamespace: { eip155: "eip155:1" },
         }),
       },
     });

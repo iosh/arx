@@ -1,20 +1,20 @@
 import type {
   AccountRecord,
   AccountSelectionRecord,
-  ChainRpcOverrideRecord,
-  CustomChainRecord,
+  CustomNetworkRecord,
   EncryptedVaultRecord,
   HdKeyringRecord,
   KeySourceRecord,
+  NetworkRpcOverrideRecord,
+  NetworkSelectionRecord,
   PermissionRecord,
   ProviderChainSelectionRecord,
   SettingRecord,
   TransactionRecord,
-  WalletChainSelectionRecord,
 } from "@arx/core/persistence";
 
 export const ENCRYPTED_VAULT_ROW_KEY = "encryptedVault" as const;
-export const WALLET_CHAIN_SELECTION_ROW_KEY = "walletChainSelection" as const;
+export const NETWORK_SELECTION_ROW_KEY = "networkSelection" as const;
 
 export type EncryptedVaultRow = EncryptedVaultRecord & {
   key: typeof ENCRYPTED_VAULT_ROW_KEY;
@@ -32,11 +32,11 @@ export type PermissionRow = PermissionRecord & {
   indexedChainRefs: string[];
 };
 
-export type CustomChainRow = CustomChainRecord;
-export type ChainRpcOverrideRow = ChainRpcOverrideRecord;
+export type CustomNetworkRow = CustomNetworkRecord;
+export type NetworkRpcOverrideRow = NetworkRpcOverrideRecord;
 
-export type WalletChainSelectionRow = WalletChainSelectionRecord & {
-  key: typeof WALLET_CHAIN_SELECTION_ROW_KEY;
+export type NetworkSelectionRow = NetworkSelectionRecord & {
+  key: typeof NETWORK_SELECTION_ROW_KEY;
 };
 
 export type ProviderChainSelectionRow = ProviderChainSelectionRecord;

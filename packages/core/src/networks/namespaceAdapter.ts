@@ -9,4 +9,4 @@ export type NetworksNamespaceAdapter = Readonly<{
   queryChainRef(endpoint: RpcEndpoint): Promise<ChainRef>;
 }>;
 
-export type NetworksNamespaceAdapters = Readonly<Record<Namespace, NetworksNamespaceAdapter | undefined>>;
+export type NetworksNamespaceAdapters = readonly [NetworksNamespaceAdapter, ...NetworksNamespaceAdapter[]];

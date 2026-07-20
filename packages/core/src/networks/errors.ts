@@ -25,3 +25,47 @@ export class ChainNamespaceMismatchError extends ArxBaseError {
     });
   }
 }
+
+export class NetworkNotFoundError extends ArxBaseError {
+  static readonly code = "network.not_found";
+
+  constructor(chainRef: ChainRef) {
+    super(`Network "${chainRef}" was not found.`, {
+      code: NetworkNotFoundError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class NetworkNamespaceUnsupportedError extends ArxBaseError {
+  static readonly code = "network.namespace_unsupported";
+
+  constructor(namespace: Namespace) {
+    super(`Networks are not configured for namespace "${namespace}".`, {
+      code: NetworkNamespaceUnsupportedError.code,
+      details: { namespace },
+    });
+  }
+}
+
+export class NetworkSelectionMissingError extends ArxBaseError {
+  static readonly code = "network.selection_missing";
+
+  constructor(namespace: Namespace) {
+    super(`Namespace "${namespace}" has no selected network.`, {
+      code: NetworkSelectionMissingError.code,
+      details: { namespace },
+    });
+  }
+}
+
+export class BuiltinNetworkConflictError extends ArxBaseError {
+  static readonly code = "network.builtin_conflict";
+
+  constructor(chainRef: ChainRef) {
+    super(`Custom network "${chainRef}" conflicts with a builtin network.`, {
+      code: BuiltinNetworkConflictError.code,
+      details: { chainRef },
+    });
+  }
+}

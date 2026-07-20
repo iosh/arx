@@ -1,8 +1,11 @@
-import { ChainNotFoundError, WalletChainSelectionUnavailableError } from "../chains/errors.js";
-import type { Networks } from "../chains/networks.js";
 import { ProviderChainSelectionInvalidKeyError } from "../chains/selection/provider/errors.js";
 import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
-import { ChainNamespaceMismatchError } from "../networks/errors.js";
+import {
+  ChainNamespaceMismatchError,
+  NetworkNamespaceUnsupportedError,
+  NetworkNotFoundError,
+} from "../networks/errors.js";
+import type { NetworksReader } from "../networks/types.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { OriginNamespaceKey } from "../persistence/keys.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
@@ -33,10 +36,10 @@ const readKey = (key: OriginNamespaceKey): OriginNamespaceKey => {
 export const createProviderChainSelections = (params: {
   reader: ProviderChainSelectionsReader;
   mutations: CoreMutationQueue;
-  networks: Pick<Networks, "getChain" | "getWalletSelection">;
+  networks: Pick<NetworksReader, "get" | "getSelection">;
 }): ProviderChainSelections => {
   const requireAvailableChain = (chainRef: ChainRef): void => {
-    if (!params.networks.getChain(chainRef)) throw new ChainNotFoundError();
+    if (!params.networks.get(chainRef)) throw new NetworkNotFoundError(chainRef);
   };
 
   return {
@@ -46,8 +49,8 @@ export const createProviderChainSelections = (params: {
       return await params.mutations.run(async (commit) => {
         const current = await params.reader.get(key);
         if (current) return current;
-        const chainRef = params.networks.getWalletSelection().chainRefByNamespace[key.namespace];
-        if (!chainRef) throw new WalletChainSelectionUnavailableError(key.namespace);
+        const chainRef = params.networks.getSelection().selectedChainRefByNamespace[key.namespace];
+        if (!chainRef) throw new NetworkNamespaceUnsupportedError(key.namespace);
         requireAvailableChain(chainRef);
         const next: ProviderChainSelectionRecord = { ...key, chainRef };
         await commit([persistenceChange.put(providerChainSelectionPersistenceType, next)]);

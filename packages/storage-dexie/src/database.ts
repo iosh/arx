@@ -4,16 +4,16 @@ import { Dexie, type Table } from "dexie";
 import type {
   AccountRow,
   AccountSelectionRow,
-  ChainRpcOverrideRow,
-  CustomChainRow,
+  CustomNetworkRow,
   EncryptedVaultRow,
   HdKeyringRow,
   KeySourceRow,
+  NetworkRpcOverrideRow,
+  NetworkSelectionRow,
   PermissionRow,
   ProviderChainSelectionRow,
   SettingsRow,
   TransactionRow,
-  WalletChainSelectionRow,
 } from "./rows.js";
 
 export const PERSISTENCE_SCHEMA_VERSION = 1;
@@ -29,9 +29,9 @@ export class ArxPersistenceDatabase extends Dexie {
   accounts!: Table<AccountRow, string>;
   accountSelections!: Table<AccountSelectionRow, string>;
   permissions!: Table<PermissionRow, [string, string]>;
-  customChains!: Table<CustomChainRow, string>;
-  chainRpcOverrides!: Table<ChainRpcOverrideRow, string>;
-  walletChainSelection!: Table<WalletChainSelectionRow, string>;
+  customNetworks!: Table<CustomNetworkRow, string>;
+  networkRpcOverrides!: Table<NetworkRpcOverrideRow, string>;
+  networkSelection!: Table<NetworkSelectionRow, string>;
   providerChainSelections!: Table<ProviderChainSelectionRow, [string, string]>;
   transactions!: Table<TransactionRow, string>;
 
@@ -45,9 +45,9 @@ export class ArxPersistenceDatabase extends Dexie {
       accounts: "&accountId",
       accountSelections: "&namespace",
       permissions: "[origin+namespace], origin, *indexedAccountIds, *indexedChainRefs",
-      customChains: "&definition.chainRef",
-      chainRpcOverrides: "&chainRef",
-      walletChainSelection: "&key",
+      customNetworks: "&definition.chainRef",
+      networkRpcOverrides: "&chainRef",
+      networkSelection: "&key",
       providerChainSelections: "[origin+namespace], origin, chainRef",
       transactions: TRANSACTIONS_SCHEMA,
     });

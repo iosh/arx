@@ -1,10 +1,10 @@
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
-import {
-  chainRpcOverridePersistenceType,
-  customChainPersistenceType,
-  walletChainSelectionPersistenceType,
-} from "../chains/persistence.js";
 import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
+import {
+  customNetworkPersistenceType,
+  networkRpcOverridePersistenceType,
+  networkSelectionPersistenceType,
+} from "../networks/persistence.js";
 import { permissionPersistenceType } from "../permissions/persistence.js";
 import { providerChainSelectionPersistenceType } from "../provider/persistence.js";
 import { settingPersistenceType } from "../settings/persistence.js";
@@ -20,9 +20,9 @@ export type PersistenceTypes = Readonly<{
   account: typeof accountPersistenceType;
   accountSelection: typeof accountSelectionPersistenceType;
   permission: typeof permissionPersistenceType;
-  customChain: typeof customChainPersistenceType;
-  chainRpcOverride: typeof chainRpcOverridePersistenceType;
-  walletChainSelection: typeof walletChainSelectionPersistenceType;
+  customNetwork: typeof customNetworkPersistenceType;
+  networkRpcOverride: typeof networkRpcOverridePersistenceType;
+  networkSelection: typeof networkSelectionPersistenceType;
   providerChainSelection: typeof providerChainSelectionPersistenceType;
   transaction: typeof transactionPersistenceType;
 }>;
@@ -35,9 +35,9 @@ export const persistenceTypes: PersistenceTypes = {
   account: accountPersistenceType,
   accountSelection: accountSelectionPersistenceType,
   permission: permissionPersistenceType,
-  customChain: customChainPersistenceType,
-  chainRpcOverride: chainRpcOverridePersistenceType,
-  walletChainSelection: walletChainSelectionPersistenceType,
+  customNetwork: customNetworkPersistenceType,
+  networkRpcOverride: networkRpcOverridePersistenceType,
+  networkSelection: networkSelectionPersistenceType,
   providerChainSelection: providerChainSelectionPersistenceType,
   transaction: transactionPersistenceType,
 };

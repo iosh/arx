@@ -1,10 +1,9 @@
 import type { AccountsChanged } from "../accounts/types.js";
 import type { ApprovalQueueService } from "../approvals/queue/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
-import type { Networks, NetworksChanged } from "../chains/networks.js";
-import type { WalletChainSelectionDefaults } from "../chains/selection.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
+import type { NetworkSelectionChanged, NetworksChanged, NetworksReader } from "../networks/types.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
   ProviderConnectionQuery,
@@ -24,7 +23,7 @@ export type CoreRuntimeChanged =
   | Readonly<{ owner: "wallet"; change: WalletStatusChanged }>
   | Readonly<{ owner: "keyring"; change: KeyringChanged }>
   | Readonly<{ owner: "accounts"; change: AccountsChanged }>
-  | Readonly<{ owner: "networks"; change: NetworksChanged }>
+  | Readonly<{ owner: "networks"; change: NetworksChanged | NetworkSelectionChanged }>
   | Readonly<{ owner: "transactions"; change: TransactionsChanged }>
   | Readonly<{ owner: "permissions" }>
   | Readonly<{ owner: "approvals" }>;
@@ -32,9 +31,6 @@ export type CoreRuntimeChanged =
 export type CreateCoreRuntimeInput = Readonly<{
   namespaces: Readonly<{ definitions: readonly NamespaceDefinition[] }>;
   persistence: CorePersistence;
-  defaults?: Readonly<{
-    walletSelection?: WalletChainSelectionDefaults;
-  }>;
   rpc?: Readonly<{
     options?: Partial<Omit<ChainJsonRpcOptions, "endpoints">>;
   }>;
@@ -65,7 +61,7 @@ export type CoreProviderApi = Readonly<{
 
 export type CoreWallet = Wallet &
   Readonly<{
-    networks: Networks;
+    networks: NetworksReader;
     transactions: Transactions;
     approvals: Pick<ApprovalQueueService, "get" | "listPending" | "resolve" | "cancel">;
   }>;

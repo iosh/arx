@@ -1,6 +1,10 @@
 import type { AccountsReader } from "../accounts/persistence.js";
-import type { ChainRpcOverridesReader, CustomChainsReader, WalletChainSelectionReader } from "../chains/persistence.js";
 import type { HdKeyringsReader, KeySourcesReader } from "../keyring/persistence.js";
+import type {
+  CustomNetworksReader,
+  NetworkRpcOverridesReader,
+  NetworkSelectionReader,
+} from "../networks/persistence.js";
 import type { PermissionsReader } from "../permissions/persistence.js";
 import type { ProviderChainSelectionsReader } from "../provider/persistence.js";
 import type { SettingsReader } from "../settings/persistence.js";
@@ -20,9 +24,9 @@ export interface CorePersistenceReaders {
   hdKeyrings: HdKeyringsReader;
   accounts: AccountsReader;
   permissions: PermissionsReader;
-  customChains: CustomChainsReader;
-  chainRpcOverrides: ChainRpcOverridesReader;
-  walletChainSelection: WalletChainSelectionReader;
+  customNetworks: CustomNetworksReader;
+  networkRpcOverrides: NetworkRpcOverridesReader;
+  networkSelection: NetworkSelectionReader;
   providerChainSelections: ProviderChainSelectionsReader;
   transactions: TransactionsReader;
 }

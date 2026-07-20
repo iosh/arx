@@ -1,37 +1,37 @@
 import type {
-  ChainRpcOverridesReader,
-  CustomChainsReader,
+  CustomNetworksReader,
+  NetworkRpcOverridesReader,
+  NetworkSelectionReader,
   ProviderChainSelectionsReader,
-  WalletChainSelectionReader,
 } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "../database.js";
-import { walletChainSelectionFromRow } from "../mappers/singletons.js";
-import { WALLET_CHAIN_SELECTION_ROW_KEY } from "../rows.js";
+import { networkSelectionFromRow } from "../mappers/singletons.js";
+import { NETWORK_SELECTION_ROW_KEY } from "../rows.js";
 
-export const createCustomChainsReader = (context: DexiePersistenceContext): CustomChainsReader => ({
+export const createCustomNetworksReader = (context: DexiePersistenceContext): CustomNetworksReader => ({
   listAll() {
     return context.read(async () => {
       await context.ready;
-      return await context.db.customChains.toArray();
+      return await context.db.customNetworks.toArray();
     });
   },
 });
 
-export const createChainRpcOverridesReader = (context: DexiePersistenceContext): ChainRpcOverridesReader => ({
+export const createNetworkRpcOverridesReader = (context: DexiePersistenceContext): NetworkRpcOverridesReader => ({
   listAll() {
     return context.read(async () => {
       await context.ready;
-      return await context.db.chainRpcOverrides.toArray();
+      return await context.db.networkRpcOverrides.toArray();
     });
   },
 });
 
-export const createWalletChainSelectionReader = (context: DexiePersistenceContext): WalletChainSelectionReader => ({
+export const createNetworkSelectionReader = (context: DexiePersistenceContext): NetworkSelectionReader => ({
   get() {
     return context.read(async () => {
       await context.ready;
-      const row = await context.db.walletChainSelection.get(WALLET_CHAIN_SELECTION_ROW_KEY);
-      return row ? walletChainSelectionFromRow(row) : null;
+      const row = await context.db.networkSelection.get(NETWORK_SELECTION_ROW_KEY);
+      return row ? networkSelectionFromRow(row) : null;
     });
   },
 });

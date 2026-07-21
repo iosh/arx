@@ -1,5 +1,5 @@
 import { ZodError, z } from "zod";
-import { ApprovalKinds } from "../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../approvals/queue/types.js";
 import { isArxBaseError } from "../../../../errors.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
 import {

@@ -11,8 +11,6 @@ export type OwnerChangedEvent =
   | { topic: "network"; change: "selection"; namespace: string; chainRef: ChainRef | null }
   | { topic: "network"; change: "chain"; chainRef: ChainRef }
   | { topic: "network"; change: "rpc"; chainRef: ChainRef }
-  | { topic: "approvals"; change: "queue"; approvalId: string }
-  | { topic: "approvals"; change: "transactionApproval"; approvalIds: readonly string[] }
   | { topic: "attention"; change: "state" }
   | { topic: "transactions"; change: "records"; transactionIds: readonly string[] };
 

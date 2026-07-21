@@ -1,4 +1,4 @@
-import { ApprovalKinds } from "../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../approvals/queue/types.js";
 import { chainRefFromChainId } from "../../../../namespaces/eip155/chainId.js";
 import { NetworkNotFoundError } from "../../../../networks/errors.js";
 import * as Hex from "../../../../utils/hex.js";

@@ -1,5 +1,6 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
+import { ArxBaseError } from "../errors.js";
 import { chainIdFromChainRef } from "../namespaces/eip155/chainId.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
@@ -7,10 +8,20 @@ import type { NetworksReader } from "../networks/types.js";
 import type { SendTransactionApprovalReview } from "../transactions/review/types.js";
 import * as Hex from "../utils/hex.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
-import { UnsupportedApprovalKindError } from "./errors.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "./queue/types.js";
 import { getApprovalSelectableAccounts } from "./shared.js";
 import type { ApprovalSource } from "./source.js";
+
+class ApprovalDetailUnsupportedKindError extends ArxBaseError {
+  static readonly code = "approval.detail.unsupported_kind";
+
+  constructor(kind: string) {
+    super(`Unsupported approval detail kind "${kind}".`, {
+      code: ApprovalDetailUnsupportedKindError.code,
+      details: { kind },
+    });
+  }
+}
 
 export type ApprovalSelectableAccount = {
   accountId: AccountId;
@@ -145,7 +156,7 @@ const toListEntry = (item: ApprovalQueueItem): ApprovalListEntry => ({
 });
 
 const assertUnreachable = (value: never): never => {
-  throw new UnsupportedApprovalKindError(String(value));
+  throw new ApprovalDetailUnsupportedKindError(String(value));
 };
 
 const toDetailMeta = (record: ApprovalRecord) => {
@@ -375,7 +386,7 @@ export const createApprovalDetails = (deps: ApprovalDetailsDeps): ApprovalDetail
       return buildTransactionDetail(record);
     }
 
-    throw new UnsupportedApprovalKindError(record.kind);
+    throw new ApprovalDetailUnsupportedKindError(record.kind);
   };
 
   return {

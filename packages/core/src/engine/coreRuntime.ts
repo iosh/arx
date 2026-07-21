@@ -1,5 +1,5 @@
 import type { AccountsChanged } from "../accounts/types.js";
-import type { ApprovalQueueService } from "../approvals/queue/types.js";
+import type { ApprovalsApi, ApprovalsChanged } from "../approvals/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
@@ -35,7 +35,7 @@ export type CoreRuntimeChanged =
   | Readonly<{ owner: "networks"; change: NetworksChanged | NetworkSelectionChanged }>
   | Readonly<{ owner: "transactions"; change: TransactionsChanged }>
   | Readonly<{ owner: "permissions"; change: PermissionsChanged }>
-  | Readonly<{ owner: "approvals" }>;
+  | Readonly<{ owner: "approvals"; change: ApprovalsChanged }>;
 
 export type CreateCoreRuntimeInput = Readonly<{
   namespaces: Readonly<{ definitions: readonly NamespaceDefinition[] }>;
@@ -80,7 +80,7 @@ export type CoreWallet = Wallet &
         selectNamespace(namespace: Namespace): Promise<void>;
       }>;
     transactions: Transactions;
-    approvals: Pick<ApprovalQueueService, "get" | "listPending" | "resolve" | "cancel">;
+    approvals: ApprovalsApi;
   }>;
 
 export type CoreRuntime = Readonly<{

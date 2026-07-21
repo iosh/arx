@@ -8,4 +8,11 @@ export {
   Eip155SigningAccountMismatchError,
 } from "./eip155/errors.js";
 export { eip155Namespace } from "./eip155/namespace.js";
+export type {
+  Eip155PersonalMessage,
+  Eip155SignRequest,
+  Eip155TypedData,
+  Eip155TypedDataField,
+  Eip155TypedDataValue,
+} from "./eip155/signingRequest.js";
 export { NAMESPACE_PATTERN, type Namespace } from "./types.js";

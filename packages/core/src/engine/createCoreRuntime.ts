@@ -1,7 +1,8 @@
 import { Accounts } from "../accounts/Accounts.js";
 import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
-import { ApprovalQueue } from "../approvals/queue/ApprovalQueue.js";
+import { Approvals } from "../approvals/Approvals.js";
+import type { ApprovalsApi } from "../approvals/types.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
@@ -14,7 +15,6 @@ import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
-import { createMessenger } from "../messenger/Messenger.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
@@ -238,9 +238,16 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishChanged: (change) => publish({ owner: "transactions", change }),
   });
   transactions.monitor.start();
-  const messenger = createMessenger();
-  const approvals = new ApprovalQueue({ messenger });
-  approvals.onStateChanged(() => publish({ owner: "approvals" }));
+  const approvals = new Approvals({
+    time: systemTime,
+    publishChanged: (change) => publish({ owner: "approvals", change }),
+  });
+  const approvalsApi: ApprovalsApi = {
+    get: (approvalId) => approvals.get(approvalId),
+    list: () => approvals.list(),
+    approve: (decision) => approvals.approve(decision),
+    reject: (approvalId) => approvals.reject(approvalId),
+  };
 
   const activeConnections = new Map<string, ProviderConnectionState>();
   const connectionListeners = new Set<
@@ -332,13 +339,14 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
 
   return {
     provider,
-    wallet: Object.assign(wallet, { networks, transactions, approvals }),
+    wallet: Object.assign(wallet, { networks, transactions, approvals: approvalsApi }),
     subscribeChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     close: () => {
       transactions.monitor.stop();
+      approvals.cancelAll();
       void wallet.lock();
       listeners.clear();
       connectionListeners.clear();

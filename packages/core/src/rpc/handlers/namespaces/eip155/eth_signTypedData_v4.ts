@@ -1,4 +1,4 @@
-import { ApprovalKinds } from "../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../approvals/queue/types.js";
 import { RpcInternalError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";

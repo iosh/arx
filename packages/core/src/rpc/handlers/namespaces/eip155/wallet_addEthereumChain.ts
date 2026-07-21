@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { ApprovalKinds } from "../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../approvals/queue/types.js";
 import { createEip155DefinitionSeedFromEip3085 } from "../../../../chains/index.js";
 import { isSameChainDefinition } from "../../../../networks/definition.js";
 import { BuiltinNetworkConflictError } from "../../../../networks/errors.js";

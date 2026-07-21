@@ -1,5 +1,5 @@
 import { ApprovalRejectedError } from "../../../../approvals/errors.js";
-import { ApprovalKinds } from "../../../../approvals/index.js";
+import { ApprovalKinds } from "../../../../approvals/queue/types.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
@@ -49,7 +49,7 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
       return selectedAccounts.map((account) => account.displayAddress);
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
-      throw new ApprovalRejectedError("User rejected account access");
+      throw new ApprovalRejectedError();
     }
   },
 });

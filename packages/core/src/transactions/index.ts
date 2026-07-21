@@ -88,6 +88,11 @@ export type {
   TransactionRecord,
   TransactionStatus,
 } from "./persistence.js";
+export type {
+  Eip155PreparedTransaction,
+  PreparedTransaction,
+  TransactionInitiator,
+} from "./preparedTransaction.js";
 export {
   TransactionConflictError,
   TransactionFinalizationRejectedError,

@@ -95,7 +95,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Sw
       },
     });
     await approval.settled;
-    await deps.providerChainSelections.select({
+    await deps.dappConnections.selectNetwork({
       origin: context.origin,
       namespace: invocation.namespace,
       chainRef: target.chainRef,

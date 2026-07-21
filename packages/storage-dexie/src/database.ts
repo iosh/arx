@@ -5,13 +5,13 @@ import type {
   AccountRow,
   AccountSelectionRow,
   CustomNetworkRow,
+  DappNetworkSelectionRow,
   EncryptedVaultRow,
   HdKeyringRow,
   KeySourceRow,
   NetworkRpcOverrideRow,
   NetworkSelectionRow,
   PermissionRow,
-  ProviderChainSelectionRow,
   SettingsRow,
   TransactionRow,
 } from "./rows.js";
@@ -32,7 +32,7 @@ export class ArxPersistenceDatabase extends Dexie {
   customNetworks!: Table<CustomNetworkRow, string>;
   networkRpcOverrides!: Table<NetworkRpcOverrideRow, string>;
   networkSelection!: Table<NetworkSelectionRow, string>;
-  providerChainSelections!: Table<ProviderChainSelectionRow, [string, string]>;
+  dappNetworkSelections!: Table<DappNetworkSelectionRow, [string, string]>;
   transactions!: Table<TransactionRow, string>;
 
   constructor(databaseName: string) {
@@ -48,7 +48,7 @@ export class ArxPersistenceDatabase extends Dexie {
       customNetworks: "&definition.chainRef",
       networkRpcOverrides: "&chainRef",
       networkSelection: "&key",
-      providerChainSelections: "[origin+namespace], origin, chainRef",
+      dappNetworkSelections: "[origin+namespace]",
       transactions: TRANSACTIONS_SCHEMA,
     });
   }

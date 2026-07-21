@@ -1,4 +1,5 @@
 import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
+import { dappNetworkSelectionPersistenceType } from "../dappConnections/persistence.js";
 import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
 import {
   customNetworkPersistenceType,
@@ -6,7 +7,6 @@ import {
   networkSelectionPersistenceType,
 } from "../networks/persistence.js";
 import { permissionPersistenceType } from "../permissions/persistence.js";
-import { providerChainSelectionPersistenceType } from "../provider/persistence.js";
 import { settingPersistenceType } from "../settings/persistence.js";
 import { transactionPersistenceType } from "../transactions/persistence.js";
 import { encryptedVaultPersistenceType } from "../vault/persistence.js";
@@ -23,7 +23,7 @@ export type PersistenceTypes = Readonly<{
   customNetwork: typeof customNetworkPersistenceType;
   networkRpcOverride: typeof networkRpcOverridePersistenceType;
   networkSelection: typeof networkSelectionPersistenceType;
-  providerChainSelection: typeof providerChainSelectionPersistenceType;
+  dappNetworkSelection: typeof dappNetworkSelectionPersistenceType;
   transaction: typeof transactionPersistenceType;
 }>;
 
@@ -38,7 +38,7 @@ export const persistenceTypes: PersistenceTypes = {
   customNetwork: customNetworkPersistenceType,
   networkRpcOverride: networkRpcOverridePersistenceType,
   networkSelection: networkSelectionPersistenceType,
-  providerChainSelection: providerChainSelectionPersistenceType,
+  dappNetworkSelection: dappNetworkSelectionPersistenceType,
   transaction: transactionPersistenceType,
 };
 

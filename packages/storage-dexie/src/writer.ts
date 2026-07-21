@@ -86,11 +86,11 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
       }
       return;
 
-    case "providerChainSelection":
+    case "dappNetworkSelection":
       if (change.operation === "put") {
-        await context.db.providerChainSelections.put(change.value);
+        await context.db.dappNetworkSelections.put(change.value);
       } else {
-        await context.db.providerChainSelections.delete([change.key.origin, change.key.namespace]);
+        await context.db.dappNetworkSelections.delete([change.key.origin, change.key.namespace]);
       }
       return;
 
@@ -123,7 +123,7 @@ export const createPersistenceWriter = (context: DexiePersistenceContext): Persi
           context.db.customNetworks,
           context.db.networkRpcOverrides,
           context.db.networkSelection,
-          context.db.providerChainSelections,
+          context.db.dappNetworkSelections,
           context.db.transactions,
         ],
         async () => {

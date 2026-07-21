@@ -5,6 +5,7 @@ import {
   AUTO_LOCK_SETTING_KEY,
   type Bip39KeySourceRecord,
   type CustomNetworkRecord,
+  type DappNetworkSelectionRecord,
   type HdKeyringRecord,
   type NetworkRpcOverrideRecord,
   type NetworkSelectionRecord,
@@ -273,16 +274,26 @@ describe("createDexiePersistence", () => {
       selectedNamespace: "eip155",
       selectedChainRefByNamespace: { eip155: "eip155:10" },
     };
+    const dappSelection: DappNetworkSelectionRecord = {
+      origin: "https://dapp.example",
+      namespace: "eip155",
+      chainRef: "eip155:10",
+    };
 
     await persistence.writer.commit([
       persistenceChange.put(persistenceTypes.customNetwork, customNetwork),
       persistenceChange.put(persistenceTypes.networkRpcOverride, rpcOverride),
       persistenceChange.put(persistenceTypes.networkSelection, selection),
+      persistenceChange.put(persistenceTypes.dappNetworkSelection, dappSelection),
     ]);
 
     expect(await persistence.readers.customNetworks.listAll()).toEqual([customNetwork]);
     expect(await persistence.readers.networkRpcOverrides.listAll()).toEqual([rpcOverride]);
     expect(await persistence.readers.networkSelection.get()).toEqual(selection);
+    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([dappSelection]);
+
+    await persistence.writer.commit([persistenceChange.remove(persistenceTypes.dappNetworkSelection, dappSelection)]);
+    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([]);
   });
 
   it("queries transaction history cursors, statuses, and conflict groups", async () => {

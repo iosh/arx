@@ -3,13 +3,13 @@ import type { ZodType } from "zod";
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { ApprovalQueueService } from "../../approvals/queue/types.js";
 import type { ChainAddressingByNamespace } from "../../chains/addressing.js";
+import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import type { Namespace } from "../../namespaces/types.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { Networks } from "../../networks/Networks.js";
 import type { NetworksReader } from "../../networks/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
-import type { ProviderChainSelections } from "../../provider/chainSelection.js";
 import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
@@ -29,7 +29,7 @@ export {
 
 export type RpcHandlerDeps = {
   networks: NetworksReader & Pick<Networks, "addCustom" | "updateCustom">;
-  providerChainSelections: Pick<ProviderChainSelections, "select">;
+  dappConnections: Pick<DappConnections, "selectNetwork">;
   accounts: Pick<Accounts, "getSelectedAddress" | "listSelectableAddresses">;
   approvals: ApprovalQueueService;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;

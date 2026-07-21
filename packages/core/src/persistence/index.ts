@@ -7,6 +7,11 @@ export type {
   PrivateKeyAccountOrigin,
 } from "../accounts/persistence.js";
 export type {
+  DappConnectionScope,
+  DappNetworkSelectionRecord,
+  DappNetworkSelectionsReader,
+} from "../dappConnections/persistence.js";
+export type {
   BackupStatus,
   Bip39KeySourceRecord,
   HdKeyringId,
@@ -30,10 +35,6 @@ export type {
   PermissionRecord,
   PermissionsReader,
 } from "../permissions/persistence.js";
-export type {
-  ProviderChainSelectionRecord,
-  ProviderChainSelectionsReader,
-} from "../provider/persistence.js";
 export type {
   AutoLockSetting,
   SettingKey,

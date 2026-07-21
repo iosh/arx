@@ -2,13 +2,13 @@ import type {
   AccountRecord,
   AccountSelectionRecord,
   CustomNetworkRecord,
+  DappNetworkSelectionRecord,
   EncryptedVaultRecord,
   HdKeyringRecord,
   KeySourceRecord,
   NetworkRpcOverrideRecord,
   NetworkSelectionRecord,
   PermissionRecord,
-  ProviderChainSelectionRecord,
   SettingRecord,
   TransactionRecord,
 } from "@arx/core/persistence";
@@ -39,5 +39,5 @@ export type NetworkSelectionRow = NetworkSelectionRecord & {
   key: typeof NETWORK_SELECTION_ROW_KEY;
 };
 
-export type ProviderChainSelectionRow = ProviderChainSelectionRecord;
+export type DappNetworkSelectionRow = DappNetworkSelectionRecord;
 export type TransactionRow = TransactionRecord;

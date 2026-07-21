@@ -1,12 +1,12 @@
 import type { CorePersistence } from "@arx/core/persistence";
 import { createDexiePersistenceContext } from "./database.js";
 import { createAccountsReader } from "./readers/accounts.js";
+import { createDappNetworkSelectionsReader } from "./readers/dappConnections.js";
 import { createHdKeyringsReader, createKeySourcesReader } from "./readers/keyrings.js";
 import {
   createCustomNetworksReader,
   createNetworkRpcOverridesReader,
   createNetworkSelectionReader,
-  createProviderChainSelectionsReader,
 } from "./readers/network.js";
 import { createPermissionsReader } from "./readers/permissions.js";
 import { createSettingsReader } from "./readers/settings.js";
@@ -36,7 +36,7 @@ export const createDexiePersistence = (options: CreateDexiePersistenceOptions): 
       customNetworks: createCustomNetworksReader(context),
       networkRpcOverrides: createNetworkRpcOverridesReader(context),
       networkSelection: createNetworkSelectionReader(context),
-      providerChainSelections: createProviderChainSelectionsReader(context),
+      dappNetworkSelections: createDappNetworkSelectionsReader(context),
       transactions: createTransactionsReader(context),
     },
     writer: createPersistenceWriter(context),

@@ -1,66 +1,204 @@
+import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainRef } from "../networks/chainRef.js";
+import {
+  AccountHiddenSelectionError,
+  AccountNamespaceMismatchError,
+  AccountNotFoundError,
+} from "../accounts/errors.js";
+import type { DappConnections } from "../dappConnections/DappConnections.js";
+import { dappConnectionScopeKey } from "../dappConnections/scope.js";
 import { persistenceChange } from "../persistence/change.js";
-import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
-import type { OriginNamespaceKey } from "../persistence/keys.js";
-import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
-import { type PermissionRecord, permissionPersistenceType } from "./persistence.js";
+import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import type { PermissionsBootstrap } from "./bootstrap.js";
+import { PermissionNetworkSelectionMissingError } from "./errors.js";
+import { type PermissionRecord, type PermissionScope, permissionPersistenceType } from "./persistence.js";
+
+export type Permission = PermissionRecord;
+
+export type PermissionsReader = Readonly<{
+  get(scope: PermissionScope): Permission | null;
+  list(): readonly Permission[];
+  listByOrigin(origin: string): readonly Permission[];
+}>;
 
 export type PermissionsChanged = Readonly<{
-  keys: readonly OriginNamespaceKey[];
+  type: "permissionsChanged";
+  scopes: readonly PermissionScope[];
 }>;
 
-export type Permissions = Readonly<{
-  get(key: OriginNamespaceKey): Promise<PermissionRecord | null>;
-  listByOrigin(origin: string): Promise<readonly PermissionRecord[]>;
-  grant(
-    input: OriginNamespaceKey & { chainRefs: readonly ChainRef[]; accountIds: readonly AccountId[] },
-  ): Promise<void>;
-  removeOrigin(origin: string): Promise<void>;
-  isAuthorized(input: OriginNamespaceKey & { chainRef: ChainRef }): Promise<boolean>;
-  listAccountIds(input: OriginNamespaceKey & { chainRef: ChainRef }): Promise<readonly AccountId[]>;
+export type PermissionsUpdate = Readonly<{
+  nextRecords: ReadonlyMap<string, PermissionRecord>;
+  persistenceChanges: readonly PersistenceChange[];
+  changedScopes: readonly PermissionScope[];
 }>;
 
-export const createPermissions = (params: {
-  readers: Pick<CorePersistenceReaders, "permissions">;
-  mutations: CoreMutationQueue;
-  /** Publishes committed permission changes and must not throw. */
-  publishChanged(change: PermissionsChanged): void;
-}): Permissions => {
-  const keyOf = (record: Pick<PermissionRecord, "origin" | "namespace">): OriginNamespaceKey => ({
-    origin: record.origin,
-    namespace: record.namespace,
-  });
+type PermissionsOptions = Readonly<{
+  bootstrap: PermissionsBootstrap;
+  accounts: Pick<Accounts, "getAccount">;
+  dappConnections: Pick<DappConnections, "getNetworkSelection">;
+}>;
 
-  return {
-    get: (key) => params.readers.permissions.get(key),
-    listByOrigin: (origin) => params.readers.permissions.listByOrigin(origin),
-    grant: async ({ origin, namespace, chainRefs, accountIds }) => {
-      await params.mutations.run(async (commit) => {
-        const key = { origin, namespace };
-        const current = await params.readers.permissions.get(key);
-        const chainScopes = { ...(current?.chainScopes ?? {}) };
-        for (const chainRef of chainRefs) chainScopes[chainRef] = [...accountIds];
-        const next: PermissionRecord = { origin, namespace, chainScopes };
-        await commit([persistenceChange.put(permissionPersistenceType, next)]);
-        params.publishChanged({ keys: [key] });
-      });
-    },
-    removeOrigin: async (origin) => {
-      await params.mutations.run(async (commit) => {
-        const records = await params.readers.permissions.listByOrigin(origin);
-        if (records.length === 0) return;
-        await commit(records.map((record) => persistenceChange.remove(permissionPersistenceType, keyOf(record))));
-        params.publishChanged({ keys: records.map(keyOf) });
-      });
-    },
-    isAuthorized: async ({ origin, namespace, chainRef }) => {
-      const record = await params.readers.permissions.get({ origin, namespace });
-      return (record?.chainScopes[chainRef]?.length ?? 0) > 0;
-    },
-    listAccountIds: async ({ origin, namespace, chainRef }) => {
-      const record = await params.readers.permissions.get({ origin, namespace });
-      return record?.chainScopes[chainRef] ?? [];
-    },
-  };
-};
+const comparePermissions = (left: Permission, right: Permission): number =>
+  left.origin.localeCompare(right.origin) || left.namespace.localeCompare(right.namespace);
+
+const permissionScope = (permission: Permission): PermissionScope => ({
+  origin: permission.origin,
+  namespace: permission.namespace,
+});
+
+const accountIdsEqual = (left: readonly AccountId[], right: readonly AccountId[]): boolean =>
+  left.length === right.length && left.every((accountId, index) => accountId === right[index]);
+
+/** Owns persistent origin and namespace account authorization state. */
+export class Permissions implements PermissionsReader {
+  readonly #accounts: Pick<Accounts, "getAccount">;
+  #records: ReadonlyMap<string, PermissionRecord>;
+
+  constructor(options: PermissionsOptions) {
+    this.#accounts = options.accounts;
+
+    const records = new Map<string, PermissionRecord>();
+    for (const record of options.bootstrap.records) {
+      this.#requireVisibleAccounts(record);
+      if (!options.dappConnections.getNetworkSelection(record)) {
+        throw new PermissionNetworkSelectionMissingError(permissionScope(record));
+      }
+
+      records.set(dappConnectionScopeKey(record), record);
+    }
+
+    this.#records = records;
+  }
+
+  get(scope: PermissionScope): Permission | null {
+    return this.#records.get(dappConnectionScopeKey(scope)) ?? null;
+  }
+
+  list(): readonly Permission[] {
+    return [...this.#records.values()].sort(comparePermissions);
+  }
+
+  listByOrigin(origin: string): readonly Permission[] {
+    return this.list().filter((permission) => permission.origin === origin);
+  }
+
+  prepareSetAccounts(permission: Permission): PermissionsUpdate | null {
+    const current = this.get(permission);
+    if (current && accountIdsEqual(current.accountIds, permission.accountIds)) return null;
+
+    this.#requireVisibleAccounts(permission);
+
+    const nextRecords = new Map(this.#records);
+    nextRecords.set(dappConnectionScopeKey(permission), permission);
+
+    return {
+      nextRecords,
+      persistenceChanges: [persistenceChange.put(permissionPersistenceType, permission)],
+      changedScopes: [permissionScope(permission)],
+    };
+  }
+
+  prepareRevoke(scope: PermissionScope): PermissionsUpdate | null {
+    const current = this.get(scope);
+    if (!current) return null;
+
+    const nextRecords = new Map(this.#records);
+    nextRecords.delete(dappConnectionScopeKey(scope));
+
+    return {
+      nextRecords,
+      persistenceChanges: [persistenceChange.remove(permissionPersistenceType, scope)],
+      changedScopes: [permissionScope(current)],
+    };
+  }
+
+  prepareRevokeOrigin(origin: string): PermissionsUpdate | null {
+    const removed = this.listByOrigin(origin);
+    if (removed.length === 0) return null;
+
+    const nextRecords = new Map(this.#records);
+    for (const permission of removed) {
+      nextRecords.delete(dappConnectionScopeKey(permission));
+    }
+
+    return {
+      nextRecords,
+      persistenceChanges: removed.map((permission) =>
+        persistenceChange.remove(permissionPersistenceType, permissionScope(permission)),
+      ),
+      changedScopes: removed.map(permissionScope),
+    };
+  }
+
+  prepareRemoveAccountReferences(accountIds: readonly AccountId[]): PermissionsUpdate | null {
+    if (accountIds.length === 0) return null;
+
+    const removedAccountIds = new Set(accountIds);
+    const nextRecords = new Map(this.#records);
+    const persistenceChanges: PersistenceChange[] = [];
+    const changedScopes: PermissionScope[] = [];
+
+    for (const permission of this.list()) {
+      const remainingAccountIds = permission.accountIds.filter((accountId) => !removedAccountIds.has(accountId));
+      if (remainingAccountIds.length === permission.accountIds.length) continue;
+
+      const scope = permissionScope(permission);
+      changedScopes.push(scope);
+
+      if (remainingAccountIds.length === 0) {
+        nextRecords.delete(dappConnectionScopeKey(permission));
+        persistenceChanges.push(persistenceChange.remove(permissionPersistenceType, scope));
+        continue;
+      }
+
+      const updated: PermissionRecord = {
+        ...permission,
+        accountIds: remainingAccountIds as [AccountId, ...AccountId[]],
+      };
+      nextRecords.set(dappConnectionScopeKey(updated), updated);
+      persistenceChanges.push(persistenceChange.put(permissionPersistenceType, updated));
+    }
+
+    if (changedScopes.length === 0) return null;
+    return { nextRecords, persistenceChanges, changedScopes };
+  }
+
+  prepareReset(): PermissionsUpdate | null {
+    const removed = this.list();
+    if (removed.length === 0) return null;
+
+    return {
+      nextRecords: new Map(),
+      persistenceChanges: removed.map((permission) =>
+        persistenceChange.remove(permissionPersistenceType, permissionScope(permission)),
+      ),
+      changedScopes: removed.map(permissionScope),
+    };
+  }
+
+  applyCommittedUpdate(update: PermissionsUpdate): void {
+    this.#records = update.nextRecords;
+  }
+
+  #requireVisibleAccounts(permission: Permission): void {
+    for (const accountId of permission.accountIds) {
+      const account = this.#accounts.getAccount(accountId);
+      if (!account) throw new AccountNotFoundError(accountId);
+
+      if (account.namespace !== permission.namespace) {
+        throw new AccountNamespaceMismatchError({
+          accountId,
+          accountNamespace: account.namespace,
+          expectedNamespace: permission.namespace,
+        });
+      }
+
+      if (account.hidden) throw new AccountHiddenSelectionError(accountId);
+    }
+  }
+}
+
+export const permissionsChangedFromUpdate = (update: PermissionsUpdate): PermissionsChanged => ({
+  type: "permissionsChanged",
+  scopes: update.changedScopes,
+});

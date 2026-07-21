@@ -1,6 +1,5 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { ApprovalAccountSelectionDecision, ApprovalRecord } from "../approvals/queue/types.js";
-import { PermissionDeniedError } from "../permissions/errors.js";
 import { RpcInvalidParamsError } from "../rpc/errors.js";
 import { deriveApprovalReviewContext } from "./chainContext.js";
 
@@ -53,7 +52,7 @@ export const resolveApprovalSelectedAccounts = (args: {
   const selected = decision.accountIds.map((accountId) => {
     const account = byKey.get(accountId);
     if (!account) {
-      throw new PermissionDeniedError();
+      throw new RpcInvalidParamsError({ message: `Account "${accountId}" is not selectable for this approval.` });
     }
     return account;
   });

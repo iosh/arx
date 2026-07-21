@@ -30,11 +30,7 @@ export type {
   NetworkSelectionReader,
   NetworkSelectionRecord,
 } from "../networks/persistence.js";
-export type {
-  PermissionChainScopes,
-  PermissionRecord,
-  PermissionsReader,
-} from "../permissions/persistence.js";
+export type { PermissionRecord, PermissionRecordsReader, PermissionScope } from "../permissions/persistence.js";
 export type {
   AutoLockSetting,
   SettingKey,
@@ -86,7 +82,6 @@ export type {
 } from "./definition.js";
 export { defineKeyedPersistenceType, defineSingletonPersistenceType } from "./definition.js";
 export { PersistenceCommitError, PersistenceReadError } from "./errors.js";
-export type { OriginNamespaceKey } from "./keys.js";
 export type { CoreMutationQueue } from "./mutationQueue.js";
 export { createCoreMutationQueue } from "./mutationQueue.js";
 export type { PersistenceChange, PersistenceType, PersistenceTypes } from "./persistenceTypes.js";

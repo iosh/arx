@@ -402,7 +402,7 @@ export const createProviderAccess = ({
           });
 
         if (!authorized) {
-          throw new PermissionNotConnectedError();
+          throw new PermissionNotConnectedError({ origin, namespace: invocation.namespace });
         }
 
         return { kind: "continue" };

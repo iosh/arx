@@ -139,7 +139,7 @@ export class Accounts {
       throw new AccountNamespaceMismatchError({
         accountId: input.accountId,
         accountNamespace,
-        chainNamespace,
+        expectedNamespace: chainNamespace,
       });
     }
 

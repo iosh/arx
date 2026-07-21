@@ -15,7 +15,6 @@
     "./accounts": "./src/accounts/index.ts",
     "./approvals": "./src/approvals/index.ts",
     "./persistence": "./src/persistence/index.ts",
-    "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
     "./networks": "./src/networks/index.ts",
     "./chain-json-rpc": "./src/chainJsonRpc/index.ts",

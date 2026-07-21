@@ -72,7 +72,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
       return;
     }
 
-    throw new PermissionNotConnectedError();
+    throw new PermissionNotConnectedError({ origin, namespace: snapshot.namespace });
   }
 
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[] {

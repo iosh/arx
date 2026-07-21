@@ -1,6 +1,5 @@
 import type { PersistenceChange, PersistenceWriter } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "./database.js";
-import { permissionToRow } from "./mappers/permissions.js";
 import { encryptedVaultToRow, networkSelectionToRow } from "./mappers/singletons.js";
 import { ENCRYPTED_VAULT_ROW_KEY, NETWORK_SELECTION_ROW_KEY } from "./rows.js";
 
@@ -56,7 +55,7 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
 
     case "permission":
       if (change.operation === "put") {
-        await context.db.permissions.put(permissionToRow(change.value));
+        await context.db.permissions.put(change.value);
       } else {
         await context.db.permissions.delete([change.key.origin, change.key.namespace]);
       }

@@ -27,10 +27,7 @@ export type HdKeyringRow = HdKeyringRecord;
 export type AccountRow = AccountRecord;
 export type AccountSelectionRow = AccountSelectionRecord;
 
-export type PermissionRow = PermissionRecord & {
-  indexedAccountIds: string[];
-  indexedChainRefs: string[];
-};
+export type PermissionRow = PermissionRecord;
 
 export type CustomNetworkRow = CustomNetworkRecord;
 export type NetworkRpcOverrideRow = NetworkRpcOverrideRecord;

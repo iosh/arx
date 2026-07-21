@@ -44,7 +44,7 @@ export class ArxPersistenceDatabase extends Dexie {
       hdKeyrings: "&hdKeyringId",
       accounts: "&accountId",
       accountSelections: "&namespace",
-      permissions: "[origin+namespace], origin, *indexedAccountIds, *indexedChainRefs",
+      permissions: "[origin+namespace]",
       customNetworks: "&definition.chainRef",
       networkRpcOverrides: "&chainRef",
       networkSelection: "&key",

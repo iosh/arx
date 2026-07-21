@@ -2,7 +2,7 @@ import type { ApprovalKind, ApprovalQueueService, ApprovalRequest } from "../../
 import { type ChainAddressingByNamespace, canonicalizeChainAddress } from "../../../../chains/addressing.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
 import { parseChainRef } from "../../../../networks/chainRef.js";
-import { PermissionDeniedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
+import { PermissionAccountNotAuthorizedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type { PermissionViewsService, PermittedAccountView } from "../../../../permissions/views/types.js";
 import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
 import { RpcInvalidRequestError } from "../../../errors.js";
@@ -91,16 +91,12 @@ export const assertPermittedEip155Account = (args: {
   const permittedAccounts = deps.permissionViews.listPermittedAccounts(origin, { chainRef });
 
   if (permittedAccounts.length === 0) {
-    throw new PermissionNotConnectedError({
-      message: `Origin "${origin}" is not connected`,
-    });
+    throw new PermissionNotConnectedError({ origin, namespace: parseChainRef(chainRef).namespace });
   }
 
   const account = permittedAccounts.find((entry) => entry.canonicalAddress === canonical);
   if (!account) {
-    throw new PermissionDeniedError({
-      message: `Account is not permitted for origin "${origin}"`,
-    });
+    throw new PermissionAccountNotAuthorizedError({ origin, namespace: parseChainRef(chainRef).namespace });
   }
 
   return account;

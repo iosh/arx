@@ -159,9 +159,7 @@ describe("createDexiePersistence", () => {
     const permission = {
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainScopes: {
-        "eip155:1": [account.accountId],
-      },
+      accountIds: [account.accountId],
     } satisfies PermissionRecord;
     const encryptedVault = {
       salt: "AAECAwQFBgcICQoLDA0ODw==",
@@ -184,8 +182,7 @@ describe("createDexiePersistence", () => {
     expect(await persistence.readers.keySources.listAll()).toEqual([source]);
     expect(await persistence.readers.hdKeyrings.listAll()).toEqual([hdKeyring]);
     expect(await persistence.readers.accounts.listRecords()).toEqual([account]);
-    expect(await persistence.readers.permissions.listReferencingAccountIds([account.accountId])).toEqual([permission]);
-    expect(await persistence.readers.permissions.listReferencingChainRef("eip155:1")).toEqual([permission]);
+    expect(await persistence.readers.permissions.listAll()).toEqual([permission]);
   });
 
   it("uses the target HD keyring primary key without secondary query indexes", async () => {

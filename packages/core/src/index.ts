@@ -26,6 +26,5 @@ export * from "./provider/index.js";
 export type { RpcHandlerDeps } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
-export type { PermissionRecord } from "./storage/index.js";
 export * from "./vault/index.js";
 export * from "./wallet/index.js";

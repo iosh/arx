@@ -38,8 +38,8 @@ export class AccountNamespaceUnsupportedError extends ArxBaseError {
 export class AccountNamespaceMismatchError extends ArxBaseError {
   static readonly code = "account.namespace_mismatch";
 
-  constructor(input: { accountId: AccountId; accountNamespace: Namespace; chainNamespace: Namespace }) {
-    super(`Account "${input.accountId}" does not belong to namespace "${input.chainNamespace}".`, {
+  constructor(input: { accountId: AccountId; accountNamespace: Namespace; expectedNamespace: Namespace }) {
+    super(`Account "${input.accountId}" does not belong to namespace "${input.expectedNamespace}".`, {
       code: AccountNamespaceMismatchError.code,
       details: input,
     });

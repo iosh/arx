@@ -6,7 +6,7 @@ import type {
   NetworkRpcOverridesReader,
   NetworkSelectionReader,
 } from "../networks/persistence.js";
-import type { PermissionsReader } from "../permissions/persistence.js";
+import type { PermissionRecordsReader } from "../permissions/persistence.js";
 import type { SettingsReader } from "../settings/persistence.js";
 import type { TransactionsReader } from "../transactions/persistence.js";
 import type { EncryptedVaultReader } from "../vault/persistence.js";
@@ -23,7 +23,7 @@ export interface CorePersistenceReaders {
   keySources: KeySourcesReader;
   hdKeyrings: HdKeyringsReader;
   accounts: AccountsReader;
-  permissions: PermissionsReader;
+  permissions: PermissionRecordsReader;
   customNetworks: CustomNetworksReader;
   networkRpcOverrides: NetworkRpcOverridesReader;
   networkSelection: NetworkSelectionReader;

@@ -1,23 +1,21 @@
 import type { AccountId } from "../accounts/accountId.js";
-import type { ChainRef } from "../networks/chainRef.js";
+import type { Namespace } from "../namespaces/types.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
-import type { OriginNamespaceKey } from "../persistence/keys.js";
 
-export type PermissionChainScopes = Readonly<Record<ChainRef, readonly AccountId[]>>;
+export type PermissionScope = Readonly<{
+  origin: string;
+  namespace: Namespace;
+}>;
 
 export type PermissionRecord = Readonly<{
   origin: string;
-  namespace: string;
-  chainScopes: PermissionChainScopes;
+  namespace: Namespace;
+  accountIds: readonly [AccountId, ...AccountId[]];
 }>;
 
-export interface PermissionsReader {
-  get(key: OriginNamespaceKey): Promise<PermissionRecord | null>;
-  listByOrigin(origin: string): Promise<PermissionRecord[]>;
-  listReferencingAccountIds(accountIds: readonly AccountId[]): Promise<PermissionRecord[]>;
-  listReferencingChainRef(chainRef: ChainRef): Promise<PermissionRecord[]>;
-  listAll(): Promise<PermissionRecord[]>;
+export interface PermissionRecordsReader {
+  listAll(): Promise<readonly PermissionRecord[]>;
 }
 
-export const permissionPersistenceType: KeyedPersistenceType<"permission", PermissionRecord, OriginNamespaceKey> =
-  defineKeyedPersistenceType<"permission", PermissionRecord, OriginNamespaceKey>("permission");
+export const permissionPersistenceType: KeyedPersistenceType<"permission", PermissionRecord, PermissionScope> =
+  defineKeyedPersistenceType<"permission", PermissionRecord, PermissionScope>("permission");

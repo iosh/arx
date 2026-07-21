@@ -2,13 +2,13 @@ import { ZodError, z } from "zod";
 import { ApprovalKinds } from "../../../../approvals/index.js";
 import { isArxBaseError } from "../../../../errors.js";
 import type { ChainRef } from "../../../../networks/chainRef.js";
-import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
-import { buildEip2255Permissions } from "../../../../permissions/eip2255.js";
 import {
   type ConnectionGrantKind,
   ConnectionGrantKinds,
-  type ConnectionGrantRequest,
-} from "../../../../permissions/index.js";
+  isConnectionGrantKind,
+} from "../../../../permissions/connectionGrantKinds.js";
+import { buildEip2255Permissions } from "../../../../permissions/eip2255.js";
+import type { ConnectionGrantRequest } from "../../../../permissions/service/types.js";
 import { RpcInternalError, RpcInvalidParamsError } from "../../../errors.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";

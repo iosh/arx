@@ -22,7 +22,8 @@ import { parseChainRef } from "../networks/chainRef.js";
 import { NetworkNamespaceUnsupportedError } from "../networks/errors.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
-import { createPermissions } from "../permissions/Permissions.js";
+import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
+import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
 import { systemTime } from "../runtime/time.js";
@@ -94,6 +95,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     accountsBootstrap,
     networksBootstrap,
     dappConnectionsBootstrap,
+    permissionsBootstrap,
     transactionsBootstrap,
   ] = await Promise.all([
     loadVaultBootstrap(input.persistence.readers),
@@ -102,6 +104,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     loadAccountsBootstrap(input.persistence.readers),
     loadNetworksBootstrap(input.persistence.readers),
     loadDappConnectionsBootstrap(input.persistence.readers),
+    loadPermissionsBootstrap(input.persistence.readers),
     loadTransactionsBootstrap(input.persistence.readers),
   ]);
 
@@ -201,10 +204,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     networks,
     mutations,
   });
-  const permissions = createPermissions({
-    readers: input.persistence.readers,
-    mutations,
-    publishChanged: () => publish({ owner: "permissions" }),
+  const permissions = new Permissions({
+    bootstrap: permissionsBootstrap,
+    accounts,
+    dappConnections,
   });
   const chainJsonRpc = createChainJsonRpc({
     ...(rpcOptions ?? {}),
@@ -257,16 +260,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   };
   const buildConnectionState = async (query: ProviderConnectionQuery): Promise<ProviderConnectionState> => {
     const chainRef = getConnectionChainRef(query);
-    const accountIds = await permissions.listAccountIds({ ...query, chainRef });
+    const accountIds = permissions.get(query)?.accountIds ?? [];
     const addresses =
       wallet.getStatus() === "unlocked"
-        ? accountIds.flatMap((accountId) => {
-            const account = accounts.getAccount(accountId);
-            if (!account) throw new AccountNotFoundError(accountId);
-            if (account.hidden) return [];
-
-            return [accounts.getAddress({ accountId, chainRef }).canonicalAddress];
-          })
+        ? accountIds.map((accountId) => accounts.getAddress({ accountId, chainRef }).canonicalAddress)
         : [];
     return {
       snapshot: {

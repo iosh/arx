@@ -12,6 +12,7 @@ import type {
   NetworksReader,
   NonEmptyRpcEndpoints,
 } from "../networks/types.js";
+import type { PermissionsChanged } from "../permissions/Permissions.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
   ProviderConnectionQuery,
@@ -33,7 +34,7 @@ export type CoreRuntimeChanged =
   | Readonly<{ owner: "accounts"; change: AccountsChanged }>
   | Readonly<{ owner: "networks"; change: NetworksChanged | NetworkSelectionChanged }>
   | Readonly<{ owner: "transactions"; change: TransactionsChanged }>
-  | Readonly<{ owner: "permissions" }>
+  | Readonly<{ owner: "permissions"; change: PermissionsChanged }>
   | Readonly<{ owner: "approvals" }>;
 
 export type CreateCoreRuntimeInput = Readonly<{

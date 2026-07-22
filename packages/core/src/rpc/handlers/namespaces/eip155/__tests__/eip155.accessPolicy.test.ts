@@ -40,13 +40,6 @@ const EXPECTED_METHOD_ACCESS_POLICY: Record<Eip155Method, MethodAccessPolicySnap
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "queue",
   },
-  eth_sendTransaction: {
-    requestKind: RpcRequestKinds.TransactionSubmission,
-    authorizationRequirement: AuthorizationRequirements.Required,
-    approvalRequirement: ApprovalRequirements.Required,
-    authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
-    lockedType: "queue",
-  },
   eth_signTypedData_v4: {
     requestKind: RpcRequestKinds.MessageSigning,
     authorizationRequirement: AuthorizationRequirements.Required,

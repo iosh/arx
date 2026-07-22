@@ -3,16 +3,13 @@ import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { Approvals } from "../approvals/Approvals.js";
 import type { ApprovalsApi } from "../approvals/types.js";
-import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
-import { buildChainAddressingByNamespace } from "../chains/addressing.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
 import { DappConnections } from "../dappConnections/DappConnections.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
-import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
 import { Networks } from "../networks/Networks.js";
@@ -22,8 +19,7 @@ import { createDappAuthorization } from "../permissions/createDappAuthorization.
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { systemTime } from "../runtime/time.js";
-import { createTransactions, loadTransactionsBootstrap } from "../transactions/index.js";
-import { createEip155TransactionAdapter } from "../transactions/namespace/eip155/adapter.js";
+import { createTransactions } from "../transactions/index.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { Vault } from "../vault/Vault.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
@@ -48,15 +44,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     transport: jsonRpcHttpTransport,
   });
   const networksAdapters = [eip155NetworksAdapter] as const satisfies NetworksNamespaceAdapters;
-  const namespaceNames = new Set(namespaceDefinitions.map((definition) => definition.namespace));
   const accountsAdapters = Object.fromEntries(
     namespaceDefinitions.map((definition) => [definition.namespace, definition.accounts]),
   );
   const keyringAdapters = Object.fromEntries(
     namespaceDefinitions.map((definition) => [definition.namespace, definition.keyring]),
-  );
-  const chainAddressing = buildChainAddressingByNamespace(
-    namespaceDefinitions.map((definition) => definition.chainAddressing),
   );
   const mutations = createCoreMutationQueue(input.persistence.writer);
   const listeners = new Set<(event: CoreRuntimeChanged) => void>();
@@ -71,7 +63,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     networksBootstrap,
     dappConnectionsBootstrap,
     permissionsBootstrap,
-    transactionsBootstrap,
   ] = await Promise.all([
     loadVaultBootstrap(input.persistence.readers),
     loadWalletBootstrap(input.persistence.readers),
@@ -80,7 +71,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     loadNetworksBootstrap(input.persistence.readers),
     loadDappConnectionsBootstrap(input.persistence.readers),
     loadPermissionsBootstrap(input.persistence.readers),
-    loadTransactionsBootstrap(input.persistence.readers),
   ]);
 
   const vault = new Vault(vaultBootstrap.encryptedVault);
@@ -197,35 +187,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       select: (params) => accounts.select(params.accountId),
     },
   };
-  const chainJsonRpc = createChainJsonRpc({
-    ...(rpcOptions ?? {}),
-    transport: jsonRpcHttpTransport,
-    endpoints: networks,
-  });
-  const transactionAdapters = new Map();
-  if (namespaceNames.has("eip155")) {
-    const accountSigning = createEip155AccountSigning({
-      keyring,
-      accounts,
-    });
-    transactionAdapters.set(
-      "eip155",
-      createEip155TransactionAdapter({
-        chainJsonRpc,
-        chains: chainAddressing,
-        accounts,
-        accountSigning,
-      }),
-    );
-  }
-  const transactions = await createTransactions({
+  const transactions = createTransactions({
     readers: input.persistence.readers,
-    mutations,
-    adapters: transactionAdapters,
-    bootstrap: transactionsBootstrap,
-    publishChanged: (change) => publish({ owner: "transactions", change }),
   });
-  transactions.monitor.start();
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet,
@@ -248,7 +212,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       return () => listeners.delete(listener);
     },
     close: () => {
-      transactions.monitor.stop();
       approvals.cancelAll();
       void wallet.lock();
       listeners.clear();

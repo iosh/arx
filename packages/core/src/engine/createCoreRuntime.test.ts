@@ -29,11 +29,8 @@ const createPersistence = (
     dappNetworkSelections: { listAll: async () => input.networkSelections ?? [] },
     transactions: {
       get: async () => null,
-      listHistory: async () => ({ transactions: [] }),
-      listByConflictKey: async () => [],
-      listByStatuses: async () => [],
-      existsByChainRefAndStatuses: async () => false,
-      listIds: async () => [],
+      list: async () => ({ transactions: [] }),
+      listPending: async () => [],
     },
   },
   writer: { commit: async () => {} },

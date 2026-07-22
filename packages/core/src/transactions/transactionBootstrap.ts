@@ -1,12 +1,12 @@
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
-import type { TransactionRecord } from "./persistence.js";
+import type { PendingTransactionRecord } from "./persistence.js";
 
 export type TransactionsBootstrap = Readonly<{
-  activeTransactions: readonly TransactionRecord[];
+  pendingTransactions: readonly PendingTransactionRecord[];
 }>;
 
 export const loadTransactionsBootstrap = async (
   readers: Pick<CorePersistenceReaders, "transactions">,
 ): Promise<TransactionsBootstrap> => ({
-  activeTransactions: await readers.transactions.listByStatuses(["submitting", "broadcasting", "submitted"]),
+  pendingTransactions: await readers.transactions.listPending(),
 });

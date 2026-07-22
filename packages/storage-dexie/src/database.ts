@@ -16,10 +16,10 @@ import type {
   TransactionRow,
 } from "./rows.js";
 
-export const PERSISTENCE_SCHEMA_VERSION = 1;
+export const PERSISTENCE_SCHEMA_VERSION = 2;
 
 const TRANSACTIONS_SCHEMA =
-  "&transactionId, [createAt+transactionId], [chainRef+createAt+transactionId], [accountId+createAt+transactionId], status, [chainRef+conflictKey.kind+conflictKey.value]";
+  "&transactionId, [createdAt+transactionId], [chainRef+createdAt+transactionId], [accountId+createdAt+transactionId], state.status";
 
 export class ArxPersistenceDatabase extends Dexie {
   encryptedVault!: Table<EncryptedVaultRow, string>;
@@ -37,20 +37,25 @@ export class ArxPersistenceDatabase extends Dexie {
 
   constructor(databaseName: string) {
     super(databaseName);
-    this.version(PERSISTENCE_SCHEMA_VERSION).stores({
-      encryptedVault: "&key",
-      settings: "&key",
-      keySources: "&keySourceId",
-      hdKeyrings: "&hdKeyringId",
-      accounts: "&accountId",
-      accountSelections: "&namespace",
-      permissions: "[origin+namespace]",
-      customNetworks: "&definition.chainRef",
-      networkRpcOverrides: "&chainRef",
-      networkSelection: "&key",
-      dappNetworkSelections: "[origin+namespace]",
-      transactions: TRANSACTIONS_SCHEMA,
-    });
+    this.version(PERSISTENCE_SCHEMA_VERSION)
+      .stores({
+        encryptedVault: "&key",
+        settings: "&key",
+        keySources: "&keySourceId",
+        hdKeyrings: "&hdKeyringId",
+        accounts: "&accountId",
+        accountSelections: "&namespace",
+        permissions: "[origin+namespace]",
+        customNetworks: "&definition.chainRef",
+        networkRpcOverrides: "&chainRef",
+        networkSelection: "&key",
+        dappNetworkSelections: "[origin+namespace]",
+        transactions: TRANSACTIONS_SCHEMA,
+      })
+      .upgrade(async (transaction) => {
+        // The target record has no valid representation for the legacy transaction row.
+        await transaction.table("transactions").clear();
+      });
   }
 }
 

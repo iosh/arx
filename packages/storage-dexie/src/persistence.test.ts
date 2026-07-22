@@ -16,6 +16,7 @@ import {
   persistenceTypes,
   type TransactionRecord,
 } from "@arx/core/persistence";
+import { Dexie } from "dexie";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDexiePersistence } from "./createDexiePersistence.js";
 import { ArxPersistenceDatabase, createDexiePersistenceContext } from "./database.js";
@@ -53,39 +54,48 @@ const transaction = (params: {
   transactionId: string;
   chainRef: string;
   accountId: string;
-  createAt: number;
-  conflictValue?: string;
-  status?: "submitting" | "submitted";
+  createdAt: number;
+  status: "pending" | "confirmed";
 }): TransactionRecord => {
   const base = {
     transactionId: params.transactionId,
+    namespace: "eip155" as const,
     chainRef: params.chainRef,
     accountId: params.accountId,
-    origin: "wallet",
-    source: "wallet-ui" as const,
-    createAt: params.createAt,
-    signingPayload: {},
-    ...(params.conflictValue
-      ? {
-          conflictKey: {
-            kind: "nonce",
-            value: params.conflictValue,
-          },
-        }
-      : {}),
+    initiator: { type: "wallet" } as const,
+    networkTransactionId: `0x${params.transactionId}`,
+    transaction: {
+      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      value: "0x0",
+      data: "0x",
+      gas: "0x5208",
+      nonce: "0x1",
+      fee: { type: "legacy", gasPrice: "0x1" },
+    },
+    createdAt: params.createdAt,
+    updatedAt: params.createdAt,
   };
 
-  if (params.status === "submitted") {
+  if (params.status === "confirmed") {
     return {
       ...base,
-      status: "submitted",
-      networkSubmission: { hash: params.transactionId },
+      state: {
+        status: "confirmed",
+        confirmation: {
+          blockHash: "0xabc",
+          blockNumber: "0x1",
+          transactionIndex: "0x0",
+          gasUsed: "0x5208",
+        },
+      },
     };
   }
 
   return {
     ...base,
-    status: "submitting",
+    state: { status: "pending" },
+    recovery: { rawTransaction: "0xdeadbeef" },
   };
 };
 
@@ -203,6 +213,25 @@ describe("createDexiePersistence", () => {
     expect(context.db.accounts.schema.indexes).toEqual([]);
   });
 
+  it("removes legacy transaction rows during the schema upgrade", async () => {
+    const databaseName = createDatabaseName();
+    const legacy = new Dexie(databaseName);
+    databaseConnections.push(legacy);
+    legacy.version(1).stores({
+      transactions:
+        "&transactionId, [createAt+transactionId], [chainRef+createAt+transactionId], [accountId+createAt+transactionId], status, [chainRef+conflictKey.kind+conflictKey.value]",
+    });
+    await legacy.open();
+    await legacy.table("transactions").put({ transactionId: "legacy-transaction", createAt: 1, status: "submitted" });
+    await legacy.close();
+
+    const context = createDexiePersistenceContext(databaseName);
+    databaseConnections.push(context.db);
+    await context.ready;
+
+    expect(await context.db.transactions.count()).toBe(0);
+  });
+
   it("rolls back earlier writes when a later store operation fails", async () => {
     const context = createDexiePersistenceContext(createDatabaseName());
     databaseConnections.push(context.db);
@@ -293,58 +322,52 @@ describe("createDexiePersistence", () => {
     expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([]);
   });
 
-  it("queries transaction history cursors, statuses, and conflict groups", async () => {
+  it("queries public transaction history without exposing pending recovery artifacts", async () => {
     const persistence = createTestPersistence();
     const first = transaction({
       transactionId: "transaction-a",
       chainRef: "eip155:1",
       accountId: "eip155:01",
-      createAt: 100,
-      conflictValue: "1",
+      createdAt: 100,
+      status: "pending",
     });
     const second = transaction({
       transactionId: "transaction-b",
       chainRef: "eip155:1",
       accountId: "eip155:01",
-      createAt: 100,
-      conflictValue: "1",
-      status: "submitted",
+      createdAt: 100,
+      status: "confirmed",
     });
     const third = transaction({
       transactionId: "transaction-c",
       chainRef: "eip155:10",
       accountId: "eip155:02",
-      createAt: 200,
-      status: "submitted",
+      createdAt: 200,
+      status: "confirmed",
     });
 
     await persistence.writer.commit(
       [first, second, third].map((record) => persistenceChange.put(persistenceTypes.transaction, record)),
     );
 
-    const firstPage = await persistence.readers.transactions.listHistory({ limit: 2 });
-    expect(firstPage.transactions).toEqual([third, second]);
-    expect(firstPage.nextCursor).toEqual({ createAt: 100, transactionId: "transaction-b" });
+    const firstPage = await persistence.readers.transactions.list({ limit: 2 });
+    expect(firstPage.transactions.map((record) => record.transactionId)).toEqual(["transaction-c", "transaction-b"]);
+    expect(firstPage.nextCursor).toEqual({ createdAt: 100, transactionId: "transaction-b" });
     expect(
-      await persistence.readers.transactions.listHistory({
+      await persistence.readers.transactions.list({
         limit: 2,
         cursor: firstPage.nextCursor,
       }),
-    ).toEqual({ transactions: [first] });
-    expect(await persistence.readers.transactions.listByStatuses(["submitted"])).toEqual(
-      expect.arrayContaining([second, third]),
-    );
+    ).toMatchObject({ transactions: [{ transactionId: "transaction-a" }] });
+    expect(await persistence.readers.transactions.get(first.transactionId)).not.toHaveProperty("recovery");
     expect(
-      await persistence.readers.transactions.listByConflictKey({
+      await persistence.readers.transactions.list({
+        accountId: "eip155:01",
         chainRef: "eip155:1",
-        conflictKey: { kind: "nonce", value: "1" },
+        statuses: ["pending"],
+        limit: 10,
       }),
-    ).toEqual(expect.arrayContaining([first, second]));
-    expect(
-      await persistence.readers.transactions.existsByChainRefAndStatuses({
-        chainRef: "eip155:1",
-        statuses: ["submitted"],
-      }),
-    ).toBe(true);
+    ).toMatchObject({ transactions: [{ transactionId: "transaction-a" }] });
+    expect(await persistence.readers.transactions.listPending()).toEqual(expect.arrayContaining([first]));
   });
 });

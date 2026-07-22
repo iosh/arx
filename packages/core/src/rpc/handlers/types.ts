@@ -10,7 +10,6 @@ import type { Networks } from "../../networks/Networks.js";
 import type { NetworksReader } from "../../networks/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../permissions/service/types.js";
 import type { PermissionViewsService } from "../../permissions/views/types.js";
-import type { TransactionsService } from "../../transactions/TransactionsService.js";
 import type { RpcExecutionContext } from "../executionContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
@@ -41,7 +40,6 @@ export type RpcHandlerDeps = {
       signTypedData(params: { chainRef: ChainRef; address: string; typedData: string }): Promise<string>;
     };
   };
-  transactions: Pick<TransactionsService, "prepareTransaction" | "submitTransaction">;
 };
 
 export type RpcRequest = {

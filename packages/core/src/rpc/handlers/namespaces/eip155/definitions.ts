@@ -2,7 +2,6 @@ import type { MethodDefinition } from "../../types.js";
 import { ethAccountsDefinition } from "./eth_accounts.js";
 import { ethChainIdDefinition } from "./eth_chainId.js";
 import { ethRequestAccountsDefinition } from "./eth_requestAccounts.js";
-import { ethSendTransactionDefinition } from "./eth_sendTransaction.js";
 import { ethSignTypedDataV4Definition } from "./eth_signTypedData_v4.js";
 import { personalSignDefinition } from "./personal_sign.js";
 import { walletAddEthereumChainDefinition } from "./wallet_addEthereumChain.js";
@@ -17,7 +16,6 @@ export const EIP155_DEFINITIONS = {
   wallet_switchEthereumChain: walletSwitchEthereumChainDefinition,
   personal_sign: personalSignDefinition,
   eth_signTypedData_v4: ethSignTypedDataV4Definition,
-  eth_sendTransaction: ethSendTransactionDefinition,
   wallet_addEthereumChain: walletAddEthereumChainDefinition,
   wallet_getPermissions: walletGetPermissionsDefinition,
   wallet_requestPermissions: walletRequestPermissionsDefinition,

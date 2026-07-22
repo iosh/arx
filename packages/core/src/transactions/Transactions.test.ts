@@ -1,277 +1,58 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AccountId } from "../accounts/accountId.js";
-import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
-import type { PersistenceChange } from "../persistence/persistenceTypes.js";
-import type {
-  BroadcastingTransactionRecord,
-  SubmittedTransactionRecord,
-  SubmittingTransactionRecord,
-  TransactionConflictKey,
-  TransactionHistoryQuery,
-  TransactionRecord,
-} from "./persistence.js";
+import type { PendingTransactionRecord } from "./persistence.js";
 import { createTransactions } from "./Transactions.js";
-import type { TransactionNamespaceAdapter } from "./transactionNamespace.js";
+import { loadTransactionsBootstrap } from "./transactionBootstrap.js";
+import type { Transaction } from "./types.js";
 
-const ACCOUNT_ID = "eip155:0000000000000000000000000000000000000001" as AccountId;
-const CONFLICT_KEY: TransactionConflictKey = { kind: "eip155.nonce", value: "eip155:1:account:1" };
-
-const submittedRecord = (transactionId: string): SubmittedTransactionRecord => ({
-  transactionId,
+const transaction: Transaction = {
+  transactionId: "transaction-1",
+  namespace: "eip155",
   chainRef: "eip155:1",
-  accountId: ACCOUNT_ID,
-  origin: "https://app.example",
-  source: "provider",
-  createAt: 1,
-  signingPayload: { nonce: "0x1" },
-  conflictKey: CONFLICT_KEY,
-  status: "submitted",
-  networkSubmission: { hash: `0x${transactionId}` },
-});
-
-const localRecord = (
-  transactionId: string,
-  status: "submitting" | "broadcasting",
-): SubmittingTransactionRecord | BroadcastingTransactionRecord => ({
-  transactionId,
-  chainRef: "eip155:1",
-  accountId: ACCOUNT_ID,
-  origin: "https://app.example",
-  source: "provider",
-  createAt: 1,
-  signingPayload: { nonce: "0x1" },
-  conflictKey: CONFLICT_KEY,
-  status,
-});
-
-type HarnessOptions = {
-  records?: readonly TransactionRecord[];
-  bootstrap?: readonly TransactionRecord[];
-  inspect?: TransactionNamespaceAdapter["inspect"];
-  sign?: TransactionNamespaceAdapter["sign"];
-  onBroadcast?: (records: Map<string, TransactionRecord>) => void;
+  accountId: "eip155:0000000000000000000000000000000000000001",
+  initiator: { type: "wallet" },
+  networkTransactionId: "0xtransaction-1",
+  transaction: {
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    value: "0x0",
+    data: "0x",
+    gas: "0x5208",
+    nonce: "0x1",
+    fee: { type: "legacy", gasPrice: "0x1" },
+  },
+  state: { status: "pending" },
+  createdAt: 1,
+  updatedAt: 1,
 };
 
-const deferred = <T>() => {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
+const pendingRecord: PendingTransactionRecord = {
+  ...transaction,
+  recovery: { rawTransaction: "0xdeadbeef" },
 };
-
-const createHarness = async (options: HarnessOptions = {}) => {
-  const records = new Map((options.records ?? []).map((record) => [record.transactionId, record]));
-  const commits: readonly PersistenceChange[][] = [];
-  const readers = {
-    transactions: {
-      get: vi.fn(async (transactionId: string) => records.get(transactionId) ?? null),
-      listHistory: vi.fn(async (_query: TransactionHistoryQuery) => ({ transactions: [...records.values()] })),
-      listByConflictKey: vi.fn(async ({ chainRef, conflictKey }) =>
-        [...records.values()].filter(
-          (record) =>
-            record.chainRef === chainRef &&
-            record.conflictKey?.kind === conflictKey.kind &&
-            record.conflictKey.value === conflictKey.value,
-        ),
-      ),
-      listByStatuses: vi.fn(async (statuses) =>
-        [...records.values()].filter((record) => statuses.includes(record.status)),
-      ),
-      existsByChainRefAndStatuses: vi.fn(async () => false),
-      listIds: vi.fn(async () => [...records.keys()]),
-    },
-  };
-  const adapter: TransactionNamespaceAdapter = {
-    namespace: "eip155",
-    getResourceKey: (input) => ({ kind: "eip155.account", value: `${input.chainRef}:${input.accountId}` }),
-    finalize: vi.fn(async ({ submission }) => ({
-      status: "ready" as const,
-      signingPayload: submission.finalizationPayload,
-      conflictKey: CONFLICT_KEY,
-    })),
-    createReplacementPayload: vi.fn(async ({ target, type }) => ({ target: target.transactionId, type })),
-    sign: options.sign ?? vi.fn(async () => ({ raw: "0xsigned" })),
-    broadcast: vi.fn(async () => {
-      options.onBroadcast?.(records);
-      return { status: "submitted" as const, networkSubmission: { hash: "0xsubmitted" } };
-    }),
-    inspect: options.inspect ?? vi.fn(async () => ({ status: "pending" as const })),
-    getInitialInspectionDelay: () => 0,
-    getPendingInspectionDelay: () => 1_000,
-    getRetryInspectionDelay: () => 1_000,
-  };
-  const changed: string[][] = [];
-  const mutations = createCoreMutationQueue({
-    commit: async (changes) => {
-      (commits as PersistenceChange[][]).push([...changes]);
-      for (const change of changes) {
-        if (change.persistenceType !== "transaction") continue;
-        if (change.operation === "put") records.set(change.value.transactionId, change.value);
-        else records.delete(change.key);
-      }
-    },
-  });
-  const transactions = await createTransactions({
-    readers,
-    mutations,
-    adapters: new Map([[adapter.namespace, adapter]]),
-    bootstrap: { activeTransactions: options.bootstrap ?? [] },
-    publishChanged: ({ transactionIds }) => changed.push([...transactionIds]),
-  });
-  return { transactions, records, commits, readers, adapter, changed, mutations };
-};
-
-const submission = (replacementTargetId?: string) => ({
-  chainRef: "eip155:1",
-  accountId: ACCOUNT_ID,
-  origin: "https://app.example",
-  source: "provider" as const,
-  finalizationPayload: { nonce: "0x1" },
-  ...(replacementTargetId ? { replacementTargetId } : {}),
-});
 
 describe("Transactions", () => {
-  it("commits broadcasting before invoking the external broadcaster", async () => {
-    const harness = await createHarness({
-      onBroadcast: (records) => {
-        expect([...records.values()][0]?.status).toBe("broadcasting");
+  it("delegates record queries to the persistence reader", async () => {
+    const readers = {
+      transactions: {
+        get: vi.fn(async () => transaction),
+        list: vi.fn(async () => ({ transactions: [transaction] })),
+        listPending: vi.fn(async () => [pendingRecord]),
       },
-    });
+    };
+    const transactions = createTransactions({ readers });
 
-    const result = await harness.transactions.submit(submission());
-
-    expect(result.status).toBe("submitted");
-    expect(harness.commits.map((changes) => (changes[0] as { value: TransactionRecord }).value.status)).toEqual([
-      "submitting",
-      "broadcasting",
-      "submitted",
-    ]);
+    await expect(transactions.get(transaction.transactionId)).resolves.toEqual(transaction);
+    await expect(transactions.list({ limit: 20 })).resolves.toEqual({ transactions: [transaction] });
+    expect(readers.transactions.get).toHaveBeenCalledWith(transaction.transactionId);
+    expect(readers.transactions.list).toHaveBeenCalledWith({ limit: 20 });
   });
 
-  it("commits a signing failure without invoking the broadcaster", async () => {
-    const harness = await createHarness({
-      sign: vi.fn(async () => {
-        throw new Error("signing failed");
-      }),
+  it("loads pending records for the later monitor bootstrap", async () => {
+    const listPending = vi.fn(async () => [pendingRecord]);
+
+    await expect(loadTransactionsBootstrap({ transactions: { listPending } })).resolves.toEqual({
+      pendingTransactions: [pendingRecord],
     });
-
-    const result = await harness.transactions.submit(submission());
-
-    expect(result).toMatchObject({
-      status: "failed",
-      phase: "submitting",
-      reason: { code: "transaction.signing_failed", message: "signing failed" },
-    });
-    expect(harness.commits.map((changes) => (changes[0] as { value: TransactionRecord }).value.status)).toEqual([
-      "submitting",
-      "failed",
-    ]);
-    expect(harness.adapter.broadcast).not.toHaveBeenCalled();
-  });
-
-  it("commits broadcasting before a competing core mutation can run", async () => {
-    const signStarted = deferred<void>();
-    const releaseSign = deferred<void>();
-    const harness = await createHarness({
-      sign: vi.fn(async () => {
-        signStarted.resolve();
-        await releaseSign.promise;
-        return { raw: "0xsigned" };
-      }),
-    });
-
-    const submissionResult = harness.transactions.submit(submission());
-    await signStarted.promise;
-
-    let statusObservedByCompetingMutation: TransactionRecord["status"] | undefined;
-    const competingMutation = harness.mutations.run(async () => {
-      statusObservedByCompetingMutation = [...harness.records.values()][0]?.status;
-    });
-
-    releaseSign.resolve();
-    await Promise.all([submissionResult, competingMutation]);
-
-    expect(statusObservedByCompetingMutation).toBe("broadcasting");
-  });
-
-  it("blocks creation when an active transaction owns the conflict key", async () => {
-    const existing = submittedRecord("existing");
-    const harness = await createHarness({ records: [existing] });
-
-    await expect(harness.transactions.submit(submission())).rejects.toMatchObject({
-      code: "transaction.conflict",
-      details: { conflictingTransactionIds: ["existing"] },
-    });
-    expect(harness.commits).toHaveLength(0);
-  });
-
-  it("requires a submitted replacement target with the same conflict key", async () => {
-    const harness = await createHarness();
-
-    await expect(harness.transactions.submit(submission("missing"))).rejects.toMatchObject({
-      code: "transaction.replacement_target_invalid",
-      details: { targetTransactionId: "missing" },
-    });
-    expect(harness.commits).toHaveLength(0);
-  });
-
-  it("allows a replacement to enter submitting when its target is submitted", async () => {
-    const target = submittedRecord("target");
-    const harness = await createHarness({ records: [target] });
-
-    const replacement = await harness.transactions.submit(submission("target"));
-
-    expect(replacement.status).toBe("submitted");
-    expect(harness.commits[0]).toEqual([
-      expect.objectContaining({
-        persistenceType: "transaction",
-        operation: "put",
-        value: expect.objectContaining({ status: "submitting", conflictKey: CONFLICT_KEY }),
-      }),
-    ]);
-  });
-
-  it("recovers interrupted stages and preserves submitted tracking", async () => {
-    const submittingRecord = localRecord("submitting", "submitting");
-    const broadcastingRecord = localRecord("broadcasting", "broadcasting");
-    const submitted = submittedRecord("submitted");
-    const harness = await createHarness({
-      records: [submittingRecord, broadcastingRecord, submitted],
-      bootstrap: [submittingRecord, broadcastingRecord, submitted],
-    });
-
-    expect(harness.commits).toHaveLength(1);
-    expect(harness.records.get("submitting")).toMatchObject({ status: "failed", phase: "submitting" });
-    expect(harness.records.get("broadcasting")).toMatchObject({ status: "failed", phase: "broadcasting" });
-    expect(harness.transactions.monitor.getNextInspectionAt()).not.toBeNull();
-  });
-
-  it("commits a confirmed winner and submitted conflicts together", async () => {
-    const winner = submittedRecord("winner");
-    const replaced = submittedRecord("replaced");
-    const inspect = vi.fn(async (record: SubmittedTransactionRecord) =>
-      record.transactionId === "winner"
-        ? ({ status: "confirmed" as const, confirmation: { blockNumber: "0x1" } } as const)
-        : ({ status: "pending" as const } as const),
-    );
-    const harness = await createHarness({
-      records: [winner, replaced],
-      bootstrap: [winner, replaced],
-      inspect,
-    });
-
-    await harness.transactions.monitor.runDue(Date.now() + 1);
-
-    expect(harness.commits).toHaveLength(1);
-    expect(harness.commits[0]?.map((change) => (change as { value: TransactionRecord }).value.status)).toEqual([
-      "confirmed",
-      "replaced",
-    ]);
-    expect(harness.records.get("replaced")).toMatchObject({
-      status: "replaced",
-      replacedByTransactionId: "winner",
-    });
-    expect(harness.readers.transactions.get).toHaveBeenCalledWith("winner");
+    expect(listPending).toHaveBeenCalledOnce();
   });
 });

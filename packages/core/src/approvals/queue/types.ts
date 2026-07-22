@@ -3,7 +3,6 @@ import type { Namespace } from "../../namespaces/types.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { ChainDefinition, RpcEndpoint } from "../../networks/types.js";
 import type { RequestPermissionsApprovalPayload } from "../../permissions/service/types.js";
-import type { TransactionReadyProposal } from "../../transactions/TransactionsService.js";
 import type { ApprovalSource } from "../source.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
@@ -74,9 +73,6 @@ export type ApprovalRequestByKind = {
     definition: ChainDefinition;
     defaultRpcEndpoints: readonly RpcEndpoint[];
     isUpdate: boolean;
-  };
-  [ApprovalKinds.SendTransaction]: {
-    proposal: TransactionReadyProposal;
   };
 };
 

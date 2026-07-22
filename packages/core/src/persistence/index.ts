@@ -43,28 +43,20 @@ export {
   settingPersistenceType,
 } from "../settings/persistence.js";
 export type {
-  BroadcastingTransactionRecord,
-  ConfirmedTransactionRecord,
-  DroppedTransactionRecord,
-  ExpiredTransactionRecord,
-  FailedAfterSubmissionTransactionRecord,
-  FailedBeforeSubmissionTransactionRecord,
-  ReplacedTransactionRecord,
-  SubmittedTransactionRecord,
-  SubmittingTransactionRecord,
-  TransactionConflictKey,
-  TransactionFailureReason,
-  TransactionHistoryCursor,
-  TransactionHistoryPage,
-  TransactionHistoryQuery,
-  TransactionId,
-  TransactionJsonObject,
-  TransactionJsonPrimitive,
-  TransactionJsonValue,
+  Eip155PendingTransactionRecord,
+  PendingTransactionRecord,
   TransactionRecord,
-  TransactionStatus,
   TransactionsReader,
 } from "../transactions/persistence.js";
+export { isPendingTransactionRecord, transactionRecordToTransaction } from "../transactions/persistence.js";
+export type {
+  Transaction,
+  TransactionCursor,
+  TransactionId,
+  TransactionPage,
+  TransactionQuery,
+  TransactionStatus,
+} from "../transactions/types.js";
 export type { EncryptedVaultReader, EncryptedVaultRecord } from "../vault/persistence.js";
 export type {
   PersistenceChangeOf,

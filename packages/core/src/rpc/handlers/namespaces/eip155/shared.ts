@@ -4,7 +4,6 @@ import type { ChainRef } from "../../../../networks/chainRef.js";
 import { parseChainRef } from "../../../../networks/chainRef.js";
 import { PermissionAccountNotAuthorizedError, PermissionNotConnectedError } from "../../../../permissions/errors.js";
 import type { PermissionViewsService, PermittedAccountView } from "../../../../permissions/views/types.js";
-import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
 import { RpcInvalidRequestError } from "../../../errors.js";
 import {
   ApprovalRequirements,
@@ -100,27 +99,6 @@ export const assertPermittedEip155Account = (args: {
   }
 
   return account;
-};
-
-export const buildEip155TransactionIntent = (args: {
-  origin: string;
-  method: string;
-  chainRef: ChainRef;
-  request: Eip155TransactionRequest;
-  account: PermittedAccountView;
-}) => {
-  const requestedAddress = args.request.payload.from;
-
-  return {
-    namespace: "eip155" as const,
-    chainRef: args.chainRef,
-    account: {
-      accountId: args.account.accountId,
-      accountAddress: args.account.canonicalAddress,
-      ...(requestedAddress ? { requestedAddress } : {}),
-    },
-    request: args.request,
-  } satisfies TransactionIntent;
 };
 
 type MethodExecutionContext<P> = Parameters<MethodHandler<P>>[0];

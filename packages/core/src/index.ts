@@ -22,7 +22,6 @@ export * from "./messenger/index.js";
 export * from "./namespaces/index.js";
 export * from "./networks/index.js";
 export * from "./permissions/index.js";
-export * from "./provider/index.js";
 export type { RpcHandlerDeps } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";

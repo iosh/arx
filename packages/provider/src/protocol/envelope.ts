@@ -1,6 +1,5 @@
-import type { JsonValue } from "@arx/core";
 import { CHANNEL } from "./channel.js";
-import type { ProviderRpcRequest, ProviderRpcResponse } from "./rpc.js";
+import type { ProviderJsonValue, ProviderRpcRequest, ProviderRpcResponse } from "./rpc.js";
 import type { ProtocolVersion } from "./version.js";
 import { PROTOCOL_VERSION } from "./version.js";
 
@@ -44,7 +43,7 @@ const isJsonPrimitive = (value: unknown) => {
   return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 };
 
-const isJsonValue = (value: unknown, seen = new WeakSet<object>()): value is JsonValue => {
+const isJsonValue = (value: unknown, seen = new WeakSet<object>()): value is ProviderJsonValue => {
   if (isJsonPrimitive(value)) return typeof value !== "number" || Number.isFinite(value);
   if (typeof value !== "object" || value === null) return false;
   if (seen.has(value)) return false;

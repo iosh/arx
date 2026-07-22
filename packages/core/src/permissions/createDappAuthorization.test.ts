@@ -3,7 +3,7 @@ import type { AccountId } from "../accounts/accountId.js";
 import type { Account } from "../accounts/types.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { Approval } from "../approvals/types.js";
-import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
+import { DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionScope, DappNetworkSelectionRecord } from "../dappConnections/persistence.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type { Network, NetworksReader } from "../networks/types.js";
@@ -78,7 +78,6 @@ const createHarness = (
   );
   const commits: PersistenceChange[][] = [];
   const permissionEvents: PermissionsChanged[] = [];
-  const connectionEvents: DappConnectionStateChanged[] = [];
   const cancelledApprovalIds: string[][] = [];
   let walletStatus = input.walletStatus ?? "unlocked";
   let commitFailure: Error | null = null;
@@ -119,7 +118,6 @@ const createHarness = (
     permissions,
     wallet: { getStatus: () => walletStatus },
     mutations,
-    publishConnectionStateChanged: (change) => connectionEvents.push(change),
   });
   const approvals = {
     list: (): readonly Approval[] => pendingApprovals,
@@ -145,7 +143,6 @@ const createHarness = (
     authorization,
     cancelledApprovalIds,
     commits,
-    connectionEvents,
     dappConnections,
     pendingApprovals: () => pendingApprovals,
     permissionEvents,
@@ -176,13 +173,10 @@ describe("createDappAuthorization", () => {
     ]);
     expect(harness.permissions.get(dappScope)).toEqual(grant);
     expect(harness.dappConnections.getNetworkSelection(dappScope)).toEqual(selection(dappScope, "eip155:10"));
-    expect(harness.connectionEvents).toEqual([
-      {
-        scope: dappScope,
-        state: { chainRef: "eip155:10", accounts: [`eip155:10/${EIP155_ACCOUNT_A}`] },
-        changedFields: { chainRef: false, accounts: true },
-      },
-    ]);
+    expect(harness.dappConnections.getConnectionState(dappScope)).toEqual({
+      chainRef: "eip155:10",
+      accounts: [`eip155:10/${EIP155_ACCOUNT_A}`],
+    });
     expect(harness.permissionEvents).toEqual([{ type: "permissionsChanged", scopes: [dappScope] }]);
   });
 
@@ -200,7 +194,6 @@ describe("createDappAuthorization", () => {
     expect(harness.commits).toEqual([]);
     expect(harness.permissions.get(dappScope)).toBeNull();
     expect(harness.dappConnections.getNetworkSelection(dappScope)).toBeNull();
-    expect(harness.connectionEvents).toEqual([]);
     expect(harness.permissionEvents).toEqual([]);
   });
 

@@ -33,15 +33,6 @@ export type DappConnectionState = Readonly<{
   accounts: readonly string[];
 }>;
 
-export type DappConnectionStateChanged = Readonly<{
-  scope: DappConnectionScope;
-  state: DappConnectionState;
-  changedFields: Readonly<{
-    chainRef: boolean;
-    accounts: boolean;
-  }>;
-}>;
-
 export type DappConnectionsOptions = Readonly<{
   bootstrap: DappConnectionsBootstrap;
   accounts: Pick<Accounts, "getAddress">;
@@ -49,7 +40,6 @@ export type DappConnectionsOptions = Readonly<{
   permissions: PermissionsReader;
   wallet: Pick<Wallet, "getStatus">;
   mutations: CoreMutationQueue;
-  publishConnectionStateChanged(change: DappConnectionStateChanged): void;
 }>;
 
 type ActiveConnection = Readonly<{
@@ -59,12 +49,6 @@ type ActiveConnection = Readonly<{
 
 const compareSelections = (left: DappNetworkSelectionRecord, right: DappNetworkSelectionRecord): number =>
   left.origin.localeCompare(right.origin) || left.namespace.localeCompare(right.namespace);
-
-const compareScopes = (left: DappConnectionScope, right: DappConnectionScope): number =>
-  left.origin.localeCompare(right.origin) || left.namespace.localeCompare(right.namespace);
-
-const accountListsEqual = (left: readonly string[], right: readonly string[]): boolean =>
-  left.length === right.length && left.every((account, index) => account === right[index]);
 
 const networkSelectionScope = (selection: DappNetworkSelectionRecord): DappConnectionScope => ({
   origin: selection.origin,
@@ -77,7 +61,6 @@ export class DappConnections {
   readonly #permissions: PermissionsReader;
   readonly #wallet: Pick<Wallet, "getStatus">;
   readonly #mutations: CoreMutationQueue;
-  readonly #publishConnectionStateChanged: DappConnectionsOptions["publishConnectionStateChanged"];
   #networkSelections: ReadonlyMap<string, DappNetworkSelectionRecord>;
   #activeConnections = new Map<string, ActiveConnection>();
 
@@ -87,7 +70,6 @@ export class DappConnections {
     this.#permissions = options.permissions;
     this.#wallet = options.wallet;
     this.#mutations = options.mutations;
-    this.#publishConnectionStateChanged = options.publishConnectionStateChanged;
 
     const networkSelections = new Map<string, DappNetworkSelectionRecord>();
 
@@ -146,33 +128,16 @@ export class DappConnections {
 
   refreshActiveConnectionStates(selectionChangedScopes: readonly DappConnectionScope[] = []): void {
     const changedSelectionScopeKeys = new Set(selectionChangedScopes.map(dappConnectionScopeKey));
-    const pendingStateChanges: DappConnectionStateChanged[] = [];
-    const activeConnections = [...this.#activeConnections.values()].sort((left, right) =>
-      compareScopes(left.scope, right.scope),
-    );
 
-    for (const active of activeConnections) {
+    for (const active of this.#activeConnections.values()) {
       const key = dappConnectionScopeKey(active.scope);
       const chainRef = changedSelectionScopeKeys.has(key)
         ? this.#getCurrentConnectionChainRef(active.scope)
         : active.state.chainRef;
       const state = this.#createConnectionState(active.scope, chainRef);
-      const changedFields = {
-        chainRef: active.state.chainRef !== state.chainRef,
-        accounts: !accountListsEqual(active.state.accounts, state.accounts),
-      };
 
       this.#activeConnections.set(key, { scope: active.scope, state });
-      if (!changedFields.chainRef && !changedFields.accounts) continue;
-
-      pendingStateChanges.push({
-        scope: active.scope,
-        state,
-        changedFields,
-      });
     }
-
-    for (const change of pendingStateChanges) this.#publishConnectionStateChanged(change);
   }
 
   async selectNetwork(selection: DappNetworkSelectionRecord): Promise<void> {

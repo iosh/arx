@@ -1,6 +1,9 @@
-import type { JsonRpcParams, JsonRpcRequest } from "@arx/core";
+import type { ProviderRpcParams } from "../protocol/rpc.js";
 
-export type RequestArguments = Readonly<Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">>;
+export type RequestArguments = Readonly<{
+  method: string;
+  params?: ProviderRpcParams;
+}>;
 
 export interface EIP1193Events {
   on(event: string, listener: (...args: unknown[]) => void): void;

@@ -4,17 +4,10 @@ import { AccountNotFoundError } from "../accounts/errors.js";
 import { Approvals } from "../approvals/Approvals.js";
 import type { ApprovalsApi } from "../approvals/types.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
-import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
-import {
-  type DappConnectionState,
-  type DappConnectionStateChanged,
-  DappConnections,
-} from "../dappConnections/DappConnections.js";
-import { dappConnectionScopeKey } from "../dappConnections/scope.js";
-import type { JsonValue } from "../errors.js";
+import { DappConnections } from "../dappConnections/DappConnections.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
@@ -22,14 +15,12 @@ import { Keyring } from "../keyring/Keyring.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
-import { parseChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
 import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
-import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
 import { systemTime } from "../runtime/time.js";
 import { createTransactions, loadTransactionsBootstrap } from "../transactions/index.js";
 import { createEip155TransactionAdapter } from "../transactions/namespace/eip155/adapter.js";
@@ -42,27 +33,6 @@ import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
 import { assertPersistedPermissionSelectionIntegrity } from "./bootstrapInvariants.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { NamespaceDefinitionRequiredError } from "./errors.js";
-
-const chainIdFor = (chainRef: string): string => {
-  const parsed = parseChainRef(chainRef);
-  if (parsed.namespace === "eip155") return `0x${BigInt(parsed.reference).toString(16)}`;
-  return parsed.reference;
-};
-
-const encodeProviderError = (error: unknown): ProviderRpcError => {
-  if (error instanceof ChainJsonRpcResponseError) {
-    return {
-      kind: "JsonRpcError",
-      code: error.rpcCode,
-      message: error.message,
-      ...(error.rpcData !== undefined ? { data: error.rpcData as JsonValue } : {}),
-    };
-  }
-  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
-    return { kind: "ArxError", code: error.code };
-  }
-  return { kind: "JsonRpcError", code: -32603, message: "Internal error" };
-};
 
 export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
   const namespaceDefinitions = [...input.namespaces.definitions];
@@ -117,43 +87,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const walletStatus = {
     getStatus: () => vault.getStatus(),
   } satisfies Pick<Wallet, "getStatus">;
-  const unlockedListeners = new Set<(payload: { at: number }) => void>();
-  const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
-  const connectionListeners = new Set<
-    (
-      change: Parameters<CoreRuntime["provider"]["subscribeConnectionStateChanged"]>[0] extends (input: infer T) => void
-        ? T
-        : never,
-    ) => void
-  >();
-  const legacyConnectionEventSnapshots = new Map<string, ProviderConnectionState>();
-  const toProviderConnectionState = (
-    scope: ProviderConnectionQuery,
-    state: DappConnectionState,
-  ): ProviderConnectionState => ({
-    snapshot: {
-      namespace: scope.namespace,
-      chain: { chainRef: state.chainRef, chainId: chainIdFor(state.chainRef) },
-      isUnlocked: walletStatus.getStatus() === "unlocked",
-    },
-    accounts: [...state.accounts],
-  });
-  const publishDappConnectionStateChanged = (change: DappConnectionStateChanged) => {
-    const key = dappConnectionScopeKey(change.scope);
-    const previous = legacyConnectionEventSnapshots.get(key);
-    const next = toProviderConnectionState(change.scope, change.state);
-    legacyConnectionEventSnapshots.set(key, next);
-    if (!previous) return;
-
-    for (const listener of connectionListeners) {
-      listener({
-        scope: { ...change.scope },
-        previous,
-        next,
-        changed: { chain: change.changedFields.chainRef, accounts: change.changedFields.accounts },
-      });
-    }
-  };
   const keyring = new Keyring({ bootstrap: keyringBootstrap, namespaceAdapters: keyringAdapters });
   const accounts = new Accounts({
     adapters: accountsAdapters,
@@ -187,7 +120,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     permissions,
     wallet: walletStatus,
     mutations,
-    publishConnectionStateChanged: publishDappConnectionStateChanged,
   });
   const approvals = new Approvals({
     time: systemTime,
@@ -209,18 +141,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     approvals,
     dappConnections,
     autoLock,
-    publishStatusChanged: (change) => {
-      if (change.type === "walletStatusChanged") {
-        const at = systemTime.now();
-        if (change.status === "unlocked") {
-          for (const listener of unlockedListeners) listener({ at });
-        } else if (change.status === "locked") {
-          for (const listener of lockedListeners) listener({ at, reason: "manual" });
-        }
-      }
-
-      publish({ owner: "wallet", change });
-    },
+    publishStatusChanged: (change) => publish({ owner: "wallet", change }),
     publishKeyringChanged: (change) => publish({ owner: "keyring", change }),
     publishAccountsChanged: (change) => publish({ owner: "accounts", change }),
     publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
@@ -315,64 +236,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
   });
 
-  const provider: CoreRuntime["provider"] = {
-    getConnectionState: async (query) => ({
-      ...toProviderConnectionState(query, dappConnections.getConnectionState(query)),
-      connected: dappConnections.isConnectionOpen(query),
-    }),
-    activateConnectionScope: async (query) => {
-      const state = toProviderConnectionState(query, dappConnections.openConnection(query));
-      legacyConnectionEventSnapshots.set(dappConnectionScopeKey(query), state);
-      return { ...state, connected: true };
-    },
-    deactivateConnectionScope: (query) => {
-      dappAuthorization.closeConnection(query);
-      legacyConnectionEventSnapshots.delete(dappConnectionScopeKey(query));
-    },
-    subscribeConnectionStateChanged: (listener) => {
-      connectionListeners.add(listener);
-      return () => connectionListeners.delete(listener);
-    },
-    subscribeSessionUnlocked: (listener) => {
-      unlockedListeners.add(listener);
-      return () => unlockedListeners.delete(listener);
-    },
-    subscribeSessionLocked: (listener) => {
-      lockedListeners.add(listener);
-      return () => lockedListeners.delete(listener);
-    },
-    request: async (request) => {
-      try {
-        const scope = {
-          origin: request.scope.origin,
-          namespace: request.namespace,
-        };
-        const state = dappConnections.getConnectionState(scope);
-        const method = request.request.method;
-        let result: unknown;
-        if (method === "eth_chainId") {
-          result = chainIdFor(state.chainRef);
-        } else if (method === "eth_accounts") {
-          result = [...state.accounts];
-        } else {
-          result = await chainJsonRpc.request({
-            chainRef: state.chainRef,
-            method,
-            replay: "forbidden",
-            ...(request.request.params !== undefined ? { params: request.request.params } : {}),
-          });
-        }
-        return { id: request.request.id, jsonrpc: "2.0", result };
-      } catch (error) {
-        return { id: request.request.id, jsonrpc: "2.0", error: encodeProviderError(error) };
-      }
-    },
-    encodeRpcError: encodeProviderError,
-    cancelRequestScope: async () => 0,
-  };
-
   return {
-    provider,
     wallet: Object.assign(wallet, {
       networks,
       transactions,
@@ -388,10 +252,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       approvals.cancelAll();
       void wallet.lock();
       listeners.clear();
-      legacyConnectionEventSnapshots.clear();
-      connectionListeners.clear();
-      unlockedListeners.clear();
-      lockedListeners.clear();
     },
   };
 };

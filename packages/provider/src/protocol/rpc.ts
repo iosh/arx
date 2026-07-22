@@ -1,7 +1,25 @@
-import type { JsonRpcParams } from "@arx/core";
-import type { ProviderRpcError } from "@arx/core/provider";
+export type ProviderJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly ProviderJsonValue[]
+  | Readonly<{ [key: string]: ProviderJsonValue }>;
 
-export type ProviderRpcParams = JsonRpcParams;
+export type ProviderRpcParams = readonly ProviderJsonValue[] | Readonly<{ [key: string]: ProviderJsonValue }>;
+
+export type ProviderRpcError =
+  | Readonly<{
+      kind: "ArxError";
+      code: string;
+    }>
+  | Readonly<{
+      kind: "JsonRpcError";
+      code: number;
+      message: string;
+      data?: ProviderJsonValue;
+    }>;
+
 export type ProviderRpcRequest = {
   method: string;
   params?: ProviderRpcParams;

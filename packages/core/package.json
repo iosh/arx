@@ -20,7 +20,6 @@
     "./chain-json-rpc": "./src/chainJsonRpc/index.ts",
     "./namespaces": "./src/namespaces/index.ts",
     "./permissions": "./src/permissions/index.ts",
-    "./provider": "./src/provider/index.ts",
     "./rpc": "./src/rpc/index.ts",
     "./runtime": "./src/runtime/index.ts",
     "./settings": "./src/settings/index.ts",

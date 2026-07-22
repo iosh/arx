@@ -7,7 +7,7 @@ import type { PermissionRecord } from "../../permissions/persistence.js";
 import { createCoreMutationQueue } from "../../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../../persistence/persistenceTypes.js";
 import type { WalletStatus } from "../../wallet/Wallet.js";
-import { type DappConnectionStateChanged, DappConnections } from "../DappConnections.js";
+import { DappConnections } from "../DappConnections.js";
 import type { DappConnectionScope, DappNetworkSelectionRecord } from "../persistence.js";
 import { dappConnectionScopeKey } from "../scope.js";
 
@@ -52,11 +52,9 @@ export const createDappConnections = (
     networkSelections?: readonly DappNetworkSelectionRecord[];
     permissions?: readonly PermissionRecord[];
     walletStatus?: WalletStatus;
-    onConnectionStateChanged?(change: DappConnectionStateChanged, connections: DappConnections): void;
   }> = {},
 ) => {
   const commits: PersistenceChange[][] = [];
-  const events: DappConnectionStateChanged[] = [];
   const permissionRecords = new Map(
     (input.permissions ?? []).map((permission) => [dappConnectionScopeKey(permission), permission]),
   );
@@ -66,7 +64,6 @@ export const createDappConnections = (
     solana: "solana:mainnet",
   };
   let commitFailure: Error | null = null;
-  let dappConnections: DappConnections;
 
   const accounts = {
     getAddress: ({ accountId, chainRef }) => ({
@@ -82,7 +79,7 @@ export const createDappConnections = (
     listByOrigin: (origin) => [...permissionRecords.values()].filter((permission) => permission.origin === origin),
   } satisfies PermissionsReader;
 
-  dappConnections = new DappConnections({
+  const dappConnections = new DappConnections({
     bootstrap: { networkSelections: input.networkSelections ?? [] },
     accounts,
     networks: {
@@ -106,16 +103,11 @@ export const createDappConnections = (
         commits.push([...changes]);
       },
     }),
-    publishConnectionStateChanged: (change) => {
-      events.push(change);
-      input.onConnectionStateChanged?.(change, dappConnections);
-    },
   });
 
   return {
     dappConnections,
     commits,
-    events,
     setCommitFailure: (failure: Error | null) => {
       commitFailure = failure;
     },

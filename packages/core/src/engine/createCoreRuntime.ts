@@ -189,15 +189,27 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     publishConnectionStateChanged: publishDappConnectionStateChanged,
   });
+  const approvals = new Approvals({
+    time: systemTime,
+    publishChanged: (change) => publish({ owner: "approvals", change }),
+  });
+  const approvalsApi: ApprovalsApi = {
+    get: (approvalId) => approvals.get(approvalId),
+    list: () => approvals.list(),
+    approve: (decision) => approvals.approve(decision),
+    reject: (approvalId) => approvals.reject(approvalId),
+  };
   const walletCoordinator = new WalletCoordinator({
     mutations,
     time: systemTime,
     vault,
     keyring,
     accounts,
+    permissions,
+    approvals,
+    dappConnections,
     autoLock,
     publishStatusChanged: (change) => {
-      dappConnections.refreshActiveConnectionStates();
       if (change.type === "walletStatusChanged") {
         const at = systemTime.now();
         if (change.status === "unlocked") {
@@ -210,10 +222,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       publish({ owner: "wallet", change });
     },
     publishKeyringChanged: (change) => publish({ owner: "keyring", change }),
-    publishAccountsChanged: (change) => {
-      dappConnections.refreshActiveConnectionStates();
-      publish({ owner: "accounts", change });
-    },
+    publishAccountsChanged: (change) => publish({ owner: "accounts", change }),
+    publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
   });
   const wallet: Wallet = {
     getStatus: () => vault.getStatus(),
@@ -239,6 +249,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       confirmMnemonicBackup: (params) => walletCoordinator.confirmMnemonicBackup(params),
       exportMnemonic: (params) => walletCoordinator.exportMnemonic(params),
       exportPrivateKey: (params) => walletCoordinator.exportPrivateKey(params),
+      remove: (params) => walletCoordinator.removeKeySource(params),
     },
     hdKeyrings: {
       get: (hdKeyringId) => {
@@ -249,6 +260,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       list: () => keyring.listHdKeyrings(),
       add: (params) => walletCoordinator.addHdKeyring(params),
       deriveAccount: (params) => walletCoordinator.deriveHdAccount(params),
+      remove: (params) => walletCoordinator.removeHdKeyring(params),
     },
     accounts: {
       get: (accountId) => {
@@ -260,6 +272,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       getAddress: (params) => accounts.getAddress(params),
       listAddresses: (chainRef) => accounts.listAddresses(chainRef),
       rename: (params) => accounts.rename(params),
+      setHidden: (params) => walletCoordinator.setAccountHidden(params),
       select: (params) => accounts.select(params.accountId),
     },
   };
@@ -292,16 +305,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishChanged: (change) => publish({ owner: "transactions", change }),
   });
   transactions.monitor.start();
-  const approvals = new Approvals({
-    time: systemTime,
-    publishChanged: (change) => publish({ owner: "approvals", change }),
-  });
-  const approvalsApi: ApprovalsApi = {
-    get: (approvalId) => approvals.get(approvalId),
-    list: () => approvals.list(),
-    approve: (decision) => approvals.approve(decision),
-    reject: (approvalId) => approvals.reject(approvalId),
-  };
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet,

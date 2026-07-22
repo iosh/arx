@@ -75,12 +75,14 @@ export type Wallet = Readonly<{
     confirmMnemonicBackup(params: { keySourceId: KeySourceId }): Promise<void>;
     exportMnemonic(params: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string }>;
     exportPrivateKey(params: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string }>;
+    remove(params: { keySourceId: KeySourceId }): Promise<void>;
   }>;
   hdKeyrings: Readonly<{
     get(hdKeyringId: HdKeyringId): HdKeyring;
     list(): readonly HdKeyring[];
     add(params: AddHdKeyringInput): Promise<{ hdKeyringId: HdKeyringId; accountId: AccountId }>;
     deriveAccount(params: { hdKeyringId: HdKeyringId }): Promise<AccountId>;
+    remove(params: { hdKeyringId: HdKeyringId }): Promise<void>;
   }>;
   accounts: Readonly<{
     get(accountId: AccountId): Account;
@@ -88,6 +90,7 @@ export type Wallet = Readonly<{
     getAddress(params: { accountId: AccountId; chainRef: ChainRef }): AccountAddress;
     listAddresses(chainRef: ChainRef): readonly AccountAddress[];
     rename(params: { accountId: AccountId; alias?: string }): Promise<void>;
+    setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
     select(params: { accountId: AccountId }): Promise<void>;
   }>;
 }>;

@@ -49,7 +49,6 @@ export type DappConnectionsOptions = Readonly<{
   permissions: PermissionsReader;
   wallet: Pick<Wallet, "getStatus">;
   mutations: CoreMutationQueue;
-  /** Publishes a derived active-connection state change and must not throw. */
   publishConnectionStateChanged(change: DappConnectionStateChanged): void;
 }>;
 

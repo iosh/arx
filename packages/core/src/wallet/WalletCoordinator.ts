@@ -2,6 +2,8 @@ import { type Accounts, accountsChangedFromUpdate } from "../accounts/Accounts.j
 import type { AccountId } from "../accounts/accountId.js";
 import type { AccountRecord } from "../accounts/persistence.js";
 import type { AccountsChanged } from "../accounts/types.js";
+import type { Approvals } from "../approvals/Approvals.js";
+import type { DappConnections } from "../dappConnections/DappConnections.js";
 import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
 import {
   HdKeyringNotFoundError,
@@ -20,6 +22,7 @@ import {
   type PrivateKeySourceSecret,
 } from "../keyring/secrets.js";
 import type { BackupStatus, HdKeyringId, KeyringChanged, KeySourceId } from "../keyring/types.js";
+import { type Permissions, type PermissionsChanged, permissionsChangedFromUpdate } from "../permissions/Permissions.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
@@ -32,7 +35,12 @@ import {
   assertAutoLockDuration,
   DEFAULT_AUTO_LOCK_DURATION_MS,
 } from "./AutoLockController.js";
-import { WalletAlreadyInitializedError, WalletLockedError, WalletUnlockFailedError } from "./errors.js";
+import {
+  WalletAlreadyInitializedError,
+  WalletLastKeySourceRemovalError,
+  WalletLockedError,
+  WalletUnlockFailedError,
+} from "./errors.js";
 import type {
   AddHdKeyringInput,
   Bip39SourceAdded,
@@ -53,13 +61,14 @@ type WalletCoordinatorOptions = Readonly<{
   vault: Vault;
   keyring: Keyring;
   accounts: Accounts;
+  permissions: Pick<Permissions, "prepareRemoveAccountReferences" | "applyCommittedUpdate">;
+  approvals: Pick<Approvals, "cancelAll">;
+  dappConnections: Pick<DappConnections, "refreshActiveConnectionStates">;
   autoLock: AutoLockController;
-  /** Publishes a committed Wallet status change and must not throw. */
   publishStatusChanged(change: WalletStatusChanged): void;
-  /** Publishes a committed Keyring change and must not throw. */
   publishKeyringChanged(change: KeyringChanged): void;
-  /** Publishes a committed Accounts change and must not throw. */
   publishAccountsChanged(change: AccountsChanged): void;
+  publishPermissionsChanged(change: PermissionsChanged): void;
 }>;
 
 /** Coordinates wallet session and identity mutations across their owning modules. */
@@ -69,10 +78,14 @@ export class WalletCoordinator {
   readonly #vault: Vault;
   readonly #keyring: Keyring;
   readonly #accounts: Accounts;
+  readonly #permissions: WalletCoordinatorOptions["permissions"];
+  readonly #approvals: WalletCoordinatorOptions["approvals"];
+  readonly #dappConnections: WalletCoordinatorOptions["dappConnections"];
   readonly #autoLock: AutoLockController;
   readonly #publishStatusChanged: WalletCoordinatorOptions["publishStatusChanged"];
   readonly #publishKeyringChanged: WalletCoordinatorOptions["publishKeyringChanged"];
   readonly #publishAccountsChanged: WalletCoordinatorOptions["publishAccountsChanged"];
+  readonly #publishPermissionsChanged: WalletCoordinatorOptions["publishPermissionsChanged"];
 
   constructor(options: WalletCoordinatorOptions) {
     this.#mutations = options.mutations;
@@ -80,10 +93,14 @@ export class WalletCoordinator {
     this.#vault = options.vault;
     this.#keyring = options.keyring;
     this.#accounts = options.accounts;
+    this.#permissions = options.permissions;
+    this.#approvals = options.approvals;
+    this.#dappConnections = options.dappConnections;
     this.#autoLock = options.autoLock;
     this.#publishStatusChanged = options.publishStatusChanged;
     this.#publishKeyringChanged = options.publishKeyringChanged;
     this.#publishAccountsChanged = options.publishAccountsChanged;
+    this.#publishPermissionsChanged = options.publishPermissionsChanged;
   }
 
   createFromMnemonic(params: CreateFromMnemonicInput): Promise<Bip39WalletCreated> {
@@ -139,6 +156,7 @@ export class WalletCoordinator {
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
+      this.#dappConnections.refreshActiveConnectionStates();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
@@ -163,6 +181,7 @@ export class WalletCoordinator {
       this.#vault.activate(draft.unlocked);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
+      this.#dappConnections.refreshActiveConnectionStates();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
     });
   }
@@ -174,6 +193,8 @@ export class WalletCoordinator {
       this.#autoLock.stop();
       this.#keyring.lock();
       this.#vault.lock();
+      this.#dappConnections.refreshActiveConnectionStates();
+      this.#approvals.cancelAll();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "locked" });
     });
   }
@@ -272,6 +293,50 @@ export class WalletCoordinator {
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
 
       return { keySourceId, accountId };
+    });
+  }
+
+  async removeKeySource(params: { keySourceId: KeySourceId }): Promise<void> {
+    await this.#mutations.run(async (commit) => {
+      const secrets = this.requireKeyringSecrets();
+      const unlocked = this.#vault.requireUnlocked();
+      const source = this.#keyring.getKeySource(params.keySourceId);
+      if (!source) throw new KeySourceNotFoundError(params.keySourceId);
+      if (this.#keyring.listKeySources().length === 1) throw new WalletLastKeySourceRemovalError();
+
+      const hdKeyringIds = this.#keyring
+        .listHdKeyringsByKeySourceIds([params.keySourceId])
+        .map((hdKeyring) => hdKeyring.hdKeyringId);
+      const accountsUpdate =
+        source.type === "bip39"
+          ? this.#accounts.prepareRemoveHdAccounts(hdKeyringIds)
+          : this.#accounts.prepareRemovePrivateKeyAccounts([params.keySourceId]);
+      const permissionsUpdate = this.#permissions.prepareRemoveAccountReferences(
+        accountsUpdate?.removedAccountIds ?? [],
+      );
+      const keyringUpdate = this.#keyring.prepareRemoveKeySource(params.keySourceId);
+      const nextSecrets = createKeyringSecrets(
+        secrets.keySources.filter((candidate) => candidate.keySourceId !== params.keySourceId),
+      );
+      const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
+
+      await commit([
+        persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
+        ...keyringUpdate.persistenceChanges,
+        ...(accountsUpdate?.persistenceChanges ?? []),
+        ...(permissionsUpdate?.persistenceChanges ?? []),
+      ]);
+
+      this.#vault.activate(nextUnlocked);
+      this.#keyring.applyCommittedUpdate(keyringUpdate);
+      if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
+      if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      this.#keyring.activateSecrets(nextSecrets);
+      this.#autoLock.recordActivity();
+      this.#dappConnections.refreshActiveConnectionStates();
+      this.#publishKeyringChanged({ type: "keyringChanged" });
+      if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
     });
   }
 
@@ -401,6 +466,49 @@ export class WalletCoordinator {
     });
   }
 
+  async removeHdKeyring(params: { hdKeyringId: HdKeyringId }): Promise<void> {
+    await this.#mutations.run(async (commit) => {
+      const keyringUpdate = this.#keyring.prepareRemoveHdKeyring(params.hdKeyringId);
+      const accountsUpdate = this.#accounts.prepareRemoveHdAccounts([params.hdKeyringId]);
+      const permissionsUpdate = this.#permissions.prepareRemoveAccountReferences(
+        accountsUpdate?.removedAccountIds ?? [],
+      );
+
+      await commit([
+        ...keyringUpdate.persistenceChanges,
+        ...(accountsUpdate?.persistenceChanges ?? []),
+        ...(permissionsUpdate?.persistenceChanges ?? []),
+      ]);
+
+      this.#keyring.applyCommittedUpdate(keyringUpdate);
+      if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
+      if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      this.#dappConnections.refreshActiveConnectionStates();
+      this.#publishKeyringChanged({ type: "keyringChanged" });
+      if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
+    });
+  }
+
+  async setAccountHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void> {
+    await this.#mutations.run(async (commit) => {
+      const accountsUpdate = this.#accounts.prepareSetAccountHidden(params.accountId, params.hidden);
+      if (!accountsUpdate) return;
+
+      const permissionsUpdate = params.hidden
+        ? this.#permissions.prepareRemoveAccountReferences([params.accountId])
+        : null;
+
+      await commit([...accountsUpdate.persistenceChanges, ...(permissionsUpdate?.persistenceChanges ?? [])]);
+
+      this.#accounts.applyCommittedUpdate(accountsUpdate);
+      if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      this.#dappConnections.refreshActiveConnectionStates();
+      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
+    });
+  }
+
   private async initializeBip39Wallet(
     params: CreateFromMnemonicInput,
     backupStatus: BackupStatus,
@@ -459,6 +567,7 @@ export class WalletCoordinator {
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
+      this.#dappConnections.refreshActiveConnectionStates();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));

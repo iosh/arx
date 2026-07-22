@@ -58,7 +58,6 @@ type AccountsOptions = Readonly<{
   adapters: AccountsNamespaceAdapters;
   bootstrap?: AccountsBootstrap;
   mutations: CoreMutationQueue;
-  /** Publishes committed account changes and must not throw. */
   publishChanged(change: AccountsChanged): void;
 }>;
 

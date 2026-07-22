@@ -8,6 +8,16 @@ export class WalletAlreadyInitializedError extends ArxBaseError {
   }
 }
 
+export class WalletLastKeySourceRemovalError extends ArxBaseError {
+  static readonly code = "wallet.last_key_source_removal";
+
+  constructor() {
+    super("The last key source cannot be removed.", {
+      code: WalletLastKeySourceRemovalError.code,
+    });
+  }
+}
+
 export class WalletLockedError extends ArxBaseError {
   static readonly code = "wallet.locked";
 

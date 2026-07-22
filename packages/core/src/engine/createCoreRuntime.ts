@@ -26,6 +26,7 @@ import { parseChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
+import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { ProviderConnectionQuery, ProviderConnectionState, ProviderRpcError } from "../provider/access/types.js";
@@ -301,6 +302,15 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     approve: (decision) => approvals.approve(decision),
     reject: (approvalId) => approvals.reject(approvalId),
   };
+  const dappAuthorization = createDappAuthorization({
+    mutations,
+    wallet,
+    networks,
+    permissions,
+    dappConnections,
+    approvals,
+    publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
+  });
 
   const provider: CoreRuntime["provider"] = {
     getConnectionState: async (query) => ({
@@ -313,7 +323,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       return { ...state, connected: true };
     },
     deactivateConnectionScope: (query) => {
-      dappConnections.closeConnection(query);
+      dappAuthorization.closeConnection(query);
       legacyConnectionEventSnapshots.delete(dappConnectionScopeKey(query));
     },
     subscribeConnectionStateChanged: (listener) => {
@@ -360,7 +370,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
 
   return {
     provider,
-    wallet: Object.assign(wallet, { networks, transactions, approvals: approvalsApi }),
+    wallet: Object.assign(wallet, {
+      networks,
+      transactions,
+      permissions: dappAuthorization.permissions,
+      approvals: approvalsApi,
+    }),
     subscribeChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

@@ -12,6 +12,7 @@ import type {
   NetworksReader,
   NonEmptyRpcEndpoints,
 } from "../networks/types.js";
+import type { PermissionsApi } from "../permissions/createDappAuthorization.js";
 import type { PermissionsChanged } from "../permissions/Permissions.js";
 import type { CorePersistence } from "../persistence/corePersistence.js";
 import type {
@@ -80,6 +81,7 @@ export type CoreWallet = Wallet &
         selectNamespace(namespace: Namespace): Promise<void>;
       }>;
     transactions: Transactions;
+    permissions: PermissionsApi;
     approvals: ApprovalsApi;
   }>;
 

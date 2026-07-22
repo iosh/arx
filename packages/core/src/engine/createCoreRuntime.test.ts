@@ -63,6 +63,7 @@ describe("createCoreRuntime", () => {
     const scope = { origin: "https://dapp.example", namespace: "eip155" } as const;
 
     try {
+      expect(runtime.wallet.permissions.list()).toEqual([]);
       expect(await runtime.provider.getConnectionState(scope)).toEqual({
         connected: false,
         snapshot: {

@@ -5,12 +5,10 @@ import {
   AccountNamespaceMismatchError,
   AccountNotFoundError,
 } from "../accounts/errors.js";
-import type { DappConnections } from "../dappConnections/DappConnections.js";
 import { dappConnectionScopeKey } from "../dappConnections/scope.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { PermissionsBootstrap } from "./bootstrap.js";
-import { PermissionNetworkSelectionMissingError } from "./errors.js";
 import { type PermissionRecord, type PermissionScope, permissionPersistenceType } from "./persistence.js";
 
 export type Permission = PermissionRecord;
@@ -35,7 +33,6 @@ export type PermissionsUpdate = Readonly<{
 type PermissionsOptions = Readonly<{
   bootstrap: PermissionsBootstrap;
   accounts: Pick<Accounts, "getAccount">;
-  dappConnections: Pick<DappConnections, "getNetworkSelection">;
 }>;
 
 const comparePermissions = (left: Permission, right: Permission): number =>
@@ -60,10 +57,6 @@ export class Permissions implements PermissionsReader {
     const records = new Map<string, PermissionRecord>();
     for (const record of options.bootstrap.records) {
       this.#requireVisibleAccounts(record);
-      if (!options.dappConnections.getNetworkSelection(record)) {
-        throw new PermissionNetworkSelectionMissingError(permissionScope(record));
-      }
-
       records.set(dappConnectionScopeKey(record), record);
     }
 

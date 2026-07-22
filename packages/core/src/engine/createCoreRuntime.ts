@@ -8,7 +8,11 @@ import { ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { buildChainAddressingByNamespace } from "../chains/addressing.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
-import { DappConnections } from "../dappConnections/DappConnections.js";
+import {
+  type DappConnectionState,
+  type DappConnectionStateChanged,
+  DappConnections,
+} from "../dappConnections/DappConnections.js";
 import { dappConnectionScopeKey } from "../dappConnections/scope.js";
 import type { JsonValue } from "../errors.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
@@ -19,7 +23,6 @@ import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
 import { parseChainRef } from "../networks/chainRef.js";
-import { NetworkNamespaceUnsupportedError } from "../networks/errors.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
@@ -35,6 +38,7 @@ import { AutoLockController } from "../wallet/AutoLockController.js";
 import { loadWalletBootstrap } from "../wallet/bootstrap.js";
 import type { Wallet } from "../wallet/Wallet.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
+import { assertPersistedPermissionSelectionIntegrity } from "./bootstrapInvariants.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { NamespaceDefinitionRequiredError } from "./errors.js";
 
@@ -108,9 +112,47 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     loadTransactionsBootstrap(input.persistence.readers),
   ]);
 
+  const vault = new Vault(vaultBootstrap.encryptedVault);
+  const walletStatus = {
+    getStatus: () => vault.getStatus(),
+  } satisfies Pick<Wallet, "getStatus">;
   const unlockedListeners = new Set<(payload: { at: number }) => void>();
   const lockedListeners = new Set<(payload: { at: number; reason: "manual" }) => void>();
-  const vault = new Vault(vaultBootstrap.encryptedVault);
+  const connectionListeners = new Set<
+    (
+      change: Parameters<CoreRuntime["provider"]["subscribeConnectionStateChanged"]>[0] extends (input: infer T) => void
+        ? T
+        : never,
+    ) => void
+  >();
+  const legacyConnectionEventSnapshots = new Map<string, ProviderConnectionState>();
+  const toProviderConnectionState = (
+    scope: ProviderConnectionQuery,
+    state: DappConnectionState,
+  ): ProviderConnectionState => ({
+    snapshot: {
+      namespace: scope.namespace,
+      chain: { chainRef: state.chainRef, chainId: chainIdFor(state.chainRef) },
+      isUnlocked: walletStatus.getStatus() === "unlocked",
+    },
+    accounts: [...state.accounts],
+  });
+  const publishDappConnectionStateChanged = (change: DappConnectionStateChanged) => {
+    const key = dappConnectionScopeKey(change.scope);
+    const previous = legacyConnectionEventSnapshots.get(key);
+    const next = toProviderConnectionState(change.scope, change.state);
+    legacyConnectionEventSnapshots.set(key, next);
+    if (!previous) return;
+
+    for (const listener of connectionListeners) {
+      listener({
+        scope: { ...change.scope },
+        previous,
+        next,
+        changed: { chain: change.changedFields.chainRef, accounts: change.changedFields.accounts },
+      });
+    }
+  };
   const keyring = new Keyring({ bootstrap: keyringBootstrap, namespaceAdapters: keyringAdapters });
   const accounts = new Accounts({
     adapters: accountsAdapters,
@@ -122,6 +164,30 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     durationMs: walletBootstrap.autoLockDurationMs,
     time: systemTime,
   });
+  const networks = new Networks({
+    adapters: networksAdapters,
+    defaultNamespace: eip155NetworksAdapter.namespace,
+    bootstrap: networksBootstrap,
+    mutations,
+    publishChanged: (change) => publish({ owner: "networks", change }),
+  });
+  assertPersistedPermissionSelectionIntegrity({
+    permissions: permissionsBootstrap.records,
+    networkSelections: dappConnectionsBootstrap.networkSelections,
+  });
+  const permissions = new Permissions({
+    bootstrap: permissionsBootstrap,
+    accounts,
+  });
+  const dappConnections = new DappConnections({
+    bootstrap: dappConnectionsBootstrap,
+    accounts,
+    networks,
+    permissions,
+    wallet: walletStatus,
+    mutations,
+    publishConnectionStateChanged: publishDappConnectionStateChanged,
+  });
   const walletCoordinator = new WalletCoordinator({
     mutations,
     time: systemTime,
@@ -130,6 +196,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     accounts,
     autoLock,
     publishStatusChanged: (change) => {
+      dappConnections.refreshActiveConnectionStates();
       if (change.type === "walletStatusChanged") {
         const at = systemTime.now();
         if (change.status === "unlocked") {
@@ -142,7 +209,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       publish({ owner: "wallet", change });
     },
     publishKeyringChanged: (change) => publish({ owner: "keyring", change }),
-    publishAccountsChanged: (change) => publish({ owner: "accounts", change }),
+    publishAccountsChanged: (change) => {
+      dappConnections.refreshActiveConnectionStates();
+      publish({ owner: "accounts", change });
+    },
   });
   const wallet: Wallet = {
     getStatus: () => vault.getStatus(),
@@ -192,23 +262,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       select: (params) => accounts.select(params.accountId),
     },
   };
-  const networks = new Networks({
-    adapters: networksAdapters,
-    defaultNamespace: eip155NetworksAdapter.namespace,
-    bootstrap: networksBootstrap,
-    mutations,
-    publishChanged: (change) => publish({ owner: "networks", change }),
-  });
-  const dappConnections = new DappConnections({
-    bootstrap: dappConnectionsBootstrap,
-    networks,
-    mutations,
-  });
-  const permissions = new Permissions({
-    bootstrap: permissionsBootstrap,
-    accounts,
-    dappConnections,
-  });
   const chainJsonRpc = createChainJsonRpc({
     ...(rpcOptions ?? {}),
     transport: jsonRpcHttpTransport,
@@ -249,51 +302,19 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     reject: (approvalId) => approvals.reject(approvalId),
   };
 
-  const activeConnections = new Map<string, ProviderConnectionState>();
-  const connectionListeners = new Set<
-    (
-      change: Parameters<CoreRuntime["provider"]["subscribeConnectionStateChanged"]>[0] extends (input: infer T) => void
-        ? T
-        : never,
-    ) => void
-  >();
-  const getConnectionChainRef = (query: ProviderConnectionQuery) => {
-    const storedSelection = dappConnections.getNetworkSelection(query);
-    if (storedSelection) return storedSelection.chainRef;
-
-    const chainRef = networks.getSelection().selectedChainRefByNamespace[query.namespace];
-    if (!chainRef) throw new NetworkNamespaceUnsupportedError(query.namespace);
-    return chainRef;
-  };
-  const buildConnectionState = async (query: ProviderConnectionQuery): Promise<ProviderConnectionState> => {
-    const chainRef = getConnectionChainRef(query);
-    const accountIds = permissions.get(query)?.accountIds ?? [];
-    const addresses =
-      wallet.getStatus() === "unlocked"
-        ? accountIds.map((accountId) => accounts.getAddress({ accountId, chainRef }).canonicalAddress)
-        : [];
-    return {
-      snapshot: {
-        namespace: query.namespace,
-        chain: { chainRef, chainId: chainIdFor(chainRef) },
-        isUnlocked: wallet.getStatus() === "unlocked",
-      },
-      accounts: addresses,
-    };
-  };
-
   const provider: CoreRuntime["provider"] = {
     getConnectionState: async (query) => ({
-      ...(await buildConnectionState(query)),
-      connected: activeConnections.has(dappConnectionScopeKey(query)),
+      ...toProviderConnectionState(query, dappConnections.getConnectionState(query)),
+      connected: dappConnections.isConnectionOpen(query),
     }),
     activateConnectionScope: async (query) => {
-      const state = await buildConnectionState(query);
-      activeConnections.set(dappConnectionScopeKey(query), state);
+      const state = toProviderConnectionState(query, dappConnections.openConnection(query));
+      legacyConnectionEventSnapshots.set(dappConnectionScopeKey(query), state);
       return { ...state, connected: true };
     },
     deactivateConnectionScope: (query) => {
-      activeConnections.delete(dappConnectionScopeKey(query));
+      dappConnections.closeConnection(query);
+      legacyConnectionEventSnapshots.delete(dappConnectionScopeKey(query));
     },
     subscribeConnectionStateChanged: (listener) => {
       connectionListeners.add(listener);
@@ -309,20 +330,20 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     },
     request: async (request) => {
       try {
-        const chainRef = getConnectionChainRef({
+        const scope = {
           origin: request.scope.origin,
           namespace: request.namespace,
-        });
+        };
+        const state = dappConnections.getConnectionState(scope);
         const method = request.request.method;
         let result: unknown;
         if (method === "eth_chainId") {
-          result = chainIdFor(chainRef);
+          result = chainIdFor(state.chainRef);
         } else if (method === "eth_accounts") {
-          result = (await buildConnectionState({ origin: request.scope.origin, namespace: request.namespace }))
-            .accounts;
+          result = [...state.accounts];
         } else {
           result = await chainJsonRpc.request({
-            chainRef,
+            chainRef: state.chainRef,
             method,
             replay: "forbidden",
             ...(request.request.params !== undefined ? { params: request.request.params } : {}),
@@ -349,6 +370,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       approvals.cancelAll();
       void wallet.lock();
       listeners.clear();
+      legacyConnectionEventSnapshots.clear();
       connectionListeners.clear();
       unlockedListeners.clear();
       lockedListeners.clear();

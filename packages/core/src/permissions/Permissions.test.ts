@@ -6,12 +6,9 @@ import {
   AccountNotFoundError,
 } from "../accounts/errors.js";
 import type { Account } from "../accounts/types.js";
-import type { DappNetworkSelectionRecord } from "../dappConnections/persistence.js";
-import { dappConnectionScopeKey } from "../dappConnections/scope.js";
 import type { Namespace } from "../namespaces/types.js";
-import { PermissionNetworkSelectionMissingError } from "./errors.js";
 import { Permissions, permissionsChangedFromUpdate } from "./Permissions.js";
-import type { PermissionRecord, PermissionScope } from "./persistence.js";
+import type { PermissionRecord } from "./persistence.js";
 
 const EIP155_ACCOUNT_A = "eip155:0000000000000000000000000000000000000001";
 const EIP155_ACCOUNT_B = "eip155:0000000000000000000000000000000000000002";
@@ -41,27 +38,17 @@ const permission = (
   accountIds: [AccountId, ...AccountId[]],
 ): PermissionRecord => ({ origin, namespace, accountIds });
 
-const selectionFor = (scope: PermissionScope): DappNetworkSelectionRecord => ({
-  ...scope,
-  chainRef: scope.namespace === "solana" ? "solana:mainnet" : `${scope.namespace}:1`,
-});
-
 const createPermissions = (options: {
   records?: readonly PermissionRecord[];
   accounts?: readonly Account[];
-  selectedScopes?: readonly PermissionScope[];
 }): Permissions => {
   const records = options.records ?? [];
   const accountsById = new Map((options.accounts ?? accounts).map((entry) => [entry.accountId, entry]));
-  const selectedScopes = new Set((options.selectedScopes ?? records).map(dappConnectionScopeKey));
 
   return new Permissions({
     bootstrap: { records },
     accounts: {
       getAccount: (accountId) => accountsById.get(accountId) ?? null,
-    },
-    dappConnections: {
-      getNetworkSelection: (scope) => (selectedScopes.has(dappConnectionScopeKey(scope)) ? selectionFor(scope) : null),
     },
   });
 };
@@ -85,9 +72,6 @@ describe("Permissions", () => {
     );
     expect(() => createPermissions({ records: [permission(first.origin, "solana", [EIP155_ACCOUNT_A])] })).toThrow(
       AccountNamespaceMismatchError,
-    );
-    expect(() => createPermissions({ records: [first], selectedScopes: [] })).toThrow(
-      PermissionNetworkSelectionMissingError,
     );
   });
 

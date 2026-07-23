@@ -11,6 +11,7 @@ import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
+import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
 import { Networks } from "../networks/Networks.js";
@@ -20,8 +21,8 @@ import { createDappAuthorization } from "../permissions/createDappAuthorization.
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { systemTime } from "../runtime/time.js";
-import { createEip155TransactionPreparer } from "../transactions/eip155/prepareTransaction.js";
-import { createTransactions } from "../transactions/index.js";
+import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
+import { createTransactions, type TransactionsNamespaceAdapters } from "../transactions/index.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { Vault } from "../vault/Vault.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
@@ -86,6 +87,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     publishChanged: (change) => publish({ owner: "accounts", change }),
   });
+  const eip155AccountSigning = createEip155AccountSigning({ keyring, accounts });
   const autoLock = new AutoLockController({
     durationMs: walletBootstrap.autoLockDurationMs,
     time: systemTime,
@@ -101,7 +103,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     endpoints: networks,
     transport: jsonRpcHttpTransport,
   });
-  const prepareEip155Transaction = createEip155TransactionPreparer({ chainJsonRpc });
+  const transactionAdapters = {
+    eip155: createEip155TransactionsAdapter({
+      chainJsonRpc,
+      signing: eip155AccountSigning,
+    }),
+  } satisfies TransactionsNamespaceAdapters;
   assertPersistedPermissionSelectionIntegrity({
     permissions: permissionsBootstrap.records,
     networkSelections: dappConnectionsBootstrap.networkSelections,
@@ -198,7 +205,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     readers: input.persistence.readers,
     accounts,
     networks,
-    prepareEip155Transaction,
+    mutations,
+    time: systemTime,
+    adapters: transactionAdapters,
+    publishChanged: (change) => publish({ owner: "transactions", change }),
   });
   const dappAuthorization = createDappAuthorization({
     mutations,

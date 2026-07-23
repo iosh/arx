@@ -8,6 +8,14 @@ export type TransactionInitiator = Readonly<{ type: "wallet" }> | Readonly<{ typ
 
 export type Transaction = Eip155.Transaction;
 
+export type TransactionSubmission = Eip155.Submission;
+
+export type TransactionSigningInput = Eip155.SigningInput;
+
+export type SignedTransaction = Eip155.SignedTransaction;
+
+export type TransactionBroadcastOutcome = Eip155.BroadcastOutcome;
+
 export type TransactionStatus = Transaction["state"]["status"];
 
 export type TransactionCursor = Readonly<{

@@ -22,3 +22,15 @@ export class Eip155PriorityFeeExceedsMaxFeeError extends ArxBaseError {
     });
   }
 }
+
+export class Eip155TransactionSigningError extends ArxBaseError {
+  static readonly code = "eip155.transaction.signing_failed";
+
+  constructor(chainRef: ChainRef, cause: unknown) {
+    super("Unable to sign the EIP-155 transaction.", {
+      code: Eip155TransactionSigningError.code,
+      details: { chainRef },
+      cause,
+    });
+  }
+}

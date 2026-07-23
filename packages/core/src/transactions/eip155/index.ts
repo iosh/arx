@@ -1,11 +1,16 @@
 export type {
+  BroadcastOutcome,
   Fee,
   FeeRequest,
-  FinalizedTransaction,
   PreparedTransaction,
+  SignableTransaction,
+  SignedTransaction,
+  SigningInput,
+  Submission,
   Transaction,
   TransactionConfirmation,
   TransactionFailure,
+  TransactionRecovery,
   TransactionRequest,
   TransactionState,
 } from "./types.js";

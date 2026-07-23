@@ -1,14 +1,16 @@
 export type {
   Fee,
   FeeRequest,
-  FinalizedTransaction,
   PreparedTransaction as Eip155PreparedTransactionFields,
+  SignableTransaction,
   Transaction as Eip155Transaction,
   TransactionConfirmation,
   TransactionFailure,
   TransactionRequest as Eip155TransactionRequest,
   TransactionState as Eip155TransactionState,
 } from "./eip155/types.js";
+export { TransactionNamespaceUnsupportedError } from "./errors.js";
+export type { TransactionsNamespaceAdapter, TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
 export type {
   Eip155PendingTransactionRecord,
   PendingTransactionRecord,
@@ -32,4 +34,5 @@ export type {
   TransactionPage,
   TransactionQuery,
   TransactionStatus,
+  TransactionSubmission,
 } from "./types.js";

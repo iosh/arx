@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Accounts } from "../accounts/Accounts.js";
 import type { Account, AccountAddress } from "../accounts/types.js";
 import type { Network, NetworksReader } from "../networks/types.js";
-import type { Eip155TransactionPreparer } from "./eip155/prepareTransaction.js";
+import type { TransactionsNamespaceAdapter, TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
 import type { PendingTransactionRecord } from "./persistence.js";
 import { createTransactions } from "./Transactions.js";
 import { loadTransactionsBootstrap } from "./transactionBootstrap.js";
@@ -41,7 +41,15 @@ const preparedTransaction = {
   fee: { type: "legacy", gasPrice: "0x1" },
 } as const;
 
-const createDependencies = (input?: { account?: Account | null; network?: ReturnType<NetworksReader["get"]> }) => {
+const unexpectedTransactionSubmission = (): never => {
+  throw new Error("Unexpected transaction submission.");
+};
+
+const createDependencies = (input?: {
+  account?: Account | null;
+  network?: ReturnType<NetworksReader["get"]>;
+  adapters?: TransactionsNamespaceAdapters;
+}) => {
   const accounts = {
     getAccount: vi.fn(() => (input?.account === undefined ? account : input.account)),
     getAddress: vi.fn(() => address),
@@ -49,9 +57,17 @@ const createDependencies = (input?: { account?: Account | null; network?: Return
   const networks = {
     get: vi.fn(() => (input?.network === undefined ? network : input.network)),
   } satisfies Pick<NetworksReader, "get">;
-  const prepareEip155Transaction = vi.fn(async () => preparedTransaction) satisfies Eip155TransactionPreparer;
+  const adapter = {
+    namespace: "eip155",
+    prepare: vi.fn(async ({ request }) => ({ ...request, transaction: preparedTransaction })),
+    createSigningInput: async () => unexpectedTransactionSubmission(),
+    sign: async () => unexpectedTransactionSubmission(),
+    broadcast: async () => unexpectedTransactionSubmission(),
+    createSubmission: unexpectedTransactionSubmission,
+  } satisfies TransactionsNamespaceAdapter;
+  const adapters = input?.adapters ?? ({ eip155: adapter } satisfies TransactionsNamespaceAdapters);
 
-  return { accounts, networks, prepareEip155Transaction };
+  return { accounts, networks, adapters, prepare: adapter.prepare };
 };
 
 const transaction: Transaction = {
@@ -60,7 +76,6 @@ const transaction: Transaction = {
   chainRef: "eip155:1",
   accountId: "eip155:0000000000000000000000000000000000000001",
   initiator: { type: "wallet" },
-  networkTransactionId: "0xtransaction-1",
   transaction: {
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -126,14 +141,13 @@ describe("Transactions", () => {
       chainRef: input.chainRef,
       accountId: input.accountId,
     });
-    expect(dependencies.prepareEip155Transaction).toHaveBeenCalledWith({
-      chainRef: input.chainRef,
+    expect(dependencies.prepare).toHaveBeenCalledWith({
+      request: input,
       from: address.canonicalAddress,
-      transaction: input.transaction,
     });
   });
 
-  it("rejects a missing account or network before calling the EIP-155 leaf", async () => {
+  it("rejects a missing account or network before calling the transaction adapter", async () => {
     const readers = {
       transactions: {
         get: vi.fn(async () => null),
@@ -152,13 +166,36 @@ describe("Transactions", () => {
     };
 
     await expect(missingAccountTransactions.prepare(input)).rejects.toMatchObject({ code: "account.not_found" });
-    expect(missingAccount.prepareEip155Transaction).not.toHaveBeenCalled();
+    expect(missingAccount.prepare).not.toHaveBeenCalled();
 
     const missingNetwork = createDependencies({ network: null });
     const missingNetworkTransactions = createTransactions({ readers, ...missingNetwork });
 
     await expect(missingNetworkTransactions.prepare(input)).rejects.toMatchObject({ code: "network.not_found" });
-    expect(missingNetwork.prepareEip155Transaction).not.toHaveBeenCalled();
+    expect(missingNetwork.prepare).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported transaction namespace", async () => {
+    const readers = {
+      transactions: {
+        get: vi.fn(async () => null),
+        list: vi.fn(async () => ({ transactions: [] })),
+        listPending: vi.fn(async () => []),
+      },
+    };
+    const dependencies = createDependencies({ adapters: {} });
+    const transactions = createTransactions({ readers, ...dependencies });
+
+    await expect(
+      transactions.prepare({
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        accountId: account.accountId,
+        initiator: { type: "wallet" },
+        transaction: { gas: "0x5208" },
+      }),
+    ).rejects.toMatchObject({ code: "transaction.namespace_unsupported" });
+    expect(dependencies.accounts.getAccount).not.toHaveBeenCalled();
   });
 
   it("loads pending records for the later monitor bootstrap", async () => {

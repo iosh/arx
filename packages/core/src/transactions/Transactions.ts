@@ -2,10 +2,19 @@ import type { Accounts } from "../accounts/Accounts.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
+import { persistenceChange } from "../persistence/change.js";
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
-import type { Eip155TransactionPreparer } from "./eip155/prepareTransaction.js";
+import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import type { CoreTime } from "../runtime/time.js";
+import { getTransactionsNamespaceAdapter, type TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
+import {
+  type PendingTransactionRecord,
+  type TransactionRecord,
+  transactionPersistenceType,
+  transactionRecordToTransaction,
+} from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
-import type { Transaction, TransactionId, TransactionPage, TransactionQuery } from "./types.js";
+import type { Transaction, TransactionId, TransactionPage, TransactionQuery, TransactionSubmission } from "./types.js";
 
 export type TransactionsChanged = Readonly<{
   type: "transactionsChanged";
@@ -14,6 +23,7 @@ export type TransactionsChanged = Readonly<{
 
 export type Transactions = Readonly<{
   prepare(input: PrepareTransactionInput): Promise<PreparedTransaction>;
+  submit(prepared: PreparedTransaction): Promise<TransactionSubmission>;
   get(transactionId: TransactionId): Promise<Transaction | null>;
   list(query: TransactionQuery): Promise<TransactionPage>;
 }>;
@@ -22,11 +32,15 @@ type TransactionsOptions = Readonly<{
   readers: Pick<CorePersistenceReaders, "transactions">;
   accounts: Pick<Accounts, "getAccount" | "getAddress">;
   networks: Pick<NetworksReader, "get">;
-  prepareEip155Transaction: Eip155TransactionPreparer;
+  mutations: CoreMutationQueue;
+  time: Pick<CoreTime, "now">;
+  adapters: TransactionsNamespaceAdapters;
+  publishChanged(change: TransactionsChanged): void;
 }>;
 
 export const createTransactions = (params: TransactionsOptions): Transactions => ({
   async prepare(input) {
+    const adapter = getTransactionsNamespaceAdapter(params.adapters, input.namespace);
     if (!params.accounts.getAccount(input.accountId)) throw new AccountNotFoundError(input.accountId);
     if (!params.networks.get(input.chainRef)) throw new NetworkNotFoundError(input.chainRef);
 
@@ -34,19 +48,68 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
       chainRef: input.chainRef,
       accountId: input.accountId,
     });
-    const transaction = await params.prepareEip155Transaction({
-      chainRef: input.chainRef,
-      from: canonicalAddress,
-      transaction: input.transaction,
+    return adapter.prepare({ request: input, from: canonicalAddress });
+  },
+
+  async submit(prepared) {
+    const adapter = getTransactionsNamespaceAdapter(params.adapters, prepared.namespace);
+    if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+    if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
+
+    const signingInput = await adapter.createSigningInput(prepared);
+
+    const { pending, signed } = await params.mutations.run(async (commit) => {
+      if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+      if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
+
+      const signed = await adapter.sign(signingInput);
+      const now = params.time.now();
+      const record: PendingTransactionRecord = {
+        transactionId: globalThis.crypto.randomUUID(),
+        namespace: prepared.namespace,
+        chainRef: prepared.chainRef,
+        accountId: prepared.accountId,
+        initiator: prepared.initiator,
+        ...(prepared.replacesTransactionId === undefined
+          ? {}
+          : { replacesTransactionId: prepared.replacesTransactionId }),
+        transaction: signed.transaction,
+        state: { status: "pending" },
+        recovery: signed.recovery,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await commit([persistenceChange.put(transactionPersistenceType, record)]);
+
+      params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
+      return { pending: record, signed };
     });
 
-    return {
-      namespace: input.namespace,
-      chainRef: input.chainRef,
-      accountId: input.accountId,
-      initiator: input.initiator,
-      transaction,
-    };
+    const broadcast = await adapter.broadcast(signed);
+    if (broadcast.status !== "rejected") {
+      return adapter.createSubmission({
+        transaction: transactionRecordToTransaction(pending),
+        broadcast,
+      });
+    }
+
+    return await params.mutations.run(async (commit) => {
+      const { recovery: _recovery, ...transaction } = pending;
+      const failed: TransactionRecord = {
+        ...transaction,
+        state: { status: "failed", failure: broadcast.failure },
+        updatedAt: params.time.now(),
+      };
+
+      await commit([persistenceChange.put(transactionPersistenceType, failed)]);
+
+      params.publishChanged({ type: "transactionsChanged", transactionIds: [failed.transactionId] });
+      return adapter.createSubmission({
+        transaction: transactionRecordToTransaction(failed),
+        broadcast,
+      });
+    });
   },
 
   get: (transactionId) => params.readers.transactions.get(transactionId),

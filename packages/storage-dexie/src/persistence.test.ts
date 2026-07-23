@@ -63,7 +63,6 @@ const transaction = (params: {
     chainRef: params.chainRef,
     accountId: params.accountId,
     initiator: { type: "wallet" } as const,
-    networkTransactionId: `0x${params.transactionId}`,
     transaction: {
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

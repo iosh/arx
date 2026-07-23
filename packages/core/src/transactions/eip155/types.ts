@@ -39,10 +39,26 @@ export type PreparedTransaction = Readonly<{
   fee: Fee;
 }>;
 
-export type FinalizedTransaction = Omit<PreparedTransaction, "nonce"> &
+export type SignableTransaction = Omit<PreparedTransaction, "nonce"> &
   Readonly<{
     nonce: Hex;
   }>;
+
+export type TransactionRecovery = Readonly<{
+  rawTransaction: Hex;
+}>;
+
+export type SigningInput = Readonly<{
+  chainRef: ChainRef;
+  accountId: AccountId;
+  transaction: SignableTransaction;
+}>;
+
+export type SignedTransaction = Readonly<{
+  chainRef: ChainRef;
+  transaction: SignableTransaction;
+  recovery: TransactionRecovery;
+}>;
 
 export type TransactionConfirmation = Readonly<{
   blockHash: string;
@@ -87,10 +103,34 @@ export type Transaction = Readonly<{
   chainRef: ChainRef;
   accountId: AccountId;
   initiator: TransactionInitiator;
-  networkTransactionId: string;
   replacesTransactionId?: TransactionId;
-  transaction: FinalizedTransaction;
+  transaction: SignableTransaction;
   state: TransactionState;
   createdAt: number;
   updatedAt: number;
 }>;
+
+export type BroadcastOutcome =
+  | Readonly<{
+      status: "accepted";
+      transactionHash: Hex;
+    }>
+  | Readonly<{
+      status: "unknown";
+      transactionHash: Hex;
+    }>
+  | Readonly<{
+      status: "rejected";
+      failure: TransactionFailure;
+    }>;
+
+export type Submission =
+  | Readonly<{
+      status: "pending";
+      transaction: Transaction;
+      transactionHash: Hex;
+    }>
+  | Readonly<{
+      status: "failed";
+      transaction: Transaction;
+    }>;

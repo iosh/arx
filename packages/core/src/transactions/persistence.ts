@@ -1,4 +1,3 @@
-import type { Hex } from "ox/Hex";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
 import type * as Eip155 from "./eip155/types.js";
 import type { Transaction, TransactionId, TransactionPage, TransactionQuery } from "./types.js";
@@ -15,7 +14,7 @@ export type {
 export type Eip155PendingTransactionRecord = Omit<Eip155.Transaction, "state"> &
   Readonly<{
     state: Readonly<{ status: "pending" }>;
-    recovery: Readonly<{ rawTransaction: Hex }>;
+    recovery: Eip155.TransactionRecovery;
   }>;
 
 type Eip155TerminalTransactionRecord = Omit<Eip155.Transaction, "state"> &
@@ -37,7 +36,6 @@ export const transactionRecordToTransaction = (record: TransactionRecord): Trans
   chainRef: record.chainRef,
   accountId: record.accountId,
   initiator: record.initiator,
-  networkTransactionId: record.networkTransactionId,
   ...(record.replacesTransactionId === undefined ? {} : { replacesTransactionId: record.replacesTransactionId }),
   transaction: record.transaction,
   state: record.state,

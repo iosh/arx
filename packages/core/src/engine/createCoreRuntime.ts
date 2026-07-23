@@ -3,6 +3,7 @@ import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { Approvals } from "../approvals/Approvals.js";
 import type { ApprovalsApi } from "../approvals/types.js";
+import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
 import { DappConnections } from "../dappConnections/DappConnections.js";
@@ -19,6 +20,7 @@ import { createDappAuthorization } from "../permissions/createDappAuthorization.
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { systemTime } from "../runtime/time.js";
+import { createEip155TransactionPreparer } from "../transactions/eip155/prepareTransaction.js";
 import { createTransactions } from "../transactions/index.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { Vault } from "../vault/Vault.js";
@@ -95,6 +97,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     publishChanged: (change) => publish({ owner: "networks", change }),
   });
+  const chainJsonRpc = createChainJsonRpc({
+    endpoints: networks,
+    transport: jsonRpcHttpTransport,
+  });
+  const prepareEip155Transaction = createEip155TransactionPreparer({ chainJsonRpc });
   assertPersistedPermissionSelectionIntegrity({
     permissions: permissionsBootstrap.records,
     networkSelections: dappConnectionsBootstrap.networkSelections,
@@ -189,6 +196,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   };
   const transactions = createTransactions({
     readers: input.persistence.readers,
+    accounts,
+    networks,
+    prepareEip155Transaction,
   });
   const dappAuthorization = createDappAuthorization({
     mutations,

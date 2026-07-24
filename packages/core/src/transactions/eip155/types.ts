@@ -97,6 +97,8 @@ export type TransactionState =
     }>
   | Readonly<{ status: "dropped" }>;
 
+export type TerminalTransactionState = Exclude<TransactionState, Readonly<{ status: "pending" }>>;
+
 export type Transaction = Readonly<{
   transactionId: TransactionId;
   namespace: "eip155";

@@ -64,6 +64,8 @@ const createDependencies = (input?: {
     sign: async () => unexpectedTransactionSubmission(),
     broadcast: async () => unexpectedTransactionSubmission(),
     createSubmission: unexpectedTransactionSubmission,
+    inspectPending: async () => unexpectedTransactionSubmission(),
+    recoverPending: async () => unexpectedTransactionSubmission(),
   } satisfies TransactionsNamespaceAdapter;
   const adapters = input?.adapters ?? ({ eip155: adapter } satisfies TransactionsNamespaceAdapters);
 

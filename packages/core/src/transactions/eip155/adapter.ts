@@ -2,6 +2,7 @@ import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
 import { EIP155_NAMESPACE } from "../../namespaces/eip155/constants.js";
 import type { TransactionsNamespaceAdapter } from "../namespaceAdapter.js";
+import { createEip155TransactionMonitor } from "./monitorTransaction.js";
 import { createEip155TransactionPreparer } from "./prepareTransaction.js";
 import { createEip155TransactionSubmitter } from "./submitTransaction.js";
 
@@ -11,6 +12,10 @@ export const createEip155TransactionsAdapter = (params: {
 }): TransactionsNamespaceAdapter => {
   const prepareTransaction = createEip155TransactionPreparer({ chainJsonRpc: params.chainJsonRpc });
   const submitTransaction = createEip155TransactionSubmitter(params);
+  const monitorTransaction = createEip155TransactionMonitor({
+    chainJsonRpc: params.chainJsonRpc,
+    broadcast: submitTransaction.broadcast,
+  });
 
   return {
     namespace: EIP155_NAMESPACE,
@@ -35,5 +40,7 @@ export const createEip155TransactionsAdapter = (params: {
       broadcast.status === "rejected"
         ? { status: "failed", transaction }
         : { status: "pending", transaction, transactionHash: broadcast.transactionHash },
+    inspectPending: monitorTransaction.inspectPending,
+    recoverPending: monitorTransaction.recoverPending,
   };
 };

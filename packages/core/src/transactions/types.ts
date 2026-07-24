@@ -18,6 +18,8 @@ export type TransactionBroadcastOutcome = Eip155.BroadcastOutcome;
 
 export type TransactionStatus = Transaction["state"]["status"];
 
+export type TerminalTransactionState = Eip155.TerminalTransactionState;
+
 export type TransactionCursor = Readonly<{
   createdAt: number;
   transactionId: TransactionId;

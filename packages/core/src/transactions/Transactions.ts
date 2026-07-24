@@ -14,7 +14,15 @@ import {
   transactionRecordToTransaction,
 } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
-import type { Transaction, TransactionId, TransactionPage, TransactionQuery, TransactionSubmission } from "./types.js";
+import type { TransactionMonitor } from "./TransactionMonitor.js";
+import type {
+  Transaction,
+  TransactionBroadcastOutcome,
+  TransactionId,
+  TransactionPage,
+  TransactionQuery,
+  TransactionSubmission,
+} from "./types.js";
 
 export type TransactionsChanged = Readonly<{
   type: "transactionsChanged";
@@ -35,6 +43,7 @@ type TransactionsOptions = Readonly<{
   mutations: CoreMutationQueue;
   time: Pick<CoreTime, "now">;
   adapters: TransactionsNamespaceAdapters;
+  monitor: Pick<TransactionMonitor, "track" | "stop">;
   publishChanged(change: TransactionsChanged): void;
 }>;
 
@@ -58,7 +67,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
 
     const signingInput = await adapter.createSigningInput(prepared);
 
-    const { pending, signed } = await params.mutations.run(async (commit) => {
+    const { pending, signed, startMonitoring } = await params.mutations.run(async (commit) => {
       if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
       if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
 
@@ -82,34 +91,49 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
 
       await commit([persistenceChange.put(transactionPersistenceType, record)]);
 
+      const startMonitoring = params.monitor.track(record);
       params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
-      return { pending: record, signed };
+      return { pending: record, signed, startMonitoring };
     });
 
-    const broadcast = await adapter.broadcast(signed);
+    let broadcast: TransactionBroadcastOutcome;
+    try {
+      broadcast = await adapter.broadcast(signed);
+    } catch (error) {
+      startMonitoring();
+      throw error;
+    }
+
     if (broadcast.status !== "rejected") {
+      startMonitoring();
       return adapter.createSubmission({
         transaction: transactionRecordToTransaction(pending),
         broadcast,
       });
     }
 
-    return await params.mutations.run(async (commit) => {
-      const { recovery: _recovery, ...transaction } = pending;
-      const failed: TransactionRecord = {
-        ...transaction,
-        state: { status: "failed", failure: broadcast.failure },
-        updatedAt: params.time.now(),
-      };
+    try {
+      return await params.mutations.run(async (commit) => {
+        const { recovery: _recovery, ...transaction } = pending;
+        const failed: TransactionRecord = {
+          ...transaction,
+          state: { status: "failed", failure: broadcast.failure },
+          updatedAt: params.time.now(),
+        };
 
-      await commit([persistenceChange.put(transactionPersistenceType, failed)]);
+        await commit([persistenceChange.put(transactionPersistenceType, failed)]);
 
-      params.publishChanged({ type: "transactionsChanged", transactionIds: [failed.transactionId] });
-      return adapter.createSubmission({
-        transaction: transactionRecordToTransaction(failed),
-        broadcast,
+        params.monitor.stop(failed.transactionId);
+        params.publishChanged({ type: "transactionsChanged", transactionIds: [failed.transactionId] });
+        return adapter.createSubmission({
+          transaction: transactionRecordToTransaction(failed),
+          broadcast,
+        });
       });
-    });
+    } catch (error) {
+      params.monitor.stop(pending.transactionId);
+      throw error;
+    }
   },
 
   get: (transactionId) => params.readers.transactions.get(transactionId),

@@ -10,7 +10,11 @@ export type {
   TransactionState as Eip155TransactionState,
 } from "./eip155/types.js";
 export { TransactionNamespaceUnsupportedError } from "./errors.js";
-export type { TransactionsNamespaceAdapter, TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
+export type {
+  PendingTransactionInspection,
+  TransactionsNamespaceAdapter,
+  TransactionsNamespaceAdapters,
+} from "./namespaceAdapter.js";
 export type {
   Eip155PendingTransactionRecord,
   PendingTransactionRecord,

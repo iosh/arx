@@ -23,6 +23,8 @@ import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { systemTime } from "../runtime/time.js";
 import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
 import { createTransactions, type TransactionsNamespaceAdapters } from "../transactions/index.js";
+import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
+import { loadTransactionsBootstrap } from "../transactions/transactionBootstrap.js";
 import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { Vault } from "../vault/Vault.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
@@ -66,6 +68,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     networksBootstrap,
     dappConnectionsBootstrap,
     permissionsBootstrap,
+    transactionsBootstrap,
   ] = await Promise.all([
     loadVaultBootstrap(input.persistence.readers),
     loadWalletBootstrap(input.persistence.readers),
@@ -74,6 +77,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     loadNetworksBootstrap(input.persistence.readers),
     loadDappConnectionsBootstrap(input.persistence.readers),
     loadPermissionsBootstrap(input.persistence.readers),
+    loadTransactionsBootstrap(input.persistence.readers),
   ]);
 
   const vault = new Vault(vaultBootstrap.encryptedVault);
@@ -201,6 +205,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       select: (params) => accounts.select(params.accountId),
     },
   };
+  const transactionMonitor = new TransactionMonitor({
+    adapters: transactionAdapters,
+    mutations,
+    time: systemTime,
+    publishChanged: (change) => publish({ owner: "transactions", change }),
+  });
   const transactions = createTransactions({
     readers: input.persistence.readers,
     accounts,
@@ -208,6 +218,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     time: systemTime,
     adapters: transactionAdapters,
+    monitor: transactionMonitor,
     publishChanged: (change) => publish({ owner: "transactions", change }),
   });
   const dappAuthorization = createDappAuthorization({
@@ -220,7 +231,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
   });
 
-  return {
+  const runtime: CoreRuntime = {
     wallet: Object.assign(wallet, {
       networks,
       transactions,
@@ -232,9 +243,13 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       return () => listeners.delete(listener);
     },
     close: () => {
+      transactionMonitor.stopAll();
       approvals.cancelAll();
       void wallet.lock();
       listeners.clear();
     },
   };
+
+  transactionMonitor.restore(transactionsBootstrap.pendingTransactions);
+  return runtime;
 };

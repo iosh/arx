@@ -115,6 +115,8 @@ const createFixture = (input: FixtureOptions = {}) => {
     sign,
     broadcast,
     createSubmission,
+    inspectPending: async () => ({ status: "pending" as const }),
+    recoverPending: async () => ({ status: "pending" as const }),
   } satisfies TransactionsNamespaceAdapter;
   const commit = vi.fn(async () => {
     order.push("commit");
@@ -127,6 +129,18 @@ const createFixture = (input: FixtureOptions = {}) => {
   const publishChanged = vi.fn(() => {
     order.push("publish");
   });
+  const startMonitoring = vi.fn(() => {
+    order.push("start monitoring");
+  });
+  const monitor = {
+    track: vi.fn(() => {
+      order.push("track");
+      return startMonitoring;
+    }),
+    stop: vi.fn(() => {
+      order.push("stop");
+    }),
+  };
   const transactions = createTransactions({
     readers: {
       transactions: {
@@ -140,6 +154,7 @@ const createFixture = (input: FixtureOptions = {}) => {
     mutations,
     time,
     adapters: { eip155: adapter },
+    monitor,
     publishChanged,
   });
 
@@ -149,6 +164,8 @@ const createFixture = (input: FixtureOptions = {}) => {
     createSigningInput,
     sign,
     broadcast,
+    monitor,
+    startMonitoring,
     publishChanged,
     order,
     setAccount: (value: Account | null) => {
@@ -180,7 +197,7 @@ describe("Transactions.submit", () => {
       state: { status: "pending" },
       recovery: { rawTransaction: "0xdeadbeef" },
     });
-    expect(fixture.order).toEqual(["commit", "publish", "broadcast"]);
+    expect(fixture.order).toEqual(["commit", "track", "publish", "broadcast", "start monitoring"]);
     expect(fixture.publishChanged).toHaveBeenCalledWith({
       type: "transactionsChanged",
       transactionIds: [submission.transaction.transactionId],
@@ -218,7 +235,7 @@ describe("Transactions.submit", () => {
     });
     expect(fixture.commit).toHaveBeenCalledTimes(2);
     expect(committedRecord(fixture.commit, 1)).not.toHaveProperty("recovery");
-    expect(fixture.order).toEqual(["commit", "publish", "broadcast", "commit", "publish"]);
+    expect(fixture.order).toEqual(["commit", "track", "publish", "broadcast", "commit", "stop", "publish"]);
   });
 
   it("keeps the record pending when the broadcast outcome is unknown", async () => {

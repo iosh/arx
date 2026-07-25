@@ -28,10 +28,33 @@ const pendingRecord: Eip155PendingTransactionRecord = {
   updatedAt: 1,
 };
 
+const replacementRecord: Eip155PendingTransactionRecord = {
+  ...pendingRecord,
+  transactionId: "transaction-2",
+  replacesTransactionId: pendingRecord.transactionId,
+  transaction: {
+    ...pendingRecord.transaction,
+    fee: { type: "legacy", gasPrice: "0x2" },
+  },
+  recovery: { rawTransaction: "0xcafebabe" },
+  createdAt: 2,
+  updatedAt: 2,
+};
+
+const unrelatedRecord: Eip155PendingTransactionRecord = {
+  ...pendingRecord,
+  transactionId: "transaction-3",
+  transaction: {
+    ...pendingRecord.transaction,
+    nonce: "0x2",
+  },
+  recovery: { rawTransaction: "0xfeedface" },
+};
+
 const createRpc = (handler: (input: ChainJsonRpcRequest) => unknown | Promise<unknown>) => {
   const request = vi.fn(async (input: ChainJsonRpcRequest) => await handler(input));
   const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input) => (await request(input)) as TResult,
+    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
   };
 
   return { chainJsonRpc, request };
@@ -48,13 +71,13 @@ const receipt = (status: "0x0" | "0x1") => ({
 });
 
 describe("EIP-155 transaction monitoring", () => {
-  it("distinguishes unavailable, confirmed, and execution-failed receipt checks", async () => {
+  it("maps unavailable, confirmed, and execution-failed receipt checks", async () => {
     const responses = [
       new ChainJsonRpcUnavailableError({ chainRef: CHAIN_REF, method: "eth_getTransactionReceipt", attempts: 1 }),
       receipt("0x1"),
       receipt("0x0"),
     ];
-    const { chainJsonRpc, request } = createRpc(() => {
+    const { chainJsonRpc } = createRpc(() => {
       const response = responses.shift();
       if (response instanceof Error) throw response;
       return response;
@@ -64,38 +87,75 @@ describe("EIP-155 transaction monitoring", () => {
       broadcast: async () => ({ status: "accepted", transactionHash: "0x1" }),
     });
 
-    await expect(monitor.inspectPending(pendingRecord)).resolves.toEqual({ status: "unavailable" });
-    await expect(monitor.inspectPending(pendingRecord)).resolves.toMatchObject({
-      status: "terminal",
-      state: {
-        status: "confirmed",
-        confirmation: { effectiveGasPrice: "0x2" },
-      },
+    await expect(monitor.inspectPending([pendingRecord])).resolves.toEqual({ status: "unavailable" });
+    await expect(monitor.inspectPending([pendingRecord])).resolves.toMatchObject({
+      status: "checked",
+      terminalChanges: [{ state: { status: "confirmed", confirmation: { effectiveGasPrice: "0x2" } } }],
     });
-    await expect(monitor.inspectPending(pendingRecord)).resolves.toMatchObject({
-      status: "terminal",
-      state: { status: "failed", failure: { type: "execution" } },
+    await expect(monitor.inspectPending([pendingRecord])).resolves.toMatchObject({
+      status: "checked",
+      terminalChanges: [{ state: { status: "failed", failure: { type: "execution" } } }],
     });
-    expect(request).toHaveBeenCalledTimes(3);
-    expect(request.mock.calls.every(([input]) => input.replay === "allowed")).toBe(true);
   });
 
-  it("rebroadcasts an unseen restored transaction through the existing raw broadcast path", async () => {
+  it("marks the known same-nonce winner and local losers without changing another nonce group", async () => {
+    let receiptChecks = 0;
+    const { chainJsonRpc, request } = createRpc(({ method }) => {
+      if (method !== "eth_getTransactionReceipt") throw new Error(`Unexpected RPC method: ${method}`);
+      receiptChecks += 1;
+      return receiptChecks === 2 ? receipt("0x1") : null;
+    });
+    const monitor = createEip155TransactionMonitor({
+      chainJsonRpc,
+      broadcast: async () => ({ status: "accepted", transactionHash: "0x1" }),
+    });
+
+    await expect(monitor.inspectPending([pendingRecord, replacementRecord, unrelatedRecord])).resolves.toMatchObject({
+      status: "checked",
+      terminalChanges: [
+        {
+          transactionId: pendingRecord.transactionId,
+          state: {
+            status: "replaced",
+            replacement: { type: "local", transactionId: replacementRecord.transactionId },
+          },
+        },
+        {
+          transactionId: replacementRecord.transactionId,
+          state: { status: "confirmed" },
+        },
+      ],
+    });
+    expect(request.mock.calls.map(([input]) => input.method)).toEqual([
+      "eth_getTransactionReceipt",
+      "eth_getTransactionReceipt",
+      "eth_getTransactionReceipt",
+    ]);
+  });
+
+  it("rebroadcasts only the pending replacement leaf during recovery", async () => {
     const { chainJsonRpc, request } = createRpc(({ method }) => {
       if (method === "eth_getTransactionReceipt") return null;
       if (method === "eth_getTransactionByHash") return null;
       throw new Error(`Unexpected RPC method: ${method}`);
     });
-    const broadcast = vi.fn(async () => ({
-      status: "rejected" as const,
-      failure: { type: "broadcast" as const, code: -32_000, message: "already known" },
-    }));
+    const broadcast = vi.fn(async () => ({ status: "accepted" as const, transactionHash: "0x1" as const }));
     const monitor = createEip155TransactionMonitor({ chainJsonRpc, broadcast });
 
-    await expect(monitor.recoverPending(pendingRecord)).resolves.toEqual({ status: "pending" });
+    await expect(
+      monitor.recoverPending(
+        [pendingRecord, replacementRecord],
+        [pendingRecord.transactionId, replacementRecord.transactionId],
+      ),
+    ).resolves.toEqual({ status: "checked", terminalChanges: [] });
     expect(broadcast).toHaveBeenCalledOnce();
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ recovery: { rawTransaction: RAW_TRANSACTION } }));
+    expect(broadcast).toHaveBeenCalledWith({
+      chainRef: CHAIN_REF,
+      transaction: replacementRecord.transaction,
+      recovery: replacementRecord.recovery,
+    });
     expect(request.mock.calls.map(([input]) => input.method)).toEqual([
+      "eth_getTransactionReceipt",
       "eth_getTransactionReceipt",
       "eth_getTransactionByHash",
     ]);

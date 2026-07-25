@@ -15,7 +15,7 @@ describe("method executor", () => {
         echo: (input: { value: string }) => `${prefix}:${input.value}`,
       },
     } as const satisfies MethodHandlerTree<TestApi>;
-    const executor = createMethodExecutor({
+    const executor = createMethodExecutor<TestApi>({
       handlers,
     });
 
@@ -33,7 +33,7 @@ describe("method executor", () => {
         getStatus: () => ({ availability: "uninitialized" as const }),
       },
     } as const satisfies MethodHandlerTree<TestApi>;
-    const executor = createMethodExecutor({
+    const executor = createMethodExecutor<TestApi>({
       handlers,
     });
 
@@ -46,10 +46,10 @@ describe("method executor", () => {
         echo(input: { value: string }): Promise<string>;
       };
     };
-    const api = createMethodApiProxy<TestApi>(async (path, input) => {
+    const api = createMethodApiProxy<TestApi>(async <TResult>(path: string, input?: unknown) => {
       expect(path).toBe("sample.echo");
       expect(input).toEqual({ value: "status" });
-      return "invoke:status";
+      return "invoke:status" as TResult;
     });
 
     await expect(api.sample.echo({ value: "status" })).resolves.toBe("invoke:status");

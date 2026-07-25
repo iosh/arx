@@ -2,8 +2,10 @@ import * as Hash from "ox/Hash";
 import type { Hex } from "ox/Hex";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../../chainJsonRpc/errors.js";
-import type { PendingTransactionInspection } from "../namespaceAdapter.js";
+import * as HexQuantity from "../../utils/hex.js";
+import type { PendingTransactionInspection, TerminalTransactionChange } from "../namespaceAdapter.js";
 import type { Eip155PendingTransactionRecord } from "../persistence.js";
+import type { TransactionId } from "../types.js";
 import type * as Eip155 from "./types.js";
 
 type TransactionReceipt = Readonly<{
@@ -32,55 +34,123 @@ const confirmationFromReceipt = (receipt: TransactionReceipt): Eip155.Transactio
   ...(receipt.contractAddress === null ? {} : { contractAddress: receipt.contractAddress }),
 });
 
-const inspectReceipt = async (
-  chainJsonRpc: ChainJsonRpc,
-  record: Eip155PendingTransactionRecord,
-): Promise<PendingTransactionInspection> => {
-  const receipt = await chainJsonRpc.request<TransactionReceipt | null>({
-    chainRef: record.chainRef,
-    method: "eth_getTransactionReceipt",
-    params: [transactionHash(record)],
-    replay: "allowed",
-  });
-  if (!receipt) return { status: "pending" };
-
+const terminalStateFromReceipt = (receipt: TransactionReceipt): Eip155.TerminalTransactionState => {
   const confirmation = confirmationFromReceipt(receipt);
   return receipt.status === "0x1"
-    ? { status: "terminal", state: { status: "confirmed", confirmation } }
-    : {
-        status: "terminal",
-        state: { status: "failed", failure: { type: "execution", inclusion: confirmation } },
-      };
+    ? { status: "confirmed", confirmation }
+    : { status: "failed", failure: { type: "execution", inclusion: confirmation } };
+};
+
+const groupBySenderAndNonce = (
+  records: readonly Eip155PendingTransactionRecord[],
+): readonly (readonly Eip155PendingTransactionRecord[])[] => {
+  const groups = new Map<string, Eip155PendingTransactionRecord[]>();
+
+  for (const record of records) {
+    const key = `${record.transaction.from}:${HexQuantity.toBigInt(record.transaction.nonce)}`;
+    const group = groups.get(key);
+    if (group) group.push(record);
+    else groups.set(key, [record]);
+  }
+
+  return [...groups.values()];
+};
+
+const terminalChangesForWinner = (
+  records: readonly Eip155PendingTransactionRecord[],
+  winner: Eip155PendingTransactionRecord,
+  winnerState: Eip155.TerminalTransactionState,
+): readonly TerminalTransactionChange[] =>
+  records.map((record) => ({
+    transactionId: record.transactionId,
+    state:
+      record.transactionId === winner.transactionId
+        ? winnerState
+        : { status: "replaced", replacement: { type: "local", transactionId: winner.transactionId } },
+  }));
+
+const inspectGroup = async (
+  chainJsonRpc: ChainJsonRpc,
+  records: readonly Eip155PendingTransactionRecord[],
+): Promise<readonly TerminalTransactionChange[]> => {
+  for (const record of records) {
+    const receipt = await chainJsonRpc.request<TransactionReceipt | null>({
+      chainRef: record.chainRef,
+      method: "eth_getTransactionReceipt",
+      params: [transactionHash(record)],
+      replay: "allowed",
+    });
+    if (receipt) return terminalChangesForWinner(records, record, terminalStateFromReceipt(receipt));
+  }
+
+  return [];
+};
+
+const recoverGroup = async (
+  params: {
+    chainJsonRpc: ChainJsonRpc;
+    broadcast(signed: Eip155.SignedTransaction): Promise<Eip155.BroadcastOutcome>;
+  },
+  records: readonly Eip155PendingTransactionRecord[],
+  recoveryTransactionIds: ReadonlySet<TransactionId>,
+): Promise<void> => {
+  const replacedTransactionIds = new Set(
+    records.flatMap((record) => (record.replacesTransactionId === undefined ? [] : [record.replacesTransactionId])),
+  );
+
+  for (const record of records) {
+    if (replacedTransactionIds.has(record.transactionId) || !recoveryTransactionIds.has(record.transactionId)) {
+      continue;
+    }
+
+    const visible = await params.chainJsonRpc.request<NetworkTransaction | null>({
+      chainRef: record.chainRef,
+      method: "eth_getTransactionByHash",
+      params: [transactionHash(record)],
+      replay: "allowed",
+    });
+    if (visible) continue;
+
+    await params.broadcast({
+      chainRef: record.chainRef,
+      transaction: record.transaction,
+      recovery: record.recovery,
+    });
+  }
 };
 
 export const createEip155TransactionMonitor = (params: {
   chainJsonRpc: ChainJsonRpc;
   broadcast(signed: Eip155.SignedTransaction): Promise<Eip155.BroadcastOutcome>;
 }) => ({
-  async inspectPending(record: Eip155PendingTransactionRecord): Promise<PendingTransactionInspection> {
+  async inspectPending(records: readonly Eip155PendingTransactionRecord[]): Promise<PendingTransactionInspection> {
     try {
-      return await inspectReceipt(params.chainJsonRpc, record);
+      const terminalChanges: TerminalTransactionChange[] = [];
+      for (const group of groupBySenderAndNonce(records)) {
+        terminalChanges.push(...(await inspectGroup(params.chainJsonRpc, group)));
+      }
+
+      return { status: "checked", terminalChanges };
     } catch (error) {
       if (isChainJsonRpcFailure(error)) return { status: "unavailable" };
       throw error;
     }
   },
 
-  async recoverPending(record: Eip155PendingTransactionRecord): Promise<PendingTransactionInspection> {
+  async recoverPending(
+    records: readonly Eip155PendingTransactionRecord[],
+    recoveryTransactionIds: readonly TransactionId[],
+  ): Promise<PendingTransactionInspection> {
     try {
-      const inspection = await inspectReceipt(params.chainJsonRpc, record);
-      if (inspection.status !== "pending") return inspection;
+      const terminalChanges: TerminalTransactionChange[] = [];
+      const recoveryIds = new Set(recoveryTransactionIds);
+      for (const group of groupBySenderAndNonce(records)) {
+        const groupTerminalChanges = await inspectGroup(params.chainJsonRpc, group);
+        terminalChanges.push(...groupTerminalChanges);
+        if (groupTerminalChanges.length === 0) await recoverGroup(params, group, recoveryIds);
+      }
 
-      const visible = await params.chainJsonRpc.request<NetworkTransaction | null>({
-        chainRef: record.chainRef,
-        method: "eth_getTransactionByHash",
-        params: [transactionHash(record)],
-        replay: "allowed",
-      });
-      if (visible) return inspection;
-
-      await params.broadcast(record);
-      return inspection;
+      return { status: "checked", terminalChanges };
     } catch (error) {
       if (isChainJsonRpcFailure(error)) return { status: "unavailable" };
       throw error;

@@ -6,6 +6,8 @@ export type TransactionId = string;
 
 export type TransactionInitiator = Readonly<{ type: "wallet" }> | Readonly<{ type: "dapp"; origin: string }>;
 
+export type TransactionReplacementType = "speed-up" | "cancel";
+
 export type Transaction = Eip155.Transaction;
 
 export type TransactionSubmission = Eip155.Submission;

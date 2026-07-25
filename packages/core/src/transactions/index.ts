@@ -9,9 +9,14 @@ export type {
   TransactionRequest as Eip155TransactionRequest,
   TransactionState as Eip155TransactionState,
 } from "./eip155/types.js";
-export { TransactionNamespaceUnsupportedError } from "./errors.js";
+export {
+  TransactionNamespaceUnsupportedError,
+  TransactionNotFoundError,
+  TransactionReplacementUnavailableError,
+} from "./errors.js";
 export type {
   PendingTransactionInspection,
+  TerminalTransactionChange,
   TransactionsNamespaceAdapter,
   TransactionsNamespaceAdapters,
 } from "./namespaceAdapter.js";
@@ -37,6 +42,7 @@ export type {
   TransactionInitiator,
   TransactionPage,
   TransactionQuery,
+  TransactionReplacementType,
   TransactionStatus,
   TransactionSubmission,
 } from "./types.js";

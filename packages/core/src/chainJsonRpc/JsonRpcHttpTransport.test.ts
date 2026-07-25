@@ -47,14 +47,13 @@ describe("JsonRpcHttpTransport", () => {
       );
     });
     const transport = createJsonRpcHttpTransport({ fetch });
-
-    await expect(
-      transport.request({ endpoint, method: "eth_call" }),
-    ).rejects.toMatchObject<ChainJsonRpcHttpProtocolError>({
+    const expected = {
       code: "chain_json_rpc.http_protocol",
       rpcCode: -32000,
       message: "rejected",
-    });
+    } satisfies Partial<ChainJsonRpcHttpProtocolError>;
+
+    await expect(transport.request({ endpoint, method: "eth_call" })).rejects.toMatchObject(expected);
   });
 
   it("rejects a response with a different request ID", async () => {
@@ -65,13 +64,12 @@ describe("JsonRpcHttpTransport", () => {
         }),
     );
     const transport = createJsonRpcHttpTransport({ fetch });
-
-    await expect(
-      transport.request({ endpoint, method: "eth_chainId" }),
-    ).rejects.toMatchObject<ChainJsonRpcHttpTransportError>({
+    const expected = {
       code: "chain_json_rpc.http_transport",
       message: "JSON-RPC response does not match the request.",
-    });
+    } satisfies Partial<ChainJsonRpcHttpTransportError>;
+
+    await expect(transport.request({ endpoint, method: "eth_chainId" })).rejects.toMatchObject(expected);
   });
 
   it("times out a request after 60 seconds by default", async () => {
@@ -85,11 +83,12 @@ describe("JsonRpcHttpTransport", () => {
     const transport = createJsonRpcHttpTransport({ fetch });
 
     try {
+      const expected = {
+        code: "chain_json_rpc.http_transport",
+        message: "RPC request timed out.",
+      } satisfies Partial<ChainJsonRpcHttpTransportError>;
       const assertion = expect(transport.request({ endpoint, method: "eth_chainId" })).rejects.toEqual(
-        expect.objectContaining<ChainJsonRpcHttpTransportError>({
-          code: "chain_json_rpc.http_transport",
-          message: "RPC request timed out.",
-        }),
+        expect.objectContaining(expected),
       );
       await vi.advanceTimersByTimeAsync(60_000);
       await assertion;

@@ -1,17 +1,21 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
-import { getTransactionsNamespaceAdapter, type TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
+import {
+  getTransactionsNamespaceAdapter,
+  type TerminalTransactionChange,
+  type TransactionsNamespaceAdapters,
+} from "./namespaceAdapter.js";
 import { type PendingTransactionRecord, type TransactionRecord, transactionPersistenceType } from "./persistence.js";
 import type { TransactionsChanged } from "./Transactions.js";
-import type { TerminalTransactionState, TransactionId } from "./types.js";
+import type { TransactionId } from "./types.js";
 
 export const TRANSACTION_INSPECTION_INTERVAL_MS = 15_000;
 
 type MonitoredTransaction = {
   readonly record: PendingTransactionRecord;
   needsRecovery: boolean;
-  cancelInspection(): void;
 };
 
 export type TransactionMonitorOptions = Readonly<{
@@ -21,12 +25,18 @@ export type TransactionMonitorOptions = Readonly<{
   publishChanged(change: TransactionsChanged): void;
 }>;
 
+const noCancellation = (): void => {};
+
 export class TransactionMonitor {
   readonly #adapters: TransactionsNamespaceAdapters;
   readonly #mutations: CoreMutationQueue;
   readonly #time: CoreTime;
   readonly #publishChanged: (change: TransactionsChanged) => void;
   readonly #pending = new Map<TransactionId, MonitoredTransaction>();
+
+  #cancelTimer: () => void = noCancellation;
+  #inspectionRunning = false;
+  #inspectionScheduled = false;
 
   constructor(options: TransactionMonitorOptions) {
     this.#adapters = options.adapters;
@@ -37,104 +47,145 @@ export class TransactionMonitor {
 
   restore(records: readonly PendingTransactionRecord[]): void {
     for (const record of records) {
-      const monitored = this.#add(record, true);
-      this.#schedule(monitored, 0);
+      this.#pending.set(record.transactionId, { record, needsRecovery: true });
     }
+
+    this.#scheduleImmediately();
   }
 
-  track(record: PendingTransactionRecord): () => void {
-    const monitored = this.#add(record, false);
-    let started = false;
-
-    return () => {
-      if (started || this.#pending.get(record.transactionId) !== monitored) return;
-
-      started = true;
-      this.#schedule(monitored, TRANSACTION_INSPECTION_INTERVAL_MS);
-    };
+  track(record: PendingTransactionRecord): void {
+    this.#pending.set(record.transactionId, { record, needsRecovery: false });
+    this.#schedule(TRANSACTION_INSPECTION_INTERVAL_MS);
   }
 
   stop(transactionId: TransactionId): void {
-    const monitored = this.#pending.get(transactionId);
-    if (!monitored) return;
-
     this.#pending.delete(transactionId);
-    monitored.cancelInspection();
+    if (this.#pending.size === 0) this.#cancelScheduledInspection();
   }
 
   stopAll(): void {
-    for (const monitored of this.#pending.values()) {
-      monitored.cancelInspection();
-    }
     this.#pending.clear();
+    this.#cancelScheduledInspection();
   }
 
-  #add(record: PendingTransactionRecord, needsRecovery: boolean): MonitoredTransaction {
-    this.stop(record.transactionId);
-
-    const monitored: MonitoredTransaction = {
-      record,
-      needsRecovery,
-      cancelInspection: () => {},
-    };
-    this.#pending.set(record.transactionId, monitored);
-    return monitored;
+  #scheduleImmediately(): void {
+    this.#cancelScheduledInspection();
+    this.#schedule(0);
   }
 
-  #schedule(monitored: MonitoredTransaction, delayMs: number): void {
-    monitored.cancelInspection();
-    monitored.cancelInspection = this.#time.schedule(delayMs, () => {
-      if (this.#pending.get(monitored.record.transactionId) !== monitored) return;
+  #schedule(delayMs: number): void {
+    if (this.#pending.size === 0 || this.#inspectionScheduled) return;
 
-      monitored.cancelInspection = () => {};
-      void this.#inspect(monitored).catch(() => {
-        if (this.#pending.get(monitored.record.transactionId) !== monitored) return;
+    this.#inspectionScheduled = true;
+    this.#cancelTimer = this.#time.schedule(delayMs, () => {
+      this.#inspectionScheduled = false;
+      this.#cancelTimer = noCancellation;
 
-        // The persisted pending record remains available for recovery after a runtime restart.
-        this.#pending.delete(monitored.record.transactionId);
-        monitored.cancelInspection();
+      if (this.#inspectionRunning) {
+        this.#schedule(TRANSACTION_INSPECTION_INTERVAL_MS);
+        return;
+      }
+
+      void this.#inspect().catch(() => {
+        this.#schedule(TRANSACTION_INSPECTION_INTERVAL_MS);
       });
     });
   }
 
-  async #inspect(monitored: MonitoredTransaction): Promise<void> {
-    const adapter = getTransactionsNamespaceAdapter(this.#adapters, monitored.record.namespace);
-    const inspection = monitored.needsRecovery
-      ? await adapter.recoverPending(monitored.record)
-      : await adapter.inspectPending(monitored.record);
+  #cancelScheduledInspection(): void {
+    if (!this.#inspectionScheduled) return;
 
-    if (this.#pending.get(monitored.record.transactionId) !== monitored) return;
-
-    if (inspection.status === "unavailable") {
-      this.#schedule(monitored, TRANSACTION_INSPECTION_INTERVAL_MS);
-      return;
-    }
-
-    if (inspection.status === "pending") {
-      monitored.needsRecovery = false;
-      this.#schedule(monitored, TRANSACTION_INSPECTION_INTERVAL_MS);
-      return;
-    }
-
-    await this.#commitTerminalState(monitored, inspection.state);
+    this.#inspectionScheduled = false;
+    this.#cancelTimer();
+    this.#cancelTimer = noCancellation;
   }
 
-  async #commitTerminalState(monitored: MonitoredTransaction, state: TerminalTransactionState): Promise<void> {
-    await this.#mutations.run(async (commit) => {
-      if (this.#pending.get(monitored.record.transactionId) !== monitored) return;
+  async #inspect(): Promise<void> {
+    this.#inspectionRunning = true;
 
-      const { recovery: _recovery, ...transaction } = monitored.record;
-      const terminal: TransactionRecord = {
-        ...transaction,
-        state,
-        updatedAt: this.#time.now(),
-      };
+    try {
+      const recordsByChainRef = new Map<ChainRef, MonitoredTransaction[]>();
+      for (const monitored of this.#pending.values()) {
+        const records = recordsByChainRef.get(monitored.record.chainRef);
+        if (records) records.push(monitored);
+        else recordsByChainRef.set(monitored.record.chainRef, [monitored]);
+      }
 
-      await commit([persistenceChange.put(transactionPersistenceType, terminal)]);
+      for (const [chainRef, monitoredRecords] of recordsByChainRef) {
+        const records = monitoredRecords.map(({ record }) => record);
+        const representativeRecord = records[0];
+        if (!representativeRecord) continue;
 
-      this.#pending.delete(terminal.transactionId);
-      monitored.cancelInspection();
-      this.#publishChanged({ type: "transactionsChanged", transactionIds: [terminal.transactionId] });
+        const recoveryTransactionIds = monitoredRecords
+          .filter(({ needsRecovery }) => needsRecovery)
+          .map(({ record }) => record.transactionId);
+        const adapter = getTransactionsNamespaceAdapter(this.#adapters, representativeRecord.namespace);
+        const inspection =
+          recoveryTransactionIds.length === 0
+            ? await adapter.inspectPending(records)
+            : await adapter.recoverPending(records, recoveryTransactionIds);
+
+        if (inspection.status === "unavailable") continue;
+
+        if (inspection.terminalChanges.length > 0) {
+          const committed = await this.#commitTerminalChanges(chainRef, monitoredRecords, inspection.terminalChanges);
+          if (!committed) continue;
+        }
+
+        for (const monitored of monitoredRecords) {
+          if (!monitored.needsRecovery) continue;
+          if (this.#pending.get(monitored.record.transactionId) === monitored) monitored.needsRecovery = false;
+        }
+      }
+    } finally {
+      this.#inspectionRunning = false;
+      this.#schedule(TRANSACTION_INSPECTION_INTERVAL_MS);
+    }
+  }
+
+  async #commitTerminalChanges(
+    chainRef: ChainRef,
+    monitoredRecords: readonly MonitoredTransaction[],
+    terminalChanges: readonly TerminalTransactionChange[],
+  ): Promise<boolean> {
+    return await this.#mutations.run(async (commit) => {
+      const currentRecords = [...this.#pending.values()].filter((monitored) => monitored.record.chainRef === chainRef);
+      if (
+        currentRecords.length !== monitoredRecords.length ||
+        monitoredRecords.some((monitored) => this.#pending.get(monitored.record.transactionId) !== monitored)
+      ) {
+        return false;
+      }
+
+      const monitoredById = new Map(monitoredRecords.map((monitored) => [monitored.record.transactionId, monitored]));
+      const now = this.#time.now();
+      const terminalRecords: TransactionRecord[] = [];
+      for (const change of terminalChanges) {
+        const monitored = monitoredById.get(change.transactionId);
+        if (!monitored) return false;
+
+        const { recovery: _recovery, ...transaction } = monitored.record;
+        terminalRecords.push({
+          ...transaction,
+          state: change.state,
+          updatedAt: now,
+        });
+      }
+      if (terminalRecords.length === 0) return true;
+
+      await commit(terminalRecords.map((record) => persistenceChange.put(transactionPersistenceType, record)));
+
+      for (const record of terminalRecords) {
+        const monitored = monitoredById.get(record.transactionId);
+        if (monitored && this.#pending.get(record.transactionId) === monitored) {
+          this.#pending.delete(record.transactionId);
+        }
+      }
+      this.#publishChanged({
+        type: "transactionsChanged",
+        transactionIds: terminalRecords.map((record) => record.transactionId),
+      });
+      return true;
     });
   }
 }

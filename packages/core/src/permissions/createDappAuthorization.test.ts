@@ -35,7 +35,7 @@ const installedNetworks = [
   },
 ] as const satisfies readonly Network[];
 
-const networksByChainRef = new Map(installedNetworks.map((network) => [network.chainRef, network]));
+const networksByChainRef = new Map<ChainRef, Network>(installedNetworks.map((network) => [network.chainRef, network]));
 
 const account = (accountId: AccountId): Account => ({
   accountId,

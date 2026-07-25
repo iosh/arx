@@ -6,6 +6,7 @@ import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/Chain
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
 import { createEip155TransactionSubmitter } from "./submitTransaction.js";
+import type * as Eip155 from "./types.js";
 
 const CHAIN_REF = "eip155:1";
 const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -13,7 +14,7 @@ const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
 
-const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef") => ({
+const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef"): Eip155.SignedTransaction => ({
   chainRef: CHAIN_REF,
   transaction: {
     from: FROM,
@@ -30,7 +31,7 @@ const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef") => ({
 const createRpc = (handler: (input: ChainJsonRpcRequest) => unknown | Promise<unknown>) => {
   const request = vi.fn(async (input: ChainJsonRpcRequest) => handler(input));
   const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input) => (await request(input)) as TResult,
+    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
   };
 
   return { chainJsonRpc, request };
@@ -63,7 +64,7 @@ describe("EIP-155 transaction submission", () => {
       gas: "0x5208",
       nonce: "0x1",
       fee: { type: "legacy" as const, gasPrice: "0x3b9aca00" },
-    };
+    } satisfies Eip155.PreparedTransaction;
 
     const signingInput = await submitter.createSigningInput({
       chainRef: CHAIN_REF,
@@ -116,7 +117,9 @@ describe("EIP-155 transaction submission", () => {
       transactionHash: TRANSACTION_HASH,
     });
 
-    expect(TransactionEnvelopeEip1559.deserialize(signed.recovery.rawTransaction)).toMatchObject({
+    expect(
+      TransactionEnvelopeEip1559.deserialize(signed.recovery.rawTransaction as TransactionEnvelopeEip1559.Serialized),
+    ).toMatchObject({
       chainId: 1,
       nonce: 9n,
       maxFeePerGas: 2_000_000_000n,

@@ -10,7 +10,7 @@ const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const createRpc = (handler: (input: ChainJsonRpcRequest) => unknown | Promise<unknown>) => {
   const request = vi.fn(async (input: ChainJsonRpcRequest) => handler(input));
   const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input) => (await request(input)) as TResult,
+    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
   };
 
   return { chainJsonRpc, request };

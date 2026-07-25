@@ -9,7 +9,7 @@ import type { TransactionsNamespaceAdapter } from "./namespaceAdapter.js";
 import type { PendingTransactionRecord } from "./persistence.js";
 import type { PreparedTransaction } from "./preparedTransaction.js";
 import { createTransactions } from "./Transactions.js";
-import type { TransactionBroadcastOutcome } from "./types.js";
+import type { Transaction, TransactionBroadcastOutcome, TransactionId } from "./types.js";
 
 const ACCOUNT_ID = "eip155:0000000000000000000000000000000000000001";
 const CHAIN_REF: ChainRef = "eip155:1";
@@ -40,11 +40,12 @@ const network: Network = {
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
-const prepared = (nonce?: `0x${string}`): PreparedTransaction => ({
+const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId): PreparedTransaction => ({
   namespace: "eip155",
   chainRef: CHAIN_REF,
   accountId: ACCOUNT_ID,
   initiator: { type: "wallet" },
+  ...(replacesTransactionId === undefined ? {} : { replacesTransactionId }),
   transaction: {
     from: FROM,
     to: null,
@@ -56,14 +57,40 @@ const prepared = (nonce?: `0x${string}`): PreparedTransaction => ({
   },
 });
 
+const replacementTarget: Transaction = {
+  transactionId: "transaction-target",
+  namespace: "eip155",
+  chainRef: CHAIN_REF,
+  accountId: ACCOUNT_ID,
+  initiator: { type: "wallet" },
+  transaction: {
+    ...prepared("0x1").transaction,
+    nonce: "0x1",
+  },
+  state: { status: "pending" },
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+const pendingReplacement: PendingTransactionRecord = {
+  ...replacementTarget,
+  transactionId: "transaction-replacement",
+  replacesTransactionId: replacementTarget.transactionId,
+  state: { status: "pending" },
+  recovery: { rawTransaction: "0xcafebabe" },
+};
+
 type FixtureOptions = Readonly<{
   broadcast?: TransactionBroadcastOutcome;
   pauseBeforeSigningInput?: () => Promise<void>;
+  replacementTarget?: Transaction | null;
   signingError?: Error;
 }>;
 
 const createFixture = (input: FixtureOptions = {}) => {
   let currentAccount: Account | null = account;
+  const currentReplacementTarget = input.replacementTarget ?? null;
+  let currentPendingTransactions: readonly PendingTransactionRecord[] = [];
   const order: string[] = [];
   const accounts = {
     getAccount: vi.fn(() => currentAccount),
@@ -111,12 +138,15 @@ const createFixture = (input: FixtureOptions = {}) => {
     prepare: async () => {
       throw new Error("Unexpected transaction preparation.");
     },
+    prepareReplacement: async () => {
+      throw new Error("Unexpected replacement preparation.");
+    },
     createSigningInput,
     sign,
     broadcast,
     createSubmission,
-    inspectPending: async () => ({ status: "pending" as const }),
-    recoverPending: async () => ({ status: "pending" as const }),
+    inspectPending: async () => ({ status: "checked" as const, terminalChanges: [] }),
+    recoverPending: async () => ({ status: "checked" as const, terminalChanges: [] }),
   } satisfies TransactionsNamespaceAdapter;
   const commit = vi.fn(async () => {
     order.push("commit");
@@ -129,13 +159,9 @@ const createFixture = (input: FixtureOptions = {}) => {
   const publishChanged = vi.fn(() => {
     order.push("publish");
   });
-  const startMonitoring = vi.fn(() => {
-    order.push("start monitoring");
-  });
   const monitor = {
     track: vi.fn(() => {
       order.push("track");
-      return startMonitoring;
     }),
     stop: vi.fn(() => {
       order.push("stop");
@@ -144,9 +170,9 @@ const createFixture = (input: FixtureOptions = {}) => {
   const transactions = createTransactions({
     readers: {
       transactions: {
-        get: vi.fn(async () => null),
+        get: vi.fn(async () => currentReplacementTarget),
         list: vi.fn(async () => ({ transactions: [] })),
-        listPending: vi.fn(async () => []),
+        listPending: vi.fn(async () => currentPendingTransactions),
       },
     },
     accounts,
@@ -165,11 +191,13 @@ const createFixture = (input: FixtureOptions = {}) => {
     sign,
     broadcast,
     monitor,
-    startMonitoring,
     publishChanged,
     order,
     setAccount: (value: Account | null) => {
       currentAccount = value;
+    },
+    setPendingTransactions: (value: readonly PendingTransactionRecord[]) => {
+      currentPendingTransactions = value;
     },
   };
 };
@@ -197,7 +225,7 @@ describe("Transactions.submit", () => {
       state: { status: "pending" },
       recovery: { rawTransaction: "0xdeadbeef" },
     });
-    expect(fixture.order).toEqual(["commit", "track", "publish", "broadcast", "start monitoring"]);
+    expect(fixture.order).toEqual(["commit", "publish", "broadcast", "track"]);
     expect(fixture.publishChanged).toHaveBeenCalledWith({
       type: "transactionsChanged",
       transactionIds: [submission.transaction.transactionId],
@@ -235,7 +263,7 @@ describe("Transactions.submit", () => {
     });
     expect(fixture.commit).toHaveBeenCalledTimes(2);
     expect(committedRecord(fixture.commit, 1)).not.toHaveProperty("recovery");
-    expect(fixture.order).toEqual(["commit", "track", "publish", "broadcast", "commit", "stop", "publish"]);
+    expect(fixture.order).toEqual(["commit", "publish", "broadcast", "commit", "stop", "publish"]);
   });
 
   it("keeps the record pending when the broadcast outcome is unknown", async () => {
@@ -281,6 +309,51 @@ describe("Transactions.submit", () => {
     const fixture = createFixture({ signingError: new Error("Signing failed.") });
 
     await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toThrow("Signing failed.");
+    expect(fixture.commit).not.toHaveBeenCalled();
+    expect(fixture.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replacement whose target no longer exists", async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId))).rejects.toMatchObject({
+      code: "transaction.not_found",
+    });
+    expect(fixture.createSigningInput).not.toHaveBeenCalled();
+    expect(fixture.commit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale replacement after another pending replacement is committed", async () => {
+    let releaseSigningInput!: () => void;
+    const signingInputPaused = new Promise<void>((resolve) => {
+      releaseSigningInput = resolve;
+    });
+    let notifySigningInputStarted!: () => void;
+    const signingInputStarted = new Promise<void>((resolve) => {
+      notifySigningInputStarted = resolve;
+    });
+    const fixture = createFixture({
+      replacementTarget,
+      pauseBeforeSigningInput: async () => {
+        notifySigningInputStarted();
+        await signingInputPaused;
+      },
+    });
+
+    const submission = fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId));
+    await signingInputStarted;
+    fixture.setPendingTransactions([pendingReplacement]);
+    releaseSigningInput();
+
+    await expect(submission).rejects.toMatchObject({
+      code: "transaction.replacement_unavailable",
+      details: {
+        transactionId: replacementTarget.transactionId,
+        status: "pending",
+        reason: "has_pending_replacement",
+      },
+    });
+    expect(fixture.sign).not.toHaveBeenCalled();
     expect(fixture.commit).not.toHaveBeenCalled();
     expect(fixture.broadcast).not.toHaveBeenCalled();
   });

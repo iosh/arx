@@ -4,6 +4,7 @@ import { EIP155_NAMESPACE } from "../../namespaces/eip155/constants.js";
 import type { TransactionsNamespaceAdapter } from "../namespaceAdapter.js";
 import { createEip155TransactionMonitor } from "./monitorTransaction.js";
 import { createEip155TransactionPreparer } from "./prepareTransaction.js";
+import { createEip155ReplacementRequest } from "./replacementTransaction.js";
 import { createEip155TransactionSubmitter } from "./submitTransaction.js";
 
 export const createEip155TransactionsAdapter = (params: {
@@ -27,6 +28,21 @@ export const createEip155TransactionsAdapter = (params: {
       });
 
       return { ...request, transaction };
+    },
+    async prepareReplacement({ target, type, from }) {
+      const request = createEip155ReplacementRequest({ target, type, from });
+      const transaction = await prepareTransaction({
+        chainRef: target.chainRef,
+        from,
+        transaction: request,
+      });
+
+      return {
+        namespace: EIP155_NAMESPACE,
+        chainRef: target.chainRef,
+        accountId: target.accountId,
+        transaction,
+      };
     },
     createSigningInput: (prepared) =>
       submitTransaction.createSigningInput({

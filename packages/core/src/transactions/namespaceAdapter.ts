@@ -7,24 +7,42 @@ import type {
   TerminalTransactionState,
   Transaction,
   TransactionBroadcastOutcome,
+  TransactionId,
+  TransactionReplacementType,
   TransactionSigningInput,
   TransactionSubmission,
 } from "./types.js";
 
+export type TerminalTransactionChange = Readonly<{
+  transactionId: TransactionId;
+  state: TerminalTransactionState;
+}>;
+
 export type PendingTransactionInspection =
-  | Readonly<{ status: "pending" }>
   | Readonly<{ status: "unavailable" }>
-  | Readonly<{ status: "terminal"; state: TerminalTransactionState }>;
+  | Readonly<{
+      status: "checked";
+      terminalChanges: readonly TerminalTransactionChange[];
+    }>;
 
 export type TransactionsNamespaceAdapter = Readonly<{
   namespace: Namespace;
   prepare(input: { request: PrepareTransactionInput; from: string }): Promise<PreparedTransaction>;
+  /** Adapters without replacement support must reject explicitly instead of returning an unchanged transaction. */
+  prepareReplacement(input: {
+    target: Transaction;
+    type: TransactionReplacementType;
+    from: string;
+  }): Promise<Omit<PreparedTransaction, "initiator" | "replacesTransactionId">>;
   createSigningInput(prepared: PreparedTransaction): Promise<TransactionSigningInput>;
   sign(input: TransactionSigningInput): Promise<SignedTransaction>;
   broadcast(signed: SignedTransaction): Promise<TransactionBroadcastOutcome>;
   createSubmission(input: { transaction: Transaction; broadcast: TransactionBroadcastOutcome }): TransactionSubmission;
-  inspectPending(record: PendingTransactionRecord): Promise<PendingTransactionInspection>;
-  recoverPending(record: PendingTransactionRecord): Promise<PendingTransactionInspection>;
+  inspectPending(records: readonly PendingTransactionRecord[]): Promise<PendingTransactionInspection>;
+  recoverPending(
+    records: readonly PendingTransactionRecord[],
+    recoveryTransactionIds: readonly TransactionId[],
+  ): Promise<PendingTransactionInspection>;
 }>;
 
 export type TransactionsNamespaceAdapters = Readonly<Record<Namespace, TransactionsNamespaceAdapter | undefined>>;

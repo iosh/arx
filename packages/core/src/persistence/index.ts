@@ -43,7 +43,6 @@ export {
   settingPersistenceType,
 } from "../settings/persistence.js";
 export type {
-  Eip155PendingTransactionRecord,
   PendingTransactionRecord,
   TransactionRecord,
   TransactionsReader,

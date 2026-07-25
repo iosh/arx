@@ -39,5 +39,4 @@ export class Vault {
     if (this.#state.status !== "unlocked") return;
     this.#state = { status: "locked", record: this.#state.unlocked.record };
   }
-
 }

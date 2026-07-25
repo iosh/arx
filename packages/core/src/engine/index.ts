@@ -1,3 +1,4 @@
+export type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
 export type {
   CoreRuntime,
   CoreRuntimeChanged,

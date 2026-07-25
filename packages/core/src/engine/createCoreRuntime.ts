@@ -7,12 +7,17 @@ import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
 import { DappConnections } from "../dappConnections/DappConnections.js";
+import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
+import { type DappNamespace, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
+import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
+import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
+import type { Namespace } from "../namespaces/types.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
@@ -239,6 +244,23 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     approvals,
     publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
   });
+  const dappNamespaces = new Map<Namespace, DappNamespace>([
+    [EIP155_NAMESPACE, createEip155DappNamespace(chainJsonRpc)],
+  ]);
+  const dappConnectionsApi: DappConnectionsApi = {
+    openConnection: (scope) => dappConnections.openConnection(scope),
+    getConnectionState: (scope) => dappConnections.getConnectionState(scope),
+    closeConnection: (scope) => dappAuthorization.closeConnection(scope),
+    request: async ({ scope, method, params }) => {
+      const { chainRef } = dappConnections.getConnectionState(scope);
+      return routeDappRequest(scope.namespace, dappNamespaces, {
+        origin: scope.origin,
+        chainRef,
+        method,
+        ...(params !== undefined ? { params } : {}),
+      });
+    },
+  };
 
   const runtime: CoreRuntime = {
     wallet: Object.assign(wallet, {
@@ -249,6 +271,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       permissions: dappAuthorization.permissions,
       approvals: approvalsApi,
     }),
+    dappConnections: dappConnectionsApi,
     subscribeChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

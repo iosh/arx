@@ -1,6 +1,7 @@
 import type { AccountsChanged } from "../accounts/types.js";
 import type { ApprovalsApi, ApprovalsChanged } from "../approvals/types.js";
 import type { ChainJsonRpcOptions } from "../chainJsonRpc/ChainJsonRpc.js";
+import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import type { NamespaceDefinition } from "../namespaces/definition.js";
 import type { Namespace } from "../namespaces/types.js";
@@ -56,6 +57,7 @@ export type CoreWallet = Wallet &
 
 export type CoreRuntime = Readonly<{
   wallet: CoreWallet;
+  dappConnections: DappConnectionsApi;
   subscribeChanged(listener: (event: CoreRuntimeChanged) => void): CoreUnsubscribe;
   close(): void;
 }>;

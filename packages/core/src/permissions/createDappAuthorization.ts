@@ -45,10 +45,9 @@ export type CreateDappAuthorizationOptions = Readonly<{
   dappConnections: Pick<
     DappConnections,
     | "getNetworkSelection"
-    | "prepareSelectNetworkIfMissing"
+    | "prepareSelectNetwork"
     | "prepareRemoveOriginSelections"
-    | "applyCommittedUpdate"
-    | "refreshActiveConnectionStates"
+    | "refreshAccountsForOpenConnections"
     | "isConnectionOpen"
     | "closeConnection"
   >;
@@ -90,7 +89,7 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       const existingSelection = options.dappConnections.getNetworkSelection(scope);
       const selectionUpdate = existingSelection
         ? null
-        : options.dappConnections.prepareSelectNetworkIfMissing({
+        : options.dappConnections.prepareSelectNetwork({
             ...scope,
             chainRef: walletChainRefFor(scope),
           });
@@ -99,8 +98,8 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       await commit([...(permissionUpdate?.persistenceChanges ?? []), ...(selectionUpdate?.persistenceChanges ?? [])]);
 
       if (permissionUpdate) options.permissions.applyCommittedUpdate(permissionUpdate);
-      if (selectionUpdate) options.dappConnections.applyCommittedUpdate(selectionUpdate);
-      options.dappConnections.refreshActiveConnectionStates(selectionUpdate?.changedScopes);
+      if (selectionUpdate) selectionUpdate.activate();
+      if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
 
       if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
     });
@@ -112,7 +111,7 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       if (permissionUpdate) {
         await commit(permissionUpdate.persistenceChanges);
         options.permissions.applyCommittedUpdate(permissionUpdate);
-        options.dappConnections.refreshActiveConnectionStates();
+        options.dappConnections.refreshAccountsForOpenConnections();
       }
 
       // An approval can be created while persistence is committing, so select cancellation targets after activation.
@@ -130,8 +129,8 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
         await commit([...(permissionUpdate?.persistenceChanges ?? []), ...(selectionUpdate?.persistenceChanges ?? [])]);
 
         if (permissionUpdate) options.permissions.applyCommittedUpdate(permissionUpdate);
-        if (selectionUpdate) options.dappConnections.applyCommittedUpdate(selectionUpdate);
-        options.dappConnections.refreshActiveConnectionStates(selectionUpdate?.changedScopes);
+        if (selectionUpdate) selectionUpdate.activate();
+        if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
       }
 
       options.approvals.cancel(

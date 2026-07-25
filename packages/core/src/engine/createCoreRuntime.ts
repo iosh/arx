@@ -14,8 +14,10 @@ import { Keyring } from "../keyring/Keyring.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { loadNetworksBootstrap } from "../networks/bootstrap.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
+import { createCustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
 import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
@@ -221,6 +223,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     monitor: transactionMonitor,
     publishChanged: (change) => publish({ owner: "transactions", change }),
   });
+  const customNetworkRemoval = createCustomNetworkRemoval({
+    mutations,
+    networks,
+    transactions: input.persistence.readers.transactions,
+    dappConnections,
+  });
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet,
@@ -233,7 +241,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
 
   const runtime: CoreRuntime = {
     wallet: Object.assign(wallet, {
-      networks,
+      networks: Object.assign(networks, {
+        removeCustom: (chainRef: ChainRef) => customNetworkRemoval.removeCustom(chainRef),
+      }),
       transactions,
       permissions: dappAuthorization.permissions,
       approvals: approvalsApi,

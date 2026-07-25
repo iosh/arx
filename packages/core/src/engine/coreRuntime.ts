@@ -43,6 +43,7 @@ export type CoreWallet = Wallet &
       Readonly<{
         addCustom(input: CustomNetworkInput): Promise<void>;
         updateCustom(input: CustomNetworkInput): Promise<void>;
+        removeCustom(chainRef: ChainRef): Promise<void>;
         setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void>;
         clearRpcOverride(chainRef: ChainRef): Promise<void>;
         selectNetwork(chainRef: ChainRef): Promise<void>;

@@ -63,7 +63,7 @@ type WalletCoordinatorOptions = Readonly<{
   accounts: Accounts;
   permissions: Pick<Permissions, "prepareRemoveAccountReferences" | "applyCommittedUpdate">;
   approvals: Pick<Approvals, "cancelAll">;
-  dappConnections: Pick<DappConnections, "refreshActiveConnectionStates">;
+  dappConnections: Pick<DappConnections, "refreshAccountsForOpenConnections">;
   autoLock: AutoLockController;
   publishStatusChanged(change: WalletStatusChanged): void;
   publishKeyringChanged(change: KeyringChanged): void;
@@ -156,7 +156,7 @@ export class WalletCoordinator {
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
@@ -181,7 +181,7 @@ export class WalletCoordinator {
       this.#vault.activate(draft.unlocked);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
     });
   }
@@ -193,7 +193,7 @@ export class WalletCoordinator {
       this.#autoLock.stop();
       this.#keyring.lock();
       this.#vault.lock();
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#approvals.cancelAll();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "locked" });
     });
@@ -333,7 +333,7 @@ export class WalletCoordinator {
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
       this.#keyring.activateSecrets(nextSecrets);
       this.#autoLock.recordActivity();
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
@@ -483,7 +483,7 @@ export class WalletCoordinator {
       this.#keyring.applyCommittedUpdate(keyringUpdate);
       if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
@@ -503,7 +503,7 @@ export class WalletCoordinator {
 
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
     });
@@ -567,7 +567,7 @@ export class WalletCoordinator {
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(secrets);
       this.startAutoLock();
-      this.#dappConnections.refreshActiveConnectionStates();
+      this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));

@@ -22,10 +22,8 @@ import {
 import { dappConnectionScopeKey } from "./scope.js";
 
 export type DappConnectionsUpdate = Readonly<{
-  networkSelections: ReadonlyMap<string, DappNetworkSelectionRecord>;
   persistenceChanges: readonly PersistenceChange[];
-  /** Scopes whose persisted Dapp network selection changed. */
-  changedScopes: readonly DappConnectionScope[];
+  activate(): void;
 }>;
 
 export type DappConnectionState = Readonly<{
@@ -55,6 +53,7 @@ const networkSelectionScope = (selection: DappNetworkSelectionRecord): DappConne
   namespace: selection.namespace,
 });
 
+/** Owns persisted dapp network selections and the transient state of open dapp connections. */
 export class DappConnections {
   readonly #accounts: Pick<Accounts, "getAddress">;
   readonly #networks: Pick<NetworksReader, "get" | "getSelection">;
@@ -126,16 +125,9 @@ export class DappConnections {
     this.#activeConnections.delete(dappConnectionScopeKey(scope));
   }
 
-  refreshActiveConnectionStates(selectionChangedScopes: readonly DappConnectionScope[] = []): void {
-    const changedSelectionScopeKeys = new Set(selectionChangedScopes.map(dappConnectionScopeKey));
-
-    for (const active of this.#activeConnections.values()) {
-      const key = dappConnectionScopeKey(active.scope);
-      const chainRef = changedSelectionScopeKeys.has(key)
-        ? this.#getCurrentConnectionChainRef(active.scope)
-        : active.state.chainRef;
-      const state = this.#createConnectionState(active.scope, chainRef);
-
+  refreshAccountsForOpenConnections(): void {
+    for (const [key, active] of this.#activeConnections) {
+      const state = this.#createConnectionState(active.scope, active.state.chainRef);
       this.#activeConnections.set(key, { scope: active.scope, state });
     }
   }
@@ -146,8 +138,7 @@ export class DappConnections {
       if (!update) return;
 
       await commit(update.persistenceChanges);
-      this.applyCommittedUpdate(update);
-      this.refreshActiveConnectionStates(update.changedScopes);
+      update.activate();
     });
   }
 
@@ -161,91 +152,70 @@ export class DappConnections {
     networkSelections.set(dappConnectionScopeKey(selection), selection);
 
     return {
-      networkSelections,
       persistenceChanges: [persistenceChange.put(dappNetworkSelectionPersistenceType, selection)],
-      changedScopes: [networkSelectionScope(selection)],
+      activate: () => {
+        this.#networkSelections = networkSelections;
+        this.#moveOpenConnectionsToCurrentNetwork([networkSelectionScope(selection)]);
+      },
     };
-  }
-
-  prepareSelectNetworkIfMissing(selection: DappNetworkSelectionRecord): DappConnectionsUpdate | null {
-    if (this.getNetworkSelection(selection)) return null;
-    return this.prepareSelectNetwork(selection);
   }
 
   prepareRemoveOriginSelections(origin: string): DappConnectionsUpdate | null {
-    const removed = this.listNetworkSelectionsByOrigin(origin);
-    if (removed.length === 0) return null;
+    const removedSelections = this.listNetworkSelectionsByOrigin(origin);
+    if (removedSelections.length === 0) return null;
 
-    const networkSelections = new Map(this.#networkSelections);
-    for (const selection of removed) {
-      networkSelections.delete(dappConnectionScopeKey(selection));
+    const remainingSelections = new Map(this.#networkSelections);
+    for (const selection of removedSelections) {
+      remainingSelections.delete(dappConnectionScopeKey(selection));
     }
 
     return {
-      networkSelections,
-      persistenceChanges: removed.map((selection) =>
+      persistenceChanges: removedSelections.map((selection) =>
         persistenceChange.remove(dappNetworkSelectionPersistenceType, selection),
       ),
-      changedScopes: removed.map(networkSelectionScope),
+      activate: () => {
+        this.#networkSelections = remainingSelections;
+        this.#moveOpenConnectionsToCurrentNetwork(removedSelections.map(networkSelectionScope));
+      },
     };
   }
 
-  prepareReplaceNetworkSelections(
-    input: Readonly<{
-      chainRef: ChainRef;
-      replacementChainRef: ChainRef;
-    }>,
-  ): DappConnectionsUpdate | null {
-    const replaced = this.listNetworkSelectionsByChainRef(input.chainRef);
-    if (replaced.length === 0) return null;
-
-    const replacementNetwork = this.#networks.get(input.replacementChainRef);
-    if (!replacementNetwork) {
-      throw new NetworkNotFoundError(input.replacementChainRef);
+  prepareRemoveNetworkReferences(chainRef: ChainRef): DappConnectionsUpdate {
+    const removedSelections = this.listNetworkSelectionsByChainRef(chainRef);
+    const removedSelectionScopeKeys = new Set(removedSelections.map(dappConnectionScopeKey));
+    const remainingSelections = new Map(this.#networkSelections);
+    for (const selection of removedSelections) {
+      remainingSelections.delete(dappConnectionScopeKey(selection));
     }
 
-    const networkSelections = new Map(this.#networkSelections);
-    const replacements = replaced.map((selection) => {
-      if (replacementNetwork.namespace !== selection.namespace) {
-        throw new ChainNamespaceMismatchError({
-          chainRef: input.replacementChainRef,
-          expectedNamespace: selection.namespace,
-          actualNamespace: replacementNetwork.namespace,
-        });
-      }
+    return {
+      persistenceChanges: removedSelections.map((selection) =>
+        persistenceChange.remove(dappNetworkSelectionPersistenceType, selection),
+      ),
+      activate: () => {
+        this.#networkSelections = remainingSelections;
 
-      const replacement = {
-        ...selection,
-        chainRef: input.replacementChainRef,
-      };
-      networkSelections.set(dappConnectionScopeKey(replacement), replacement);
-      return replacement;
+        for (const [key, active] of this.#activeConnections) {
+          if (active.state.chainRef !== chainRef && !removedSelectionScopeKeys.has(key)) continue;
+          this.#replaceOpenConnectionState(active.scope, this.#getCurrentConnectionChainRef(active.scope));
+        }
+      },
+    };
+  }
+
+  #moveOpenConnectionsToCurrentNetwork(scopes: readonly DappConnectionScope[]): void {
+    for (const scope of scopes) {
+      if (!this.isConnectionOpen(scope)) continue;
+      this.#replaceOpenConnectionState(scope, this.#getCurrentConnectionChainRef(scope));
+    }
+  }
+
+  #replaceOpenConnectionState(scope: DappConnectionScope, chainRef: ChainRef): void {
+    const key = dappConnectionScopeKey(scope);
+    this.#activeConnections.set(key, {
+      scope,
+      state: this.#createConnectionState(scope, chainRef),
     });
-
-    return {
-      networkSelections,
-      persistenceChanges: replacements.map((selection) =>
-        persistenceChange.put(dappNetworkSelectionPersistenceType, selection),
-      ),
-      changedScopes: replaced.map(networkSelectionScope),
-    };
-  }
-
-  prepareRemoveAllNetworkSelections(): DappConnectionsUpdate | null {
-    const removed = this.listNetworkSelections();
-    if (removed.length === 0) return null;
-
-    return {
-      networkSelections: new Map(),
-      persistenceChanges: removed.map((selection) =>
-        persistenceChange.remove(dappNetworkSelectionPersistenceType, selection),
-      ),
-      changedScopes: removed.map(networkSelectionScope),
-    };
-  }
-
-  applyCommittedUpdate(update: DappConnectionsUpdate): void {
-    this.#networkSelections = update.networkSelections;
   }
 
   #createConnectionState(scope: DappConnectionScope, chainRef: ChainRef): DappConnectionState {
@@ -262,10 +232,6 @@ export class DappConnections {
     const selection = this.getNetworkSelection(scope);
     if (selection) return selection.chainRef;
 
-    return this.#getWalletSelectedChainRef(scope);
-  }
-
-  #getWalletSelectedChainRef(scope: DappConnectionScope): ChainRef {
     const chainRef = this.#networks.getSelection().selectedChainRefByNamespace[scope.namespace];
     if (!chainRef) throw new NetworkNamespaceUnsupportedError(scope.namespace);
     return chainRef;

@@ -92,6 +92,17 @@ export class BuiltinNetworkImmutableError extends ArxBaseError {
   }
 }
 
+export class NetworkHasPendingTransactionsError extends ArxBaseError {
+  static readonly code = "network.has_pending_transactions";
+
+  constructor(chainRef: ChainRef) {
+    super(`Network "${chainRef}" has pending transactions.`, {
+      code: NetworkHasPendingTransactionsError.code,
+      details: { chainRef },
+    });
+  }
+}
+
 export class NetworkRpcEndpointInvalidError extends ArxBaseError {
   static readonly code = "network.rpc_endpoint_invalid";
 

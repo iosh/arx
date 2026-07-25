@@ -15,6 +15,7 @@ export {
   ChainNamespaceMismatchError,
   CustomNetworkAlreadyExistsError,
   InvalidChainRefError,
+  NetworkHasPendingTransactionsError,
   NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,

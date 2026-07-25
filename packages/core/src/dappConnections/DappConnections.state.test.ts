@@ -24,7 +24,7 @@ describe("DappConnections active state", () => {
     expect(commits).toEqual([]);
 
     setWalletSelection("eip155", "eip155:1");
-    dappConnections.refreshActiveConnectionStates();
+    dappConnections.refreshAccountsForOpenConnections();
 
     expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:10", accounts: [] });
   });
@@ -42,7 +42,7 @@ describe("DappConnections active state", () => {
     dappConnections.openConnection(secondScope);
     dappConnections.openConnection(firstScope);
     setWalletStatus("unlocked");
-    dappConnections.refreshActiveConnectionStates();
+    dappConnections.refreshAccountsForOpenConnections();
 
     expect(dappConnections.getConnectionState(firstScope)).toEqual({
       chainRef: "eip155:1",
@@ -63,14 +63,14 @@ describe("DappConnections active state", () => {
 
     dappConnections.openConnection(scope);
     setPermission({ ...initial, accountIds: [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B] });
-    dappConnections.refreshActiveConnectionStates();
+    dappConnections.refreshAccountsForOpenConnections();
     expect(dappConnections.getConnectionState(scope)).toEqual({
       chainRef: "eip155:1",
       accounts: [`eip155:1/${EIP155_ACCOUNT_A}`, `eip155:1/${EIP155_ACCOUNT_B}`],
     });
 
     removePermission(scope);
-    dappConnections.refreshActiveConnectionStates();
+    dappConnections.refreshAccountsForOpenConnections();
     expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
   });
 
@@ -85,7 +85,7 @@ describe("DappConnections active state", () => {
     expect(dappConnections.openConnection(scope)).toEqual({ chainRef: "solana:mainnet", accounts: [] });
 
     setWalletStatus("unlocked");
-    dappConnections.refreshActiveConnectionStates();
+    dappConnections.refreshAccountsForOpenConnections();
 
     expect(dappConnections.getConnectionState(scope)).toEqual({
       chainRef: "solana:mainnet",
@@ -118,8 +118,7 @@ describe("DappConnections active state", () => {
     removePermission(scope);
     const removal = dappConnections.prepareRemoveOriginSelections(scope.origin);
     if (!removal) throw new Error("Expected a selection removal draft");
-    dappConnections.applyCommittedUpdate(removal);
-    dappConnections.refreshActiveConnectionStates(removal.changedScopes);
+    removal.activate();
 
     expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
   });
@@ -136,8 +135,7 @@ describe("DappConnections active state", () => {
     setWalletSelection("eip155", "eip155:1");
     const removal = dappConnections.prepareRemoveOriginSelections(scope.origin);
     if (!removal) throw new Error("Expected a selection removal draft");
-    dappConnections.applyCommittedUpdate(removal);
-    dappConnections.refreshActiveConnectionStates(removal.changedScopes);
+    removal.activate();
 
     expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
   });

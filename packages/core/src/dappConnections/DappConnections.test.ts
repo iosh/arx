@@ -57,38 +57,24 @@ describe("DappConnections selections", () => {
     expect(dappConnections.getNetworkSelection(initial)).toEqual(next);
   });
 
-  it("builds coordination drafts without activating them early", () => {
+  it("builds coordination plans without activating them early", () => {
     const first = selection("https://a.example", "eip155", "eip155:1");
     const second = selection("https://a.example", "solana", "solana:mainnet");
     const third = selection("https://b.example", "eip155", "eip155:1");
     const { dappConnections } = createDappConnections({ networkSelections: [first, second, third] });
 
-    expect(dappConnections.prepareSelectNetworkIfMissing({ ...first, chainRef: "eip155:10" })).toBeNull();
-
-    const replacement = dappConnections.prepareReplaceNetworkSelections({
-      chainRef: "eip155:1",
-      replacementChainRef: "eip155:10",
-    });
-    if (!replacement) throw new Error("Expected a network replacement draft");
-    expect(replacement.persistenceChanges).toHaveLength(2);
-    expect(replacement.changedScopes).toEqual([
-      { origin: first.origin, namespace: first.namespace },
-      { origin: third.origin, namespace: third.namespace },
-    ]);
-    expect(dappConnections.getNetworkSelection(first)).toEqual(first);
-    dappConnections.applyCommittedUpdate(replacement);
-    expect(dappConnections.getNetworkSelection(first)?.chainRef).toBe("eip155:10");
-
-    const removal = dappConnections.prepareRemoveOriginSelections(first.origin);
-    if (!removal) throw new Error("Expected an origin removal draft");
+    const removal = dappConnections.prepareRemoveNetworkReferences("eip155:1");
     expect(removal.persistenceChanges).toHaveLength(2);
-    dappConnections.applyCommittedUpdate(removal);
-    expect(dappConnections.listNetworkSelectionsByOrigin(first.origin)).toEqual([]);
+    expect(dappConnections.getNetworkSelection(first)).toEqual(first);
+    removal.activate();
+    expect(dappConnections.getNetworkSelection(first)).toBeNull();
+    expect(dappConnections.getNetworkSelection(third)).toBeNull();
 
-    const reset = dappConnections.prepareRemoveAllNetworkSelections();
-    if (!reset) throw new Error("Expected a selection reset draft");
-    expect(reset.persistenceChanges).toHaveLength(1);
-    dappConnections.applyCommittedUpdate(reset);
+    const originRemoval = dappConnections.prepareRemoveOriginSelections(first.origin);
+    if (!originRemoval) throw new Error("Expected an origin removal plan");
+    expect(originRemoval.persistenceChanges).toHaveLength(1);
+    originRemoval.activate();
+    expect(dappConnections.listNetworkSelectionsByOrigin(first.origin)).toEqual([]);
     expect(dappConnections.listNetworkSelections()).toEqual([]);
   });
 });

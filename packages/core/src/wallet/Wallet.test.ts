@@ -183,7 +183,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     accounts,
     permissions,
     approvals,
-    dappConnections: { refreshActiveConnectionStates: refreshDappConnections },
+    dappConnections: { refreshAccountsForOpenConnections: refreshDappConnections },
     autoLock,
     publishStatusChanged: (event) => events.push(event),
     publishKeyringChanged: (event) => keyringChanges.push(event),

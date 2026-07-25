@@ -238,6 +238,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet,
+    accounts,
     networks,
     permissions,
     dappConnections,
@@ -245,7 +246,15 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishPermissionsChanged: (change) => publish({ owner: "permissions", change }),
   });
   const dappNamespaces = new Map<Namespace, DappNamespace>([
-    [EIP155_NAMESPACE, createEip155DappNamespace(chainJsonRpc)],
+    [
+      EIP155_NAMESPACE,
+      createEip155DappNamespace({
+        chainJsonRpc,
+        getConnectionState: (scope) => dappConnections.getConnectionState(scope),
+        requestAccountAccess: (request) => dappAuthorization.requestAccountAccess(request),
+        revokeAccountAccess: (scope) => dappAuthorization.permissions.revoke(scope),
+      }),
+    ],
   ]);
   const dappConnectionsApi: DappConnectionsApi = {
     openConnection: (scope) => dappConnections.openConnection(scope),

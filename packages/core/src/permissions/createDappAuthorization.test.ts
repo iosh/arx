@@ -121,6 +121,9 @@ const createHarness = (
   });
   const approvals = {
     list: (): readonly Approval[] => pendingApprovals,
+    request: () => {
+      throw new Error("Unexpected account access approval request in this test.");
+    },
     cancel: (approvalIds: readonly string[]) => {
       if (approvalIds.length === 0) return;
 
@@ -128,10 +131,19 @@ const createHarness = (
       const cancelled = new Set(approvalIds);
       pendingApprovals = pendingApprovals.filter(({ approvalId }) => !cancelled.has(approvalId));
     },
-  } satisfies Pick<Approvals, "list" | "cancel">;
+  } satisfies Pick<Approvals, "list" | "request" | "cancel">;
   const authorization = createDappAuthorization({
     mutations,
     wallet: { getStatus: () => walletStatus },
+    accounts: {
+      listSelectableAddresses: (chainRef) =>
+        [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B].map((accountId) => ({
+          accountId,
+          chainRef,
+          canonicalAddress: `${chainRef}/${accountId}`,
+          displayAddress: `${chainRef}/${accountId}`,
+        })),
+    },
     networks,
     permissions,
     dappConnections,

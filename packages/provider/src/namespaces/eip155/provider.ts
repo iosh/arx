@@ -425,11 +425,13 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     }
 
     switch (error.code) {
+      case "global.rpc.unauthorized":
       case "global.permission.not_connected":
       case "global.permission.denied":
       case "global.session.locked":
       case "keyring.secret_unavailable":
         return new ProviderUnauthorizedError({ message: "Unauthorized" });
+      case "global.rpc.user_rejected_request":
       case "approval.rejected":
       case "approval.user_dismissed":
         return new ProviderUserRejectedRequestError({ message: "User rejected the request" });

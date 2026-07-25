@@ -1,12 +1,15 @@
+import type { Accounts } from "../accounts/Accounts.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { Approval } from "../approvals/types.js";
 import type { DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../dappConnections/persistence.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import { NetworkNamespaceUnsupportedError } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import { WalletLockedError } from "../wallet/errors.js";
 import type { Wallet } from "../wallet/Wallet.js";
+import { PermissionAccountAccessUnavailableError } from "./errors.js";
 import {
   type Permission,
   type Permissions,
@@ -25,12 +28,14 @@ export type PermissionsApi = PermissionsReader &
 
 export type DappAuthorization = Readonly<{
   permissions: PermissionsApi;
+  requestAccountAccess(input: Readonly<{ scope: DappConnectionScope; chainRef: ChainRef }>): Promise<void>;
   closeConnection(scope: DappConnectionScope): void;
 }>;
 
 export type CreateDappAuthorizationOptions = Readonly<{
   mutations: CoreMutationQueue;
   wallet: Pick<Wallet, "getStatus">;
+  accounts: Pick<Accounts, "listSelectableAddresses">;
   networks: Pick<NetworksReader, "getSelection">;
   permissions: Pick<
     Permissions,
@@ -51,7 +56,7 @@ export type CreateDappAuthorizationOptions = Readonly<{
     | "isConnectionOpen"
     | "closeConnection"
   >;
-  approvals: Pick<Approvals, "list" | "cancel">;
+  approvals: Pick<Approvals, "list" | "request" | "cancel">;
   publishPermissionsChanged(change: PermissionsChanged): void;
 }>;
 
@@ -102,6 +107,32 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
 
       if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
+    });
+  };
+
+  const requestAccountAccess = async ({
+    scope,
+    chainRef,
+  }: Readonly<{ scope: DappConnectionScope; chainRef: ChainRef }>): Promise<void> => {
+    if (options.wallet.getStatus() === "uninitialized") {
+      throw new PermissionAccountAccessUnavailableError(scope.namespace);
+    }
+
+    const [firstAccount, ...remainingAccounts] = options.accounts.listSelectableAddresses(chainRef);
+    if (!firstAccount) throw new PermissionAccountAccessUnavailableError(scope.namespace);
+
+    const approval = options.approvals.request<"accountAccess">({
+      type: "accountAccess",
+      ...scope,
+      request: {
+        selectableAccounts: [firstAccount, ...remainingAccounts],
+      },
+    });
+    const decision = await approval.decision;
+
+    await setAccounts({
+      ...scope,
+      accountIds: decision.accountIds,
     });
   };
 
@@ -160,6 +191,7 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       revoke,
       disconnectOrigin,
     },
+    requestAccountAccess,
     closeConnection,
   };
 };

@@ -221,22 +221,6 @@ export class Keyring {
     return { nextKeySources, nextHdKeyrings, persistenceChanges };
   }
 
-  prepareReset(): KeyringUpdate {
-    const keySources = this.listKeySources();
-    const hdKeyrings = this.listHdKeyrings();
-
-    const persistenceChanges = [
-      ...keySources.map((source) => persistenceChange.remove(keySourcePersistenceType, source.keySourceId)),
-      ...hdKeyrings.map((hdKeyring) => persistenceChange.remove(hdKeyringPersistenceType, hdKeyring.hdKeyringId)),
-    ];
-
-    return {
-      nextKeySources: new Map(),
-      nextHdKeyrings: new Map(),
-      persistenceChanges,
-    };
-  }
-
   applyCommittedUpdate(update: KeyringUpdate): void {
     this.#keySources = update.nextKeySources;
     this.#hdKeyrings = update.nextHdKeyrings;

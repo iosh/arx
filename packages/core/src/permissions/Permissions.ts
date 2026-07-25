@@ -156,19 +156,6 @@ export class Permissions implements PermissionsReader {
     return { nextRecords, persistenceChanges, changedScopes };
   }
 
-  prepareReset(): PermissionsUpdate | null {
-    const removed = this.list();
-    if (removed.length === 0) return null;
-
-    return {
-      nextRecords: new Map(),
-      persistenceChanges: removed.map((permission) =>
-        persistenceChange.remove(permissionPersistenceType, permissionScope(permission)),
-      ),
-      changedScopes: removed.map(permissionScope),
-    };
-  }
-
   applyCommittedUpdate(update: PermissionsUpdate): void {
     this.#records = update.nextRecords;
   }

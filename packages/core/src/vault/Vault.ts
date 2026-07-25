@@ -40,7 +40,4 @@ export class Vault {
     this.#state = { status: "locked", record: this.#state.unlocked.record };
   }
 
-  activateDeleted(): void {
-    this.#state = { status: "uninitialized" };
-  }
 }

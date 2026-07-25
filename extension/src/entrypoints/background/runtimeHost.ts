@@ -35,7 +35,6 @@ const createWalletHandlers = (wallet: CoreRuntime["wallet"]): MethodHandlerTree<
     deriveAccount: (keyringId) => wallet.keyrings.deriveAccount(keyringId),
     remove: (keyringId) => wallet.keyrings.remove(keyringId),
   },
-  delete: () => wallet.delete(),
   networks: {
     getChain: (chainRef) => wallet.networks.getChain(chainRef),
     listChains: () => wallet.networks.listChains(),

@@ -283,10 +283,6 @@ export class Accounts {
     return this.prepareRemoveRecords(this.listPrivateKeyAccountRecords(keySourceIds));
   }
 
-  prepareReset(): AccountsRemovalUpdate | null {
-    return this.prepareRemoveRecords(this.listAccountRecords());
-  }
-
   applyCommittedUpdate(update: AccountsUpdate): void {
     this.#records = update.nextRecords;
     this.#selections = update.nextSelections;

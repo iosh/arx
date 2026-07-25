@@ -133,11 +133,5 @@ describe("Permissions", () => {
     ]);
     permissions.applyCommittedUpdate(update);
     expect(permissions.list()).toEqual([{ ...retained, accountIds: [EIP155_ACCOUNT_B] }, unrelated]);
-
-    const reset = permissions.prepareReset();
-    if (!reset) throw new Error("Expected a permissions reset draft");
-    permissions.applyCommittedUpdate(reset);
-    expect(permissions.list()).toEqual([]);
-    expect(permissions.prepareReset()).toBeNull();
   });
 });

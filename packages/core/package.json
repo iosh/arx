@@ -23,7 +23,6 @@
     "./runtime": "./src/runtime/index.ts",
     "./settings": "./src/settings/index.ts",
     "./transactions/eip155": "./src/transactions/eip155/index.ts",
-    "./invoke": "./src/invoke/index.ts",
     "./wallet": "./src/wallet/index.ts",
     "./keyring": "./src/keyring/index.ts"
   },

@@ -1,16 +1,13 @@
 import { Accounts } from "../accounts/Accounts.js";
-import { loadAccountsBootstrap } from "../accounts/bootstrap.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { Approvals } from "../approvals/Approvals.js";
 import type { ApprovalsApi } from "../approvals/types.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
-import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
 import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
 import { type DappNamespace, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
-import { loadKeyringBootstrap } from "../keyring/bootstrap.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
@@ -18,34 +15,32 @@ import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import type { Namespace } from "../namespaces/types.js";
-import { loadNetworksBootstrap } from "../networks/bootstrap.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { createCustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
-import { loadPermissionsBootstrap } from "../permissions/bootstrap.js";
 import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
+import { loadCoreBootstrap } from "../runtime/loadCoreBootstrap.js";
 import { systemTime } from "../runtime/time.js";
 import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
 import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAdapter.js";
 import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
 import { createTransactions } from "../transactions/Transactions.js";
-import { loadTransactionsBootstrap } from "../transactions/transactionBootstrap.js";
-import { loadVaultBootstrap } from "../vault/bootstrap.js";
 import { Vault } from "../vault/Vault.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
-import { loadWalletBootstrap } from "../wallet/bootstrap.js";
 import type { Wallet } from "../wallet/Wallet.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
-import { assertPersistedPermissionSelectionIntegrity } from "./bootstrapInvariants.js";
 import type { CoreRuntime, CoreRuntimeChanged, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { NamespaceDefinitionRequiredError } from "./errors.js";
 
 export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<CoreRuntime> => {
   const namespaceDefinitions = [...input.namespaces.definitions];
   if (namespaceDefinitions.length === 0) throw new NamespaceDefinitionRequiredError();
+
+  const bootstrap = await loadCoreBootstrap(input.persistence.readers);
+
   const rpcOptions = input.rpc?.options;
   const jsonRpcHttpTransport =
     rpcOptions?.transport ??
@@ -72,46 +67,26 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const publishDappConnectionStateChanged = (change: DappConnectionStateChanged) => {
     for (const listener of dappConnectionStateListeners) listener(change);
   };
-  const [
-    vaultBootstrap,
-    walletBootstrap,
-    keyringBootstrap,
-    accountsBootstrap,
-    networksBootstrap,
-    dappConnectionsBootstrap,
-    permissionsBootstrap,
-    transactionsBootstrap,
-  ] = await Promise.all([
-    loadVaultBootstrap(input.persistence.readers),
-    loadWalletBootstrap(input.persistence.readers),
-    loadKeyringBootstrap(input.persistence.readers),
-    loadAccountsBootstrap(input.persistence.readers),
-    loadNetworksBootstrap(input.persistence.readers),
-    loadDappConnectionsBootstrap(input.persistence.readers),
-    loadPermissionsBootstrap(input.persistence.readers),
-    loadTransactionsBootstrap(input.persistence.readers),
-  ]);
-
-  const vault = new Vault(vaultBootstrap.encryptedVault);
+  const vault = new Vault(bootstrap.vault.encryptedVault);
   const walletStatus = {
     getStatus: () => vault.getStatus(),
   } satisfies Pick<Wallet, "getStatus">;
-  const keyring = new Keyring({ bootstrap: keyringBootstrap, namespaceAdapters: keyringAdapters });
+  const keyring = new Keyring({ bootstrap: bootstrap.keyring, namespaceAdapters: keyringAdapters });
   const accounts = new Accounts({
     adapters: accountsAdapters,
-    bootstrap: accountsBootstrap,
+    bootstrap: bootstrap.accounts,
     mutations,
     publishChanged: (change) => publish({ owner: "accounts", change }),
   });
   const eip155AccountSigning = createEip155AccountSigning({ keyring, accounts });
   const autoLock = new AutoLockController({
-    durationMs: walletBootstrap.autoLockDurationMs,
+    durationMs: bootstrap.wallet.autoLockDurationMs,
     time: systemTime,
   });
   const networks = new Networks({
     adapters: networksAdapters,
     defaultNamespace: eip155NetworksAdapter.namespace,
-    bootstrap: networksBootstrap,
+    bootstrap: bootstrap.networks,
     mutations,
     publishChanged: (change) => publish({ owner: "networks", change }),
   });
@@ -126,16 +101,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       pendingTransactionsReader: input.persistence.readers.transactions,
     }),
   } satisfies TransactionsNamespaceAdapters;
-  assertPersistedPermissionSelectionIntegrity({
-    permissions: permissionsBootstrap.records,
-    networkSelections: dappConnectionsBootstrap.networkSelections,
-  });
   const permissions = new Permissions({
-    bootstrap: permissionsBootstrap,
+    bootstrap: bootstrap.permissions,
     accounts,
   });
   const dappConnections = new DappConnections({
-    bootstrap: dappConnectionsBootstrap,
+    bootstrap: bootstrap.dappConnections,
     accounts,
     networks,
     permissions,
@@ -309,6 +280,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     },
   };
 
-  transactionMonitor.restore(transactionsBootstrap.pendingTransactions);
+  transactionMonitor.restore(bootstrap.transactions.pendingTransactions);
   return runtime;
 };

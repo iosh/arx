@@ -1,6 +1,5 @@
 export * from "./accounts/index.js";
 export * from "./chains/index.js";
-export * from "./engine/index.js";
 export type { ArxErrorDetails, JsonValue, SerializedArxError } from "./errors.js";
 export {
   ARX_ERROR_KIND,

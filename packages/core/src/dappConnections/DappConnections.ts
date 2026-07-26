@@ -10,7 +10,7 @@ import type { PermissionsReader } from "../permissions/Permissions.js";
 import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
-import type { Wallet } from "../wallet/Wallet.js";
+import type { WalletStatusReader } from "../wallet/Wallet.js";
 import type { DappConnectionsBootstrap } from "./bootstrap.js";
 import { DappOriginInvalidError } from "./errors.js";
 import { parseDappOrigin } from "./origin.js";
@@ -46,7 +46,7 @@ export type DappConnectionsOptions = Readonly<{
   accounts: Pick<Accounts, "getAddress">;
   networks: Pick<NetworksReader, "get" | "getSelection">;
   permissions: PermissionsReader;
-  wallet: Pick<Wallet, "getStatus">;
+  wallet: WalletStatusReader;
   mutations: CoreMutationQueue;
   publishStateChanged(change: DappConnectionStateChanged): void;
 }>;
@@ -75,7 +75,7 @@ export class DappConnections {
   readonly #accounts: Pick<Accounts, "getAddress">;
   readonly #networks: Pick<NetworksReader, "get" | "getSelection">;
   readonly #permissions: PermissionsReader;
-  readonly #wallet: Pick<Wallet, "getStatus">;
+  readonly #wallet: WalletStatusReader;
   readonly #mutations: CoreMutationQueue;
   readonly #publishStateChanged: DappConnectionsOptions["publishStateChanged"];
   #networkSelections: ReadonlyMap<string, DappNetworkSelectionRecord>;

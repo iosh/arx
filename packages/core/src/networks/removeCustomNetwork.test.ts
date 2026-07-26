@@ -6,7 +6,7 @@ import type { PermissionsReader } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { PendingTransactionRecord } from "../transactions/persistence.js";
-import type { Wallet } from "../wallet/Wallet.js";
+import type { WalletStatusReader } from "../wallet/Wallet.js";
 import { NetworkHasPendingTransactionsError } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { NetworksNamespaceAdapters } from "./namespaceAdapter.js";
@@ -126,7 +126,7 @@ const createFixture = (input: FixtureOptions = {}) => {
     } satisfies Pick<Accounts, "getAddress">,
     networks,
     permissions,
-    wallet: { getStatus: () => "unlocked" } satisfies Pick<Wallet, "getStatus">,
+    wallet: { getStatus: () => "unlocked" } satisfies WalletStatusReader,
     mutations,
     publishStateChanged: () => undefined,
   });

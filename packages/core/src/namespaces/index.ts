@@ -1,5 +1,3 @@
-export { builtinNamespaces } from "./builtin.js";
-export type { NamespaceDefinition } from "./definition.js";
 export { chainIdFromChainRef, chainRefFromChainId, validateEip155ChainReference } from "./eip155/chainId.js";
 export { EIP155_NAMESPACE } from "./eip155/constants.js";
 export {
@@ -7,7 +5,6 @@ export {
   Eip155InvalidPrivateKeyError,
   Eip155SigningAccountMismatchError,
 } from "./eip155/errors.js";
-export { eip155Namespace } from "./eip155/namespace.js";
 export type {
   Eip155PersonalMessage,
   Eip155SignRequest,

@@ -1,1 +1,2 @@
-export { WALLET_UI_ORIGIN } from "./internalOrigins.js";
+export type { CoreRuntime, CreateCoreRuntimeInput, UserActivitySource } from "./coreRuntime.js";
+export { createCoreRuntime } from "./createCoreRuntime.js";

@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
 
 export type DappRequest = Readonly<{
@@ -12,11 +13,19 @@ export type DappRequest = Readonly<{
 
 export type DappRequestMethod = (input: DappRequest) => Promise<unknown>;
 
+export type NodeReadRequest = Readonly<{
+  chainRef: ChainRef;
+  method: string;
+  params?: unknown;
+}>;
+
 export type DappNamespace = Readonly<{
   localMethods: ReadonlyMap<string, DappRequestMethod>;
   nodeReadMethods: ReadonlySet<string>;
-  forwardNodeRead(input: DappRequest): Promise<unknown>;
+  forwardNodeRead(input: NodeReadRequest): Promise<unknown>;
 }>;
+
+export type DappNamespaces = Readonly<Record<Namespace, DappNamespace | undefined>>;
 
 export const invalidDappParams = (method: string, reason: string): RpcInvalidParamsError =>
   new RpcInvalidParamsError({ message: `${method}: ${reason}` });
@@ -77,10 +86,10 @@ const unsupportedMethod = (namespace: Namespace, method: string): RpcUnsupported
 
 export const routeDappRequest = async (
   namespace: Namespace,
-  namespaces: ReadonlyMap<Namespace, DappNamespace>,
+  namespaces: DappNamespaces,
   input: DappRequest,
 ): Promise<unknown> => {
-  const namespaceRequests = namespaces.get(namespace);
+  const namespaceRequests = namespaces[namespace];
   if (!namespaceRequests) throw unsupportedMethod(namespace, input.method);
 
   const localMethod = namespaceRequests.localMethods.get(input.method);
@@ -89,4 +98,12 @@ export const routeDappRequest = async (
   if (namespaceRequests.nodeReadMethods.has(input.method)) return namespaceRequests.forwardNodeRead(input);
 
   throw unsupportedMethod(namespace, input.method);
+};
+
+export const routeChainRpcRequest = async (namespaces: DappNamespaces, input: NodeReadRequest): Promise<unknown> => {
+  const { namespace } = parseChainRef(input.chainRef);
+  const namespaceRequests = namespaces[namespace];
+  if (!namespaceRequests?.nodeReadMethods.has(input.method)) throw unsupportedMethod(namespace, input.method);
+
+  return namespaceRequests.forwardNodeRead(input);
 };

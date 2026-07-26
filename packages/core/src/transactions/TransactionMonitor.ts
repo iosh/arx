@@ -63,11 +63,6 @@ export class TransactionMonitor {
     if (this.#pending.size === 0) this.#cancelScheduledInspection();
   }
 
-  stopAll(): void {
-    this.#pending.clear();
-    this.#cancelScheduledInspection();
-  }
-
   #scheduleImmediately(): void {
     this.#cancelScheduledInspection();
     this.#schedule(0);

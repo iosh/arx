@@ -17,7 +17,19 @@ export type {
   PrivateKeySourceInput,
   PrivateKeyWalletCreated,
   RestoreFromMnemonicInput,
-  Wallet,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
+export type {
+  WalletAccountsApi,
+  WalletApi,
+  WalletApiEvent,
+  WalletApprovalsApi,
+  WalletChainRpcApi,
+  WalletChainRpcRequest,
+  WalletHdKeyringsApi,
+  WalletKeySourcesApi,
+  WalletNetworksApi,
+  WalletPermissionsApi,
+  WalletTransactionsApi,
+} from "./WalletApi.js";

@@ -8,7 +8,7 @@ import { NetworkNamespaceUnsupportedError } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import { WalletLockedError } from "../wallet/errors.js";
-import type { Wallet } from "../wallet/Wallet.js";
+import type { WalletStatusReader } from "../wallet/Wallet.js";
 import { PermissionAccountAccessUnavailableError } from "./errors.js";
 import {
   type Permission,
@@ -34,7 +34,7 @@ export type DappAuthorization = Readonly<{
 
 export type CreateDappAuthorizationOptions = Readonly<{
   mutations: CoreMutationQueue;
-  wallet: Pick<Wallet, "getStatus">;
+  wallet: WalletStatusReader;
   accounts: Pick<Accounts, "listSelectableAddresses">;
   networks: Pick<NetworksReader, "getSelection">;
   permissions: Pick<

@@ -13,10 +13,10 @@ import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../../dappConnections/persistence.js";
 import {
   type DappNamespace,
-  type DappRequest,
   decodeDappParams,
   decodeNoParams,
   defineDappMethod,
+  type NodeReadRequest,
 } from "../../dappConnections/routeDappRequest.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { Networks } from "../../networks/Networks.js";
@@ -186,7 +186,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       ["wallet_addEthereumChain", networkHandlers.addEthereumChain],
     ]),
     nodeReadMethods: EIP155_NODE_READ_METHODS,
-    forwardNodeRead: ({ chainRef, method, params }: DappRequest) => {
+    forwardNodeRead: ({ chainRef, method, params }: NodeReadRequest) => {
       const decodedParams = decodeJsonRpcParams(params, method);
       return options.chainJsonRpc.request({
         chainRef,

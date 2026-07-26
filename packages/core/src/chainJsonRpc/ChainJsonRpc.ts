@@ -1,4 +1,3 @@
-import type { JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../networks/chainRef.js";
 import type { NetworkRpcEndpointsReader } from "../networks/types.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "./errors.js";
@@ -8,6 +7,7 @@ import {
   createJsonRpcHttpTransport,
   type JsonRpcHttpTransport,
 } from "./JsonRpcHttpTransport.js";
+import type { JsonRpcParams } from "./types.js";
 
 export type ChainJsonRpcRequest = Readonly<{
   chainRef: ChainRef;

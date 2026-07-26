@@ -1,7 +1,4 @@
 import { ArxBaseError, type JsonObject, type JsonValue, toJsonSafe } from "../errors.js";
-import type { JsonRpcErrorLike } from "./jsonRpcError.js";
-
-export { isJsonRpcErrorLike } from "./jsonRpcError.js";
 
 export type RpcErrorInput = {
   message?: string;
@@ -109,17 +106,6 @@ export class RpcInternalError extends ArxBaseError {
     });
   }
 }
-
-export const sanitizeJsonRpcErrorObject = (
-  error: JsonRpcErrorLike,
-): { code: number; message: string; data?: JsonValue } => {
-  const data = toJsonSafe(error.data);
-  return {
-    code: error.code,
-    message: typeof error.message === "string" && error.message.length > 0 ? error.message : "Unknown error",
-    ...(data !== undefined ? { data } : {}),
-  };
-};
 
 export const createRpcInternalErrorFromUnknown = (error: unknown): RpcInternalError => {
   return new RpcInternalError({ cause: error });

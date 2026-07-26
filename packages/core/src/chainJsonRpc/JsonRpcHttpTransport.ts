@@ -1,6 +1,6 @@
-import type { JsonRpcParams } from "@metamask/utils";
 import { ArxBaseError, type JsonValue, toJsonSafe } from "../errors.js";
 import type { RpcEndpoint } from "../networks/types.js";
+import type { JsonRpcParams } from "./types.js";
 
 export type JsonRpcHttpRequest = Readonly<{
   endpoint: RpcEndpoint;

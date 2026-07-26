@@ -1,16 +1,5 @@
 import { ArxBaseError } from "../errors.js";
 
-export class ChainAddressNamespaceNotSupportedError extends ArxBaseError {
-  static readonly code = "chain.address_namespace_not_supported";
-
-  constructor(params: { chainRef: string; namespace: string }) {
-    super(`No chain address handling is available for "${params.chainRef}".`, {
-      code: ChainAddressNamespaceNotSupportedError.code,
-      details: { chainRef: params.chainRef, namespace: params.namespace },
-    });
-  }
-}
-
 export class ChainInvalidAddressError extends ArxBaseError {
   static readonly code = "chain.address.invalid";
 

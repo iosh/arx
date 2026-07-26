@@ -8,6 +8,7 @@ import {
 import type { Approvals } from "../../approvals/Approvals.js";
 import { isApprovalDecisionError } from "../../approvals/errors.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import type { JsonRpcParams } from "../../chainJsonRpc/types.js";
 import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../../dappConnections/persistence.js";
 import {
@@ -17,7 +18,6 @@ import {
   decodeNoParams,
   defineDappMethod,
 } from "../../dappConnections/routeDappRequest.js";
-import type { JsonObject, JsonValue } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { Networks } from "../../networks/Networks.js";
 import type { DappAuthorization } from "../../permissions/createDappAuthorization.js";
@@ -33,8 +33,6 @@ import { EIP155_NAMESPACE } from "./constants.js";
 import { createEip155DappNetworkHandlers } from "./dappNetworks.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
 import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
-
-type JsonRpcParams = JsonValue[] | JsonObject;
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;

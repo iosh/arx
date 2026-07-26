@@ -23,25 +23,3 @@ export class PermissionNetworkSelectionMissingError extends ArxBaseError {
     });
   }
 }
-
-export class PermissionNotConnectedError extends ArxBaseError {
-  static readonly code = "permission.not_connected";
-
-  constructor(scope: PermissionScope) {
-    super("Origin has no account permission for the namespace.", {
-      code: PermissionNotConnectedError.code,
-      details: scope,
-    });
-  }
-}
-
-export class PermissionAccountNotAuthorizedError extends ArxBaseError {
-  static readonly code = "permission.account_not_authorized";
-
-  constructor(scope: PermissionScope) {
-    super("Requested account is not authorized for the permission scope.", {
-      code: PermissionAccountNotAuthorizedError.code,
-      details: scope,
-    });
-  }
-}

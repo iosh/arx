@@ -9,7 +9,7 @@ import type { TransactionsNamespaceAdapter } from "./namespaceAdapter.js";
 import type { PendingTransactionRecord } from "./persistence.js";
 import type { PreparedTransaction } from "./preparedTransaction.js";
 import { createTransactions } from "./Transactions.js";
-import type { Transaction, TransactionBroadcastOutcome, TransactionId } from "./types.js";
+import type { Transaction, TransactionBroadcastOutcome, TransactionId, TransactionSigningInput } from "./types.js";
 
 const ACCOUNT_ID = "eip155:0000000000000000000000000000000000000001";
 const CHAIN_REF: ChainRef = "eip155:1";
@@ -100,10 +100,8 @@ const createFixture = (input: FixtureOptions = {}) => {
   const networks = {
     get: vi.fn(() => network),
   } satisfies Pick<NetworksReader, "get">;
-  type SigningInputRequest = Parameters<TransactionsNamespaceAdapter["createSigningInput"]>[0];
-  type SigningInput = Awaited<ReturnType<TransactionsNamespaceAdapter["createSigningInput"]>>;
   type SignedTransaction = Awaited<ReturnType<TransactionsNamespaceAdapter["sign"]>>;
-  const createSigningInput = vi.fn(async (params: SigningInputRequest): Promise<SigningInput> => {
+  const createSigningInput = vi.fn(async (params: PreparedTransaction): Promise<TransactionSigningInput> => {
     await input.pauseBeforeSigningInput?.();
 
     return {
@@ -112,7 +110,11 @@ const createFixture = (input: FixtureOptions = {}) => {
       transaction: { ...params.transaction, nonce: params.transaction.nonce ?? "0x1" },
     };
   });
-  const sign = vi.fn(async (signingInput: SigningInput): Promise<SignedTransaction> => {
+  const withSigningInput = async <T>(
+    params: PreparedTransaction,
+    use: (signingInput: TransactionSigningInput) => Promise<T>,
+  ): Promise<T> => use(await createSigningInput(params));
+  const sign = vi.fn(async (signingInput: TransactionSigningInput): Promise<SignedTransaction> => {
     if (input.signingError) throw input.signingError;
 
     return {
@@ -142,7 +144,7 @@ const createFixture = (input: FixtureOptions = {}) => {
     prepareReplacement: async () => {
       throw new Error("Unexpected replacement preparation.");
     },
-    createSigningInput,
+    withSigningInput,
     sign,
     broadcast,
     createSubmission,

@@ -110,12 +110,13 @@ const legacyRequest = {
   to: RECIPIENT,
   value: "0x1",
   gasPrice: "0x2",
+  nonce: "0x9",
   chainId: "0x1",
   type: "0x0",
 };
 
 describe("EIP-155 dapp transactions", () => {
-  it("decodes auto, legacy, EIP-2930, and EIP-1559 transaction requests", () => {
+  it("decodes transaction kinds and ignores a dapp nonce", () => {
     const cases = [
       {
         request: { from: ADDRESS },
@@ -154,6 +155,8 @@ describe("EIP-155 dapp transactions", () => {
         testCase.expected,
       );
     }
+
+    expect(decodeSendTransactionParams([legacyRequest], "eth_sendTransaction").transaction).not.toHaveProperty("nonce");
   });
 
   it("prepares, approves, and submits the decoded transaction", async () => {

@@ -119,6 +119,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     eip155: createEip155TransactionsAdapter({
       chainJsonRpc,
       signing: eip155AccountSigning,
+      pendingTransactionsReader: input.persistence.readers.transactions,
     }),
   } satisfies TransactionsNamespaceAdapters;
   assertPersistedPermissionSelectionIntegrity({

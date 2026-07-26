@@ -4,22 +4,15 @@ import * as HexValue from "ox/Hex";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
-import type { AccountId } from "../../accounts/accountId.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import { isArxBaseError } from "../../errors.js";
 import { type Eip155AccountSigning, isAccountSigningUnavailableError } from "../../namespaces/eip155/accountSigning.js";
-import type { ChainRef } from "../../networks/chainRef.js";
 import { Eip155TransactionSigningError, Eip155TransactionSigningUnavailableError } from "./errors.js";
 import { createEip155TransactionEnvelope } from "./transactionEnvelope.js";
 import type * as Eip155 from "./types.js";
 
 export type Eip155TransactionSubmitter = Readonly<{
-  createSigningInput(input: {
-    chainRef: ChainRef;
-    accountId: AccountId;
-    transaction: Eip155.PreparedTransaction;
-  }): Promise<Eip155.SigningInput>;
   sign(input: Eip155.SigningInput): Promise<Eip155.SignedTransaction>;
   broadcast(signed: Eip155.SignedTransaction): Promise<Eip155.BroadcastOutcome>;
 }>;
@@ -77,23 +70,6 @@ export const createEip155TransactionSubmitter = (params: {
   chainJsonRpc: ChainJsonRpc;
   signing: Eip155AccountSigning;
 }): Eip155TransactionSubmitter => ({
-  async createSigningInput(input) {
-    const nonce =
-      input.transaction.nonce ??
-      (await params.chainJsonRpc.request<Hex>({
-        chainRef: input.chainRef,
-        method: "eth_getTransactionCount",
-        params: [input.transaction.from, "pending"],
-        replay: "allowed",
-      }));
-
-    return {
-      chainRef: input.chainRef,
-      accountId: input.accountId,
-      transaction: { ...input.transaction, nonce },
-    };
-  },
-
   sign: (input) => signEip155Transaction(input, params.signing),
 
   async broadcast(signed) {

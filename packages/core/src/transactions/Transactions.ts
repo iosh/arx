@@ -102,38 +102,38 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
       await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
     }
 
-    const signingInput = await adapter.createSigningInput(prepared);
+    const { pending, signed } = await adapter.withSigningInput(prepared, (signingInput) =>
+      params.mutations.run(async (commit) => {
+        if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+        if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
+        if (prepared.replacesTransactionId !== undefined) {
+          await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
+        }
 
-    const { pending, signed } = await params.mutations.run(async (commit) => {
-      if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
-      if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
-      if (prepared.replacesTransactionId !== undefined) {
-        await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
-      }
+        const signed = await adapter.sign(signingInput);
+        const now = params.time.now();
+        const record: PendingTransactionRecord = {
+          transactionId: globalThis.crypto.randomUUID(),
+          namespace: prepared.namespace,
+          chainRef: prepared.chainRef,
+          accountId: prepared.accountId,
+          initiator: prepared.initiator,
+          ...(prepared.replacesTransactionId === undefined
+            ? {}
+            : { replacesTransactionId: prepared.replacesTransactionId }),
+          transaction: signed.transaction,
+          state: { status: "pending" },
+          recovery: signed.recovery,
+          createdAt: now,
+          updatedAt: now,
+        };
 
-      const signed = await adapter.sign(signingInput);
-      const now = params.time.now();
-      const record: PendingTransactionRecord = {
-        transactionId: globalThis.crypto.randomUUID(),
-        namespace: prepared.namespace,
-        chainRef: prepared.chainRef,
-        accountId: prepared.accountId,
-        initiator: prepared.initiator,
-        ...(prepared.replacesTransactionId === undefined
-          ? {}
-          : { replacesTransactionId: prepared.replacesTransactionId }),
-        transaction: signed.transaction,
-        state: { status: "pending" },
-        recovery: signed.recovery,
-        createdAt: now,
-        updatedAt: now,
-      };
+        await commit([persistenceChange.put(transactionPersistenceType, record)]);
 
-      await commit([persistenceChange.put(transactionPersistenceType, record)]);
-
-      params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
-      return { pending: record, signed };
-    });
+        params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
+        return { pending: record, signed };
+      }),
+    );
 
     let broadcast: TransactionBroadcastOutcome;
     try {

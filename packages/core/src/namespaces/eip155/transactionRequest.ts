@@ -100,13 +100,13 @@ const decodeAccessList = (
   }));
 };
 
+// Dapp nonce is accepted by the request shape but assigned by the wallet during signing.
 const decodeCommonFields = (request: RpcTransactionFields, method: string) => ({
   from: decodeAddress(request.from, method, "from"),
   to: request.to === undefined || request.to === null ? request.to : decodeAddress(request.to, method, "to"),
   value: request.value === undefined ? undefined : decodeHexNumber(request.value, method, "value"),
   data: request.data === undefined ? undefined : decodeHexBytes(request.data, method, "data"),
   gas: request.gas === undefined ? undefined : decodeHexNumber(request.gas, method, "gas"),
-  nonce: request.nonce === undefined ? undefined : decodeHexNumber(request.nonce, method, "nonce"),
   requestedChainRef: request.chainId === undefined ? undefined : decodeChainId(request.chainId, method).chainRef,
 });
 

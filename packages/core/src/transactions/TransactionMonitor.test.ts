@@ -76,7 +76,7 @@ const createHarness = (input?: {
     namespace: "eip155",
     prepare: async () => unexpected(),
     prepareReplacement: async () => unexpected(),
-    createSigningInput: async () => unexpected(),
+    withSigningInput: async () => unexpected(),
     sign: async () => unexpected(),
     broadcast: async () => unexpected(),
     createSubmission: unexpected,

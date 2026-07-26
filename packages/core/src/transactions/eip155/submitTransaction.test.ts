@@ -75,12 +75,11 @@ describe("EIP-155 transaction submission", () => {
       gasPrice: "0x3b9aca00",
     } satisfies Eip155.PreparedTransaction;
 
-    const signingInput = await submitter.createSigningInput({
+    const signed = await submitter.sign({
       chainRef: CHAIN_REF,
       accountId: ACCOUNT_ID,
       transaction,
     });
-    const signed = await submitter.sign(signingInput);
 
     expect(TransactionEnvelopeLegacy.deserialize(signed.recovery.rawTransaction)).toMatchObject({
       chainId: 1,
@@ -113,12 +112,11 @@ describe("EIP-155 transaction submission", () => {
       accessList: ACCESS_LIST,
     } satisfies Eip155.PreparedTransaction;
 
-    const signingInput = await submitter.createSigningInput({
+    const signed = await submitter.sign({
       chainRef: CHAIN_REF,
       accountId: ACCOUNT_ID,
       transaction,
     });
-    const signed = await submitter.sign(signingInput);
 
     expect(
       TransactionEnvelopeEip2930.deserialize(signed.recovery.rawTransaction as TransactionEnvelopeEip2930.Serialized),
@@ -130,15 +128,14 @@ describe("EIP-155 transaction submission", () => {
     });
   });
 
-  it("uses pending nonce lookup and a forbidden-replay raw broadcast for EIP-1559", async () => {
+  it("signs and broadcasts an EIP-1559 transaction without replaying the raw submission", async () => {
     const { chainJsonRpc, request } = createRpc(({ method }) => {
-      if (method === "eth_getTransactionCount") return "0x9";
       if (method === "eth_sendRawTransaction") return TRANSACTION_HASH;
       throw new Error(`Unexpected RPC method: ${method}`);
     });
     const { signing } = createSigning();
     const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
-    const signingInput = await submitter.createSigningInput({
+    const signed = await submitter.sign({
       chainRef: CHAIN_REF,
       accountId: ACCOUNT_ID,
       transaction: {
@@ -147,13 +144,13 @@ describe("EIP-155 transaction submission", () => {
         value: "0x1",
         data: "0x",
         gas: "0x5208",
+        nonce: "0x9",
         type: "eip1559",
         maxFeePerGas: "0x77359400",
         maxPriorityFeePerGas: "0x59682f00",
         accessList: [],
       },
     });
-    const signed = await submitter.sign(signingInput);
 
     await expect(submitter.broadcast(signed)).resolves.toEqual({
       status: "accepted",
@@ -170,13 +167,7 @@ describe("EIP-155 transaction submission", () => {
       gas: 21_000n,
       value: 1n,
     });
-    expect(request).toHaveBeenNthCalledWith(1, {
-      chainRef: CHAIN_REF,
-      method: "eth_getTransactionCount",
-      params: [FROM, "pending"],
-      replay: "allowed",
-    });
-    expect(request).toHaveBeenNthCalledWith(2, {
+    expect(request).toHaveBeenCalledWith({
       chainRef: CHAIN_REF,
       method: "eth_sendRawTransaction",
       params: [signed.recovery.rawTransaction],

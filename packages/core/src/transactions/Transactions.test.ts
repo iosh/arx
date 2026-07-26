@@ -69,7 +69,7 @@ const createDependencies = (input?: {
       accountId: target.accountId,
       transaction: target.transaction,
     })),
-    createSigningInput: async () => unexpectedTransactionSubmission(),
+    withSigningInput: async () => unexpectedTransactionSubmission(),
     sign: async () => unexpectedTransactionSubmission(),
     broadcast: async () => unexpectedTransactionSubmission(),
     createSubmission: unexpectedTransactionSubmission,

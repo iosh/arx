@@ -54,7 +54,7 @@ export const createEip155TransactionsAdapter = (params: {
     broadcast: submitTransaction.broadcast,
     createSubmission: ({ transaction, broadcast }) =>
       broadcast.status === "rejected"
-        ? { status: "failed", transaction }
+        ? { status: "failed", transaction, failure: broadcast.failure }
         : { status: "pending", transaction, transactionHash: broadcast.transactionHash },
     inspectPending: monitorTransaction.inspectPending,
     recoverPending: monitorTransaction.recoverPending,

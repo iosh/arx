@@ -8,6 +8,7 @@ import {
   CustomNetworkAlreadyExistsError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
+  NetworkRpcEndpointVerificationError,
   NetworkSelectionMissingError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
@@ -260,7 +261,10 @@ describe("Networks", () => {
         throw transportFailure;
       },
     });
-    await expect(unavailable.networks.addCustom(custom)).rejects.toBe(transportFailure);
+    await expect(unavailable.networks.addCustom(custom)).rejects.toMatchObject({
+      code: NetworkRpcEndpointVerificationError.code,
+      cause: transportFailure,
+    });
 
     const commitFailure = new Error("commit failed");
     const failedCommit = createNetworks({

@@ -256,6 +256,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
         permissions,
         approvals,
         accountSigning: eip155AccountSigning,
+        networks,
+        transactions,
       }),
     ],
   ]);

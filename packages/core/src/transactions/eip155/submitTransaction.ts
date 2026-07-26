@@ -2,15 +2,16 @@ import * as Hash from "ox/Hash";
 import type { Hex } from "ox/Hex";
 import * as HexValue from "ox/Hex";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
+import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import type { AccountId } from "../../accounts/accountId.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import { isArxBaseError } from "../../errors.js";
-import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
-import { chainIdFromChainRef } from "../../namespaces/eip155/chainId.js";
+import { type Eip155AccountSigning, isAccountSigningUnavailableError } from "../../namespaces/eip155/accountSigning.js";
 import type { ChainRef } from "../../networks/chainRef.js";
-import { Eip155TransactionSigningError } from "./errors.js";
+import { Eip155TransactionSigningError, Eip155TransactionSigningUnavailableError } from "./errors.js";
+import { createEip155TransactionEnvelope } from "./transactionEnvelope.js";
 import type * as Eip155 from "./types.js";
 
 export type Eip155TransactionSubmitter = Readonly<{
@@ -28,41 +29,34 @@ const signEip155Transaction = async (
   signing: Eip155AccountSigning,
 ): Promise<Eip155.SignedTransaction> => {
   try {
-    const { transaction } = input;
-    const chainId = Number(chainIdFromChainRef(input.chainRef));
-    const envelope = {
-      chainId,
-      nonce: BigInt(transaction.nonce),
-      gas: BigInt(transaction.gas),
-      to: transaction.to === null ? null : (transaction.to as Hex),
-      value: BigInt(transaction.value),
-      data: transaction.data,
-    };
+    const transaction = input.transaction;
+    const transactionEnvelope = createEip155TransactionEnvelope(input.chainRef, transaction);
+    const signPayload = async (payload: Hex) =>
+      signing.signDigest({
+        accountId: input.accountId,
+        digest: HexValue.toBytes(payload),
+      });
 
     let rawTransaction: Hex;
-    if (transaction.fee.type === "legacy") {
-      const legacy = {
-        ...envelope,
-        type: "legacy" as const,
-        gasPrice: BigInt(transaction.fee.gasPrice),
-      };
-      const signature = await signing.signDigest({
-        accountId: input.accountId,
-        digest: HexValue.toBytes(TransactionEnvelopeLegacy.getSignPayload(legacy)),
-      });
-      rawTransaction = TransactionEnvelopeLegacy.serialize(legacy, { signature });
-    } else {
-      const eip1559 = {
-        ...envelope,
-        type: "eip1559" as const,
-        maxFeePerGas: BigInt(transaction.fee.maxFeePerGas),
-        maxPriorityFeePerGas: BigInt(transaction.fee.maxPriorityFeePerGas),
-      };
-      const signature = await signing.signDigest({
-        accountId: input.accountId,
-        digest: HexValue.toBytes(TransactionEnvelopeEip1559.getSignPayload(eip1559)),
-      });
-      rawTransaction = TransactionEnvelopeEip1559.serialize(eip1559, { signature });
+    switch (transactionEnvelope.type) {
+      case "legacy": {
+        const envelope = transactionEnvelope.envelope;
+        const signature = await signPayload(TransactionEnvelopeLegacy.getSignPayload(envelope));
+        rawTransaction = TransactionEnvelopeLegacy.serialize(envelope, { signature });
+        break;
+      }
+      case "eip2930": {
+        const envelope = transactionEnvelope.envelope;
+        const signature = await signPayload(TransactionEnvelopeEip2930.getSignPayload(envelope));
+        rawTransaction = TransactionEnvelopeEip2930.serialize(envelope, { signature });
+        break;
+      }
+      case "eip1559": {
+        const envelope = transactionEnvelope.envelope;
+        const signature = await signPayload(TransactionEnvelopeEip1559.getSignPayload(envelope));
+        rawTransaction = TransactionEnvelopeEip1559.serialize(envelope, { signature });
+        break;
+      }
     }
 
     return {
@@ -71,6 +65,9 @@ const signEip155Transaction = async (
       recovery: { rawTransaction },
     };
   } catch (cause) {
+    if (isAccountSigningUnavailableError(cause)) {
+      throw new Eip155TransactionSigningUnavailableError(input.chainRef, cause);
+    }
     if (isArxBaseError(cause)) throw cause;
     throw new Eip155TransactionSigningError(input.chainRef, cause);
   }

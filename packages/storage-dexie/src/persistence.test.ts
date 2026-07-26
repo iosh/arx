@@ -70,8 +70,9 @@ const transaction = (params: {
       data: "0x",
       gas: "0x5208",
       nonce: "0x1",
-      fee: { type: "legacy", gasPrice: "0x1" },
-    },
+      type: "legacy",
+      gasPrice: "0x1",
+    } as const,
     createdAt: params.createdAt,
     updatedAt: params.createdAt,
   };
@@ -351,11 +352,13 @@ describe("createDexiePersistence", () => {
 
     const firstPage = await persistence.readers.transactions.list({ limit: 2 });
     expect(firstPage.transactions.map((record) => record.transactionId)).toEqual(["transaction-c", "transaction-b"]);
-    expect(firstPage.nextCursor).toEqual({ createdAt: 100, transactionId: "transaction-b" });
+    const nextCursor = firstPage.nextCursor;
+    if (!nextCursor) throw new Error("Expected another transaction page.");
+    expect(nextCursor).toEqual({ createdAt: 100, transactionId: "transaction-b" });
     expect(
       await persistence.readers.transactions.list({
         limit: 2,
-        cursor: firstPage.nextCursor,
+        cursor: nextCursor,
       }),
     ).toMatchObject({ transactions: [{ transactionId: "transaction-a" }] });
     expect(await persistence.readers.transactions.get(first.transactionId)).not.toHaveProperty("recovery");

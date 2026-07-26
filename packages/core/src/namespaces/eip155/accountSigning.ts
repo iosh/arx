@@ -18,6 +18,12 @@ export type Eip155AccountSigning = Readonly<{
   signDigest(params: { accountId: AccountId; digest: Uint8Array }): Promise<Eip155DigestSignature>;
 }>;
 
+export const isAccountSigningUnavailableError = (error: unknown): boolean =>
+  error instanceof AccountNotFoundError ||
+  error instanceof WalletLockedError ||
+  error instanceof KeySourceNotFoundError ||
+  error instanceof HdKeyringNotFoundError;
+
 const getKeySourceSecret = (keyring: Pick<Keyring, "getSecrets">, keySourceId: KeySourceId): KeySourceSecret => {
   const secrets = keyring.getSecrets();
   if (!secrets) throw new WalletLockedError();

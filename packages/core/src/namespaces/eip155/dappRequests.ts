@@ -19,22 +19,26 @@ import {
 } from "../../dappConnections/routeDappRequest.js";
 import type { JsonObject, JsonValue } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
+import type { Networks } from "../../networks/Networks.js";
 import type { DappAuthorization } from "../../permissions/createDappAuthorization.js";
 import { buildEip2255Permissions } from "../../permissions/eip2255.js";
 import { PermissionAccountAccessUnavailableError } from "../../permissions/errors.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
 import { RpcUnauthorizedError, RpcUserRejectedRequestError } from "../../rpc/errors.js";
+import type { Transactions } from "../../transactions/Transactions.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
+import { createEip155DappNetworkHandlers } from "./dappNetworks.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
+import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
 
 type JsonRpcParams = JsonValue[] | JsonObject;
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;
-  dappConnections: Pick<DappConnections, "getConnectionState">;
+  dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
   dappAuthorization: Readonly<{
     requestAccountAccess: DappAuthorization["requestAccountAccess"];
     permissions: Pick<DappAuthorization["permissions"], "revoke">;
@@ -43,6 +47,8 @@ type CreateEip155DappNamespaceOptions = Readonly<{
   permissions: Pick<PermissionsReader, "get">;
   approvals: Pick<Approvals, "request">;
   accountSigning: Eip155AccountSigning;
+  networks: Pick<Networks, "get" | "addCustom">;
+  transactions: Pick<Transactions, "prepare" | "submit">;
 }>;
 
 const JSON_RPC_PARAMS_SCHEMA: z.ZodType<JsonRpcParams> = z.union([z.array(z.json()), z.record(z.string(), z.json())]);
@@ -102,6 +108,17 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
     permissions: options.permissions,
     approvals: options.approvals,
     accountSigning: options.accountSigning,
+  });
+  const transactionHandlers = createEip155DappTransactionHandlers({
+    accounts: options.accounts,
+    permissions: options.permissions,
+    approvals: options.approvals,
+    transactions: options.transactions,
+  });
+  const networkHandlers = createEip155DappNetworkHandlers({
+    networks: options.networks,
+    dappConnections: options.dappConnections,
+    approvals: options.approvals,
   });
 
   return {
@@ -166,6 +183,9 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       ],
       ["personal_sign", signingHandlers.personalSign],
       ["eth_signTypedData_v4", signingHandlers.signTypedDataV4],
+      ["eth_sendTransaction", transactionHandlers.sendTransaction],
+      ["wallet_switchEthereumChain", networkHandlers.switchEthereumChain],
+      ["wallet_addEthereumChain", networkHandlers.addEthereumChain],
     ]),
     nodeReadMethods: EIP155_NODE_READ_METHODS,
     forwardNodeRead: ({ chainRef, method, params }: DappRequest) => {

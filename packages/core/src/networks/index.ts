@@ -20,6 +20,7 @@ export {
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
+  NetworkRpcEndpointVerificationError,
   NetworkSelectionMissingError,
 } from "./errors.js";
 export { Networks } from "./Networks.js";

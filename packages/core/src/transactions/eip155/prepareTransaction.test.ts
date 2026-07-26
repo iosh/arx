@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
-import { Eip155PriorityFeeExceedsMaxFeeError } from "./errors.js";
+import { Eip155PriorityFeeExceedsMaxFeeError, Eip155TransactionInvalidError } from "./errors.js";
 import { createEip155TransactionPreparer } from "./prepareTransaction.js";
 
 const CHAIN_REF = "eip155:1";
@@ -31,6 +31,7 @@ describe("EIP-155 transaction preparation", () => {
         chainRef: CHAIN_REF,
         from: FROM,
         transaction: {
+          type: "auto",
           to: TO,
           value: "0x00",
           data: "0xabcd",
@@ -44,11 +45,10 @@ describe("EIP-155 transaction preparation", () => {
       data: "0xabcd",
       gas: "0x5208",
       nonce: "0x01",
-      fee: {
-        type: "eip1559",
-        maxFeePerGas: "0x22",
-        maxPriorityFeePerGas: "0x2",
-      },
+      type: "eip1559",
+      maxFeePerGas: "0x22",
+      maxPriorityFeePerGas: "0x2",
+      accessList: [],
     });
     expect(request.mock.calls.map(([input]) => input.method)).toEqual([
       "eth_getBlockByNumber",
@@ -64,8 +64,10 @@ describe("EIP-155 transaction preparation", () => {
           to: TO,
           value: "0x00",
           data: "0xabcd",
+          type: "0x2",
           maxFeePerGas: "0x22",
           maxPriorityFeePerGas: "0x2",
+          accessList: [],
         },
       ],
       replay: "allowed",
@@ -83,12 +85,13 @@ describe("EIP-155 transaction preparation", () => {
         chainRef: CHAIN_REF,
         from: FROM,
         transaction: {
+          type: "legacy",
           to: TO,
           value: "0x01",
           data: "0x",
           gas: "0x5208",
           nonce: "0x01",
-          fee: { type: "legacy", gasPrice: "0x03" },
+          gasPrice: "0x03",
         },
       }),
     ).resolves.toEqual({
@@ -98,7 +101,8 @@ describe("EIP-155 transaction preparation", () => {
       data: "0x",
       gas: "0x5208",
       nonce: "0x01",
-      fee: { type: "legacy", gasPrice: "0x03" },
+      type: "legacy",
+      gasPrice: "0x03",
     });
     expect(request).not.toHaveBeenCalled();
   });
@@ -116,9 +120,10 @@ describe("EIP-155 transaction preparation", () => {
         chainRef: CHAIN_REF,
         from: FROM,
         transaction: {
+          type: "eip1559",
           gas: "0x5208",
           nonce: "0x05",
-          fee: { type: "eip1559", maxFeePerGas: "0x40" },
+          maxFeePerGas: "0x40",
         },
       }),
     ).resolves.toEqual({
@@ -128,11 +133,10 @@ describe("EIP-155 transaction preparation", () => {
       data: "0x",
       gas: "0x5208",
       nonce: "0x05",
-      fee: {
-        type: "eip1559",
-        maxFeePerGas: "0x40",
-        maxPriorityFeePerGas: "0x2",
-      },
+      type: "eip1559",
+      maxFeePerGas: "0x40",
+      maxPriorityFeePerGas: "0x2",
+      accessList: [],
     });
     expect(request.mock.calls.map(([input]) => input.method)).toEqual([
       "eth_getBlockByNumber",
@@ -152,14 +156,25 @@ describe("EIP-155 transaction preparation", () => {
         chainRef: CHAIN_REF,
         from: FROM,
         transaction: {
+          type: "eip1559",
           gas: "0x5208",
-          fee: {
-            type: "eip1559",
-            maxFeePerGas: "0x1",
-            maxPriorityFeePerGas: "0x2",
-          },
+          maxFeePerGas: "0x1",
+          maxPriorityFeePerGas: "0x2",
         },
       }),
     ).rejects.toBeInstanceOf(Eip155PriorityFeeExceedsMaxFeeError);
+
+    await expect(
+      prepare({
+        chainRef: CHAIN_REF,
+        from: FROM,
+        transaction: {
+          type: "eip1559",
+          gas: "0x5208",
+          maxFeePerGas: `0x1${"0".repeat(64)}`,
+          maxPriorityFeePerGas: "0x1",
+        },
+      }),
+    ).rejects.toBeInstanceOf(Eip155TransactionInvalidError);
   });
 });

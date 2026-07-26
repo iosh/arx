@@ -7,21 +7,24 @@ import { createEip155TransactionMonitor } from "./monitorTransaction.js";
 const CHAIN_REF = "eip155:1";
 const RAW_TRANSACTION = "0xdeadbeef" as const;
 
+const pendingTransaction = {
+  from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  value: "0x0",
+  data: "0x",
+  gas: "0x5208",
+  nonce: "0x1",
+  type: "legacy",
+  gasPrice: "0x1",
+} as const;
+
 const pendingRecord: Eip155PendingTransactionRecord = {
   transactionId: "transaction-1",
   namespace: "eip155",
   chainRef: CHAIN_REF,
   accountId: "eip155:0000000000000000000000000000000000000001",
   initiator: { type: "wallet" },
-  transaction: {
-    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    value: "0x0",
-    data: "0x",
-    gas: "0x5208",
-    nonce: "0x1",
-    fee: { type: "legacy", gasPrice: "0x1" },
-  },
+  transaction: pendingTransaction,
   state: { status: "pending" },
   recovery: { rawTransaction: RAW_TRANSACTION },
   createdAt: 1,
@@ -33,8 +36,8 @@ const replacementRecord: Eip155PendingTransactionRecord = {
   transactionId: "transaction-2",
   replacesTransactionId: pendingRecord.transactionId,
   transaction: {
-    ...pendingRecord.transaction,
-    fee: { type: "legacy", gasPrice: "0x2" },
+    ...pendingTransaction,
+    gasPrice: "0x2",
   },
   recovery: { rawTransaction: "0xcafebabe" },
   createdAt: 2,
@@ -45,7 +48,7 @@ const unrelatedRecord: Eip155PendingTransactionRecord = {
   ...pendingRecord,
   transactionId: "transaction-3",
   transaction: {
-    ...pendingRecord.transaction,
+    ...pendingTransaction,
     nonce: "0x2",
   },
   recovery: { rawTransaction: "0xfeedface" },

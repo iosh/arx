@@ -1,5 +1,6 @@
 import * as Hash from "ox/Hash";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
+import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
@@ -13,6 +14,12 @@ const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+const ACCESS_LIST = [
+  {
+    address: TO,
+    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000000"],
+  },
+] as const;
 
 const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef"): Eip155.SignedTransaction => ({
   chainRef: CHAIN_REF,
@@ -23,7 +30,8 @@ const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef"): Eip155
     data: "0x",
     gas: "0x5208",
     nonce: "0x1",
-    fee: { type: "legacy" as const, gasPrice: "0x1" },
+    type: "legacy",
+    gasPrice: "0x1",
   },
   recovery: { rawTransaction },
 });
@@ -63,7 +71,8 @@ describe("EIP-155 transaction submission", () => {
       data: "0x",
       gas: "0x5208",
       nonce: "0x1",
-      fee: { type: "legacy" as const, gasPrice: "0x3b9aca00" },
+      type: "legacy",
+      gasPrice: "0x3b9aca00",
     } satisfies Eip155.PreparedTransaction;
 
     const signingInput = await submitter.createSigningInput({
@@ -86,6 +95,41 @@ describe("EIP-155 transaction submission", () => {
     expect(signed.transaction).toEqual({ ...transaction, nonce: "0x1" });
   });
 
+  it("signs an EIP-2930 transaction with its access list", async () => {
+    const { chainJsonRpc } = createRpc(() => {
+      throw new Error("Unexpected RPC request");
+    });
+    const { signing } = createSigning();
+    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const transaction = {
+      from: FROM,
+      to: TO,
+      value: "0x1",
+      data: "0x",
+      gas: "0x5208",
+      nonce: "0x1",
+      type: "eip2930",
+      gasPrice: "0x3b9aca00",
+      accessList: ACCESS_LIST,
+    } satisfies Eip155.PreparedTransaction;
+
+    const signingInput = await submitter.createSigningInput({
+      chainRef: CHAIN_REF,
+      accountId: ACCOUNT_ID,
+      transaction,
+    });
+    const signed = await submitter.sign(signingInput);
+
+    expect(
+      TransactionEnvelopeEip2930.deserialize(signed.recovery.rawTransaction as TransactionEnvelopeEip2930.Serialized),
+    ).toMatchObject({
+      chainId: 1,
+      nonce: 1n,
+      gasPrice: 1_000_000_000n,
+      accessList: ACCESS_LIST,
+    });
+  });
+
   it("uses pending nonce lookup and a forbidden-replay raw broadcast for EIP-1559", async () => {
     const { chainJsonRpc, request } = createRpc(({ method }) => {
       if (method === "eth_getTransactionCount") return "0x9";
@@ -103,11 +147,10 @@ describe("EIP-155 transaction submission", () => {
         value: "0x1",
         data: "0x",
         gas: "0x5208",
-        fee: {
-          type: "eip1559",
-          maxFeePerGas: "0x77359400",
-          maxPriorityFeePerGas: "0x59682f00",
-        },
+        type: "eip1559",
+        maxFeePerGas: "0x77359400",
+        maxPriorityFeePerGas: "0x59682f00",
+        accessList: [],
       },
     });
     const signed = await submitter.sign(signingInput);

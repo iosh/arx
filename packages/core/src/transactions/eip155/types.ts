@@ -1,48 +1,82 @@
+import type { AccessList } from "ox/AccessList";
 import type { Hex } from "ox/Hex";
 import type { AccountId } from "../../accounts/accountId.js";
 import type { JsonValue } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { TransactionId, TransactionInitiator } from "../types.js";
 
-export type FeeRequest =
-  | Readonly<{ type: "legacy"; gasPrice?: Hex }>
-  | Readonly<{
-      type: "eip1559";
-      maxFeePerGas?: Hex;
-      maxPriorityFeePerGas?: Hex;
-    }>;
-
-export type Fee =
-  | Readonly<{ type: "legacy"; gasPrice: Hex }>
-  | Readonly<{
-      type: "eip1559";
-      maxFeePerGas: Hex;
-      maxPriorityFeePerGas: Hex;
-    }>;
-
-export type TransactionRequest = Readonly<{
-  to?: string;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  nonce?: Hex;
-  fee?: FeeRequest;
+type TransactionRequestFields = Readonly<{
+  to?: string | null | undefined;
+  value?: Hex | undefined;
+  data?: Hex | undefined;
+  gas?: Hex | undefined;
+  nonce?: Hex | undefined;
 }>;
 
-export type PreparedTransaction = Readonly<{
+export type AutoTransactionRequest = TransactionRequestFields & Readonly<{ type: "auto" }>;
+
+export type LegacyTransactionRequest = TransactionRequestFields &
+  Readonly<{
+    type: "legacy";
+    gasPrice?: Hex | undefined;
+  }>;
+
+export type Eip2930TransactionRequest = TransactionRequestFields &
+  Readonly<{
+    type: "eip2930";
+    gasPrice?: Hex | undefined;
+    accessList?: AccessList | undefined;
+  }>;
+
+export type Eip1559TransactionRequest = TransactionRequestFields &
+  Readonly<{
+    type: "eip1559";
+    maxFeePerGas?: Hex | undefined;
+    maxPriorityFeePerGas?: Hex | undefined;
+    accessList?: AccessList | undefined;
+  }>;
+
+export type TransactionRequest =
+  | AutoTransactionRequest
+  | LegacyTransactionRequest
+  | Eip2930TransactionRequest
+  | Eip1559TransactionRequest;
+
+type PreparedTransactionFields = Readonly<{
   from: string;
   to: string | null;
   value: Hex;
   data: Hex;
   gas: Hex;
   nonce?: Hex;
-  fee: Fee;
 }>;
 
-export type SignableTransaction = Omit<PreparedTransaction, "nonce"> &
+export type LegacyPreparedTransaction = PreparedTransactionFields &
   Readonly<{
-    nonce: Hex;
+    type: "legacy";
+    gasPrice: Hex;
   }>;
+
+export type Eip2930PreparedTransaction = PreparedTransactionFields &
+  Readonly<{
+    type: "eip2930";
+    gasPrice: Hex;
+    accessList: AccessList;
+  }>;
+
+export type Eip1559PreparedTransaction = PreparedTransactionFields &
+  Readonly<{
+    type: "eip1559";
+    maxFeePerGas: Hex;
+    maxPriorityFeePerGas: Hex;
+    accessList: AccessList;
+  }>;
+
+export type PreparedTransaction = LegacyPreparedTransaction | Eip2930PreparedTransaction | Eip1559PreparedTransaction;
+
+type WithNonce<T> = T extends Readonly<{ nonce?: Hex }> ? Omit<T, "nonce"> & Readonly<{ nonce: Hex }> : never;
+
+export type SignableTransaction = WithNonce<PreparedTransaction>;
 
 export type TransactionRecovery = Readonly<{
   rawTransaction: Hex;
@@ -80,6 +114,8 @@ export type TransactionFailure =
       type: "execution";
       inclusion: TransactionConfirmation;
     }>;
+
+export type TransactionBroadcastFailure = Extract<TransactionFailure, Readonly<{ type: "broadcast" }>>;
 
 export type TransactionState =
   | Readonly<{ status: "pending" }>
@@ -123,7 +159,7 @@ export type BroadcastOutcome =
     }>
   | Readonly<{
       status: "rejected";
-      failure: TransactionFailure;
+      failure: TransactionBroadcastFailure;
     }>;
 
 export type Submission =
@@ -135,4 +171,5 @@ export type Submission =
   | Readonly<{
       status: "failed";
       transaction: Transaction;
+      failure: TransactionBroadcastFailure;
     }>;

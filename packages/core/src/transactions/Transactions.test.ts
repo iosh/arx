@@ -40,7 +40,8 @@ const preparedTransaction = {
   value: "0x0",
   data: "0x",
   gas: "0x5208",
-  fee: { type: "legacy", gasPrice: "0x1" },
+  type: "legacy",
+  gasPrice: "0x1",
 } as const;
 
 const unexpectedTransactionSubmission = (): never => {
@@ -104,7 +105,8 @@ const transaction = {
     data: "0x",
     gas: "0x5208",
     nonce: "0x1",
-    fee: { type: "legacy", gasPrice: "0x1" },
+    type: "legacy",
+    gasPrice: "0x1",
   },
   state: { status: "pending" },
   createdAt: 1,
@@ -155,7 +157,7 @@ describe("Transactions", () => {
       chainRef: "eip155:1",
       accountId: account.accountId,
       initiator: { type: "wallet" as const },
-      transaction: { gas: "0x5208" },
+      transaction: { type: "auto", gas: "0x5208" },
     } satisfies PrepareTransactionInput;
 
     await expect(transactions.prepare(input)).resolves.toEqual({
@@ -190,7 +192,7 @@ describe("Transactions", () => {
       chainRef: "eip155:1",
       accountId: account.accountId,
       initiator: { type: "wallet" as const },
-      transaction: { gas: "0x5208" },
+      transaction: { type: "auto", gas: "0x5208" },
     } satisfies PrepareTransactionInput;
 
     await expect(missingAccountTransactions.prepare(input)).rejects.toMatchObject({ code: "account.not_found" });
@@ -220,7 +222,7 @@ describe("Transactions", () => {
         chainRef: "eip155:1",
         accountId: account.accountId,
         initiator: { type: "wallet" },
-        transaction: { gas: "0x5208" },
+        transaction: { type: "auto", gas: "0x5208" },
       }),
     ).rejects.toMatchObject({ code: "transaction.namespace_unsupported" });
     expect(dependencies.accounts.getAccount).not.toHaveBeenCalled();

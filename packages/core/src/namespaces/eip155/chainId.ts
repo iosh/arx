@@ -9,8 +9,10 @@ export const validateEip155ChainReference = (reference: string): void => {
   if (!EIP155_DECIMAL_REFERENCE_PATTERN.test(reference)) {
     throw new Eip155InvalidChainIdError({ value: reference, reason: "non_canonical" });
   }
-  if (reference.length > 32) {
-    throw new Eip155InvalidChainIdError({ value: reference, reason: "too_long" });
+
+  const chainId = Number(reference);
+  if (!Number.isSafeInteger(chainId) || chainId < 1) {
+    throw new Eip155InvalidChainIdError({ value: reference, reason: "out_of_range" });
   }
 };
 

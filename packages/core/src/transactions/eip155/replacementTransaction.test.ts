@@ -23,7 +23,8 @@ describe("EIP-155 replacement transactions", () => {
       data: "0xabcd",
       gas: "0x10000",
       nonce: "0x7",
-      fee: { type: "legacy", gasPrice: "0x64" },
+      type: "legacy",
+      gasPrice: "0x64",
     });
 
     const request = createEip155ReplacementRequest({
@@ -33,17 +34,19 @@ describe("EIP-155 replacement transactions", () => {
     });
 
     expect(request).toEqual({
+      to: null,
       value: "0x3",
       data: "0xabcd",
       gas: "0x10000",
       nonce: "0x7",
-      fee: { type: "legacy", gasPrice: "0x6e" },
+      type: "legacy",
+      gasPrice: "0x6e",
     });
-    expect(request).not.toHaveProperty("to");
 
     const zeroFeeTarget = transaction({
       ...target.transaction,
-      fee: { type: "legacy", gasPrice: "0x0" },
+      type: "legacy",
+      gasPrice: "0x0",
     });
     expect(
       createEip155ReplacementRequest({
@@ -51,7 +54,7 @@ describe("EIP-155 replacement transactions", () => {
         type: "speed-up",
         from: zeroFeeTarget.transaction.from,
       }),
-    ).toMatchObject({ fee: { gasPrice: "0x1" } });
+    ).toMatchObject({ gasPrice: "0x1" });
   });
 
   it("builds a self-transfer cancellation with bigint-safe rounded fee increases", () => {
@@ -62,11 +65,10 @@ describe("EIP-155 replacement transactions", () => {
       data: "0xabcd",
       gas: "0x10000",
       nonce: "0x7",
-      fee: {
-        type: "eip1559",
-        maxFeePerGas: "0x20000000000001",
-        maxPriorityFeePerGas: "0x1",
-      },
+      type: "eip1559",
+      maxFeePerGas: "0x20000000000001",
+      maxPriorityFeePerGas: "0x1",
+      accessList: [],
     });
 
     expect(
@@ -81,11 +83,10 @@ describe("EIP-155 replacement transactions", () => {
       data: "0x",
       gas: "0x5208",
       nonce: "0x7",
-      fee: {
-        type: "eip1559",
-        maxFeePerGas: "0x23333333333335",
-        maxPriorityFeePerGas: "0x2",
-      },
+      type: "eip1559",
+      maxFeePerGas: "0x23333333333335",
+      maxPriorityFeePerGas: "0x2",
+      accessList: [],
     });
   });
 });

@@ -16,6 +16,7 @@ import {
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
+  NetworkRpcEndpointVerificationError,
   NetworkSelectionMissingError,
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
@@ -443,7 +444,16 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     }
 
     for (const endpoint of endpoints) {
-      const actualChainRef = await adapter.queryChainRef(endpoint);
+      let actualChainRef: ChainRef;
+      try {
+        actualChainRef = await adapter.queryChainRef(endpoint);
+      } catch (cause) {
+        throw new NetworkRpcEndpointVerificationError({
+          endpoint,
+          expectedChainRef: chainRef,
+          cause,
+        });
+      }
       if (actualChainRef !== chainRef) {
         throw new NetworkRpcEndpointMismatchError({
           endpoint,

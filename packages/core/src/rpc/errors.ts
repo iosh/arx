@@ -67,6 +67,37 @@ export class RpcUnsupportedMethodError extends ArxBaseError {
   }
 }
 
+export class RpcUnrecognizedChainError extends ArxBaseError {
+  static readonly code = "global.rpc.unrecognized_chain";
+
+  constructor(input: RpcErrorInput = {}) {
+    super(input.message ?? "Unrecognized chain.", {
+      code: RpcUnrecognizedChainError.code,
+      details: input.details,
+    });
+  }
+}
+
+export class RpcNodeResponseError extends ArxBaseError {
+  static readonly code = "global.rpc.node_response";
+
+  readonly rpcCode: number;
+  readonly rpcData?: JsonValue;
+
+  constructor(input: { rpcCode: number; message: string; data?: unknown }) {
+    const rpcData = toJsonSafe(input.data);
+    super(input.message, {
+      code: RpcNodeResponseError.code,
+      details: {
+        rpcCode: input.rpcCode,
+        ...(rpcData !== undefined ? { rpcData } : {}),
+      },
+    });
+    this.rpcCode = input.rpcCode;
+    if (rpcData !== undefined) this.rpcData = rpcData;
+  }
+}
+
 export class RpcInternalError extends ArxBaseError {
   static readonly code = "global.rpc.internal";
 

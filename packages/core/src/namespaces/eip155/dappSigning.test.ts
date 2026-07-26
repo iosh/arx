@@ -101,8 +101,8 @@ describe("EIP-155 dapp signing", () => {
     expect(harness.signed[1]?.digest).toEqual(Hex.toBytes(PersonalMessage.getSignPayload(Hex.fromString("0x"))));
   });
 
-  it("filters typed data for approval and binds domain.chainId without number coercion", async () => {
-    const chainId = 9_007_199_254_740_993n;
+  it("filters typed data for approval and binds domain.chainId to the request chain", async () => {
+    const chainId = 4_294_967_297n;
     const harness = createHarness(`eip155:${chainId}`);
     const typedData = {
       types: {

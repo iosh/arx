@@ -1,9 +1,11 @@
+import type { AccessList } from "ox/AccessList";
 import type { Hex } from "ox/Hex";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { createEip155AddressFormat } from "../../namespaces/eip155/address.js";
 import type { ChainRef } from "../../networks/chainRef.js";
-import * as HexQuantity from "../../utils/hex.js";
+import * as HexNumber from "../../utils/hex.js";
 import { Eip155FeeModelUnsupportedError, Eip155PriorityFeeExceedsMaxFeeError } from "./errors.js";
+import { createEip155TransactionEnvelope } from "./transactionEnvelope.js";
 import type * as Eip155 from "./types.js";
 
 type PreparationInput = Readonly<{
@@ -12,43 +14,68 @@ type PreparationInput = Readonly<{
   transaction: Eip155.TransactionRequest;
 }>;
 
-type RpcTransaction = Readonly<{
+type PreparedWithoutGas =
+  | Omit<Eip155.LegacyPreparedTransaction, "gas" | "nonce">
+  | Omit<Eip155.Eip2930PreparedTransaction, "gas" | "nonce">
+  | Omit<Eip155.Eip1559PreparedTransaction, "gas" | "nonce">;
+
+type GasEstimateRequest = Readonly<{
   from: string;
   to?: string;
   value: Hex;
   data: Hex;
+  type?: "0x1" | "0x2";
   gasPrice?: Hex;
   maxFeePerGas?: Hex;
   maxPriorityFeePerGas?: Hex;
+  accessList?: Array<{ address: string; storageKeys: Hex[] }>;
 }>;
 
 type LatestBlock = Readonly<{
   baseFeePerGas?: Hex;
 }>;
 
+type Eip1559Fees = Readonly<{
+  maxFeePerGas: Hex;
+  maxPriorityFeePerGas: Hex;
+}>;
+
 export type Eip155TransactionPreparer = (input: PreparationInput) => Promise<Eip155.PreparedTransaction>;
 
-const rpcFeeFields = (fee: Eip155.Fee): Pick<RpcTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas"> =>
-  fee.type === "legacy"
-    ? { gasPrice: fee.gasPrice }
-    : {
-        maxFeePerGas: fee.maxFeePerGas,
-        maxPriorityFeePerGas: fee.maxPriorityFeePerGas,
-      };
+const rpcAccessList = (accessList: AccessList): Array<{ address: string; storageKeys: Hex[] }> =>
+  accessList.map((entry) => ({
+    address: entry.address,
+    storageKeys: [...entry.storageKeys],
+  }));
 
-const createGasEstimateRequest = (input: {
-  from: string;
-  to: string | null;
-  value: Hex;
-  data: Hex;
-  fee: Eip155.Fee;
-}): RpcTransaction => ({
-  from: input.from,
-  ...(input.to === null ? {} : { to: input.to }),
-  value: input.value,
-  data: input.data,
-  ...rpcFeeFields(input.fee),
-});
+const gasEstimateRequest = (transaction: PreparedWithoutGas): GasEstimateRequest => {
+  const common = {
+    from: transaction.from,
+    ...(transaction.to === null ? {} : { to: transaction.to }),
+    value: transaction.value,
+    data: transaction.data,
+  };
+
+  switch (transaction.type) {
+    case "legacy":
+      return { ...common, gasPrice: transaction.gasPrice };
+    case "eip2930":
+      return {
+        ...common,
+        type: "0x1",
+        gasPrice: transaction.gasPrice,
+        accessList: rpcAccessList(transaction.accessList),
+      };
+    case "eip1559":
+      return {
+        ...common,
+        type: "0x2",
+        maxFeePerGas: transaction.maxFeePerGas,
+        maxPriorityFeePerGas: transaction.maxPriorityFeePerGas,
+        accessList: rpcAccessList(transaction.accessList),
+      };
+  }
+};
 
 export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJsonRpc }): Eip155TransactionPreparer => {
   const addressFormat = createEip155AddressFormat();
@@ -63,85 +90,119 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
     return block.baseFeePerGas;
   };
 
-  const completeFee = async (chainRef: ChainRef, requestedFee: Eip155.FeeRequest | undefined): Promise<Eip155.Fee> => {
-    if (requestedFee?.type === "legacy") {
-      return {
-        type: "legacy",
-        gasPrice:
-          requestedFee.gasPrice === undefined
-            ? await params.chainJsonRpc.request<Hex>({
-                chainRef,
-                method: "eth_gasPrice",
-                replay: "allowed",
-              })
-            : requestedFee.gasPrice,
-      };
-    }
+  const getGasPrice = (chainRef: ChainRef): Promise<Hex> =>
+    params.chainJsonRpc.request<Hex>({
+      chainRef,
+      method: "eth_gasPrice",
+      replay: "allowed",
+    });
 
-    const baseFeePerGas = await getLatestBlockBaseFee(chainRef);
-    if (requestedFee === undefined && baseFeePerGas === undefined) {
-      return {
-        type: "legacy",
-        gasPrice: await params.chainJsonRpc.request<Hex>({
-          chainRef,
-          method: "eth_gasPrice",
-          replay: "allowed",
-        }),
-      };
-    }
-    if (baseFeePerGas === undefined) throw new Eip155FeeModelUnsupportedError(chainRef);
-
+  const completeEip1559Fees = async (
+    chainRef: ChainRef,
+    baseFeePerGas: Hex,
+    requested: Readonly<{
+      maxFeePerGas?: Hex | undefined;
+      maxPriorityFeePerGas?: Hex | undefined;
+    }>,
+  ): Promise<Eip1559Fees> => {
     const maxPriorityFeePerGas =
-      requestedFee?.maxPriorityFeePerGas === undefined
-        ? await params.chainJsonRpc.request<Hex>({
-            chainRef,
-            method: "eth_maxPriorityFeePerGas",
-            replay: "allowed",
-          })
-        : requestedFee.maxPriorityFeePerGas;
+      requested.maxPriorityFeePerGas ??
+      (await params.chainJsonRpc.request<Hex>({
+        chainRef,
+        method: "eth_maxPriorityFeePerGas",
+        replay: "allowed",
+      }));
     const maxFeePerGas =
-      requestedFee?.maxFeePerGas === undefined
-        ? HexQuantity.fromNumber(HexQuantity.toBigInt(baseFeePerGas) * 2n + HexQuantity.toBigInt(maxPriorityFeePerGas))
-        : requestedFee.maxFeePerGas;
+      requested.maxFeePerGas ??
+      HexNumber.fromNumber(HexNumber.toBigInt(baseFeePerGas) * 2n + HexNumber.toBigInt(maxPriorityFeePerGas));
 
-    if (HexQuantity.toBigInt(maxPriorityFeePerGas) > HexQuantity.toBigInt(maxFeePerGas)) {
+    if (HexNumber.toBigInt(maxPriorityFeePerGas) > HexNumber.toBigInt(maxFeePerGas)) {
       throw new Eip155PriorityFeeExceedsMaxFeeError({ maxFeePerGas, maxPriorityFeePerGas });
     }
 
-    return { type: "eip1559", maxFeePerGas, maxPriorityFeePerGas };
+    return { maxFeePerGas, maxPriorityFeePerGas };
   };
 
-  const estimateGas = async (chainRef: ChainRef, transaction: RpcTransaction): Promise<Hex> => {
-    return params.chainJsonRpc.request<Hex>({
-      chainRef,
-      method: "eth_estimateGas",
-      params: [transaction],
-      replay: "allowed",
-    });
+  const completeGas = async <TTransaction extends PreparedWithoutGas>(
+    chainRef: ChainRef,
+    transaction: TTransaction,
+    requestedGas: Hex | undefined,
+    nonce: Hex | undefined,
+  ): Promise<TTransaction & Readonly<{ gas: Hex; nonce?: Hex }>> => {
+    const gas =
+      requestedGas ??
+      (await params.chainJsonRpc.request<Hex>({
+        chainRef,
+        method: "eth_estimateGas",
+        params: [gasEstimateRequest(transaction)],
+        replay: "allowed",
+      }));
+
+    return {
+      ...transaction,
+      gas,
+      ...(nonce === undefined ? {} : { nonce }),
+    };
   };
 
   return async (input) => {
-    const to =
-      input.transaction.to === undefined
-        ? null
-        : addressFormat.canonicalize({ chainRef: input.chainRef, value: input.transaction.to }).canonical;
-    const value = input.transaction.value ?? ("0x0" as Hex);
-    const data = input.transaction.data ?? ("0x" as Hex);
-    const fee = await completeFee(input.chainRef, input.transaction.fee);
-    const gas =
-      input.transaction.gas === undefined
-        ? await estimateGas(input.chainRef, createGasEstimateRequest({ from: input.from, to, value, data, fee }))
-        : input.transaction.gas;
-    const nonce = input.transaction.nonce;
-
-    return {
+    const request = input.transaction;
+    const common = {
       from: input.from,
-      to,
-      value,
-      data,
-      gas,
-      ...(nonce === undefined ? {} : { nonce }),
-      fee,
+      to:
+        request.to === undefined || request.to === null
+          ? null
+          : addressFormat.canonicalize({ chainRef: input.chainRef, value: request.to }).canonical,
+      value: request.value ?? ("0x0" as Hex),
+      data: request.data ?? ("0x" as Hex),
     };
+
+    let transaction: PreparedWithoutGas;
+    switch (request.type) {
+      case "auto": {
+        const baseFeePerGas = await getLatestBlockBaseFee(input.chainRef);
+        if (baseFeePerGas === undefined) {
+          transaction = { ...common, type: "legacy", gasPrice: await getGasPrice(input.chainRef) };
+        } else {
+          transaction = {
+            ...common,
+            type: "eip1559",
+            ...(await completeEip1559Fees(input.chainRef, baseFeePerGas, {})),
+            accessList: [],
+          };
+        }
+        break;
+      }
+      case "legacy":
+        transaction = {
+          ...common,
+          type: "legacy",
+          gasPrice: request.gasPrice ?? (await getGasPrice(input.chainRef)),
+        };
+        break;
+      case "eip2930":
+        transaction = {
+          ...common,
+          type: "eip2930",
+          gasPrice: request.gasPrice ?? (await getGasPrice(input.chainRef)),
+          accessList: request.accessList ?? [],
+        };
+        break;
+      case "eip1559": {
+        const baseFeePerGas = await getLatestBlockBaseFee(input.chainRef);
+        if (baseFeePerGas === undefined) throw new Eip155FeeModelUnsupportedError(input.chainRef);
+
+        transaction = {
+          ...common,
+          type: "eip1559",
+          ...(await completeEip1559Fees(input.chainRef, baseFeePerGas, request)),
+          accessList: request.accessList ?? [],
+        };
+        break;
+      }
+    }
+
+    createEip155TransactionEnvelope(input.chainRef, transaction);
+    return completeGas(input.chainRef, transaction, request.gas, request.nonce);
   };
 };

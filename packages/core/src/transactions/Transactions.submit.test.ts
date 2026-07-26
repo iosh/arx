@@ -53,7 +53,8 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
     data: "0x",
     gas: "0x5208",
     ...(nonce === undefined ? {} : { nonce }),
-    fee: { type: "legacy", gasPrice: "0x1" },
+    type: "legacy",
+    gasPrice: "0x1",
   },
 });
 
@@ -130,7 +131,7 @@ const createFixture = (input: FixtureOptions = {}) => {
       broadcast: submissionBroadcast,
     }: Parameters<TransactionsNamespaceAdapter["createSubmission"]>[0]) =>
       submissionBroadcast.status === "rejected"
-        ? { status: "failed" as const, transaction }
+        ? { status: "failed" as const, transaction, failure: submissionBroadcast.failure }
         : { status: "pending" as const, transaction, transactionHash: submissionBroadcast.transactionHash },
   );
   const adapter = {

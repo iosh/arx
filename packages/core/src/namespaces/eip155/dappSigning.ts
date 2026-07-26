@@ -1,10 +1,8 @@
 import { Hex, Signature } from "ox";
 import type { Accounts } from "../../accounts/Accounts.js";
-import type { AccountId } from "../../accounts/accountId.js";
 import type { Approvals } from "../../approvals/Approvals.js";
 import { isApprovalDecisionError } from "../../approvals/errors.js";
 import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/routeDappRequest.js";
-import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../../keyring/errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
 import {
@@ -13,10 +11,10 @@ import {
   RpcUnauthorizedError,
   RpcUserRejectedRequestError,
 } from "../../rpc/errors.js";
-import { WalletLockedError } from "../../wallet/errors.js";
-import type { Eip155AccountSigning } from "./accountSigning.js";
+import { type Eip155AccountSigning, isAccountSigningUnavailableError } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
+import { getAuthorizedAccount } from "./dappAccount.js";
 import { decodePersonalSignParams, personalMessageDigest } from "./personalSign.js";
 import type { Eip155PersonalMessage, Eip155SignRequest, Eip155TypedData } from "./signingRequest.js";
 import { decodeSignTypedDataV4Params } from "./typedData.js";
@@ -38,29 +36,12 @@ type CreateEip155DappSigningHandlersOptions = Readonly<{
   accountSigning: Eip155AccountSigning;
 }>;
 
-const isSigningUnavailable = (error: unknown): boolean =>
-  error instanceof WalletLockedError ||
-  error instanceof KeySourceNotFoundError ||
-  error instanceof HdKeyringNotFoundError;
-
 export const createEip155DappSigningHandlers = (
   options: CreateEip155DappSigningHandlersOptions,
 ): Readonly<{
   personalSign: DappRequestMethod;
   signTypedDataV4: DappRequestMethod;
 }> => {
-  const getAuthorizedAccountId = (origin: string, chainRef: ChainRef, address: string): AccountId => {
-    const accountId = options.accounts.accountIdFromAddress({ chainRef, address });
-    const permission = options.permissions.get({ origin, namespace: EIP155_NAMESPACE });
-    const account = options.accounts.getAccount(accountId);
-
-    if (!permission?.accountIds.includes(accountId) || !account || account.hidden) {
-      throw new RpcUnauthorizedError();
-    }
-
-    return accountId;
-  };
-
   const approveAndSign = async (input: {
     origin: string;
     chainRef: ChainRef;
@@ -68,8 +49,7 @@ export const createEip155DappSigningHandlers = (
     payload: Eip155SignPayload;
     digest: Hex.Hex;
   }): Promise<Hex.Hex> => {
-    const accountId = getAuthorizedAccountId(input.origin, input.chainRef, input.address);
-    const account = options.accounts.getAddress({ chainRef: input.chainRef, accountId });
+    const account = getAuthorizedAccount(options, input);
     const request: Eip155SignRequest = { account, ...input.payload };
     const approval = options.approvals.request<"sign">({
       type: "sign",
@@ -87,12 +67,12 @@ export const createEip155DappSigningHandlers = (
 
     try {
       const signature = await options.accountSigning.signDigest({
-        accountId,
+        accountId: account.accountId,
         digest: Hex.toBytes(input.digest),
       });
       return Signature.toHex(signature);
     } catch (error) {
-      if (isSigningUnavailable(error)) throw new RpcUnauthorizedError();
+      if (isAccountSigningUnavailableError(error)) throw new RpcUnauthorizedError();
       throw new RpcInternalError({ message: "Unable to sign the EIP-155 request.", cause: error });
     }
   };

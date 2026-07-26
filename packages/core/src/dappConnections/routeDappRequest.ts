@@ -18,6 +18,9 @@ export type DappNamespace = Readonly<{
   forwardNodeRead(input: DappRequest): Promise<unknown>;
 }>;
 
+export const invalidDappParams = (method: string, reason: string): RpcInvalidParamsError =>
+  new RpcInvalidParamsError({ message: `${method}: ${reason}` });
+
 type DappMethodDefinition<Params> = Readonly<{
   decode(params: unknown, method: string): Params;
   execute(input: Readonly<{ origin: string; chainRef: ChainRef; params: Params }>): Promise<unknown>;

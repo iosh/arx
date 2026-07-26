@@ -1,12 +1,14 @@
 import { z } from "zod";
+import type { Accounts } from "../../accounts/Accounts.js";
 import {
   AccountHiddenSelectionError,
   AccountNamespaceMismatchError,
   AccountNotFoundError,
 } from "../../accounts/errors.js";
-import { ApprovalCancelledError, ApprovalRejectedError, ApprovalTimeoutError } from "../../approvals/errors.js";
+import type { Approvals } from "../../approvals/Approvals.js";
+import { isApprovalDecisionError } from "../../approvals/errors.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
-import type { DappConnectionState } from "../../dappConnections/DappConnections.js";
+import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../../dappConnections/persistence.js";
 import {
   type DappNamespace,
@@ -17,20 +19,30 @@ import {
 } from "../../dappConnections/routeDappRequest.js";
 import type { JsonObject, JsonValue } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
+import type { DappAuthorization } from "../../permissions/createDappAuthorization.js";
 import { buildEip2255Permissions } from "../../permissions/eip2255.js";
 import { PermissionAccountAccessUnavailableError } from "../../permissions/errors.js";
+import type { PermissionsReader } from "../../permissions/Permissions.js";
 import { RpcUnauthorizedError, RpcUserRejectedRequestError } from "../../rpc/errors.js";
 import { WalletLockedError } from "../../wallet/errors.js";
+import type { Eip155AccountSigning } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
+import { createEip155DappSigningHandlers } from "./dappSigning.js";
 
 type JsonRpcParams = JsonValue[] | JsonObject;
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;
-  getConnectionState(scope: DappConnectionScope): DappConnectionState;
-  requestAccountAccess(input: Readonly<{ scope: DappConnectionScope; chainRef: ChainRef }>): Promise<void>;
-  revokeAccountAccess(scope: DappConnectionScope): Promise<void>;
+  dappConnections: Pick<DappConnections, "getConnectionState">;
+  dappAuthorization: Readonly<{
+    requestAccountAccess: DappAuthorization["requestAccountAccess"];
+    permissions: Pick<DappAuthorization["permissions"], "revoke">;
+  }>;
+  accounts: Pick<Accounts, "accountIdFromAddress" | "getAccount" | "getAddress">;
+  permissions: Pick<PermissionsReader, "get">;
+  approvals: Pick<Approvals, "request">;
+  accountSigning: Eip155AccountSigning;
 }>;
 
 const JSON_RPC_PARAMS_SCHEMA: z.ZodType<JsonRpcParams> = z.union([z.array(z.json()), z.record(z.string(), z.json())]);
@@ -58,11 +70,6 @@ const eip155ConnectionScope = (origin: string): DappConnectionScope => ({
   namespace: EIP155_NAMESPACE,
 });
 
-const isAccountAccessRejected = (error: unknown): boolean =>
-  error instanceof ApprovalRejectedError ||
-  error instanceof ApprovalCancelledError ||
-  error instanceof ApprovalTimeoutError;
-
 const isAccountAccessUnavailable = (error: unknown): boolean =>
   error instanceof PermissionAccountAccessUnavailableError ||
   error instanceof WalletLockedError ||
@@ -71,7 +78,8 @@ const isAccountAccessUnavailable = (error: unknown): boolean =>
   error instanceof AccountHiddenSelectionError;
 
 export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOptions): DappNamespace => {
-  const getAccounts = (scope: DappConnectionScope): readonly string[] => options.getConnectionState(scope).accounts;
+  const getAccounts = (scope: DappConnectionScope): readonly string[] =>
+    options.dappConnections.getConnectionState(scope).accounts;
 
   const getPermissions = (scope: DappConnectionScope) =>
     buildEip2255Permissions({
@@ -81,13 +89,20 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
 
   const requestAccountAccess = async (scope: DappConnectionScope, chainRef: ChainRef): Promise<void> => {
     try {
-      await options.requestAccountAccess({ scope, chainRef });
+      await options.dappAuthorization.requestAccountAccess({ scope, chainRef });
     } catch (error) {
-      if (isAccountAccessRejected(error)) throw new RpcUserRejectedRequestError();
+      if (isApprovalDecisionError(error)) throw new RpcUserRejectedRequestError();
       if (isAccountAccessUnavailable(error)) throw new RpcUnauthorizedError();
       throw error;
     }
   };
+
+  const signingHandlers = createEip155DappSigningHandlers({
+    accounts: options.accounts,
+    permissions: options.permissions,
+    approvals: options.approvals,
+    accountSigning: options.accountSigning,
+  });
 
   return {
     localMethods: new Map([
@@ -111,7 +126,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
           decode: decodeNoParams,
           execute: async ({ origin }) => {
             const scope = eip155ConnectionScope(origin);
-            const state = options.getConnectionState(scope);
+            const state = options.dappConnections.getConnectionState(scope);
             if (state.accounts.length > 0) return state.accounts;
 
             await requestAccountAccess(scope, state.chainRef);
@@ -132,7 +147,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
           decode: decodeAccountPermissionRequest,
           execute: async ({ origin }) => {
             const scope = eip155ConnectionScope(origin);
-            const { chainRef } = options.getConnectionState(scope);
+            const { chainRef } = options.dappConnections.getConnectionState(scope);
 
             await requestAccountAccess(scope, chainRef);
             return getPermissions(scope);
@@ -144,11 +159,13 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
         defineDappMethod({
           decode: decodeAccountPermissionRequest,
           execute: async ({ origin }) => {
-            await options.revokeAccountAccess(eip155ConnectionScope(origin));
+            await options.dappAuthorization.permissions.revoke(eip155ConnectionScope(origin));
             return null;
           },
         }),
       ],
+      ["personal_sign", signingHandlers.personalSign],
+      ["eth_signTypedData_v4", signingHandlers.signTypedDataV4],
     ]),
     nodeReadMethods: EIP155_NODE_READ_METHODS,
     forwardNodeRead: ({ chainRef, method, params }: DappRequest) => {

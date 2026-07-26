@@ -4,6 +4,7 @@ export {
   ApprovalNotFoundError,
   ApprovalRejectedError,
   ApprovalTimeoutError,
+  isApprovalDecisionError,
 } from "./errors.js";
 export type {
   AccountAccessApproval,

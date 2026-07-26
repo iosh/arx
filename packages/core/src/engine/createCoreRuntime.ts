@@ -250,9 +250,12 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       EIP155_NAMESPACE,
       createEip155DappNamespace({
         chainJsonRpc,
-        getConnectionState: (scope) => dappConnections.getConnectionState(scope),
-        requestAccountAccess: (request) => dappAuthorization.requestAccountAccess(request),
-        revokeAccountAccess: (scope) => dappAuthorization.permissions.revoke(scope),
+        dappConnections,
+        dappAuthorization,
+        accounts,
+        permissions,
+        approvals,
+        accountSigning: eip155AccountSigning,
       }),
     ],
   ]);

@@ -1,4 +1,4 @@
-import { add0x, getChecksumAddress, type Hex, isValidHexAddress } from "@metamask/utils";
+import { Address, type Hex } from "ox";
 import { ChainInvalidAddressError } from "../../chains/errors.js";
 import type {
   CanonicalizeAddressParams,
@@ -10,11 +10,11 @@ import { type ChainRef, parseChainRef } from "../../networks/chainRef.js";
 import { ChainNamespaceMismatchError } from "../../networks/errors.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
-const HEX_ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/i;
+const with0xPrefix = (value: string): Hex.Hex => (value.startsWith("0x") ? (value as Hex.Hex) : `0x${value}`);
 
-const with0xPrefix = (value: string): Hex => (value.startsWith("0x") ? (value as Hex) : `0x${value}`);
+const toCanonicalAddress = (value: string): Hex.Hex => with0xPrefix(value).toLowerCase() as Hex.Hex;
 
-const toCanonical = (value: string): Hex => with0xPrefix(value).toLowerCase() as Hex;
+export const isEip155Address = (value: string): boolean => Address.validate(with0xPrefix(value), { strict: false });
 
 const fail = (field: "input" | "canonical") => {
   throw new ChainInvalidAddressError({ namespace: EIP155_NAMESPACE, field });
@@ -35,13 +35,13 @@ const assertValidInput = (value: string): void => {
   if (typeof value !== "string" || value.trim().length === 0) {
     fail("input");
   }
-  if (!HEX_ADDRESS_PATTERN.test(value.trim())) {
+  if (!isEip155Address(value.trim())) {
     fail("input");
   }
 };
 
-const validateCanonical = (canonical: Hex): void => {
-  if (!isValidHexAddress(canonical)) {
+const validateCanonical = (canonical: Hex.Hex): void => {
+  if (!Address.validate(canonical, { strict: false })) {
     fail("canonical");
   }
 };
@@ -50,20 +50,20 @@ export const createEip155AddressFormat = (): ChainAddressFormat => ({
   canonicalize({ chainRef, value }: CanonicalizeAddressParams): CanonicalizedAddressResult {
     assertEip155ChainRef(chainRef);
     assertValidInput(value);
-    const canonical = toCanonical(value.trim());
+    const canonical = toCanonicalAddress(value.trim());
     validateCanonical(canonical);
     return { canonical };
   },
 
   format({ chainRef, canonical }: FormatAddressParams): string {
     assertEip155ChainRef(chainRef);
-    const normalized = toCanonical(canonical.trim());
-    validateCanonical(normalized);
-    return getChecksumAddress(add0x(normalized));
+    const canonicalAddress = toCanonicalAddress(canonical.trim());
+    validateCanonical(canonicalAddress);
+    return Address.checksum(canonicalAddress);
   },
 
   validate({ chainRef, canonical }: FormatAddressParams): void {
     assertEip155ChainRef(chainRef);
-    validateCanonical(toCanonical(canonical.trim()));
+    validateCanonical(toCanonicalAddress(canonical.trim()));
   },
 });

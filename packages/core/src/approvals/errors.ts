@@ -30,6 +30,13 @@ export class ApprovalCancelledError extends ArxBaseError {
   }
 }
 
+export const isApprovalDecisionError = (
+  error: unknown,
+): error is ApprovalRejectedError | ApprovalTimeoutError | ApprovalCancelledError =>
+  error instanceof ApprovalRejectedError ||
+  error instanceof ApprovalTimeoutError ||
+  error instanceof ApprovalCancelledError;
+
 export class ApprovalNotFoundError extends ArxBaseError {
   static readonly code = "approval.not_found";
 

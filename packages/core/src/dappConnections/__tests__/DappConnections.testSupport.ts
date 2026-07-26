@@ -7,7 +7,7 @@ import type { PermissionRecord } from "../../permissions/persistence.js";
 import { createCoreMutationQueue } from "../../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../../persistence/persistenceTypes.js";
 import type { WalletStatus } from "../../wallet/Wallet.js";
-import { DappConnections } from "../DappConnections.js";
+import { type DappConnectionStateChanged, DappConnections } from "../DappConnections.js";
 import type { DappConnectionScope, DappNetworkSelectionRecord } from "../persistence.js";
 import { dappConnectionScopeKey } from "../scope.js";
 
@@ -55,6 +55,7 @@ export const createDappConnections = (
   }> = {},
 ) => {
   const commits: PersistenceChange[][] = [];
+  const stateChanges: DappConnectionStateChanged[] = [];
   const permissionRecords = new Map(
     (input.permissions ?? []).map((permission) => [dappConnectionScopeKey(permission), permission]),
   );
@@ -103,11 +104,13 @@ export const createDappConnections = (
         commits.push([...changes]);
       },
     }),
+    publishStateChanged: (change) => stateChanges.push(change),
   });
 
   return {
     dappConnections,
     commits,
+    stateChanges,
     setCommitFailure: (failure: Error | null) => {
       commitFailure = failure;
     },

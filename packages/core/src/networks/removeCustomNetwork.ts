@@ -32,6 +32,7 @@ export const createCustomNetworkRemoval = (options: CustomNetworkRemovalOptions)
       networkRemoval.activate();
       dappConnectionsUpdate.activate();
       networkRemoval.publish();
+      dappConnectionsUpdate.publish();
     });
   },
 });

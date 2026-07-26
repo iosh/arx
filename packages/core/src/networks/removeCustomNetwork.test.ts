@@ -128,6 +128,7 @@ const createFixture = (input: FixtureOptions = {}) => {
     permissions,
     wallet: { getStatus: () => "unlocked" } satisfies Pick<Wallet, "getStatus">,
     mutations,
+    publishStateChanged: () => undefined,
   });
   const removal = createCustomNetworkRemoval({
     mutations,

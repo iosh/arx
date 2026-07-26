@@ -6,7 +6,7 @@ import type { ApprovalsApi } from "../approvals/types.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { loadDappConnectionsBootstrap } from "../dappConnections/bootstrap.js";
-import { DappConnections } from "../dappConnections/DappConnections.js";
+import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
 import { type DappNamespace, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
@@ -67,6 +67,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const listeners = new Set<(event: CoreRuntimeChanged) => void>();
   const publish = (event: CoreRuntimeChanged) => {
     for (const listener of listeners) listener(event);
+  };
+  const dappConnectionStateListeners = new Set<(change: DappConnectionStateChanged) => void>();
+  const publishDappConnectionStateChanged = (change: DappConnectionStateChanged) => {
+    for (const listener of dappConnectionStateListeners) listener(change);
   };
   const [
     vaultBootstrap,
@@ -137,6 +141,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     permissions,
     wallet: walletStatus,
     mutations,
+    publishStateChanged: publishDappConnectionStateChanged,
   });
   const approvals = new Approvals({
     time: systemTime,
@@ -275,6 +280,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
         ...(params !== undefined ? { params } : {}),
       });
     },
+    subscribeStateChanged: (listener) => {
+      dappConnectionStateListeners.add(listener);
+      return () => dappConnectionStateListeners.delete(listener);
+    },
   };
 
   const runtime: CoreRuntime = {
@@ -296,6 +305,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
       approvals.cancelAll();
       void wallet.lock();
       listeners.clear();
+      dappConnectionStateListeners.clear();
     },
   };
 

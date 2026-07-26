@@ -34,24 +34,44 @@ describe("DappConnections active state", () => {
     const secondScope = { origin: "https://b.example", namespace: "eip155" } as const;
     const firstPermission: PermissionRecord = { ...firstScope, accountIds: [EIP155_ACCOUNT_A] };
     const secondPermission: PermissionRecord = { ...secondScope, accountIds: [EIP155_ACCOUNT_B] };
-    const { dappConnections, setWalletStatus } = createDappConnections({
+    const { dappConnections, setWalletStatus, stateChanges } = createDappConnections({
       walletStatus: "locked",
       permissions: [firstPermission, secondPermission],
     });
 
     dappConnections.openConnection(secondScope);
     dappConnections.openConnection(firstScope);
+    expect(stateChanges).toEqual([]);
+
     setWalletStatus("unlocked");
     dappConnections.refreshAccountsForOpenConnections();
 
-    expect(dappConnections.getConnectionState(firstScope)).toEqual({
+    const firstState = {
       chainRef: "eip155:1",
       accounts: [`eip155:1/${EIP155_ACCOUNT_A}`],
-    });
-    expect(dappConnections.getConnectionState(secondScope)).toEqual({
+    } as const;
+    const secondState = {
       chainRef: "eip155:1",
       accounts: [`eip155:1/${EIP155_ACCOUNT_B}`],
-    });
+    } as const;
+
+    expect(dappConnections.getConnectionState(firstScope)).toEqual(firstState);
+    expect(dappConnections.getConnectionState(secondScope)).toEqual(secondState);
+    expect(stateChanges).toEqual([
+      {
+        scope: firstScope,
+        state: firstState,
+        changedFields: { chainRef: false, accounts: true },
+      },
+      {
+        scope: secondScope,
+        state: secondState,
+        changedFields: { chainRef: false, accounts: true },
+      },
+    ]);
+
+    dappConnections.refreshAccountsForOpenConnections();
+    expect(stateChanges).toHaveLength(2);
   });
 
   it("refreshes an active account projection after permission changes", () => {
@@ -98,7 +118,7 @@ describe("DappConnections active state", () => {
     const initial = selection(scope.origin, scope.namespace, "eip155:1");
     const next = { ...initial, chainRef: "eip155:10" };
     const permission: PermissionRecord = { ...scope, accountIds: [EIP155_ACCOUNT_A] };
-    const { dappConnections, removePermission, setWalletSelection } = createDappConnections({
+    const { dappConnections, removePermission, setWalletSelection, stateChanges } = createDappConnections({
       networkSelections: [initial],
       permissions: [permission],
     });
@@ -109,18 +129,33 @@ describe("DappConnections active state", () => {
     });
 
     await dappConnections.selectNetwork(next);
-    expect(dappConnections.getConnectionState(scope)).toEqual({
+    const selectedState = {
       chainRef: "eip155:10",
       accounts: [`eip155:10/${EIP155_ACCOUNT_A}`],
-    });
+    } as const;
+    expect(dappConnections.getConnectionState(scope)).toEqual(selectedState);
 
     setWalletSelection("eip155", "eip155:1");
     removePermission(scope);
     const removal = dappConnections.prepareRemoveOriginSelections(scope.origin);
     if (!removal) throw new Error("Expected a selection removal draft");
     removal.activate();
+    removal.publish();
 
-    expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
+    const disconnectedState = { chainRef: "eip155:1", accounts: [] } as const;
+    expect(dappConnections.getConnectionState(scope)).toEqual(disconnectedState);
+    expect(stateChanges).toEqual([
+      {
+        scope,
+        state: selectedState,
+        changedFields: { chainRef: true, accounts: true },
+      },
+      {
+        scope,
+        state: disconnectedState,
+        changedFields: { chainRef: true, accounts: true },
+      },
+    ]);
   });
 
   it("switches a captured scope to a matching persisted selection and falls back after removal", async () => {

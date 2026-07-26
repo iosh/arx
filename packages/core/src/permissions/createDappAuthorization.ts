@@ -106,6 +106,7 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
       if (selectionUpdate) selectionUpdate.activate();
       if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
 
+      if (selectionUpdate) selectionUpdate.publish();
       if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
     });
   };
@@ -162,6 +163,8 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
         if (permissionUpdate) options.permissions.applyCommittedUpdate(permissionUpdate);
         if (selectionUpdate) selectionUpdate.activate();
         if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
+
+        if (selectionUpdate) selectionUpdate.publish();
       }
 
       options.approvals.cancel(

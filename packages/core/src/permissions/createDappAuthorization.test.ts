@@ -118,6 +118,7 @@ const createHarness = (
     permissions,
     wallet: { getStatus: () => walletStatus },
     mutations,
+    publishStateChanged: () => undefined,
   });
   const approvals = {
     list: (): readonly Approval[] => pendingApprovals,

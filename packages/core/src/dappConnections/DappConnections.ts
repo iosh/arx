@@ -24,11 +24,21 @@ import { dappConnectionScopeKey } from "./scope.js";
 export type DappConnectionsUpdate = Readonly<{
   persistenceChanges: readonly PersistenceChange[];
   activate(): void;
+  publish(): void;
 }>;
 
 export type DappConnectionState = Readonly<{
   chainRef: ChainRef;
   accounts: readonly string[];
+}>;
+
+export type DappConnectionStateChanged = Readonly<{
+  scope: DappConnectionScope;
+  state: DappConnectionState;
+  changedFields: Readonly<{
+    chainRef: boolean;
+    accounts: boolean;
+  }>;
 }>;
 
 export type DappConnectionsOptions = Readonly<{
@@ -38,6 +48,7 @@ export type DappConnectionsOptions = Readonly<{
   permissions: PermissionsReader;
   wallet: Pick<Wallet, "getStatus">;
   mutations: CoreMutationQueue;
+  publishStateChanged(change: DappConnectionStateChanged): void;
 }>;
 
 type ActiveConnection = Readonly<{
@@ -53,6 +64,12 @@ const networkSelectionScope = (selection: DappNetworkSelectionRecord): DappConne
   namespace: selection.namespace,
 });
 
+const accountsEqual = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((account, index) => account === right[index]);
+
+const compareStateChanges = (left: DappConnectionStateChanged, right: DappConnectionStateChanged): number =>
+  left.scope.origin.localeCompare(right.scope.origin) || left.scope.namespace.localeCompare(right.scope.namespace);
+
 /** Owns persisted dapp network selections and the transient state of open dapp connections. */
 export class DappConnections {
   readonly #accounts: Pick<Accounts, "getAddress">;
@@ -60,6 +77,7 @@ export class DappConnections {
   readonly #permissions: PermissionsReader;
   readonly #wallet: Pick<Wallet, "getStatus">;
   readonly #mutations: CoreMutationQueue;
+  readonly #publishStateChanged: DappConnectionsOptions["publishStateChanged"];
   #networkSelections: ReadonlyMap<string, DappNetworkSelectionRecord>;
   #activeConnections = new Map<string, ActiveConnection>();
 
@@ -69,6 +87,7 @@ export class DappConnections {
     this.#permissions = options.permissions;
     this.#wallet = options.wallet;
     this.#mutations = options.mutations;
+    this.#publishStateChanged = options.publishStateChanged;
 
     const networkSelections = new Map<string, DappNetworkSelectionRecord>();
 
@@ -126,10 +145,14 @@ export class DappConnections {
   }
 
   refreshAccountsForOpenConnections(): void {
-    for (const [key, active] of this.#activeConnections) {
-      const state = this.#createConnectionState(active.scope, active.state.chainRef);
-      this.#activeConnections.set(key, { scope: active.scope, state });
+    const changes: DappConnectionStateChanged[] = [];
+
+    for (const active of this.#activeConnections.values()) {
+      const change = this.#replaceOpenConnectionState(active.scope, active.state.chainRef);
+      if (change) changes.push(change);
     }
+
+    this.#publishStateChanges(changes);
   }
 
   async selectNetwork(selection: DappNetworkSelectionRecord): Promise<void> {
@@ -139,6 +162,7 @@ export class DappConnections {
 
       await commit(update.persistenceChanges);
       update.activate();
+      update.publish();
     });
   }
 
@@ -150,13 +174,15 @@ export class DappConnections {
 
     const networkSelections = new Map(this.#networkSelections);
     networkSelections.set(dappConnectionScopeKey(selection), selection);
+    let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
       persistenceChanges: [persistenceChange.put(dappNetworkSelectionPersistenceType, selection)],
       activate: () => {
         this.#networkSelections = networkSelections;
-        this.#moveOpenConnectionsToCurrentNetwork([networkSelectionScope(selection)]);
+        stateChanges = this.#moveOpenConnectionsToCurrentNetwork([networkSelectionScope(selection)]);
       },
+      publish: () => this.#publishStateChanges(stateChanges),
     };
   }
 
@@ -168,6 +194,7 @@ export class DappConnections {
     for (const selection of removedSelections) {
       remainingSelections.delete(dappConnectionScopeKey(selection));
     }
+    let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
       persistenceChanges: removedSelections.map((selection) =>
@@ -175,8 +202,9 @@ export class DappConnections {
       ),
       activate: () => {
         this.#networkSelections = remainingSelections;
-        this.#moveOpenConnectionsToCurrentNetwork(removedSelections.map(networkSelectionScope));
+        stateChanges = this.#moveOpenConnectionsToCurrentNetwork(removedSelections.map(networkSelectionScope));
       },
+      publish: () => this.#publishStateChanges(stateChanges),
     };
   }
 
@@ -187,6 +215,7 @@ export class DappConnections {
     for (const selection of removedSelections) {
       remainingSelections.delete(dappConnectionScopeKey(selection));
     }
+    let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
       persistenceChanges: removedSelections.map((selection) =>
@@ -194,28 +223,59 @@ export class DappConnections {
       ),
       activate: () => {
         this.#networkSelections = remainingSelections;
+        const changes: DappConnectionStateChanged[] = [];
 
         for (const [key, active] of this.#activeConnections) {
           if (active.state.chainRef !== chainRef && !removedSelectionScopeKeys.has(key)) continue;
-          this.#replaceOpenConnectionState(active.scope, this.#getCurrentConnectionChainRef(active.scope));
+
+          const change = this.#replaceOpenConnectionState(
+            active.scope,
+            this.#getCurrentConnectionChainRef(active.scope),
+          );
+          if (change) changes.push(change);
         }
+
+        stateChanges = changes;
       },
+      publish: () => this.#publishStateChanges(stateChanges),
     };
   }
 
-  #moveOpenConnectionsToCurrentNetwork(scopes: readonly DappConnectionScope[]): void {
+  #moveOpenConnectionsToCurrentNetwork(scopes: readonly DappConnectionScope[]): readonly DappConnectionStateChanged[] {
+    const changes: DappConnectionStateChanged[] = [];
+
     for (const scope of scopes) {
       if (!this.isConnectionOpen(scope)) continue;
-      this.#replaceOpenConnectionState(scope, this.#getCurrentConnectionChainRef(scope));
+
+      const change = this.#replaceOpenConnectionState(scope, this.#getCurrentConnectionChainRef(scope));
+      if (change) changes.push(change);
     }
+
+    return changes;
   }
 
-  #replaceOpenConnectionState(scope: DappConnectionScope, chainRef: ChainRef): void {
+  #replaceOpenConnectionState(scope: DappConnectionScope, chainRef: ChainRef): DappConnectionStateChanged | null {
     const key = dappConnectionScopeKey(scope);
+    const active = this.#activeConnections.get(key);
+    if (!active) return null;
+
+    const state = this.#createConnectionState(active.scope, chainRef);
+    const changedFields = {
+      chainRef: active.state.chainRef !== state.chainRef,
+      accounts: !accountsEqual(active.state.accounts, state.accounts),
+    };
+    if (!changedFields.chainRef && !changedFields.accounts) return null;
+
     this.#activeConnections.set(key, {
-      scope,
-      state: this.#createConnectionState(scope, chainRef),
+      scope: active.scope,
+      state,
     });
+
+    return { scope: active.scope, state, changedFields };
+  }
+
+  #publishStateChanges(changes: readonly DappConnectionStateChanged[]): void {
+    for (const change of [...changes].sort(compareStateChanges)) this.#publishStateChanged(change);
   }
 
   #createConnectionState(scope: DappConnectionScope, chainRef: ChainRef): DappConnectionState {

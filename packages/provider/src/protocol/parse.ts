@@ -1,5 +1,10 @@
 import * as z from "zod/mini";
-import { DAPP_ERROR_KINDS, type PageToWalletMessage, type WalletToPageMessage } from "./messages.js";
+import {
+  DAPP_ERROR_KINDS,
+  type DappErrorKind,
+  type PageToWalletMessage,
+  type WalletToPageMessage,
+} from "./messages.js";
 
 const NON_EMPTY_STRING_SCHEMA = z.string().check(z.minLength(1));
 const REQUEST_ID_SCHEMA = z.number().check(z.int(), z.nonnegative());
@@ -11,14 +16,29 @@ const PROVIDER_CONNECTION_SCHEMA = z.object({
   accounts: z.array(z.string()),
 });
 
-const SERIALIZED_DAPP_ERROR_SCHEMA = z.pipe(
+const NON_UPSTREAM_DAPP_ERROR_KINDS = DAPP_ERROR_KINDS.filter(
+  (kind): kind is Exclude<DappErrorKind, "upstream_response"> => kind !== "upstream_response",
+);
+
+const UPSTREAM_RESPONSE_DATA_SCHEMA = z.pipe(
   z.object({
-    kind: z.enum(DAPP_ERROR_KINDS),
-    message: NON_EMPTY_STRING_SCHEMA,
+    code: z.number().check(z.int()),
     data: z.optional(JSON_VALUE_SCHEMA),
   }),
-  z.transform(({ kind, message, data }) => (data === undefined ? { kind, message } : { kind, message, data })),
+  z.transform(({ code, data }) => (data === undefined ? { code } : { code, data })),
 );
+
+const SERIALIZED_DAPP_ERROR_SCHEMA = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("upstream_response"),
+    message: NON_EMPTY_STRING_SCHEMA,
+    data: UPSTREAM_RESPONSE_DATA_SCHEMA,
+  }),
+  z.object({
+    kind: z.enum(NON_UPSTREAM_DAPP_ERROR_KINDS),
+    message: NON_EMPTY_STRING_SCHEMA,
+  }),
+]);
 
 const PAGE_TO_WALLET_MESSAGE_SCHEMA = z.pipe(
   z.discriminatedUnion("type", [

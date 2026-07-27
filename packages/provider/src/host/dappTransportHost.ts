@@ -55,7 +55,7 @@ const DISCONNECTED_ERROR: SerializedDappError = {
   message: "The provider is disconnected.",
 };
 
-const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, DappErrorKind>> = {
+const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, Exclude<DappErrorKind, "upstream_response">>> = {
   [RpcInvalidRequestError.code]: "invalid_request",
   [RpcInvalidParamsError.code]: "invalid_params",
   [RpcInternalError.code]: "internal",

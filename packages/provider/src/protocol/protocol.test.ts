@@ -54,6 +54,18 @@ describe("provider protocol", () => {
         data: { code: -32000, data: { request: "eth_call" } },
       },
     });
+    expect(
+      parseWalletToPageMessage({
+        type: "failure",
+        namespace: "eip155",
+        id: 9,
+        error: {
+          kind: "upstream_response",
+          message: "Invalid upstream code.",
+          data: { code: "-32000" },
+        },
+      }),
+    ).toBeNull();
 
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;

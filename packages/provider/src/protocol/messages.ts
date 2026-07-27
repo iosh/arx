@@ -27,11 +27,19 @@ export const DAPP_ERROR_KINDS = [
 
 export type DappErrorKind = (typeof DAPP_ERROR_KINDS)[number];
 
-export type SerializedDappError = Readonly<{
-  kind: DappErrorKind;
-  message: string;
-  data?: ProviderJsonValue;
-}>;
+export type SerializedDappError =
+  | Readonly<{
+      kind: "upstream_response";
+      message: string;
+      data: Readonly<{
+        code: number;
+        data?: ProviderJsonValue;
+      }>;
+    }>
+  | Readonly<{
+      kind: Exclude<DappErrorKind, "upstream_response">;
+      message: string;
+    }>;
 
 export type PageToWalletMessage =
   | Readonly<{

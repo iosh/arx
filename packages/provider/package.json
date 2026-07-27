@@ -9,6 +9,7 @@
     "compile": "tsc --noEmit"
   },
   "exports": {
+    "./eip155": "./src/eip155/index.ts",
     "./host": "./src/host/index.ts",
     "./protocol": "./src/protocol/index.ts"
   },

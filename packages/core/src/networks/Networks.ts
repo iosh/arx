@@ -1,5 +1,4 @@
 import type { Namespace } from "../namespaces/types.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { uniqueSortedStrings } from "../utils/array.js";
@@ -21,10 +20,10 @@ import {
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 import {
-  customNetworkPersistenceType,
+  customNetworkWrites,
   type NetworkSelectionRecord,
-  networkRpcOverridePersistenceType,
-  networkSelectionPersistenceType,
+  networkRpcOverrideWrites,
+  networkSelectionWrites,
 } from "./persistence.js";
 import type {
   CustomNetworkInput,
@@ -254,7 +253,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextNetworks,
       nextRpcOverrides: this.#rpcOverrides,
       nextSelection: this.#selection,
-      persistenceChanges: [persistenceChange.put(customNetworkPersistenceType, input)],
+      persistenceChanges: [customNetworkWrites.put(input)],
       changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
     };
   }
@@ -276,7 +275,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextNetworks,
       nextRpcOverrides: this.#rpcOverrides,
       nextSelection: this.#selection,
-      persistenceChanges: [persistenceChange.put(customNetworkPersistenceType, input)],
+      persistenceChanges: [customNetworkWrites.put(input)],
       changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
     };
   }
@@ -294,7 +293,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextRpcOverrides,
       nextSelection: this.#selection,
       persistenceChanges: [
-        persistenceChange.put(networkRpcOverridePersistenceType, {
+        networkRpcOverrideWrites.put({
           chainRef: input.chainRef,
           endpoints: input.endpoints,
         }),
@@ -314,7 +313,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextNetworks: this.#networks,
       nextRpcOverrides,
       nextSelection: this.#selection,
-      persistenceChanges: [persistenceChange.remove(networkRpcOverridePersistenceType, chainRef)],
+      persistenceChanges: [networkRpcOverrideWrites.remove(chainRef)],
       changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
     };
   }
@@ -338,7 +337,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextNetworks: this.#networks,
       nextRpcOverrides: this.#rpcOverrides,
       nextSelection,
-      persistenceChanges: [persistenceChange.put(networkSelectionPersistenceType, selectionRecord(nextSelection))],
+      persistenceChanges: [networkSelectionWrites.put(selectionRecord(nextSelection))],
       changes: [
         {
           type: "networkSelectionChanged",
@@ -360,7 +359,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       nextNetworks: this.#networks,
       nextRpcOverrides: this.#rpcOverrides,
       nextSelection,
-      persistenceChanges: [persistenceChange.put(networkSelectionPersistenceType, selectionRecord(nextSelection))],
+      persistenceChanges: [networkSelectionWrites.put(selectionRecord(nextSelection))],
       changes: [
         {
           type: "networkSelectionChanged",
@@ -396,10 +395,10 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
         }
       : this.#selection;
 
-    const persistenceChanges: PersistenceChange[] = [persistenceChange.remove(customNetworkPersistenceType, chainRef)];
-    if (hadRpcOverride) persistenceChanges.push(persistenceChange.remove(networkRpcOverridePersistenceType, chainRef));
+    const persistenceChanges: PersistenceChange[] = [customNetworkWrites.remove(chainRef)];
+    if (hadRpcOverride) persistenceChanges.push(networkRpcOverrideWrites.remove(chainRef));
     if (selectionChanged) {
-      persistenceChanges.push(persistenceChange.put(networkSelectionPersistenceType, selectionRecord(nextSelection)));
+      persistenceChanges.push(networkSelectionWrites.put(selectionRecord(nextSelection)));
     }
 
     const changes: NetworksChange[] = [{ type: "networksChanged", chainRefs: [chainRef] }];

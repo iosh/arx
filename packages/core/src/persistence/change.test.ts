@@ -1,10 +1,9 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { AccountRecord } from "../accounts/persistence.js";
-import { accountPersistenceType } from "../accounts/persistence.js";
-import { encryptedVaultPersistenceType } from "../vault/persistence.js";
-import { persistenceChange } from "./change.js";
+import { accountWrites } from "../accounts/persistence.js";
+import { encryptedVaultWrites } from "../vault/persistence.js";
 
-describe("persistenceChange", () => {
+describe("persistence writes", () => {
   it("preserves complete records and stable delete keys", () => {
     const account: AccountRecord = {
       accountId: "eip155:01",
@@ -17,9 +16,9 @@ describe("persistenceChange", () => {
       createdAt: 1,
     };
 
-    const put = persistenceChange.put(accountPersistenceType, account);
-    const keyedRemove = persistenceChange.remove(accountPersistenceType, account.accountId);
-    const singletonRemove = persistenceChange.remove(encryptedVaultPersistenceType);
+    const put = accountWrites.put(account);
+    const keyedRemove = accountWrites.remove(account.accountId);
+    const singletonRemove = encryptedVaultWrites.remove();
 
     expect(put).toEqual({
       persistenceType: "account",

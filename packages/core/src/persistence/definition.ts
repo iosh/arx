@@ -1,16 +1,35 @@
 declare const persistenceTypeMarker: unique symbol;
 
-/** Defines a canonical persistence value addressed by a stable domain key. */
+/** Defines pure writes for a canonical persistence value addressed by a stable domain key. */
 export type KeyedPersistenceType<TName extends string, TValue, TKey> = Readonly<{
   name: TName;
   identity: "keyed";
+  put(value: TValue): Readonly<{
+    persistenceType: TName;
+    operation: "put";
+    value: TValue;
+  }>;
+  remove(key: TKey): Readonly<{
+    persistenceType: TName;
+    operation: "remove";
+    key: TKey;
+  }>;
   [persistenceTypeMarker]?: readonly [value: TValue, key: TKey];
 }>;
 
-/** Defines the sole canonical persistence value of its type. */
+/** Defines pure writes for the sole canonical persistence value of its type. */
 export type SingletonPersistenceType<TName extends string, TValue> = Readonly<{
   name: TName;
   identity: "singleton";
+  put(value: TValue): Readonly<{
+    persistenceType: TName;
+    operation: "put";
+    value: TValue;
+  }>;
+  remove(): Readonly<{
+    persistenceType: TName;
+    operation: "remove";
+  }>;
   [persistenceTypeMarker]?: readonly [value: TValue];
 }>;
 
@@ -33,6 +52,8 @@ export const defineKeyedPersistenceType = <const TName extends string, TValue, T
 ): KeyedPersistenceType<TName, TValue, TKey> => ({
   name,
   identity: "keyed",
+  put: (value) => ({ persistenceType: name, operation: "put", value }),
+  remove: (key) => ({ persistenceType: name, operation: "remove", key }),
 });
 
 export const defineSingletonPersistenceType = <const TName extends string, TValue>(
@@ -40,4 +61,6 @@ export const defineSingletonPersistenceType = <const TName extends string, TValu
 ): SingletonPersistenceType<TName, TValue> => ({
   name,
   identity: "singleton",
+  put: (value) => ({ persistenceType: name, operation: "put", value }),
+  remove: () => ({ persistenceType: name, operation: "remove" }),
 });

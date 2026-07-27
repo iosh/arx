@@ -6,10 +6,9 @@ import {
   AccountNotFoundError,
 } from "../accounts/errors.js";
 import { dappConnectionScopeKey } from "../dappConnections/scope.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { PermissionsBootstrap } from "./bootstrap.js";
-import { type PermissionRecord, type PermissionScope, permissionPersistenceType } from "./persistence.js";
+import { type PermissionRecord, type PermissionScope, permissionWrites } from "./persistence.js";
 
 export type Permission = PermissionRecord;
 
@@ -86,7 +85,7 @@ export class Permissions implements PermissionsReader {
 
     return {
       nextRecords,
-      persistenceChanges: [persistenceChange.put(permissionPersistenceType, permission)],
+      persistenceChanges: [permissionWrites.put(permission)],
       changedScopes: [permissionScope(permission)],
     };
   }
@@ -100,7 +99,7 @@ export class Permissions implements PermissionsReader {
 
     return {
       nextRecords,
-      persistenceChanges: [persistenceChange.remove(permissionPersistenceType, scope)],
+      persistenceChanges: [permissionWrites.remove(scope)],
       changedScopes: [permissionScope(current)],
     };
   }
@@ -116,9 +115,7 @@ export class Permissions implements PermissionsReader {
 
     return {
       nextRecords,
-      persistenceChanges: removed.map((permission) =>
-        persistenceChange.remove(permissionPersistenceType, permissionScope(permission)),
-      ),
+      persistenceChanges: removed.map((permission) => permissionWrites.remove(permissionScope(permission))),
       changedScopes: removed.map(permissionScope),
     };
   }
@@ -140,7 +137,7 @@ export class Permissions implements PermissionsReader {
 
       if (remainingAccountIds.length === 0) {
         nextRecords.delete(dappConnectionScopeKey(permission));
-        persistenceChanges.push(persistenceChange.remove(permissionPersistenceType, scope));
+        persistenceChanges.push(permissionWrites.remove(scope));
         continue;
       }
 
@@ -149,7 +146,7 @@ export class Permissions implements PermissionsReader {
         accountIds: remainingAccountIds as [AccountId, ...AccountId[]],
       };
       nextRecords.set(dappConnectionScopeKey(updated), updated);
-      persistenceChanges.push(persistenceChange.put(permissionPersistenceType, updated));
+      persistenceChanges.push(permissionWrites.put(updated));
     }
 
     if (changedScopes.length === 0) return null;

@@ -34,8 +34,11 @@ export interface AccountsReader {
   listSelections(): Promise<AccountSelectionRecord[]>;
 }
 
-export const accountPersistenceType: KeyedPersistenceType<"account", AccountRecord, AccountId> =
-  defineKeyedPersistenceType<"account", AccountRecord, AccountId>("account");
+export const accountWrites: KeyedPersistenceType<"account", AccountRecord, AccountId> = defineKeyedPersistenceType<
+  "account",
+  AccountRecord,
+  AccountId
+>("account");
 
-export const accountSelectionPersistenceType: KeyedPersistenceType<"accountSelection", AccountSelectionRecord, string> =
+export const accountSelectionWrites: KeyedPersistenceType<"accountSelection", AccountSelectionRecord, string> =
   defineKeyedPersistenceType<"accountSelection", AccountSelectionRecord, string>("accountSelection");

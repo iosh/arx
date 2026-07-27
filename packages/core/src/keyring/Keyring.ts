@@ -1,6 +1,5 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { Namespace } from "../namespaces/types.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { KeyringBootstrap } from "./bootstrap.js";
 import {
@@ -16,10 +15,10 @@ import {
   type Bip39KeySourceRecord,
   type HdKeyringId,
   type HdKeyringRecord,
-  hdKeyringPersistenceType,
+  hdKeyringWrites,
   type KeySourceId,
   type KeySourceRecord,
-  keySourcePersistenceType,
+  keySourceWrites,
   type PrivateKeySourceRecord,
 } from "./persistence.js";
 import type { KeyringSecrets } from "./secrets.js";
@@ -121,10 +120,7 @@ export class Keyring {
     const nextHdKeyrings = new Map(this.#hdKeyrings);
     nextHdKeyrings.set(hdKeyring.hdKeyringId, hdKeyring);
 
-    const persistenceChanges = [
-      persistenceChange.put(keySourcePersistenceType, params.source),
-      persistenceChange.put(hdKeyringPersistenceType, hdKeyring),
-    ];
+    const persistenceChanges = [keySourceWrites.put(params.source), hdKeyringWrites.put(hdKeyring)];
 
     return { nextKeySources, nextHdKeyrings, persistenceChanges };
   }
@@ -133,7 +129,7 @@ export class Keyring {
     const nextKeySources = new Map(this.#keySources);
     nextKeySources.set(source.keySourceId, source);
 
-    const persistenceChanges = [persistenceChange.put(keySourcePersistenceType, source)];
+    const persistenceChanges = [keySourceWrites.put(source)];
 
     return { nextKeySources, nextHdKeyrings: this.#hdKeyrings, persistenceChanges };
   }
@@ -148,7 +144,7 @@ export class Keyring {
     const nextKeySources = new Map(this.#keySources);
     nextKeySources.set(keySourceId, confirmedSource);
 
-    const persistenceChanges = [persistenceChange.put(keySourcePersistenceType, confirmedSource)];
+    const persistenceChanges = [keySourceWrites.put(confirmedSource)];
 
     return { nextKeySources, nextHdKeyrings: this.#hdKeyrings, persistenceChanges };
   }
@@ -167,7 +163,7 @@ export class Keyring {
     const nextHdKeyrings = new Map(this.#hdKeyrings);
     nextHdKeyrings.set(hdKeyring.hdKeyringId, hdKeyring);
 
-    const persistenceChanges = [persistenceChange.put(hdKeyringPersistenceType, hdKeyring)];
+    const persistenceChanges = [hdKeyringWrites.put(hdKeyring)];
 
     return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
   }
@@ -180,7 +176,7 @@ export class Keyring {
     const nextHdKeyrings = new Map(this.#hdKeyrings);
     nextHdKeyrings.set(hdKeyringId, advanced);
 
-    const persistenceChanges = [persistenceChange.put(hdKeyringPersistenceType, advanced)];
+    const persistenceChanges = [hdKeyringWrites.put(advanced)];
 
     return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
   }
@@ -195,7 +191,7 @@ export class Keyring {
     const nextHdKeyrings = new Map(this.#hdKeyrings);
     nextHdKeyrings.delete(hdKeyringId);
 
-    const persistenceChanges = [persistenceChange.remove(hdKeyringPersistenceType, hdKeyringId)];
+    const persistenceChanges = [hdKeyringWrites.remove(hdKeyringId)];
 
     return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
   }
@@ -212,10 +208,8 @@ export class Keyring {
     for (const hdKeyring of removedHdKeyrings) nextHdKeyrings.delete(hdKeyring.hdKeyringId);
 
     const persistenceChanges = [
-      persistenceChange.remove(keySourcePersistenceType, keySourceId),
-      ...removedHdKeyrings.map((hdKeyring) =>
-        persistenceChange.remove(hdKeyringPersistenceType, hdKeyring.hdKeyringId),
-      ),
+      keySourceWrites.remove(keySourceId),
+      ...removedHdKeyrings.map((hdKeyring) => hdKeyringWrites.remove(hdKeyring.hdKeyringId)),
     ];
 
     return { nextKeySources, nextHdKeyrings, persistenceChanges };

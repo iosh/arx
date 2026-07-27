@@ -19,8 +19,8 @@ export interface HdKeyringsReader {
   listAll(): Promise<HdKeyringRecord[]>;
 }
 
-export const keySourcePersistenceType: KeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId> =
+export const keySourceWrites: KeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId> =
   defineKeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId>("keySource");
 
-export const hdKeyringPersistenceType: KeyedPersistenceType<"hdKeyring", HdKeyringRecord, HdKeyringId> =
+export const hdKeyringWrites: KeyedPersistenceType<"hdKeyring", HdKeyringRecord, HdKeyringId> =
   defineKeyedPersistenceType<"hdKeyring", HdKeyringRecord, HdKeyringId>("hdKeyring");

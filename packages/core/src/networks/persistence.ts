@@ -17,7 +17,7 @@ export interface CustomNetworksReader {
   listAll(): Promise<CustomNetworkRecord[]>;
 }
 
-export const customNetworkPersistenceType: KeyedPersistenceType<"customNetwork", CustomNetworkRecord, ChainRef> =
+export const customNetworkWrites: KeyedPersistenceType<"customNetwork", CustomNetworkRecord, ChainRef> =
   defineKeyedPersistenceType<"customNetwork", CustomNetworkRecord, ChainRef>("customNetwork");
 
 export type NetworkRpcOverrideRecord = Readonly<{
@@ -29,11 +29,8 @@ export interface NetworkRpcOverridesReader {
   listAll(): Promise<NetworkRpcOverrideRecord[]>;
 }
 
-export const networkRpcOverridePersistenceType: KeyedPersistenceType<
-  "networkRpcOverride",
-  NetworkRpcOverrideRecord,
-  ChainRef
-> = defineKeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef>("networkRpcOverride");
+export const networkRpcOverrideWrites: KeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef> =
+  defineKeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef>("networkRpcOverride");
 
 export type NetworkSelectionRecord = Readonly<{
   selectedNamespace: Namespace;
@@ -44,5 +41,5 @@ export interface NetworkSelectionReader {
   get(): Promise<NetworkSelectionRecord | null>;
 }
 
-export const networkSelectionPersistenceType: SingletonPersistenceType<"networkSelection", NetworkSelectionRecord> =
+export const networkSelectionWrites: SingletonPersistenceType<"networkSelection", NetworkSelectionRecord> =
   defineSingletonPersistenceType<"networkSelection", NetworkSelectionRecord>("networkSelection");

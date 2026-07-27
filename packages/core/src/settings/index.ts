@@ -7,5 +7,5 @@ export type {
 } from "./persistence.js";
 export {
   AUTO_LOCK_SETTING_KEY,
-  settingPersistenceType,
+  settingWrites,
 } from "./persistence.js";

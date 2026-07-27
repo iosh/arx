@@ -2,7 +2,6 @@ import type { Accounts } from "../accounts/Accounts.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import { TransactionNotFoundError, TransactionReplacementUnavailableError } from "./errors.js";
@@ -11,8 +10,8 @@ import {
   type PendingTransactionRecord,
   type TransactionRecord,
   type TransactionsReader,
-  transactionPersistenceType,
   transactionRecordToTransaction,
+  transactionWrites,
 } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
 import type { TransactionMonitor } from "./TransactionMonitor.js";
@@ -128,7 +127,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
           updatedAt: now,
         };
 
-        await commit([persistenceChange.put(transactionPersistenceType, record)]);
+        await commit([transactionWrites.put(record)]);
 
         params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
         return { pending: record, signed };
@@ -160,7 +159,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
           updatedAt: params.time.now(),
         };
 
-        await commit([persistenceChange.put(transactionPersistenceType, failed)]);
+        await commit([transactionWrites.put(failed)]);
 
         params.monitor.stop(failed.transactionId);
         params.publishChanged({ type: "transactionsChanged", transactionIds: [failed.transactionId] });

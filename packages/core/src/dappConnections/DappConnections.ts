@@ -7,7 +7,6 @@ import {
 } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
 import type { PermissionsReader } from "../permissions/Permissions.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { WalletStatusReader } from "../wallet/Wallet.js";
@@ -17,7 +16,7 @@ import { parseDappOrigin } from "./origin.js";
 import {
   type DappConnectionScope,
   type DappNetworkSelectionRecord,
-  dappNetworkSelectionPersistenceType,
+  dappNetworkSelectionWrites,
 } from "./persistence.js";
 import { dappConnectionScopeKey } from "./scope.js";
 
@@ -177,7 +176,7 @@ export class DappConnections {
     let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
-      persistenceChanges: [persistenceChange.put(dappNetworkSelectionPersistenceType, selection)],
+      persistenceChanges: [dappNetworkSelectionWrites.put(selection)],
       activate: () => {
         this.#networkSelections = networkSelections;
         stateChanges = this.#moveOpenConnectionsToCurrentNetwork([networkSelectionScope(selection)]);
@@ -197,9 +196,7 @@ export class DappConnections {
     let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
-      persistenceChanges: removedSelections.map((selection) =>
-        persistenceChange.remove(dappNetworkSelectionPersistenceType, selection),
-      ),
+      persistenceChanges: removedSelections.map(dappNetworkSelectionWrites.remove),
       activate: () => {
         this.#networkSelections = remainingSelections;
         stateChanges = this.#moveOpenConnectionsToCurrentNetwork(removedSelections.map(networkSelectionScope));
@@ -218,9 +215,7 @@ export class DappConnections {
     let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
-      persistenceChanges: removedSelections.map((selection) =>
-        persistenceChange.remove(dappNetworkSelectionPersistenceType, selection),
-      ),
+      persistenceChanges: removedSelections.map(dappNetworkSelectionWrites.remove),
       activate: () => {
         this.#networkSelections = remainingSelections;
         const changes: DappConnectionStateChanged[] = [];

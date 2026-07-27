@@ -17,5 +17,5 @@ export interface PermissionRecordsReader {
   listAll(): Promise<readonly PermissionRecord[]>;
 }
 
-export const permissionPersistenceType: KeyedPersistenceType<"permission", PermissionRecord, PermissionScope> =
+export const permissionWrites: KeyedPersistenceType<"permission", PermissionRecord, PermissionScope> =
   defineKeyedPersistenceType<"permission", PermissionRecord, PermissionScope>("permission");

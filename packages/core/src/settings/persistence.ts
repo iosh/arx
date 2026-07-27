@@ -15,5 +15,8 @@ export interface SettingsReader {
   get<TKey extends SettingKey>(key: TKey): Promise<SettingRecordFor<TKey> | null>;
 }
 
-export const settingPersistenceType: KeyedPersistenceType<"setting", SettingRecord, SettingKey> =
-  defineKeyedPersistenceType<"setting", SettingRecord, SettingKey>("setting");
+export const settingWrites: KeyedPersistenceType<"setting", SettingRecord, SettingKey> = defineKeyedPersistenceType<
+  "setting",
+  SettingRecord,
+  SettingKey
+>("setting");

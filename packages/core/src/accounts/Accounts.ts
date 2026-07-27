@@ -2,7 +2,6 @@ import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { parseChainRef } from "../networks/chainRef.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { uniqueSortedStrings } from "../utils/array.js";
@@ -26,8 +25,8 @@ import { type AccountsNamespaceAdapters, getAccountsNamespaceAdapter } from "./n
 import {
   type AccountRecord,
   type AccountSelectionRecord,
-  accountPersistenceType,
-  accountSelectionPersistenceType,
+  accountSelectionWrites,
+  accountWrites,
 } from "./persistence.js";
 import type { Account, AccountAddress, AccountsChanged } from "./types.js";
 
@@ -191,13 +190,11 @@ export class Accounts {
     nextRecords.set(record.accountId, record);
 
     const nextSelections = new Map(this.#selections);
-    const persistenceChanges: PersistenceChange[] = [persistenceChange.put(accountPersistenceType, record)];
+    const persistenceChanges: PersistenceChange[] = [accountWrites.put(record)];
 
     if (!this.hasAccountsInNamespace(namespace)) {
       nextSelections.set(namespace, record.accountId);
-      persistenceChanges.push(
-        persistenceChange.put(accountSelectionPersistenceType, accountSelectionRecord(namespace, record.accountId)),
-      );
+      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, record.accountId)));
     }
 
     return this.update(nextRecords, nextSelections, persistenceChanges, [record.accountId], [namespace]);
@@ -215,7 +212,7 @@ export class Accounts {
     return this.update(
       nextRecords,
       this.#selections,
-      [persistenceChange.put(accountPersistenceType, renamed)],
+      [accountWrites.put(renamed)],
       [accountId],
       [getAccountIdNamespace(accountId)],
     );
@@ -235,7 +232,7 @@ export class Accounts {
     return this.update(
       this.#records,
       nextSelections,
-      [persistenceChange.put(accountSelectionPersistenceType, accountSelectionRecord(namespace, accountId))],
+      [accountSelectionWrites.put(accountSelectionRecord(namespace, accountId))],
       previousAccountId ? [previousAccountId, accountId] : [accountId],
       [namespace],
     );
@@ -258,19 +255,14 @@ export class Accounts {
 
       if (this.#selections.get(namespace) === accountId) {
         nextSelections.set(namespace, replacement.accountId);
-        persistenceChanges.push(
-          persistenceChange.put(
-            accountSelectionPersistenceType,
-            accountSelectionRecord(namespace, replacement.accountId),
-          ),
-        );
+        persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, replacement.accountId)));
         changedAccountIds.push(replacement.accountId);
       }
     }
 
     const updated = { ...current, hidden };
     nextRecords.set(accountId, updated);
-    persistenceChanges.unshift(persistenceChange.put(accountPersistenceType, updated));
+    persistenceChanges.unshift(accountWrites.put(updated));
 
     return this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, [namespace]);
   }
@@ -326,9 +318,7 @@ export class Accounts {
     const changedAccountIds = records.map((record) => record.accountId);
     const changedNamespaces = uniqueSortedStrings(records.map((record) => getAccountIdNamespace(record.accountId)));
     const nextSelections = new Map(this.#selections);
-    const persistenceChanges: PersistenceChange[] = records.map((record) =>
-      persistenceChange.remove(accountPersistenceType, record.accountId),
-    );
+    const persistenceChanges: PersistenceChange[] = records.map((record) => accountWrites.remove(record.accountId));
 
     for (const namespace of changedNamespaces) {
       const remaining = sortRecords(
@@ -337,7 +327,7 @@ export class Accounts {
 
       if (remaining.length === 0) {
         nextSelections.delete(namespace);
-        persistenceChanges.push(persistenceChange.remove(accountSelectionPersistenceType, namespace));
+        persistenceChanges.push(accountSelectionWrites.remove(namespace));
         continue;
       }
 
@@ -349,12 +339,7 @@ export class Accounts {
 
       nextSelections.set(namespace, replacement.accountId);
       changedAccountIds.push(replacement.accountId);
-      persistenceChanges.push(
-        persistenceChange.put(
-          accountSelectionPersistenceType,
-          accountSelectionRecord(namespace, replacement.accountId),
-        ),
-      );
+      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, replacement.accountId)));
     }
 
     return {

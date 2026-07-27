@@ -1,5 +1,4 @@
 import type { ChainRef } from "../networks/chainRef.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import {
@@ -7,7 +6,7 @@ import {
   type TerminalTransactionChange,
   type TransactionsNamespaceAdapters,
 } from "./namespaceAdapter.js";
-import { type PendingTransactionRecord, type TransactionRecord, transactionPersistenceType } from "./persistence.js";
+import { type PendingTransactionRecord, type TransactionRecord, transactionWrites } from "./persistence.js";
 import type { TransactionsChanged } from "./Transactions.js";
 import type { TransactionId } from "./types.js";
 
@@ -168,7 +167,7 @@ export class TransactionMonitor {
       }
       if (terminalRecords.length === 0) return true;
 
-      await commit(terminalRecords.map((record) => persistenceChange.put(transactionPersistenceType, record)));
+      await commit(terminalRecords.map(transactionWrites.put));
 
       for (const record of terminalRecords) {
         const monitored = monitoredById.get(record.transactionId);

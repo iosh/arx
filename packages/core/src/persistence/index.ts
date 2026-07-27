@@ -40,7 +40,7 @@ export type {
 } from "../settings/persistence.js";
 export {
   AUTO_LOCK_SETTING_KEY,
-  settingPersistenceType,
+  settingWrites,
 } from "../settings/persistence.js";
 export type {
   PendingTransactionRecord,
@@ -62,7 +62,6 @@ export type {
   PersistencePutChangeOf,
   PersistenceRemoveChangeOf,
 } from "./change.js";
-export { persistenceChange } from "./change.js";
 export type { CorePersistence, CorePersistenceReaders, PersistenceWriter } from "./corePersistence.js";
 export type {
   AnyPersistenceType,

@@ -10,5 +10,5 @@ export interface EncryptedVaultReader {
   get(): Promise<EncryptedVaultRecord | null>;
 }
 
-export const encryptedVaultPersistenceType: SingletonPersistenceType<"encryptedVault", EncryptedVaultRecord> =
+export const encryptedVaultWrites: SingletonPersistenceType<"encryptedVault", EncryptedVaultRecord> =
   defineSingletonPersistenceType<"encryptedVault", EncryptedVaultRecord>("encryptedVault");

@@ -23,12 +23,11 @@ import {
 } from "../keyring/secrets.js";
 import type { BackupStatus, HdKeyringId, KeyringChanged, KeySourceId } from "../keyring/types.js";
 import { type Permissions, type PermissionsChanged, permissionsChangedFromUpdate } from "../permissions/Permissions.js";
-import { persistenceChange } from "../persistence/change.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
-import { AUTO_LOCK_SETTING_KEY, settingPersistenceType } from "../settings/persistence.js";
+import { AUTO_LOCK_SETTING_KEY, settingWrites } from "../settings/persistence.js";
 import { changeVaultPassword, createUnlockedVault, replaceVaultPlaintext, unlockVaultRecord } from "../vault/crypto.js";
-import { encryptedVaultPersistenceType } from "../vault/persistence.js";
+import { encryptedVaultWrites } from "../vault/persistence.js";
 import type { Vault } from "../vault/Vault.js";
 import {
   type AutoLockController,
@@ -146,7 +145,7 @@ export class WalletCoordinator {
       });
 
       await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
+        encryptedVaultWrites.put(unlocked.record),
         ...keyringUpdate.persistenceChanges,
         ...accountsUpdate.persistenceChanges,
       ]);
@@ -207,7 +206,7 @@ export class WalletCoordinator {
         newPassword: params.newPassword,
       });
 
-      await commit([persistenceChange.put(encryptedVaultPersistenceType, draft.record)]);
+      await commit([encryptedVaultWrites.put(draft.record)]);
 
       this.#vault.activate(draft);
       this.#autoLock.recordActivity();
@@ -222,8 +221,8 @@ export class WalletCoordinator {
 
       const change =
         durationMs === DEFAULT_AUTO_LOCK_DURATION_MS
-          ? persistenceChange.remove(settingPersistenceType, AUTO_LOCK_SETTING_KEY)
-          : persistenceChange.put(settingPersistenceType, {
+          ? settingWrites.remove(AUTO_LOCK_SETTING_KEY)
+          : settingWrites.put({
               key: AUTO_LOCK_SETTING_KEY,
               durationMs,
             });
@@ -279,7 +278,7 @@ export class WalletCoordinator {
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
 
       await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
+        encryptedVaultWrites.put(nextUnlocked.record),
         ...keyringUpdate.persistenceChanges,
         ...accountsUpdate.persistenceChanges,
       ]);
@@ -321,7 +320,7 @@ export class WalletCoordinator {
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
 
       await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
+        encryptedVaultWrites.put(nextUnlocked.record),
         ...keyringUpdate.persistenceChanges,
         ...(accountsUpdate?.persistenceChanges ?? []),
         ...(permissionsUpdate?.persistenceChanges ?? []),
@@ -557,7 +556,7 @@ export class WalletCoordinator {
       });
 
       await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, unlocked.record),
+        encryptedVaultWrites.put(unlocked.record),
         ...keyringUpdate.persistenceChanges,
         ...accountsUpdate.persistenceChanges,
       ]);
@@ -623,7 +622,7 @@ export class WalletCoordinator {
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
 
       await commit([
-        persistenceChange.put(encryptedVaultPersistenceType, nextUnlocked.record),
+        encryptedVaultWrites.put(nextUnlocked.record),
         ...keyringUpdate.persistenceChanges,
         ...accountsUpdate.persistenceChanges,
       ]);

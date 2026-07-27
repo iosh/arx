@@ -12,7 +12,6 @@ import {
   type PermissionRecord,
   PersistenceCommitError,
   PersistenceReadError,
-  persistenceChange,
   persistenceTypes,
   type TransactionRecord,
 } from "@arx/core/persistence";
@@ -179,12 +178,12 @@ describe("createDexiePersistence", () => {
     const autoLock = { key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 } as const;
 
     await persistence.writer.commit([
-      persistenceChange.put(persistenceTypes.encryptedVault, encryptedVault),
-      persistenceChange.put(persistenceTypes.setting, autoLock),
-      persistenceChange.put(persistenceTypes.keySource, source),
-      persistenceChange.put(persistenceTypes.hdKeyring, hdKeyring),
-      persistenceChange.put(persistenceTypes.account, account),
-      persistenceChange.put(persistenceTypes.permission, permission),
+      persistenceTypes.encryptedVault.put(encryptedVault),
+      persistenceTypes.setting.put(autoLock),
+      persistenceTypes.keySource.put(source),
+      persistenceTypes.hdKeyring.put(hdKeyring),
+      persistenceTypes.account.put(account),
+      persistenceTypes.permission.put(permission),
     ]);
 
     expect(await persistence.readers.encryptedVault.get()).toEqual(encryptedVault);
@@ -241,14 +240,11 @@ describe("createDexiePersistence", () => {
     const putAccount = vi.spyOn(context.db.accounts, "put").mockRejectedValueOnce(failure);
 
     const commit = writer.commit([
-      persistenceChange.put(persistenceTypes.setting, {
+      persistenceTypes.setting.put({
         key: AUTO_LOCK_SETTING_KEY,
         durationMs: 60_000,
       }),
-      persistenceChange.put(
-        persistenceTypes.account,
-        hdAccount({ accountId: "eip155:02", hdKeyringId: "keyring-1", createdAt: 2 }),
-      ),
+      persistenceTypes.account.put(hdAccount({ accountId: "eip155:02", hdKeyringId: "keyring-1", createdAt: 2 })),
     ]);
 
     await expect(commit).rejects.toBeInstanceOf(PersistenceCommitError);
@@ -273,9 +269,9 @@ describe("createDexiePersistence", () => {
     } as const;
 
     await persistence.writer.commit([
-      persistenceChange.put(persistenceTypes.account, first),
-      persistenceChange.put(persistenceTypes.account, second),
-      persistenceChange.put(persistenceTypes.accountSelection, selection),
+      persistenceTypes.account.put(first),
+      persistenceTypes.account.put(second),
+      persistenceTypes.accountSelection.put(selection),
     ]);
 
     expect(await persistence.readers.accounts.listRecords()).toEqual(expect.arrayContaining([first, second]));
@@ -307,10 +303,10 @@ describe("createDexiePersistence", () => {
     };
 
     await persistence.writer.commit([
-      persistenceChange.put(persistenceTypes.customNetwork, customNetwork),
-      persistenceChange.put(persistenceTypes.networkRpcOverride, rpcOverride),
-      persistenceChange.put(persistenceTypes.networkSelection, selection),
-      persistenceChange.put(persistenceTypes.dappNetworkSelection, dappSelection),
+      persistenceTypes.customNetwork.put(customNetwork),
+      persistenceTypes.networkRpcOverride.put(rpcOverride),
+      persistenceTypes.networkSelection.put(selection),
+      persistenceTypes.dappNetworkSelection.put(dappSelection),
     ]);
 
     expect(await persistence.readers.customNetworks.listAll()).toEqual([customNetwork]);
@@ -318,7 +314,7 @@ describe("createDexiePersistence", () => {
     expect(await persistence.readers.networkSelection.get()).toEqual(selection);
     expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([dappSelection]);
 
-    await persistence.writer.commit([persistenceChange.remove(persistenceTypes.dappNetworkSelection, dappSelection)]);
+    await persistence.writer.commit([persistenceTypes.dappNetworkSelection.remove(dappSelection)]);
     expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([]);
   });
 
@@ -346,9 +342,7 @@ describe("createDexiePersistence", () => {
       status: "confirmed",
     });
 
-    await persistence.writer.commit(
-      [first, second, third].map((record) => persistenceChange.put(persistenceTypes.transaction, record)),
-    );
+    await persistence.writer.commit([first, second, third].map(persistenceTypes.transaction.put));
 
     const firstPage = await persistence.readers.transactions.list({ limit: 2 });
     expect(firstPage.transactions.map((record) => record.transactionId)).toEqual(["transaction-c", "transaction-b"]);

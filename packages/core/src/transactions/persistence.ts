@@ -49,5 +49,5 @@ export interface TransactionsReader {
   listPending(): Promise<readonly PendingTransactionRecord[]>;
 }
 
-export const transactionPersistenceType: KeyedPersistenceType<"transaction", TransactionRecord, TransactionId> =
+export const transactionWrites: KeyedPersistenceType<"transaction", TransactionRecord, TransactionId> =
   defineKeyedPersistenceType<"transaction", TransactionRecord, TransactionId>("transaction");

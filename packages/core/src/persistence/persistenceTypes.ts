@@ -1,45 +1,41 @@
-import { accountPersistenceType, accountSelectionPersistenceType } from "../accounts/persistence.js";
-import { dappNetworkSelectionPersistenceType } from "../dappConnections/persistence.js";
-import { hdKeyringPersistenceType, keySourcePersistenceType } from "../keyring/persistence.js";
-import {
-  customNetworkPersistenceType,
-  networkRpcOverridePersistenceType,
-  networkSelectionPersistenceType,
-} from "../networks/persistence.js";
-import { permissionPersistenceType } from "../permissions/persistence.js";
-import { settingPersistenceType } from "../settings/persistence.js";
-import { transactionPersistenceType } from "../transactions/persistence.js";
-import { encryptedVaultPersistenceType } from "../vault/persistence.js";
+import { accountSelectionWrites, accountWrites } from "../accounts/persistence.js";
+import { dappNetworkSelectionWrites } from "../dappConnections/persistence.js";
+import { hdKeyringWrites, keySourceWrites } from "../keyring/persistence.js";
+import { customNetworkWrites, networkRpcOverrideWrites, networkSelectionWrites } from "../networks/persistence.js";
+import { permissionWrites } from "../permissions/persistence.js";
+import { settingWrites } from "../settings/persistence.js";
+import { transactionWrites } from "../transactions/persistence.js";
+import { encryptedVaultWrites } from "../vault/persistence.js";
 import type { PersistenceChangeOf } from "./change.js";
 
 export type PersistenceTypes = Readonly<{
-  encryptedVault: typeof encryptedVaultPersistenceType;
-  setting: typeof settingPersistenceType;
-  keySource: typeof keySourcePersistenceType;
-  hdKeyring: typeof hdKeyringPersistenceType;
-  account: typeof accountPersistenceType;
-  accountSelection: typeof accountSelectionPersistenceType;
-  permission: typeof permissionPersistenceType;
-  customNetwork: typeof customNetworkPersistenceType;
-  networkRpcOverride: typeof networkRpcOverridePersistenceType;
-  networkSelection: typeof networkSelectionPersistenceType;
-  dappNetworkSelection: typeof dappNetworkSelectionPersistenceType;
-  transaction: typeof transactionPersistenceType;
+  encryptedVault: typeof encryptedVaultWrites;
+  setting: typeof settingWrites;
+  keySource: typeof keySourceWrites;
+  hdKeyring: typeof hdKeyringWrites;
+  account: typeof accountWrites;
+  accountSelection: typeof accountSelectionWrites;
+  permission: typeof permissionWrites;
+  customNetwork: typeof customNetworkWrites;
+  networkRpcOverride: typeof networkRpcOverrideWrites;
+  networkSelection: typeof networkSelectionWrites;
+  dappNetworkSelection: typeof dappNetworkSelectionWrites;
+  transaction: typeof transactionWrites;
 }>;
 
 export const persistenceTypes: PersistenceTypes = {
-  encryptedVault: encryptedVaultPersistenceType,
-  setting: settingPersistenceType,
-  keySource: keySourcePersistenceType,
-  hdKeyring: hdKeyringPersistenceType,
-  account: accountPersistenceType,
-  accountSelection: accountSelectionPersistenceType,
-  permission: permissionPersistenceType,
-  customNetwork: customNetworkPersistenceType,
-  networkRpcOverride: networkRpcOverridePersistenceType,
-  networkSelection: networkSelectionPersistenceType,
-  dappNetworkSelection: dappNetworkSelectionPersistenceType,
-  transaction: transactionPersistenceType,
+  encryptedVault: encryptedVaultWrites,
+  setting: settingWrites,
+  keySource: keySourceWrites,
+  hdKeyring: hdKeyringWrites,
+  account: accountWrites,
+  accountSelection: accountSelectionWrites,
+  permission: permissionWrites,
+  customNetwork: customNetworkWrites,
+  networkRpcOverride: networkRpcOverrideWrites,
+  networkSelection: networkSelectionWrites,
+  dappNetworkSelection: dappNetworkSelectionWrites,
+  transaction: transactionWrites,
 };
 
 export type PersistenceType = PersistenceTypes[keyof PersistenceTypes];

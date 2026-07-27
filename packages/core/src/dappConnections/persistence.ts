@@ -17,7 +17,7 @@ export interface DappNetworkSelectionsReader {
   listAll(): Promise<readonly DappNetworkSelectionRecord[]>;
 }
 
-export const dappNetworkSelectionPersistenceType: KeyedPersistenceType<
+export const dappNetworkSelectionWrites: KeyedPersistenceType<
   "dappNetworkSelection",
   DappNetworkSelectionRecord,
   DappConnectionScope

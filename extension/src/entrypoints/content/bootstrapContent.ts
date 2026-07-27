@@ -1,184 +1,172 @@
-import { CHANNEL, type Envelope, PROVIDER_EVENTS, parseProviderEnvelope } from "@arx/provider/protocol";
+import {
+  type PageToWalletMessage,
+  parsePageToWalletMessage,
+  parseWalletToPageMessage,
+  type WalletToPageMessage,
+} from "@arx/provider/protocol";
 import browser, { type Runtime } from "webextension-polyfill";
+import {
+  createProviderWindowEnvelope,
+  PROVIDER_WINDOW_TARGET,
+  readProviderWindowEnvelope,
+} from "@/platform/browser/providerWindowChannel";
+import { createRuntimePortChannel } from "@/platform/browser/runtimePortChannel";
+import { DAPP_PROVIDER_PORT_NAME } from "@/platform/browser/runtimePortNames";
 
-type SessionPortEntry = {
-  namespace: string;
+type ActiveProviderPort = {
   port: Runtime.Port;
-  onMessage: (data: unknown) => void;
-  onDisconnect: () => void;
+  channel: ReturnType<typeof createRuntimePortChannel>;
+  unsubscribeMessage(): void;
+  unsubscribeDisconnect(): void;
 };
 
-const parseHandshakeNamespace = (envelope: Extract<Envelope, { type: "handshake" }>): string | null => {
-  const namespace = envelope.payload.namespace.trim();
-  return namespace ? namespace : null;
+export type BootstrapContentOptions = Readonly<{
+  targetWindow?: Window;
+  connectProviderPort?: () => Runtime.Port;
+}>;
+
+const DISCONNECTED_MESSAGE = {
+  type: "disconnected",
+  error: {
+    kind: "disconnected",
+    message: "The provider is disconnected.",
+  },
+} as const satisfies WalletToPageMessage;
+
+const closePort = (port: Runtime.Port): void => {
+  try {
+    port.disconnect();
+  } catch {
+    // The port is already unavailable.
+  }
 };
 
-export const bootstrapContent = () => {
-  const DISCONNECT_ERROR = { code: 4900, message: "Disconnected" } as const;
+export const bootstrapContent = ({
+  targetWindow = window,
+  connectProviderPort = () => browser.runtime.connect({ name: DAPP_PROVIDER_PORT_NAME }),
+}: BootstrapContentOptions = {}): void => {
+  const pageOrigin = targetWindow.location.origin;
+  const openedNamespaces = new Set<string>();
+  let activePort: ActiveProviderPort | null = null;
+  let recoveryAttempted = false;
 
-  const sessions = new Map<string, SessionPortEntry>();
-  const latestSessionByNamespace = new Map<string, string>();
-
-  const emitDisconnectEvent = (activeSessionId: string) => {
-    window.postMessage(
-      {
-        channel: CHANNEL,
-        sessionId: activeSessionId,
-        type: "event",
-        payload: { event: PROVIDER_EVENTS.disconnect, params: [DISCONNECT_ERROR] },
-      },
-      window.location.origin,
-    );
+  const sendToPage = (message: WalletToPageMessage): void => {
+    targetWindow.postMessage(createProviderWindowEnvelope(PROVIDER_WINDOW_TARGET.page, message), pageOrigin);
   };
 
-  const releaseSession = (sessionId: string): SessionPortEntry | null => {
-    const entry = sessions.get(sessionId);
-    if (!entry) return null;
-
-    sessions.delete(sessionId);
-    if (latestSessionByNamespace.get(entry.namespace) === sessionId) {
-      latestSessionByNamespace.delete(entry.namespace);
-    }
-
-    try {
-      entry.port.onMessage.removeListener(entry.onMessage);
-      entry.port.onDisconnect.removeListener(entry.onDisconnect);
-    } catch {
-      // ignore cleanup failures
-    }
-
-    return entry;
-  };
-
-  const disconnectPort = (port: Runtime.Port) => {
-    try {
-      port.disconnect();
-    } catch {
-      // ignore disconnect failures
-    }
-  };
-
-  const closeSession = (sessionId: string) => {
-    const entry = releaseSession(sessionId);
-    if (!entry) return;
-    disconnectPort(entry.port);
-  };
-
-  const disconnectSession = (sessionId: string) => {
-    if (!releaseSession(sessionId)) return;
-    emitDisconnectEvent(sessionId);
-  };
-
-  const closeSessionWithDisconnectEvent = (sessionId: string) => {
-    const entry = releaseSession(sessionId);
-    if (!entry) return;
-    disconnectPort(entry.port);
-    emitDisconnectEvent(sessionId);
-  };
-
-  const finalizeSessionFromBackgroundDisconnect = (
-    sessionId: string,
-    envelope: Extract<Envelope, { type: "event" }>,
-  ) => {
-    const entry = releaseSession(sessionId);
-    if (!entry) return;
-
-    window.postMessage(envelope, window.location.origin);
-    disconnectPort(entry.port);
-  };
-
-  const createSessionPort = (sessionId: string, namespace: string): SessionPortEntry => {
-    const nextPort = browser.runtime.connect({ name: CHANNEL });
-    const entry: SessionPortEntry = {
-      namespace,
-      port: nextPort,
-      onMessage: (data: unknown) => {
-        const envelope = parseProviderEnvelope(data);
-        if (!envelope) return;
-        if (envelope.sessionId !== sessionId) return;
-
-        switch (envelope.type) {
-          case "handshake_ack":
-          case "response":
-            window.postMessage(envelope, window.location.origin);
-            return;
-          case "event":
-            if (envelope.payload.event === PROVIDER_EVENTS.disconnect) {
-              finalizeSessionFromBackgroundDisconnect(sessionId, envelope);
-              return;
-            }
-
-            window.postMessage(envelope, window.location.origin);
-            return;
-          default:
-            return;
-        }
-      },
-      onDisconnect: () => {
-        disconnectSession(sessionId);
-      },
-    };
-
-    sessions.set(sessionId, entry);
-    latestSessionByNamespace.set(namespace, sessionId);
-    nextPort.onMessage.addListener(entry.onMessage);
-    nextPort.onDisconnect.addListener(entry.onDisconnect);
-    return entry;
-  };
-
-  const getOrCreateSessionPort = (sessionId: string, namespace: string): SessionPortEntry => {
-    const existing = sessions.get(sessionId);
-    if (existing) {
-      return existing;
-    }
-
-    const previousSessionId = latestSessionByNamespace.get(namespace);
-    if (previousSessionId && previousSessionId !== sessionId) {
-      closeSession(previousSessionId);
-    }
-
-    return createSessionPort(sessionId, namespace);
-  };
-
-  const postToBackground = (envelope: Envelope) => {
-    const sessionId = envelope.sessionId;
-    const entry = sessions.get(sessionId);
-    if (!entry) return false;
-
-    try {
-      entry.port.postMessage(envelope);
-      return true;
-    } catch (error) {
-      closeSessionWithDisconnectEvent(sessionId);
-      console.warn("[arx:content] failed to forward message to background", { error, sessionId });
+  const releasePort = (expected: ActiveProviderPort): boolean => {
+    if (activePort !== expected) {
       return false;
     }
+
+    activePort = null;
+    expected.unsubscribeMessage();
+    expected.unsubscribeDisconnect();
+    return true;
   };
 
-  const handleWindowMessage = (event: MessageEvent) => {
-    if (event.source !== window) return;
-    if (event.origin !== window.location.origin) return;
+  const connect = (): ActiveProviderPort | null => {
+    let port: Runtime.Port;
+    try {
+      port = connectProviderPort();
+    } catch {
+      return null;
+    }
 
-    const data = parseProviderEnvelope(event.data);
-    if (!data) return;
+    const channel = createRuntimePortChannel(port);
+    const connection: ActiveProviderPort = {
+      port,
+      channel,
+      unsubscribeMessage: () => undefined,
+      unsubscribeDisconnect: () => undefined,
+    };
 
-    switch (data.type) {
-      case "handshake": {
-        const namespace = parseHandshakeNamespace(data);
-        if (!namespace) return;
-        getOrCreateSessionPort(data.sessionId, namespace);
-        postToBackground(data);
+    activePort = connection;
+    connection.unsubscribeMessage = channel.onMessage((raw) => {
+      if (activePort !== connection) {
         return;
       }
 
-      case "request":
-        postToBackground(data);
+      const message = parseWalletToPageMessage(raw);
+      if (message) {
+        sendToPage(message);
+      }
+    });
+    connection.unsubscribeDisconnect = channel.onDisconnect(() => {
+      if (!releasePort(connection)) {
         return;
+      }
 
-      default:
-        return;
+      sendToPage(DISCONNECTED_MESSAGE);
+      recoverOpenedNamespaces();
+    });
+
+    return connection;
+  };
+
+  const recoverOpenedNamespaces = (): void => {
+    if (recoveryAttempted || openedNamespaces.size === 0) {
+      return;
+    }
+
+    recoveryAttempted = true;
+    const recoveredPort = connect();
+    if (!recoveredPort) {
+      return;
+    }
+
+    try {
+      for (const namespace of openedNamespaces) {
+        recoveredPort.channel.send({ type: "open", namespace } satisfies PageToWalletMessage);
+      }
+    } catch {
+      releasePort(recoveredPort);
+      closePort(recoveredPort.port);
     }
   };
 
-  window.addEventListener("message", handleWindowMessage);
+  const forwardToBackground = (message: PageToWalletMessage): void => {
+    if (message.type === "open") {
+      openedNamespaces.add(message.namespace);
+    }
+
+    if (!activePort && recoveryAttempted) {
+      return;
+    }
+
+    const connection = activePort ?? connect();
+    if (!connection) {
+      recoveryAttempted = true;
+      sendToPage(DISCONNECTED_MESSAGE);
+      return;
+    }
+
+    try {
+      connection.channel.send(message);
+    } catch {
+      if (!releasePort(connection)) {
+        return;
+      }
+
+      closePort(connection.port);
+      sendToPage(DISCONNECTED_MESSAGE);
+      recoverOpenedNamespaces();
+    }
+  };
+
+  targetWindow.addEventListener("message", (event: MessageEvent) => {
+    if (event.source !== targetWindow || event.origin !== pageOrigin) {
+      return;
+    }
+
+    const raw = readProviderWindowEnvelope(event.data, PROVIDER_WINDOW_TARGET.content);
+    if (raw === null) {
+      return;
+    }
+
+    const message = parsePageToWalletMessage(raw);
+    if (message) {
+      forwardToBackground(message);
+    }
+  });
 };

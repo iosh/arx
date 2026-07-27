@@ -1,237 +1,238 @@
-import { CHANNEL, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
+import type { WalletToPageMessage } from "@arx/provider/protocol";
 import { JSDOM } from "jsdom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
+import {
+  createProviderWindowEnvelope,
+  PROVIDER_WINDOW_TARGET,
+  readProviderWindowEnvelope,
+} from "@/platform/browser/providerWindowChannel";
+import { DAPP_PROVIDER_PORT_NAME } from "@/platform/browser/runtimePortNames";
 import { bootstrapContent } from "./bootstrapContent";
 
-type Listener<T> = (payload: T) => void;
+vi.mock("webextension-polyfill", () => ({
+  default: {
+    runtime: {
+      connect: vi.fn(),
+    },
+  },
+}));
+
+type MessageListener = (message: unknown) => void;
+type DisconnectListener = () => void;
+type TestWindow = Window & { MessageEvent: typeof MessageEvent };
 
 class FakePort {
-  name = CHANNEL;
-  sender: unknown = {};
-  postMessage = vi.fn();
+  readonly name = DAPP_PROVIDER_PORT_NAME;
+  postMessage = vi.fn<(message: unknown) => void>();
   disconnect = vi.fn();
-
-  #messageListeners = new Set<Listener<unknown>>();
-  #disconnectListeners = new Set<() => void>();
+  readonly #messageListeners = new Set<MessageListener>();
+  readonly #disconnectListeners = new Set<DisconnectListener>();
 
   onMessage = {
-    addListener: (fn: Listener<unknown>) => this.#messageListeners.add(fn),
-    removeListener: (fn: Listener<unknown>) => this.#messageListeners.delete(fn),
+    addListener: (listener: MessageListener) => this.#messageListeners.add(listener),
+    removeListener: (listener: MessageListener) => this.#messageListeners.delete(listener),
   };
 
   onDisconnect = {
-    addListener: (fn: () => void) => this.#disconnectListeners.add(fn),
-    removeListener: (fn: () => void) => this.#disconnectListeners.delete(fn),
+    addListener: (listener: DisconnectListener) => this.#disconnectListeners.add(listener),
+    removeListener: (listener: DisconnectListener) => this.#disconnectListeners.delete(listener),
   };
 
-  triggerMessage(msg: unknown) {
-    for (const fn of this.#messageListeners) fn(msg);
+  receive(message: unknown): void {
+    for (const listener of [...this.#messageListeners]) listener(message);
   }
 
-  triggerDisconnect() {
-    for (const fn of this.#disconnectListeners) fn();
+  loseConnection(): void {
+    for (const listener of [...this.#disconnectListeners]) listener();
   }
 }
 
-const createDom = (url = "https://dapp.test") => {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", { url });
-
-  const g = globalThis as unknown as Record<string, unknown>;
-  const prev = {
-    window: g.window,
-    document: g.document,
-    Event: g.Event,
-    MessageEvent: g.MessageEvent,
-  };
-
-  g.window = dom.window as unknown as Window;
-  g.document = dom.window.document;
-  g.Event = dom.window.Event;
-  g.MessageEvent = dom.window.MessageEvent;
-
-  const restoreKey = (key: keyof typeof prev) => {
-    if (prev[key] === undefined) {
-      delete g[key];
-      return;
-    }
-    g[key] = prev[key] as unknown;
-  };
-
-  return {
-    dom,
-    teardown: () => {
-      restoreKey("MessageEvent");
-      restoreKey("Event");
-      restoreKey("document");
-      restoreKey("window");
-      dom.window.close();
-    },
-  };
-};
-
-const dispatchWindowMessage = (data: unknown) => {
-  window.dispatchEvent(
-    new window.MessageEvent("message", {
-      data,
-      source: window as unknown as Window,
-      origin: window.location.origin,
+const dispatchPageMessage = (
+  targetWindow: TestWindow,
+  message: unknown,
+  overrides: Readonly<{ source?: MessageEventSource | null; origin?: string; target?: string }> = {},
+): void => {
+  targetWindow.dispatchEvent(
+    new targetWindow.MessageEvent("message", {
+      data: createProviderWindowEnvelope(
+        (overrides.target ?? PROVIDER_WINDOW_TARGET.content) as typeof PROVIDER_WINDOW_TARGET.content,
+        message,
+      ),
+      source: overrides.source === undefined ? targetWindow : overrides.source,
+      origin: overrides.origin ?? targetWindow.location.origin,
     }),
   );
 };
 
-vi.mock("webextension-polyfill", () => {
-  return {
-    __esModule: true,
-    default: {
-      runtime: {
-        connect: vi.fn(),
-      },
-    },
-  };
-});
-
 describe("bootstrapContent", () => {
-  let port: FakePort;
-  let connectSpy: ReturnType<typeof vi.fn>;
-  let _ctx: ReturnType<typeof createDom>;
+  let dom: JSDOM;
+  let targetWindow: TestWindow;
+  let postToPage: ReturnType<typeof vi.spyOn>;
 
-  beforeEach(async () => {
-    _ctx = createDom();
-    port = new FakePort();
-
-    const mod = (await import("webextension-polyfill")) as unknown as { default: { runtime: { connect: unknown } } };
-    connectSpy = vi.fn(() => port as unknown as Runtime.Port);
-    mod.default.runtime.connect = connectSpy;
+  beforeEach(() => {
+    dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://dapp.test/frame" });
+    targetWindow = dom.window as unknown as TestWindow;
+    postToPage = vi.spyOn(targetWindow, "postMessage").mockImplementation(() => undefined);
   });
 
-  it("does not connect eagerly; connects on handshake and forwards to background", () => {
-    const postSpy = vi.spyOn(window, "postMessage");
+  afterEach(() => {
+    dom.window.close();
+  });
 
-    bootstrapContent();
+  it("filters the window relay by source, load origin, direction, and Provider protocol", () => {
+    const port = new FakePort();
+    const connectProviderPort = vi.fn(() => port as unknown as Runtime.Port);
+    bootstrapContent({ targetWindow, connectProviderPort });
 
-    expect(connectSpy).toHaveBeenCalledTimes(0);
-
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h1", namespace: "eip155" },
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { source: null });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { origin: "https://other.test" });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { target: PROVIDER_WINDOW_TARGET.page });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "" });
+    dispatchPageMessage(targetWindow, {
+      type: "opened",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:1", accounts: [] },
     });
 
-    expect(connectSpy).toHaveBeenCalledTimes(1);
-    expect(port.postMessage).toHaveBeenCalledTimes(1);
-    expect(port.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: CHANNEL, sessionId: "s1", type: "handshake" }),
-    );
+    expect(connectProviderPort).not.toHaveBeenCalled();
 
-    port.triggerDisconnect();
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
 
-    expect(postSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: CHANNEL,
-        sessionId: "s1",
-        type: "event",
-        payload: { event: PROVIDER_EVENTS.disconnect, params: [{ code: 4900, message: "Disconnected" }] },
-      }),
-      window.location.origin,
-    );
+    expect(connectProviderPort).toHaveBeenCalledOnce();
+    expect(port.postMessage).toHaveBeenCalledWith({ type: "open", namespace: "eip155" });
   });
 
-  it("ignores request before handshake", () => {
-    bootstrapContent();
+  it("uses one Runtime.Port for every namespace in the frame", () => {
+    const port = new FakePort();
+    const connectProviderPort = vi.fn(() => port as unknown as Runtime.Port);
+    bootstrapContent({ targetWindow, connectProviderPort });
 
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "conflux" });
+    dispatchPageMessage(targetWindow, {
       type: "request",
-      id: "m1",
-      payload: { method: "eth_chainId" },
+      namespace: "eip155",
+      id: 1,
+      method: "eth_chainId",
     });
 
-    expect(connectSpy).toHaveBeenCalledTimes(0);
-    expect(port.postMessage).toHaveBeenCalledTimes(0);
+    expect(connectProviderPort).toHaveBeenCalledOnce();
+    expect(port.postMessage.mock.calls.map(([message]) => message)).toEqual([
+      { type: "open", namespace: "eip155" },
+      { type: "open", namespace: "conflux" },
+      { type: "request", namespace: "eip155", id: 1, method: "eth_chainId" },
+    ]);
   });
 
-  it("creates isolated ports for different namespace sessions", async () => {
-    const portA = new FakePort();
-    const portB = new FakePort();
+  it("only relays decoded Wallet-to-Page Provider messages from background", () => {
+    const port = new FakePort();
+    bootstrapContent({ targetWindow, connectProviderPort: () => port as unknown as Runtime.Port });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    postToPage.mockClear();
 
-    const mod = (await import("webextension-polyfill")) as unknown as { default: { runtime: { connect: unknown } } };
-    connectSpy = vi
-      .fn()
-      .mockReturnValueOnce(portA as unknown as Runtime.Port)
-      .mockReturnValueOnce(portB as unknown as Runtime.Port);
-    mod.default.runtime.connect = connectSpy;
+    port.receive({ type: "open", namespace: "eip155" });
+    port.receive({ type: "opened", namespace: "", connection: { chainRef: "eip155:1", accounts: [] } });
+    expect(postToPage).not.toHaveBeenCalled();
 
-    bootstrapContent();
+    const opened = {
+      type: "opened",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:1", accounts: [] },
+    } as const;
+    port.receive(opened);
 
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s-eth",
-      type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h-eth", namespace: "eip155" },
-    });
-
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s-cfx",
-      type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h-cfx", namespace: "conflux" },
-    });
-
-    expect(connectSpy).toHaveBeenCalledTimes(2);
-    expect(portA.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: CHANNEL, sessionId: "s-eth", type: "handshake" }),
-    );
-    expect(portB.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: CHANNEL, sessionId: "s-cfx", type: "handshake" }),
+    expect(postToPage).toHaveBeenCalledWith(
+      createProviderWindowEnvelope(PROVIDER_WINDOW_TARGET.page, opened),
+      targetWindow.location.origin,
     );
   });
 
-  it("releases a session after relaying background disconnect and does not emit it twice", () => {
-    const postSpy = vi.spyOn(window, "postMessage");
+  it("settles page requests on disconnect and recovers once by resending only opened namespaces", () => {
+    const firstPort = new FakePort();
+    const recoveredPort = new FakePort();
+    const connectProviderPort = vi
+      .fn<() => Runtime.Port>()
+      .mockReturnValueOnce(firstPort as unknown as Runtime.Port)
+      .mockReturnValueOnce(recoveredPort as unknown as Runtime.Port);
+    bootstrapContent({ targetWindow, connectProviderPort });
 
-    bootstrapContent();
-
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h1", namespace: "eip155" },
-    });
-
-    expect(connectSpy).toHaveBeenCalledTimes(1);
-    port.postMessage.mockClear();
-
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "event",
-      payload: { event: PROVIDER_EVENTS.disconnect, params: [{ code: 4900, message: "Disconnected" }] },
-    });
-
-    expect(postSpy).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        channel: CHANNEL,
-        sessionId: "s1",
-        type: "event",
-        payload: { event: PROVIDER_EVENTS.disconnect, params: [{ code: 4900, message: "Disconnected" }] },
-      }),
-      window.location.origin,
-    );
-    expect(port.disconnect).toHaveBeenCalledTimes(1);
-
-    dispatchWindowMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "conflux" });
+    dispatchPageMessage(targetWindow, {
       type: "request",
-      id: "m1",
-      payload: { method: "eth_chainId" },
+      namespace: "eip155",
+      id: 7,
+      method: "eth_getBalance",
+      params: ["0xabc", "latest"],
     });
-    expect(port.postMessage).not.toHaveBeenCalled();
+    postToPage.mockClear();
 
-    port.triggerDisconnect();
-    expect(postSpy).toHaveBeenCalledTimes(1);
+    firstPort.loseConnection();
+
+    expect(connectProviderPort).toHaveBeenCalledTimes(2);
+    expect(recoveredPort.postMessage.mock.calls.map(([message]) => message)).toEqual([
+      { type: "open", namespace: "eip155" },
+      { type: "open", namespace: "conflux" },
+    ]);
+    expect(recoveredPort.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "request" }));
+
+    const [windowEnvelope] = postToPage.mock.calls[0] ?? [];
+    expect(readProviderWindowEnvelope(windowEnvelope, PROVIDER_WINDOW_TARGET.page)).toEqual({
+      type: "disconnected",
+      error: {
+        kind: "disconnected",
+        message: "The provider is disconnected.",
+      },
+    } satisfies WalletToPageMessage);
+
+    recoveredPort.loseConnection();
+
+    expect(connectProviderPort).toHaveBeenCalledTimes(2);
+    expect(postToPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a synchronous port send failure as disconnect without replaying the failed request", () => {
+    const firstPort = new FakePort();
+    const recoveredPort = new FakePort();
+    firstPort.postMessage.mockImplementation((message) => {
+      if ((message as { type?: unknown }).type === "request") {
+        throw new Error("disconnected");
+      }
+    });
+    const connectProviderPort = vi
+      .fn<() => Runtime.Port>()
+      .mockReturnValueOnce(firstPort as unknown as Runtime.Port)
+      .mockReturnValueOnce(recoveredPort as unknown as Runtime.Port);
+    bootstrapContent({ targetWindow, connectProviderPort });
+
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    postToPage.mockClear();
+    dispatchPageMessage(targetWindow, {
+      type: "request",
+      namespace: "eip155",
+      id: 8,
+      method: "eth_chainId",
+    });
+
+    expect(firstPort.disconnect).toHaveBeenCalledOnce();
+    expect(connectProviderPort).toHaveBeenCalledTimes(2);
+    expect(recoveredPort.postMessage.mock.calls.map(([message]) => message)).toEqual([
+      { type: "open", namespace: "eip155" },
+    ]);
+    expect(postToPage).toHaveBeenCalledOnce();
+  });
+
+  it("reports an initial connection failure without retrying", () => {
+    const connectProviderPort = vi.fn(() => {
+      throw new Error("extension context invalidated");
+    });
+    bootstrapContent({ targetWindow, connectProviderPort });
+
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+
+    expect(connectProviderPort).toHaveBeenCalledOnce();
+    expect(postToPage).toHaveBeenCalledOnce();
   });
 });

@@ -47,12 +47,18 @@ importers:
       '@arx/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@arx/message-channel':
+        specifier: workspace:*
+        version: link:../packages/message-channel
       '@arx/provider':
         specifier: workspace:*
         version: link:../packages/provider
       '@arx/storage-dexie':
         specifier: workspace:*
         version: link:../packages/storage-dexie
+      '@arx/wallet-api':
+        specifier: workspace:*
+        version: link:../packages/wallet-api
       '@tamagui/animations-css':
         specifier: 1.141.5
         version: 1.141.5(react-dom@19.2.7(react@19.2.7))(react-native@0.82.1(@babel/core@7.29.0)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
@@ -92,6 +98,9 @@ importers:
       zustand:
         specifier: 5.0.14
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@tanstack/router-cli':
         specifier: ^1.166.30

@@ -20,8 +20,10 @@
   },
   "dependencies": {
     "@arx/core": "workspace:*",
+    "@arx/message-channel": "workspace:*",
     "@arx/provider": "workspace:*",
     "@arx/storage-dexie": "workspace:*",
+    "@arx/wallet-api": "workspace:*",
     "@tamagui/animations-css": "1.141.5",
     "@tamagui/config": "1.141.5",
     "@tanstack/react-query": "^5.90.9",
@@ -34,7 +36,8 @@
     "react-native-web": "0.21.2",
     "tamagui": "1.141.5",
     "webextension-polyfill": "catalog:",
-    "zustand": "5.0.14"
+    "zustand": "5.0.14",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@tanstack/router-cli": "^1.166.30",

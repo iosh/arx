@@ -1,117 +1,100 @@
+import { createCoreRuntime } from "@arx/core/runtime";
+import { createDappTransportHost } from "@arx/provider/host";
+import { createDexiePersistence } from "@arx/storage-dexie";
+import { createWalletHost } from "@arx/wallet-api/host";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
-import { UI_CHANNEL } from "@/lib/host";
-import { ENTRYPOINTS } from "./constants";
-import { getExtensionOrigin } from "./origin";
-import { createUiPlatform } from "./platform/uiPlatform";
-import { createProviderPortServer } from "./providerPortServer";
-import { createBackgroundRuntimeHost } from "./runtimeHost";
-import { createUiEntryCoordinator } from "./ui/uiEntryCoordinator";
-import { createBackgroundUiPort } from "./uiPort";
+import { createWalletUiInputSource } from "@/platform/browser/walletUiInput";
+import { acceptBrowserPort, type BrowserChannelHosts, type PendingBrowserPort } from "./browserChannels";
 
-export type BackgroundRoot = {
+const EXTENSION_DATABASE_NAME = "arx-extension";
+
+type BackgroundBrowser = Readonly<{
+  runtime: Pick<typeof browser.runtime, "getURL" | "id" | "onConnect">;
+}>;
+
+export type BackgroundRootDependencies = Readonly<{
+  browser: BackgroundBrowser;
+  createPersistence: () => ReturnType<typeof createDexiePersistence>;
+  createRuntime: typeof createCoreRuntime;
+  createWalletHost: typeof createWalletHost;
+  createDappTransportHost: typeof createDappTransportHost;
+  createWalletUiInputSource: typeof createWalletUiInputSource;
+  acceptBrowserPort: typeof acceptBrowserPort;
+}>;
+
+export type BackgroundRoot = Readonly<{
   initialize(): Promise<void>;
+}>;
+
+const productionDependencies: BackgroundRootDependencies = {
+  browser,
+  createPersistence: () => createDexiePersistence({ databaseName: EXTENSION_DATABASE_NAME }),
+  createRuntime: createCoreRuntime,
+  createWalletHost,
+  createDappTransportHost,
+  createWalletUiInputSource,
+  acceptBrowserPort,
 };
 
-export const createBackgroundRoot = (): BackgroundRoot => {
-  const extensionOrigin = getExtensionOrigin();
-  const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
-  const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
-  const providerPortServer = createProviderPortServer({
-    extensionOrigin,
-    getOrInitProvider: runtimeHost.getOrInitProvider,
-  });
-  const uiPort = createBackgroundUiPort({
-    runtimeHost,
-    host: {
-      getEntryLaunchContext: (params) => uiEntries.getEntryLaunchContext(params),
-      getEntryBootstrap: (params) => uiEntries.getEntryBootstrap(params),
-      openOnboardingTab: (reason) => uiEntries.openOnboardingTab(reason),
-    },
-  });
-  const uiEntries = createUiEntryCoordinator({
-    runtimeHost,
-    platform: uiPlatform,
-    onEntryChanged: (entry) => {
-      uiPort.broadcastEntryChanged(entry);
-    },
-  });
+export const createBackgroundRoot = (
+  dependencies: BackgroundRootDependencies = productionDependencies,
+): BackgroundRoot => {
+  const persistence = dependencies.createPersistence();
+  const walletUiInput = dependencies.createWalletUiInputSource();
+  const extensionUrl = dependencies.browser.runtime.getURL("");
+  const runtimeId = dependencies.browser.runtime.id;
+  let hostsPromise: Promise<BrowserChannelHosts> | null = null;
+  let browserListenerAttached = false;
 
-  let initialized = false;
-  let initializePromise: Promise<void> | null = null;
-  let listenersAttached = false;
+  const createHosts = async (): Promise<BrowserChannelHosts> => {
+    const runtime = await dependencies.createRuntime({ persistence, userActivity: walletUiInput });
 
-  const attachBrowserListeners = () => {
-    if (listenersAttached) {
+    return {
+      wallet: dependencies.createWalletHost({ api: runtime.wallet }),
+      dapp: dependencies.createDappTransportHost({ dappConnections: runtime.dappConnections }),
+    };
+  };
+
+  const getHosts = (): Promise<BrowserChannelHosts> => {
+    hostsPromise ??= createHosts();
+    return hostsPromise;
+  };
+
+  const attachPendingPort = async (pendingPort: PendingBrowserPort) => {
+    let hosts: BrowserChannelHosts;
+    try {
+      hosts = await getHosts();
+    } catch {
+      pendingPort.reject();
       return;
     }
 
-    browser.runtime.onConnect.addListener(handleConnect);
-    browser.runtime.onInstalled.addListener(handleOnInstalled);
-    listenersAttached = true;
+    pendingPort.attach(hosts);
   };
 
-  const detachBrowserListeners = () => {
-    if (!listenersAttached) {
+  const onConnect = (port: Runtime.Port) => {
+    const pendingPort = dependencies.acceptBrowserPort({
+      port,
+      extensionUrl,
+      runtimeId,
+      onWalletUiInput: walletUiInput.publish,
+    });
+    if (!pendingPort) {
       return;
     }
 
-    browser.runtime.onInstalled.removeListener(handleOnInstalled);
-    browser.runtime.onConnect.removeListener(handleConnect);
-    listenersAttached = false;
-  };
-
-  const handleOnInstalled = (details: Runtime.OnInstalledDetailsType) => {
-    if (details.reason !== "install") {
-      return;
-    }
-
-    void uiEntries.openOnboardingTab("install");
-  };
-
-  const handleConnect = (port: Runtime.Port) => {
-    if (port.name === UI_CHANNEL) {
-      uiPort.attachPort(port);
-      return;
-    }
-
-    providerPortServer.handleConnect(port);
-  };
-
-  const recoverFailedBoot = () => {
-    detachBrowserListeners();
-    initialized = false;
+    void attachPendingPort(pendingPort);
   };
 
   const initialize = async () => {
-    if (initialized) {
-      return;
-    }
-    if (initializePromise) {
-      return await initializePromise;
+    if (!browserListenerAttached) {
+      dependencies.browser.runtime.onConnect.addListener(onConnect);
+      browserListenerAttached = true;
     }
 
-    initializePromise = (async () => {
-      attachBrowserListeners();
-
-      try {
-        await runtimeHost.initializeRuntime();
-        providerPortServer.start();
-        await uiPort.start();
-        await uiEntries.start();
-        initialized = true;
-      } catch (error) {
-        recoverFailedBoot();
-        throw error;
-      } finally {
-        initializePromise = null;
-      }
-    })();
-
-    return await initializePromise;
+    await getHosts();
   };
 
-  return {
-    initialize,
-  };
+  return { initialize };
 };

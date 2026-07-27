@@ -1,5 +1,11 @@
-export * from "./channel.js";
-export * from "./envelope.js";
-export * from "./events.js";
-export * from "./rpc.js";
-export * from "./version.js";
+export type {
+  DappErrorKind,
+  DappRequestParams,
+  PageToWalletMessage,
+  ProviderConnection,
+  ProviderJsonValue,
+  SerializedDappError,
+  WalletToPageMessage,
+} from "./messages.js";
+export { DAPP_ERROR_KINDS } from "./messages.js";
+export { parsePageToWalletMessage, parseWalletToPageMessage } from "./parse.js";

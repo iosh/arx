@@ -34,7 +34,7 @@
     "@scure/bip39": "1.6.0",
     "ox": "catalog:",
     "viem": "2.39.0",
-    "zod": "4.4.3",
+    "zod": "catalog:",
     "eventemitter3": "catalog:"
   },
   "devDependencies": {

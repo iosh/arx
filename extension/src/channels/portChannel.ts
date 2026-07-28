@@ -1,7 +1,7 @@
 import type { DuplexChannel } from "@arx/message-channel";
 import type { Runtime } from "webextension-polyfill";
 
-export const createRuntimePortChannel = (port: Runtime.Port): DuplexChannel => ({
+export const createPortChannel = (port: Runtime.Port): DuplexChannel => ({
   send(message) {
     port.postMessage(message);
   },

@@ -5,12 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 const {
   announceEip6963ProviderMock,
   createEip155ProviderMock,
-  createProviderWindowChannelMock,
+  createInpageProviderChannelMock,
   setEthereumProviderIfAbsentMock,
 } = vi.hoisted(() => ({
   announceEip6963ProviderMock: vi.fn(),
   createEip155ProviderMock: vi.fn(),
-  createProviderWindowChannelMock: vi.fn(),
+  createInpageProviderChannelMock: vi.fn(),
   setEthereumProviderIfAbsentMock: vi.fn(),
 }));
 
@@ -20,8 +20,8 @@ vi.mock("@arx/provider/eip155", () => ({
   setEthereumProviderIfAbsent: setEthereumProviderIfAbsentMock,
 }));
 
-vi.mock("@/platform/browser/providerWindowChannel", () => ({
-  createProviderWindowChannel: createProviderWindowChannelMock,
+vi.mock("@/channels/inpageProviderChannel", () => ({
+  createInpageProviderChannel: createInpageProviderChannelMock,
 }));
 
 vi.mock("wxt/utils/define-unlisted-script", () => ({
@@ -32,14 +32,14 @@ describe("inpage entrypoint", () => {
   it("statically creates, announces, and conditionally injects the EIP-155 provider", async () => {
     const channel = { name: "window channel" };
     const provider = { name: "provider" };
-    createProviderWindowChannelMock.mockReturnValue(channel);
+    createInpageProviderChannelMock.mockReturnValue(channel);
     createEip155ProviderMock.mockReturnValue(provider);
 
     const entrypoint = await import("./index");
     const runEntrypoint = entrypoint.default as unknown as () => void;
     runEntrypoint();
 
-    expect(createProviderWindowChannelMock).toHaveBeenCalledWith({ targetWindow: window });
+    expect(createInpageProviderChannelMock).toHaveBeenCalledWith({ targetWindow: window });
     expect(createEip155ProviderMock).toHaveBeenCalledWith({ channel });
     expect(announceEip6963ProviderMock).toHaveBeenCalledWith({
       targetWindow: window,

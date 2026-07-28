@@ -5,17 +5,13 @@ import {
   type WalletToPageMessage,
 } from "@arx/provider/protocol";
 import browser, { type Runtime } from "webextension-polyfill";
-import {
-  createProviderWindowEnvelope,
-  PROVIDER_WINDOW_TARGET,
-  readProviderWindowEnvelope,
-} from "@/platform/browser/providerWindowChannel";
-import { createRuntimePortChannel } from "@/platform/browser/runtimePortChannel";
-import { DAPP_PROVIDER_PORT_NAME } from "@/platform/browser/runtimePortNames";
+import { createContentToPageMessage, readPageToContentMessage } from "@/channels/inpageProviderChannel";
+import { createPortChannel } from "@/channels/portChannel";
+import { DAPP_PROVIDER_PORT_NAME } from "@/channels/portNames";
 
 type ActiveProviderPort = {
   port: Runtime.Port;
-  channel: ReturnType<typeof createRuntimePortChannel>;
+  channel: ReturnType<typeof createPortChannel>;
   unsubscribeMessage(): void;
   unsubscribeDisconnect(): void;
 };
@@ -51,7 +47,7 @@ export const bootstrapContent = ({
   let recoveryAttempted = false;
 
   const sendToPage = (message: WalletToPageMessage): void => {
-    targetWindow.postMessage(createProviderWindowEnvelope(PROVIDER_WINDOW_TARGET.page, message), pageOrigin);
+    targetWindow.postMessage(createContentToPageMessage(message), pageOrigin);
   };
 
   const releasePort = (expected: ActiveProviderPort): boolean => {
@@ -73,7 +69,7 @@ export const bootstrapContent = ({
       return null;
     }
 
-    const channel = createRuntimePortChannel(port);
+    const channel = createPortChannel(port);
     const connection: ActiveProviderPort = {
       port,
       channel,
@@ -159,7 +155,7 @@ export const bootstrapContent = ({
       return;
     }
 
-    const raw = readProviderWindowEnvelope(event.data, PROVIDER_WINDOW_TARGET.content);
+    const raw = readPageToContentMessage(event.data);
     if (raw === null) {
       return;
     }

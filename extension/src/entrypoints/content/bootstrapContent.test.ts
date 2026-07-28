@@ -3,11 +3,11 @@ import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import {
-  createProviderWindowEnvelope,
-  PROVIDER_WINDOW_TARGET,
-  readProviderWindowEnvelope,
-} from "@/platform/browser/providerWindowChannel";
-import { DAPP_PROVIDER_PORT_NAME } from "@/platform/browser/runtimePortNames";
+  createContentToPageMessage,
+  createPageToContentMessage,
+  readContentToPageMessage,
+} from "@/channels/inpageProviderChannel";
+import { DAPP_PROVIDER_PORT_NAME } from "@/channels/portNames";
 import { bootstrapContent } from "./bootstrapContent";
 
 vi.mock("webextension-polyfill", () => ({
@@ -51,14 +51,20 @@ class FakePort {
 const dispatchPageMessage = (
   targetWindow: TestWindow,
   message: unknown,
-  overrides: Readonly<{ source?: MessageEventSource | null; origin?: string; target?: string }> = {},
+  overrides: Readonly<{
+    source?: MessageEventSource | null;
+    origin?: string;
+    direction?: "page-to-content" | "content-to-page";
+  }> = {},
 ): void => {
+  const channelMessage =
+    overrides.direction === "content-to-page"
+      ? createContentToPageMessage(message)
+      : createPageToContentMessage(message);
+
   targetWindow.dispatchEvent(
     new targetWindow.MessageEvent("message", {
-      data: createProviderWindowEnvelope(
-        (overrides.target ?? PROVIDER_WINDOW_TARGET.content) as typeof PROVIDER_WINDOW_TARGET.content,
-        message,
-      ),
+      data: channelMessage,
       source: overrides.source === undefined ? targetWindow : overrides.source,
       origin: overrides.origin ?? targetWindow.location.origin,
     }),
@@ -87,7 +93,7 @@ describe("bootstrapContent", () => {
 
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { source: null });
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { origin: "https://other.test" });
-    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { target: PROVIDER_WINDOW_TARGET.page });
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { direction: "content-to-page" });
     dispatchPageMessage(targetWindow, { type: "open", namespace: "" });
     dispatchPageMessage(targetWindow, {
       type: "opened",
@@ -142,10 +148,7 @@ describe("bootstrapContent", () => {
     } as const;
     port.receive(opened);
 
-    expect(postToPage).toHaveBeenCalledWith(
-      createProviderWindowEnvelope(PROVIDER_WINDOW_TARGET.page, opened),
-      targetWindow.location.origin,
-    );
+    expect(postToPage).toHaveBeenCalledWith(createContentToPageMessage(opened), targetWindow.location.origin);
   });
 
   it("settles page requests on disconnect and recovers once by resending only opened namespaces", () => {
@@ -177,8 +180,8 @@ describe("bootstrapContent", () => {
     ]);
     expect(recoveredPort.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "request" }));
 
-    const [windowEnvelope] = postToPage.mock.calls[0] ?? [];
-    expect(readProviderWindowEnvelope(windowEnvelope, PROVIDER_WINDOW_TARGET.page)).toEqual({
+    const [windowMessage] = postToPage.mock.calls[0] ?? [];
+    expect(readContentToPageMessage(windowMessage)).toEqual({
       type: "disconnected",
       error: {
         kind: "disconnected",

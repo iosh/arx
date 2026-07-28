@@ -1,8 +1,8 @@
 import type { DuplexChannel } from "@arx/message-channel";
 import { describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
-import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/platform/browser/runtimePortNames";
-import { WALLET_UI_INPUT_MESSAGE } from "@/platform/browser/walletUiInput";
+import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/channels/portNames";
+import { WALLET_UI_INPUT_MESSAGE } from "@/channels/walletUiInput";
 import { acceptBrowserPort, type PendingBrowserPort } from "./browserChannels";
 
 type MessageListener = (message: unknown) => void;

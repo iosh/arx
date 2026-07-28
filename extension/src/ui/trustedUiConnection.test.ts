@@ -2,8 +2,8 @@ import { WalletChannelDisconnectedError } from "@arx/wallet-api/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type browserDefault from "webextension-polyfill";
 import type { Runtime } from "webextension-polyfill";
-import { WALLET_UI_PORT_NAME } from "@/platform/browser/runtimePortNames";
-import { WALLET_UI_INPUT_MESSAGE } from "@/platform/browser/walletUiInput";
+import { WALLET_UI_PORT_NAME } from "@/channels/portNames";
+import { WALLET_UI_INPUT_MESSAGE } from "@/channels/walletUiInput";
 import { createTrustedUiConnection } from "./trustedUiConnection";
 
 vi.mock("webextension-polyfill", () => ({

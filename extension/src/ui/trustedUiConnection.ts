@@ -1,8 +1,8 @@
 import { createWalletClient, type WalletClient } from "@arx/wallet-api/client";
 import browserDefault from "webextension-polyfill";
-import { createRuntimePortChannel } from "@/platform/browser/runtimePortChannel";
-import { WALLET_UI_PORT_NAME } from "@/platform/browser/runtimePortNames";
-import { WALLET_UI_INPUT_MESSAGE } from "@/platform/browser/walletUiInput";
+import { createPortChannel } from "@/channels/portChannel";
+import { WALLET_UI_PORT_NAME } from "@/channels/portNames";
+import { WALLET_UI_INPUT_MESSAGE } from "@/channels/walletUiInput";
 
 const INPUT_SIGNAL_INTERVAL_MS = 10_000;
 const INPUT_EVENTS = ["pointerdown", "pointermove", "keydown", "touchstart", "wheel"] as const;
@@ -25,7 +25,7 @@ export const createTrustedUiConnection = ({
   inputTarget = window,
 }: CreateTrustedUiConnectionOptions = {}): TrustedUiConnection => {
   const port = browserApi.runtime.connect({ name: WALLET_UI_PORT_NAME });
-  const channel = createRuntimePortChannel(port);
+  const channel = createPortChannel(port);
   const wallet = createWalletClient({ channel });
   let lastInputSignalAt: number | null = null;
   let stopped = false;

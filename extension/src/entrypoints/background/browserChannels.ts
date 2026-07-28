@@ -2,8 +2,8 @@ import type { DisconnectListener, DuplexChannel, MessageListener } from "@arx/me
 import type { DappTransportHost } from "@arx/provider/host";
 import type { WalletHost } from "@arx/wallet-api/host";
 import type { Runtime } from "webextension-polyfill";
-import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/platform/browser/runtimePortNames";
-import { isWalletUiInputMessage } from "@/platform/browser/walletUiInput";
+import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/channels/portNames";
+import { isWalletUiInputMessage } from "@/channels/walletUiInput";
 
 export type BrowserChannelHosts = Readonly<{
   wallet: WalletHost;

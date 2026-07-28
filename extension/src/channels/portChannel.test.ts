@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
-import { createRuntimePortChannel } from "./runtimePortChannel";
+import { createPortChannel } from "./portChannel";
 
 type MessageListener = (message: unknown) => void;
 type DisconnectListener = () => void;
@@ -29,10 +29,10 @@ class FakePort {
   }
 }
 
-describe("createRuntimePortChannel", () => {
+describe("createPortChannel", () => {
   it("maps one connected Runtime.Port to the DuplexChannel contract", () => {
     const port = new FakePort();
-    const channel = createRuntimePortChannel(port as unknown as Runtime.Port);
+    const channel = createPortChannel(port as unknown as Runtime.Port);
     const onMessage = vi.fn();
     const onDisconnect = vi.fn();
     const unsubscribeMessage = channel.onMessage(onMessage);

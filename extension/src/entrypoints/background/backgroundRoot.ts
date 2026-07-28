@@ -4,7 +4,7 @@ import { createDexiePersistence } from "@arx/storage-dexie";
 import { createWalletHost } from "@arx/wallet-api/host";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
-import { createWalletUiInputSource } from "@/platform/browser/walletUiInput";
+import { createWalletUiInputSource } from "@/channels/walletUiInput";
 import { acceptBrowserPort, type BrowserChannelHosts, type PendingBrowserPort } from "./browserChannels";
 
 const EXTENSION_DATABASE_NAME = "arx-extension";

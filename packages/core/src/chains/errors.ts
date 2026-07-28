@@ -10,14 +10,3 @@ export class ChainInvalidAddressError extends ArxBaseError {
     });
   }
 }
-
-export class ChainDefinitionRpcUrlsRequiredError extends ArxBaseError {
-  static readonly code = "chain.definition.rpc_urls_required";
-
-  constructor(chainRef: string) {
-    super("At least one valid RPC URL is required.", {
-      code: ChainDefinitionRpcUrlsRequiredError.code,
-      details: { chainRef },
-    });
-  }
-}

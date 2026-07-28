@@ -10,7 +10,6 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
     "./approvals": "./src/approvals/index.ts",
     "./persistence": "./src/persistence/index.ts",
@@ -33,9 +32,7 @@
     "@scure/bip32": "1.7.0",
     "@scure/bip39": "1.6.0",
     "ox": "catalog:",
-    "viem": "2.39.0",
-    "zod": "catalog:",
-    "eventemitter3": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:"

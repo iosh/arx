@@ -1,5 +1,9 @@
 import type browserDefault from "webextension-polyfill";
-import { ARX_UI_INNER_SIZE } from "@/ui/lib/uiWindow";
+
+const DEFAULT_POPUP_SIZE = {
+  width: 384,
+  height: 600,
+} as const;
 
 export type PopupOpenContext = {
   reason?: string;
@@ -32,7 +36,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
 
   const cooldownMs = deps.cooldownMs ?? 500;
   const popupPath = deps.popupPath ?? "popup.html";
-  const size = deps.size ?? ARX_UI_INNER_SIZE;
+  const size = deps.size ?? DEFAULT_POPUP_SIZE;
 
   let cachedWindowId: number | null = null;
   let lastAttemptAt: number | null = null;

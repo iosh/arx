@@ -1,15 +1,9 @@
-import * as z from "zod/mini";
-
 export const WALLET_UI_INPUT_MESSAGE = {
   type: "arx:wallet-ui-input",
 } as const;
 
-const WALLET_UI_INPUT_MESSAGE_SCHEMA = z.object({
-  type: z.literal(WALLET_UI_INPUT_MESSAGE.type),
-});
-
-export const isWalletUiInputMessage = (value: unknown): boolean => {
-  return z.safeParse(WALLET_UI_INPUT_MESSAGE_SCHEMA, value).success;
+export const isWalletUiInputMessage = (value: unknown): value is typeof WALLET_UI_INPUT_MESSAGE => {
+  return typeof value === "object" && value !== null && "type" in value && value.type === WALLET_UI_INPUT_MESSAGE.type;
 };
 
 export type WalletUiInputSource = Readonly<{

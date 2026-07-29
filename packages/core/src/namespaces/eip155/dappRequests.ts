@@ -27,6 +27,7 @@ import { EIP155_NAMESPACE } from "./constants.js";
 import { createEip155DappNetworkHandlers } from "./dappNetworks.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
 import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
+import { createEip155SendRawTransactionMethod } from "./eth_sendRawTransaction.js";
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;
@@ -125,6 +126,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
     approvals: options.approvals,
     transactions: options.transactions,
   });
+  const sendRawTransaction = createEip155SendRawTransactionMethod(options.chainJsonRpc);
   const networkHandlers = createEip155DappNetworkHandlers({
     networks: options.networks,
     dappConnections: options.dappConnections,
@@ -194,6 +196,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       ["personal_sign", signingHandlers.personalSign],
       ["eth_signTypedData_v4", signingHandlers.signTypedDataV4],
       ["eth_sendTransaction", transactionHandlers.sendTransaction],
+      ["eth_sendRawTransaction", sendRawTransaction],
       ["wallet_switchEthereumChain", networkHandlers.switchEthereumChain],
       ["wallet_addEthereumChain", networkHandlers.addEthereumChain],
     ]),

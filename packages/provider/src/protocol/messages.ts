@@ -21,6 +21,7 @@ export const DAPP_ERROR_KINDS = [
   "unsupported_method",
   "unrecognized_chain",
   "chain_unavailable",
+  "outcome_unknown",
   "json_rpc_response",
   "internal",
   "disconnected",

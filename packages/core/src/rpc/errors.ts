@@ -86,6 +86,17 @@ export class RpcChainUnavailableError extends ArxBaseError {
   }
 }
 
+export class RpcOutcomeUnknownError extends ArxBaseError {
+  static readonly code = "global.rpc.outcome_unknown";
+
+  constructor(input: RpcErrorInput = {}) {
+    super(input.message ?? "Request outcome is unknown.", {
+      code: RpcOutcomeUnknownError.code,
+      details: input.details,
+    });
+  }
+}
+
 export class RpcJsonRpcResponseError extends ArxBaseError {
   static readonly code = "global.rpc.json_rpc_response";
 

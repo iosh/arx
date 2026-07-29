@@ -5,6 +5,7 @@ import {
   RpcInvalidParamsError,
   RpcInvalidRequestError,
   RpcJsonRpcResponseError,
+  RpcOutcomeUnknownError,
   RpcUnauthorizedError,
   RpcUnrecognizedChainError,
   RpcUnsupportedMethodError,
@@ -64,6 +65,7 @@ const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, Exclude<DappErrorKi
   [RpcUnsupportedMethodError.code]: "unsupported_method",
   [RpcUnrecognizedChainError.code]: "unrecognized_chain",
   [RpcChainUnavailableError.code]: "chain_unavailable",
+  [RpcOutcomeUnknownError.code]: "outcome_unknown",
 };
 
 const scopeKey = (scope: DappConnectionScope): string => JSON.stringify([scope.origin, scope.namespace]);

@@ -22,6 +22,7 @@ const ERROR_CODE_BY_KIND: Readonly<Record<Exclude<DappErrorKind, "json_rpc_respo
   invalid_request: -32600,
   invalid_params: -32602,
   internal: -32603,
+  outcome_unknown: -32603,
   user_rejected: 4001,
   unauthorized: 4100,
   unsupported_method: 4200,
@@ -44,6 +45,7 @@ export const toProviderRpcError = (error: SerializedDappError): ProviderRpcError
     return new ProviderRpcError({
       code: ERROR_CODE_BY_KIND[error.kind],
       message: error.message,
+      ...(error.kind === "outcome_unknown" ? { data: { outcome: "unknown" } } : {}),
     });
   }
 

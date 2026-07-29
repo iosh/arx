@@ -28,6 +28,8 @@ export type ChainJsonRpcOptions = Readonly<{
   abortController?: () => AbortController;
 }>;
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
 export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc => {
   const transport =
     options.transport ??
@@ -35,19 +37,24 @@ export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc =
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.abortController ? { abortController: options.abortController } : {}),
     });
-
   return {
     async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
+      const deadline = Date.now() + (input.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
       const endpoints = options.endpoints.getRpcEndpoints(input.chainRef);
       let lastTransportError: ChainJsonRpcHttpTransportError | undefined;
+      let attempts = 0;
 
       for (const endpoint of endpoints) {
+        const timeoutMs = deadline - Date.now();
+        if (timeoutMs <= 0) break;
+        attempts += 1;
+
         try {
           return await transport.request<TResult>({
             endpoint,
             method: input.method,
             ...(input.params !== undefined ? { params: input.params } : {}),
-            ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+            timeoutMs,
           });
         } catch (error) {
           if (error instanceof ChainJsonRpcHttpProtocolError) {
@@ -74,7 +81,7 @@ export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc =
       throw new ChainJsonRpcUnavailableError({
         chainRef: input.chainRef,
         method: input.method,
-        attempts: endpoints.length,
+        attempts,
         cause: lastTransportError,
       });
     },

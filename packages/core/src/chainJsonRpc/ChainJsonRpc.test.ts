@@ -9,6 +9,7 @@ const endpoints = { getRpcEndpoints: () => [endpointA, endpointB] as const };
 
 describe("ChainJsonRpc", () => {
   it("fails over to the next endpoint after a transport failure", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(40);
     const transport = {
       request: vi
         .fn()
@@ -17,11 +18,17 @@ describe("ChainJsonRpc", () => {
     };
     const rpc = createChainJsonRpc({ endpoints, transport });
 
-    await expect(rpc.request<string>({ chainRef: "eip155:1", method: "eth_chainId", replay: "allowed" })).resolves.toBe(
-      "0x1",
-    );
-    expect(transport.request.mock.calls.map(([request]) => request.endpoint)).toEqual([endpointA, endpointB]);
-    expect(transport.request.mock.calls.every(([request]) => !("timeoutMs" in request))).toBe(true);
+    try {
+      await expect(
+        rpc.request<string>({ chainRef: "eip155:1", method: "eth_chainId", timeoutMs: 100, replay: "allowed" }),
+      ).resolves.toBe("0x1");
+      expect(transport.request.mock.calls).toEqual([
+        [{ endpoint: endpointA, method: "eth_chainId", timeoutMs: 100 }],
+        [{ endpoint: endpointB, method: "eth_chainId", timeoutMs: 60 }],
+      ]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("reports unavailable after trying every endpoint once", async () => {

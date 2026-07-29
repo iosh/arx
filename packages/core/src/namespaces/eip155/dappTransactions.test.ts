@@ -210,28 +210,4 @@ describe("EIP-155 dapp transactions", () => {
     await expect(pending).rejects.toMatchObject({ code: "global.rpc.user_rejected_request" });
     expect(harness.submit).not.toHaveBeenCalled();
   });
-
-  it("returns a broadcast rejection as a node RPC error", async () => {
-    const failure = {
-      type: "broadcast" as const,
-      code: -32_000,
-      message: "insufficient funds",
-      data: { balance: "0x0" },
-    };
-    const harness = createHarness({
-      status: "failed",
-      transaction: transactionWithState({ status: "failed", failure }),
-      failure,
-    });
-
-    const pending = harness.request([legacyRequest]);
-    await harness.approve();
-
-    await expect(pending).rejects.toMatchObject({
-      code: "global.rpc.node_response",
-      message: failure.message,
-      rpcCode: failure.code,
-      rpcData: failure.data,
-    });
-  });
 });

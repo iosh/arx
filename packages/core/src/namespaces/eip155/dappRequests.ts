@@ -8,6 +8,7 @@ import {
 import type { Approvals } from "../../approvals/Approvals.js";
 import { isApprovalDecisionError } from "../../approvals/errors.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import type { JsonRpcParams } from "../../chainJsonRpc/types.js";
 import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../../dappConnections/persistence.js";
 import { type DappNamespace, decodeNoParams, defineDappMethod } from "../../dappConnections/routeDappRequest.js";
@@ -48,7 +49,32 @@ const EIP155_ACCOUNT_PERMISSION_PARAMS_SCHEMA = z.tuple([
   }),
 ]);
 
-const EIP155_NODE_READ_METHODS: ReadonlySet<string> = new Set(["eth_blockNumber"]);
+const EIP155_NODE_READ_METHODS: ReadonlySet<string> = new Set([
+  "eth_blockNumber",
+  "eth_syncing",
+  "net_version",
+  "web3_clientVersion",
+  "eth_getBalance",
+  "eth_getCode",
+  "eth_getStorageAt",
+  "eth_getTransactionCount",
+  "eth_getProof",
+  "eth_call",
+  "eth_estimateGas",
+  "eth_createAccessList",
+  "eth_gasPrice",
+  "eth_maxPriorityFeePerGas",
+  "eth_feeHistory",
+  "eth_getBlockByHash",
+  "eth_getBlockByNumber",
+  "eth_getBlockTransactionCountByHash",
+  "eth_getBlockTransactionCountByNumber",
+  "eth_getTransactionByHash",
+  "eth_getTransactionByBlockHashAndIndex",
+  "eth_getTransactionByBlockNumberAndIndex",
+  "eth_getTransactionReceipt",
+  "eth_getLogs",
+]);
 
 const decodeAccountPermissionRequest = (params: unknown): undefined => {
   EIP155_ACCOUNT_PERMISSION_PARAMS_SCHEMA.parse(params);
@@ -172,13 +198,12 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       ["wallet_addEthereumChain", networkHandlers.addEthereumChain],
     ]),
     nodeReadMethods: EIP155_NODE_READ_METHODS,
-    forwardNodeRead: ({ chainRef, method, params }) => {
-      decodeNoParams(params, method);
-      return options.chainJsonRpc.request({
+    forwardNodeRead: ({ chainRef, method, params }) =>
+      options.chainJsonRpc.request({
         chainRef,
         method,
+        ...(params !== undefined ? { params: params as JsonRpcParams } : {}),
         replay: "allowed",
-      });
-    },
+      }),
   };
 };

@@ -1,9 +1,10 @@
 import { isArxBaseError } from "@arx/core";
 import {
+  RpcChainUnavailableError,
   RpcInternalError,
   RpcInvalidParamsError,
   RpcInvalidRequestError,
-  RpcNodeResponseError,
+  RpcJsonRpcResponseError,
   RpcUnauthorizedError,
   RpcUnrecognizedChainError,
   RpcUnsupportedMethodError,
@@ -50,19 +51,19 @@ const INTERNAL_ERROR: SerializedDappError = {
   message: "Internal error.",
 };
 
-const DISCONNECTED_ERROR: SerializedDappError = {
+const DISCONNECTED_ERROR = {
   kind: "disconnected",
   message: "The provider is disconnected.",
-};
+} as const satisfies SerializedDappError;
 
-const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, Exclude<DappErrorKind, "upstream_response">>> = {
+const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, Exclude<DappErrorKind, "json_rpc_response">>> = {
   [RpcInvalidRequestError.code]: "invalid_request",
   [RpcInvalidParamsError.code]: "invalid_params",
-  [RpcInternalError.code]: "internal",
   [RpcUserRejectedRequestError.code]: "user_rejected",
   [RpcUnauthorizedError.code]: "unauthorized",
   [RpcUnsupportedMethodError.code]: "unsupported_method",
-  [RpcUnrecognizedChainError.code]: "unrecognized_network",
+  [RpcUnrecognizedChainError.code]: "unrecognized_chain",
+  [RpcChainUnavailableError.code]: "chain_unavailable",
 };
 
 const scopeKey = (scope: DappConnectionScope): string => JSON.stringify([scope.origin, scope.namespace]);
@@ -77,17 +78,19 @@ const serializeDappError = (error: unknown): SerializedDappError => {
     return INTERNAL_ERROR;
   }
 
-  if (error.code === RpcNodeResponseError.code) {
-    const nodeError = error as RpcNodeResponseError;
+  if (error.code === RpcJsonRpcResponseError.code) {
+    const jsonRpcError = error as RpcJsonRpcResponseError;
     return {
-      kind: "upstream_response",
-      message: nodeError.message,
+      kind: "json_rpc_response",
+      message: jsonRpcError.message,
       data: {
-        code: nodeError.rpcCode,
-        ...(nodeError.rpcData === undefined ? {} : { data: nodeError.rpcData }),
+        code: jsonRpcError.rpcCode,
+        ...(jsonRpcError.rpcData === undefined ? {} : { data: jsonRpcError.rpcData }),
       },
     };
   }
+
+  if (error.code === RpcInternalError.code) return INTERNAL_ERROR;
 
   const kind = DAPP_ERROR_KINDS_BY_CORE_CODE[error.code];
   if (!kind) {
@@ -172,7 +175,16 @@ class DappTransportHostState implements DappTransportHost {
         attached,
       );
     } catch (error) {
-      this.#failAttachment(channel, attached, serializeDappError(error));
+      this.#closeNamespace(channel, attached, namespace);
+      this.#send(
+        channel,
+        {
+          type: "open_failed",
+          namespace,
+          error: serializeDappError(error),
+        },
+        attached,
+      );
     }
   }
 
@@ -205,7 +217,16 @@ class DappTransportHostState implements DappTransportHost {
         ...(message.params === undefined ? {} : { params: message.params }),
       });
 
-      this.#send(channel, { type: "success", namespace: message.namespace, id: message.id, result }, attached);
+      this.#send(
+        channel,
+        {
+          type: "success",
+          namespace: message.namespace,
+          id: message.id,
+          result,
+        },
+        attached,
+      );
     } catch (error) {
       this.#send(
         channel,
@@ -230,10 +251,6 @@ class DappTransportHostState implements DappTransportHost {
       type: "connection_changed",
       namespace: change.scope.namespace,
       connection: toProviderConnection(change.state),
-      changed: {
-        network: change.changedFields.chainRef,
-        accounts: change.changedFields.accounts,
-      },
     };
 
     for (const channel of [...openScope.channels]) {
@@ -256,16 +273,6 @@ class DappTransportHostState implements DappTransportHost {
     }
   }
 
-  #failAttachment(channel: DuplexChannel, attached: AttachedChannel, error: SerializedDappError): void {
-    this.#detach(channel, attached);
-
-    try {
-      channel.send({ type: "disconnected", error } satisfies WalletToPageMessage);
-    } catch {
-      // The failed attachment has already been removed from the host.
-    }
-  }
-
   #detach(channel: DuplexChannel, expected?: AttachedChannel): void {
     const attached = this.#channels.get(channel);
     if (!attached || (expected && attached !== expected)) {
@@ -276,21 +283,23 @@ class DappTransportHostState implements DappTransportHost {
     attached.unsubscribeMessage();
     attached.unsubscribeDisconnect();
 
-    for (const namespace of attached.namespaces) {
-      const key = scopeKey({ origin: attached.origin, namespace });
-      const openScope = this.#openScopes.get(key);
-      if (!openScope) {
-        continue;
-      }
-
-      openScope.channels.delete(channel);
-      if (openScope.channels.size > 0) {
-        continue;
-      }
-
-      this.#openScopes.delete(key);
-      this.#dappConnections.closeConnection(openScope.scope);
+    for (const namespace of [...attached.namespaces]) {
+      this.#closeNamespace(channel, attached, namespace);
     }
+  }
+
+  #closeNamespace(channel: DuplexChannel, attached: AttachedChannel, namespace: string): void {
+    if (!attached.namespaces.delete(namespace)) return;
+
+    const key = scopeKey({ origin: attached.origin, namespace });
+    const openScope = this.#openScopes.get(key);
+    if (!openScope) return;
+
+    openScope.channels.delete(channel);
+    if (openScope.channels.size > 0) return;
+
+    this.#openScopes.delete(key);
+    this.#dappConnections.closeConnection(openScope.scope);
   }
 }
 

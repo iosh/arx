@@ -22,7 +22,7 @@ export type BootstrapContentOptions = Readonly<{
 }>;
 
 const DISCONNECTED_MESSAGE = {
-  type: "disconnected",
+  type: "transport_disconnected",
   error: {
     kind: "disconnected",
     message: "The provider is disconnected.",

@@ -18,7 +18,7 @@ export class ProviderRpcError extends Error {
   }
 }
 
-const ERROR_CODE_BY_KIND: Readonly<Record<Exclude<DappErrorKind, "upstream_response">, number>> = {
+const ERROR_CODE_BY_KIND: Readonly<Record<Exclude<DappErrorKind, "json_rpc_response">, number>> = {
   invalid_request: -32600,
   invalid_params: -32602,
   internal: -32603,
@@ -26,7 +26,8 @@ const ERROR_CODE_BY_KIND: Readonly<Record<Exclude<DappErrorKind, "upstream_respo
   unauthorized: 4100,
   unsupported_method: 4200,
   disconnected: 4900,
-  unrecognized_network: 4902,
+  chain_unavailable: 4901,
+  unrecognized_chain: 4902,
 };
 
 export const invalidProviderRequestError = (): ProviderRpcError =>
@@ -38,11 +39,8 @@ export const invalidProviderRequestError = (): ProviderRpcError =>
 export const disconnectedProviderRequestError = (message = "The provider is disconnected."): ProviderRpcError =>
   new ProviderRpcError({ code: 4900, message });
 
-export const providerDisconnectEventError = (message: string): ProviderRpcError =>
-  new ProviderRpcError({ code: 1013, message });
-
 export const toProviderRpcError = (error: SerializedDappError): ProviderRpcError => {
-  if (error.kind !== "upstream_response") {
+  if (error.kind !== "json_rpc_response") {
     return new ProviderRpcError({
       code: ERROR_CODE_BY_KIND[error.kind],
       message: error.message,

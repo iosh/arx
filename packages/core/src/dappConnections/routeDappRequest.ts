@@ -1,8 +1,16 @@
 import { ZodError } from "zod";
+import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../chainJsonRpc/errors.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { parseChainRef } from "../networks/chainRef.js";
-import { RpcInternalError, RpcInvalidParamsError, RpcUnsupportedMethodError } from "../rpc/errors.js";
+import { NetworkNotFoundError } from "../networks/errors.js";
+import {
+  RpcChainUnavailableError,
+  RpcInternalError,
+  RpcInvalidParamsError,
+  RpcJsonRpcResponseError,
+  RpcUnsupportedMethodError,
+} from "../rpc/errors.js";
 
 export type DappRequest = Readonly<{
   origin: string;
@@ -20,7 +28,7 @@ export type NodeReadRequest = Readonly<{
 }>;
 
 export type DappNamespace = Readonly<{
-  localMethods: ReadonlyMap<string, DappRequestMethod>;
+  namespaceMethods: ReadonlyMap<string, DappRequestMethod>;
   nodeReadMethods: ReadonlySet<string>;
   forwardNodeRead(input: NodeReadRequest): Promise<unknown>;
 }>;
@@ -84,6 +92,31 @@ const unsupportedMethod = (namespace: Namespace, method: string): RpcUnsupported
   });
 };
 
+const forwardNodeRead = async (namespaceRequests: DappNamespace, input: NodeReadRequest): Promise<unknown> => {
+  try {
+    return await namespaceRequests.forwardNodeRead(input);
+  } catch (error) {
+    if (error instanceof RpcInvalidParamsError) throw error;
+
+    if (error instanceof ChainJsonRpcResponseError) {
+      throw new RpcJsonRpcResponseError({
+        rpcCode: error.rpcCode,
+        message: error.message,
+        data: error.rpcData,
+      });
+    }
+
+    if (error instanceof ChainJsonRpcUnavailableError || error instanceof NetworkNotFoundError) {
+      throw new RpcChainUnavailableError();
+    }
+
+    throw new RpcInternalError({
+      message: "Unable to complete the chain RPC request.",
+      cause: error,
+    });
+  }
+};
+
 export const routeDappRequest = async (
   namespace: Namespace,
   namespaces: DappNamespaces,
@@ -92,10 +125,10 @@ export const routeDappRequest = async (
   const namespaceRequests = namespaces[namespace];
   if (!namespaceRequests) throw unsupportedMethod(namespace, input.method);
 
-  const localMethod = namespaceRequests.localMethods.get(input.method);
-  if (localMethod) return localMethod(input);
+  const namespaceMethod = namespaceRequests.namespaceMethods.get(input.method);
+  if (namespaceMethod) return namespaceMethod(input);
 
-  if (namespaceRequests.nodeReadMethods.has(input.method)) return namespaceRequests.forwardNodeRead(input);
+  if (namespaceRequests.nodeReadMethods.has(input.method)) return forwardNodeRead(namespaceRequests, input);
 
   throw unsupportedMethod(namespace, input.method);
 };
@@ -105,5 +138,5 @@ export const routeChainRpcRequest = async (namespaces: DappNamespaces, input: No
   const namespaceRequests = namespaces[namespace];
   if (!namespaceRequests?.nodeReadMethods.has(input.method)) throw unsupportedMethod(namespace, input.method);
 
-  return namespaceRequests.forwardNodeRead(input);
+  return forwardNodeRead(namespaceRequests, input);
 };

@@ -1,16 +1,11 @@
+import { chainIdFromChainRef } from "@arx/core/namespaces";
 import type { DuplexChannel } from "@arx/message-channel";
 import * as z from "zod/mini";
 import type { DappRequestParams, PageToWalletMessage, ProviderConnection } from "../protocol/messages.js";
 import { parseWalletToPageMessage } from "../protocol/parse.js";
-import {
-  disconnectedProviderRequestError,
-  invalidProviderRequestError,
-  providerDisconnectEventError,
-  toProviderRpcError,
-} from "./errors.js";
+import { disconnectedProviderRequestError, invalidProviderRequestError, toProviderRpcError } from "./errors.js";
 
 const EIP155_NAMESPACE = "eip155";
-const EIP155_CHAIN_REF_PATTERN = /^eip155:([1-9][0-9]*)$/;
 const DISCONNECTED_MESSAGE = "The provider is disconnected.";
 
 export type Eip1193RequestArguments = Readonly<{
@@ -64,19 +59,10 @@ const parseRequestArguments = (input: unknown): ParsedRequestArguments | null =>
   }
 };
 
-const decodeEip155ChainId = (chainRef: string): string | null => {
-  const reference = EIP155_CHAIN_REF_PATTERN.exec(chainRef)?.[1];
-  if (!reference) {
-    return null;
-  }
+const eip1193ChainIdFromChainRef = (chainRef: string): string => `0x${chainIdFromChainRef(chainRef).toString(16)}`;
 
-  const chainId = Number(reference);
-  if (!Number.isSafeInteger(chainId)) {
-    return null;
-  }
-
-  return `0x${chainId.toString(16)}`;
-};
+const accountsEqual = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((account, index) => account === right[index]);
 
 class Eip155ProviderState implements Eip155Provider {
   readonly #channel: DuplexChannel;
@@ -86,7 +72,7 @@ class Eip155ProviderState implements Eip155Provider {
   #status: ProviderStatus = "connecting";
   #nextRequestId = 1;
   #chainId: string | null = null;
-  #selectedAddress: string | null = null;
+  #accounts: readonly string[] = [];
 
   constructor(channel: DuplexChannel) {
     this.#channel = channel;
@@ -105,7 +91,7 @@ class Eip155ProviderState implements Eip155Provider {
   }
 
   get selectedAddress(): string | null {
-    return this.#selectedAddress;
+    return this.#accounts[0] ?? null;
   }
 
   readonly request = <TResult = unknown>(input: Eip1193RequestArguments): Promise<TResult> => {
@@ -174,7 +160,7 @@ class Eip155ProviderState implements Eip155Provider {
       return;
     }
 
-    if (message.type === "disconnected") {
+    if (message.type === "transport_disconnected") {
       this.#disconnect(message.error.message);
       return;
     }
@@ -188,13 +174,23 @@ class Eip155ProviderState implements Eip155Provider {
       return;
     }
 
+    if (message.type === "open_failed") {
+      this.#disconnect(message.error.message);
+      return;
+    }
+
     if (message.type === "connection_changed") {
-      this.#changeConnection(message.connection, message.changed);
+      this.#changeConnection(message.connection);
       return;
     }
 
     const request = this.#pending.get(message.id);
     if (!request) {
+      return;
+    }
+
+    if (message.type === "failure" && message.error.kind === "disconnected") {
+      this.#disconnect(message.error.message);
       return;
     }
 
@@ -208,49 +204,46 @@ class Eip155ProviderState implements Eip155Provider {
   }
 
   #open(connection: ProviderConnection): void {
-    const chainId = decodeEip155ChainId(connection.chainRef);
-    if (!chainId) {
-      this.#disconnect(DISCONNECTED_MESSAGE);
+    if (this.#status === "connected") {
+      this.#changeConnection(connection);
       return;
     }
 
-    const publishConnect = this.#status !== "connected";
+    const chainId = eip1193ChainIdFromChainRef(connection.chainRef);
+    const accounts = [...connection.accounts];
     this.#status = "connected";
     this.#chainId = chainId;
-    this.#selectedAddress = connection.accounts[0] ?? null;
+    this.#accounts = accounts;
+
+    this.#publish("connect", { chainId });
+    if (this.#status !== "connected") return;
 
     const queuedRequestIds = this.#queuedRequestIds.splice(0);
     for (const id of queuedRequestIds) {
-      if (this.#status !== "connected") {
-        return;
-      }
+      if (this.#status !== "connected") return;
       this.#sendRequest(id);
-    }
-
-    if (publishConnect && this.#status === "connected") {
-      this.#publish("connect", { chainId });
     }
   }
 
-  #changeConnection(connection: ProviderConnection, changed: Readonly<{ network: boolean; accounts: boolean }>): void {
+  #changeConnection(connection: ProviderConnection): void {
     if (this.#status !== "connected") {
       return;
     }
 
-    const chainId = decodeEip155ChainId(connection.chainRef);
-    if (!chainId) {
-      this.#disconnect(DISCONNECTED_MESSAGE);
-      return;
-    }
-
+    const chainId = eip1193ChainIdFromChainRef(connection.chainRef);
     const accounts = [...connection.accounts];
-    this.#chainId = chainId;
-    this.#selectedAddress = accounts[0] ?? null;
+    const chainChanged = this.#chainId !== chainId;
+    const accountsChanged = !accountsEqual(this.#accounts, accounts);
+    if (!chainChanged && !accountsChanged) return;
 
-    if (changed.network) {
+    this.#chainId = chainId;
+    this.#accounts = accounts;
+
+    if (chainChanged) {
       this.#publish("chainChanged", chainId);
+      if (this.#status !== "connected") return;
     }
-    if (changed.accounts) {
+    if (accountsChanged) {
       this.#publish("accountsChanged", accounts);
     }
   }
@@ -275,16 +268,16 @@ class Eip155ProviderState implements Eip155Provider {
 
     this.#status = "disconnected";
     this.#chainId = null;
-    this.#selectedAddress = null;
+    this.#accounts = [];
     this.#queuedRequestIds.splice(0);
 
-    const requestError = disconnectedProviderRequestError(message);
+    const disconnectError = disconnectedProviderRequestError(message);
     for (const request of this.#pending.values()) {
-      request.reject(requestError);
+      request.reject(disconnectError);
     }
     this.#pending.clear();
 
-    this.#publish("disconnect", providerDisconnectEventError(message));
+    this.#publish("disconnect", disconnectError);
   }
 
   #publish(event: string, value: unknown): void {

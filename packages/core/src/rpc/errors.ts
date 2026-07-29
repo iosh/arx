@@ -75,8 +75,19 @@ export class RpcUnrecognizedChainError extends ArxBaseError {
   }
 }
 
-export class RpcNodeResponseError extends ArxBaseError {
-  static readonly code = "global.rpc.node_response";
+export class RpcChainUnavailableError extends ArxBaseError {
+  static readonly code = "global.rpc.chain_unavailable";
+
+  constructor(input: RpcErrorInput = {}) {
+    super(input.message ?? "The requested chain is currently unavailable.", {
+      code: RpcChainUnavailableError.code,
+      details: input.details,
+    });
+  }
+}
+
+export class RpcJsonRpcResponseError extends ArxBaseError {
+  static readonly code = "global.rpc.json_rpc_response";
 
   readonly rpcCode: number;
   readonly rpcData?: JsonValue;
@@ -84,7 +95,7 @@ export class RpcNodeResponseError extends ArxBaseError {
   constructor(input: { rpcCode: number; message: string; data?: unknown }) {
     const rpcData = toJsonSafe(input.data);
     super(input.message, {
-      code: RpcNodeResponseError.code,
+      code: RpcJsonRpcResponseError.code,
       details: {
         rpcCode: input.rpcCode,
         ...(rpcData !== undefined ? { rpcData } : {}),

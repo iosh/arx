@@ -16,11 +16,11 @@ const PROVIDER_CONNECTION_SCHEMA = z.object({
   accounts: z.array(z.string()),
 });
 
-const NON_UPSTREAM_DAPP_ERROR_KINDS = DAPP_ERROR_KINDS.filter(
-  (kind): kind is Exclude<DappErrorKind, "upstream_response"> => kind !== "upstream_response",
+const NON_JSON_RPC_RESPONSE_DAPP_ERROR_KINDS = DAPP_ERROR_KINDS.filter(
+  (kind): kind is Exclude<DappErrorKind, "json_rpc_response"> => kind !== "json_rpc_response",
 );
 
-const UPSTREAM_RESPONSE_DATA_SCHEMA = z.pipe(
+const JSON_RPC_RESPONSE_DATA_SCHEMA = z.pipe(
   z.object({
     code: z.number().check(z.int()),
     data: z.optional(JSON_VALUE_SCHEMA),
@@ -30,12 +30,12 @@ const UPSTREAM_RESPONSE_DATA_SCHEMA = z.pipe(
 
 const SERIALIZED_DAPP_ERROR_SCHEMA = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal("upstream_response"),
+    kind: z.literal("json_rpc_response"),
     message: NON_EMPTY_STRING_SCHEMA,
-    data: UPSTREAM_RESPONSE_DATA_SCHEMA,
+    data: JSON_RPC_RESPONSE_DATA_SCHEMA,
   }),
   z.object({
-    kind: z.enum(NON_UPSTREAM_DAPP_ERROR_KINDS),
+    kind: z.enum(NON_JSON_RPC_RESPONSE_DAPP_ERROR_KINDS),
     message: NON_EMPTY_STRING_SCHEMA,
   }),
 ]);
@@ -69,6 +69,11 @@ const WALLET_TO_PAGE_MESSAGE_SCHEMA = z.discriminatedUnion("type", [
     connection: PROVIDER_CONNECTION_SCHEMA,
   }),
   z.object({
+    type: z.literal("open_failed"),
+    namespace: NON_EMPTY_STRING_SCHEMA,
+    error: SERIALIZED_DAPP_ERROR_SCHEMA,
+  }),
+  z.object({
     type: z.literal("success"),
     namespace: NON_EMPTY_STRING_SCHEMA,
     id: REQUEST_ID_SCHEMA,
@@ -84,14 +89,13 @@ const WALLET_TO_PAGE_MESSAGE_SCHEMA = z.discriminatedUnion("type", [
     type: z.literal("connection_changed"),
     namespace: NON_EMPTY_STRING_SCHEMA,
     connection: PROVIDER_CONNECTION_SCHEMA,
-    changed: z.object({
-      network: z.boolean(),
-      accounts: z.boolean(),
-    }),
   }),
   z.object({
-    type: z.literal("disconnected"),
-    error: SERIALIZED_DAPP_ERROR_SCHEMA,
+    type: z.literal("transport_disconnected"),
+    error: z.object({
+      kind: z.literal("disconnected"),
+      message: NON_EMPTY_STRING_SCHEMA,
+    }),
   }),
 ]);
 

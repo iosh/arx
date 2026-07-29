@@ -131,15 +131,11 @@ describe("bootstrapContent", () => {
     ]);
   });
 
-  it("only relays decoded Wallet-to-Page Provider messages from background", () => {
+  it("relays decoded Wallet-to-Page Provider messages from background", () => {
     const port = new FakePort();
     bootstrapContent({ targetWindow, connectProviderPort: () => port as unknown as Runtime.Port });
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
     postToPage.mockClear();
-
-    port.receive({ type: "open", namespace: "eip155" });
-    port.receive({ type: "opened", namespace: "", connection: { chainRef: "eip155:1", accounts: [] } });
-    expect(postToPage).not.toHaveBeenCalled();
 
     const opened = {
       type: "opened",
@@ -182,7 +178,7 @@ describe("bootstrapContent", () => {
 
     const [windowMessage] = postToPage.mock.calls[0] ?? [];
     expect(readContentToPageMessage(windowMessage)).toEqual({
-      type: "disconnected",
+      type: "transport_disconnected",
       error: {
         kind: "disconnected",
         message: "The provider is disconnected.",

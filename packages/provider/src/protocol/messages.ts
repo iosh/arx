@@ -19,27 +19,34 @@ export const DAPP_ERROR_KINDS = [
   "unauthorized",
   "user_rejected",
   "unsupported_method",
-  "unrecognized_network",
-  "upstream_response",
+  "unrecognized_chain",
+  "chain_unavailable",
+  "json_rpc_response",
   "internal",
   "disconnected",
 ] as const;
 
 export type DappErrorKind = (typeof DAPP_ERROR_KINDS)[number];
 
+type NonJsonRpcResponseDappErrorKind = Exclude<DappErrorKind, "json_rpc_response">;
+
 export type SerializedDappError =
   | Readonly<{
-      kind: "upstream_response";
+      kind: "json_rpc_response";
       message: string;
       data: Readonly<{
         code: number;
         data?: ProviderJsonValue;
       }>;
     }>
-  | Readonly<{
-      kind: Exclude<DappErrorKind, "upstream_response">;
-      message: string;
-    }>;
+  | {
+      [Kind in NonJsonRpcResponseDappErrorKind]: Readonly<{
+        kind: Kind;
+        message: string;
+      }>;
+    }[NonJsonRpcResponseDappErrorKind];
+
+type DisconnectedError = Extract<SerializedDappError, { kind: "disconnected" }>;
 
 export type PageToWalletMessage =
   | Readonly<{
@@ -61,6 +68,11 @@ export type WalletToPageMessage =
       connection: ProviderConnection;
     }>
   | Readonly<{
+      type: "open_failed";
+      namespace: string;
+      error: SerializedDappError;
+    }>
+  | Readonly<{
       type: "success";
       namespace: string;
       id: number;
@@ -76,12 +88,8 @@ export type WalletToPageMessage =
       type: "connection_changed";
       namespace: string;
       connection: ProviderConnection;
-      changed: Readonly<{
-        network: boolean;
-        accounts: boolean;
-      }>;
     }>
   | Readonly<{
-      type: "disconnected";
-      error: SerializedDappError;
+      type: "transport_disconnected";
+      error: DisconnectedError;
     }>;

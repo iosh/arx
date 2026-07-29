@@ -2,13 +2,15 @@ import type { Accounts } from "../../accounts/Accounts.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
 import type { Approvals } from "../../approvals/Approvals.js";
 import { isApprovalDecisionError } from "../../approvals/errors.js";
-import { ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
+import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../../chainJsonRpc/errors.js";
 import { type DappRequestMethod, defineDappMethod, invalidDappParams } from "../../dappConnections/routeDappRequest.js";
+import { NetworkNotFoundError } from "../../networks/errors.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
 import {
+  RpcChainUnavailableError,
   RpcInternalError,
   RpcInvalidParamsError,
-  RpcNodeResponseError,
+  RpcJsonRpcResponseError,
   RpcUnauthorizedError,
   RpcUserRejectedRequestError,
 } from "../../rpc/errors.js";
@@ -32,8 +34,8 @@ type CreateEip155DappTransactionHandlersOptions = Readonly<{
   transactions: Pick<Transactions, "prepare" | "submit">;
 }>;
 
-const createNodeResponseError = (error: ChainJsonRpcResponseError): RpcNodeResponseError =>
-  new RpcNodeResponseError({
+const createJsonRpcResponseError = (error: ChainJsonRpcResponseError): RpcJsonRpcResponseError =>
+  new RpcJsonRpcResponseError({
     rpcCode: error.rpcCode,
     message: error.message,
     data: error.rpcData,
@@ -41,7 +43,10 @@ const createNodeResponseError = (error: ChainJsonRpcResponseError): RpcNodeRespo
 
 const mapTransactionPreparationError = (error: unknown): Error => {
   if (error instanceof AccountNotFoundError) return new RpcUnauthorizedError();
-  if (error instanceof ChainJsonRpcResponseError) return createNodeResponseError(error);
+  if (error instanceof ChainJsonRpcResponseError) return createJsonRpcResponseError(error);
+  if (error instanceof ChainJsonRpcUnavailableError || error instanceof NetworkNotFoundError) {
+    return new RpcChainUnavailableError();
+  }
   if (
     error instanceof Eip155FeeModelUnsupportedError ||
     error instanceof Eip155PriorityFeeExceedsMaxFeeError ||
@@ -60,7 +65,10 @@ const mapTransactionSubmissionError = (error: unknown): Error => {
   if (error instanceof AccountNotFoundError || error instanceof Eip155TransactionSigningUnavailableError) {
     return new RpcUnauthorizedError();
   }
-  if (error instanceof ChainJsonRpcResponseError) return createNodeResponseError(error);
+  if (error instanceof ChainJsonRpcResponseError) return createJsonRpcResponseError(error);
+  if (error instanceof ChainJsonRpcUnavailableError || error instanceof NetworkNotFoundError) {
+    return new RpcChainUnavailableError();
+  }
 
   return new RpcInternalError({
     message: "Unable to submit the EIP-155 transaction.",
@@ -123,7 +131,7 @@ export const createEip155DappTransactionHandlers = (
       }
 
       if (submission.status === "failed") {
-        throw new RpcNodeResponseError({
+        throw new RpcJsonRpcResponseError({
           rpcCode: submission.failure.code,
           message: submission.failure.message,
           data: submission.failure.data,

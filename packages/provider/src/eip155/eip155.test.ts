@@ -12,7 +12,12 @@ import { createEip155Provider } from "./provider.js";
 const createTestChannel = () => {
   const messageListeners = new Set<(message: unknown) => void>();
   const disconnectListeners = new Set<() => void>();
-  const send = vi.fn<(message: unknown) => void>();
+  let failNextSend = false;
+  const send = vi.fn<(message: unknown) => void>(() => {
+    if (!failNextSend) return;
+    failNextSend = false;
+    throw new Error("send failed");
+  });
   const channel: DuplexChannel = {
     send,
     onMessage: (listener) => {
@@ -33,6 +38,9 @@ const createTestChannel = () => {
     },
     disconnect: () => {
       for (const listener of [...disconnectListeners]) listener();
+    },
+    rejectNextSend: () => {
+      failNextSend = true;
     },
   };
 };
@@ -55,7 +63,16 @@ describe("EIP-155 provider", () => {
   it("opens immediately and releases queued requests after the initial connection", async () => {
     const transport = createTestChannel();
     const provider = createEip155Provider({ channel: transport.channel });
-    const connected = vi.fn();
+    const sendCountsAtConnect: number[] = [];
+    const statesAtConnect: unknown[] = [];
+    const connected = vi.fn(() => {
+      sendCountsAtConnect.push(transport.send.mock.calls.length);
+      statesAtConnect.push({
+        connected: provider.isConnected(),
+        chainId: provider.chainId,
+        selectedAddress: provider.selectedAddress,
+      });
+    });
     provider.on("connect", connected);
 
     expect(transport.send).toHaveBeenCalledWith({ type: "open", namespace: "eip155" });
@@ -72,12 +89,17 @@ describe("EIP-155 provider", () => {
     expect(provider.chainId).toBe("0xa");
     expect(provider.selectedAddress).toBe("0xabc");
     expect(connected).toHaveBeenCalledWith({ chainId: "0xa" });
+    expect(sendCountsAtConnect).toEqual([1]);
+    expect(statesAtConnect).toEqual([{ connected: true, chainId: "0xa", selectedAddress: "0xabc" }]);
     expect(transport.send).toHaveBeenLastCalledWith({
       type: "request",
       namespace: "eip155",
       id: 1,
       method: "eth_chainId",
     });
+
+    open(transport.receive, { chainRef: "eip155:10", accounts: ["0xabc"] });
+    expect(connected).toHaveBeenCalledOnce();
 
     transport.receive({ type: "success", namespace: "eip155", id: 1, result: "0xa" });
     await expect(chainIdRequest).resolves.toBe("0xa");
@@ -89,20 +111,27 @@ describe("EIP-155 provider", () => {
     open(transport.receive);
 
     const eventOrder: string[] = [];
+    const observedStates: unknown[] = [];
     const accountListener = vi.fn((accounts: unknown) => {
       eventOrder.push("accounts");
-      expect(accounts).toEqual(["0xdef"]);
-      expect(provider.chainId).toBe("0xa");
-      expect(provider.selectedAddress).toBe("0xdef");
+      observedStates.push({
+        event: "accounts",
+        value: accounts,
+        chainId: provider.chainId,
+        selectedAddress: provider.selectedAddress,
+      });
     });
 
     expect(
       provider
         .on("chainChanged", (chainId) => {
           eventOrder.push("chain");
-          expect(chainId).toBe("0xa");
-          expect(provider.chainId).toBe("0xa");
-          expect(provider.selectedAddress).toBe("0xdef");
+          observedStates.push({
+            event: "chain",
+            value: chainId,
+            chainId: provider.chainId,
+            selectedAddress: provider.selectedAddress,
+          });
         })
         .on("accountsChanged", () => {
           eventOrder.push("throwing account listener");
@@ -115,27 +144,60 @@ describe("EIP-155 provider", () => {
       type: "connection_changed",
       namespace: "eip155",
       connection: { chainRef: "eip155:10", accounts: ["0xdef"] },
-      changed: { network: true, accounts: true },
     });
 
     expect(eventOrder).toEqual(["chain", "throwing account listener", "accounts"]);
+    expect(observedStates).toEqual([
+      { event: "chain", value: "0xa", chainId: "0xa", selectedAddress: "0xdef" },
+      { event: "accounts", value: ["0xdef"], chainId: "0xa", selectedAddress: "0xdef" },
+    ]);
     expect(provider.removeListener("accountsChanged", accountListener)).toBe(provider);
 
     transport.receive({
       type: "connection_changed",
       namespace: "eip155",
       connection: { chainRef: "eip155:10", accounts: [] },
-      changed: { network: false, accounts: true },
     });
     expect(accountListener).toHaveBeenCalledTimes(1);
     expect(provider.selectedAddress).toBeNull();
+
+    const chainChanged = vi.fn();
+    const accountsChanged = vi.fn();
+    provider.on("chainChanged", chainChanged).on("accountsChanged", accountsChanged);
+    transport.receive({
+      type: "connection_changed",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:10", accounts: [] },
+    });
+    expect(chainChanged).not.toHaveBeenCalled();
+    expect(accountsChanged).not.toHaveBeenCalled();
+
+    transport.receive({
+      type: "connection_changed",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:10", accounts: ["0xaaa", "0xbbb"] },
+    });
+    expect(accountsChanged).toHaveBeenCalledWith(["0xaaa", "0xbbb"]);
+    transport.receive({
+      type: "connection_changed",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:10", accounts: ["0xaaa", "0xccc"] },
+    });
+    expect(accountsChanged).toHaveBeenLastCalledWith(["0xaaa", "0xccc"]);
   });
 
   it("maps boundary errors, settles disconnects, and accepts a fresh opened state without replay", async () => {
     const transport = createTestChannel();
     const provider = createEip155Provider({ channel: transport.channel });
     const connected = vi.fn();
-    const disconnected = vi.fn();
+    const statesAtDisconnect: unknown[] = [];
+    const disconnected = vi.fn(() => {
+      statesAtDisconnect.push({
+        connected: provider.isConnected(),
+        chainId: provider.chainId,
+        selectedAddress: provider.selectedAddress,
+      });
+    });
     provider.on("connect", connected).on("disconnect", disconnected);
     open(transport.receive);
 
@@ -150,28 +212,38 @@ describe("EIP-155 provider", () => {
     });
     await expect(unsupported).resolves.toMatchObject({ code: 4200, message: "Unsupported method." });
 
-    const upstream = provider.request({ method: "eth_call", params: [] }).catch((error: unknown) => error);
+    const jsonRpcFailure = provider.request({ method: "eth_call", params: [] }).catch((error: unknown) => error);
     transport.receive({
       type: "failure",
       namespace: "eip155",
       id: 2,
       error: {
-        kind: "upstream_response",
+        kind: "json_rpc_response",
         message: "Execution reverted.",
         data: { code: -32000, data: { reason: "reverted" } },
       },
     });
-    await expect(upstream).resolves.toMatchObject({
+    await expect(jsonRpcFailure).resolves.toMatchObject({
       code: -32000,
       message: "Execution reverted.",
       data: { reason: "reverted" },
     });
 
+    const unavailable = provider.request({ method: "eth_blockNumber" }).catch((error: unknown) => error);
+    transport.receive({
+      type: "failure",
+      namespace: "eip155",
+      id: 3,
+      error: { kind: "chain_unavailable", message: "Chain unavailable." },
+    });
+    await expect(unavailable).resolves.toMatchObject({ code: 4901, message: "Chain unavailable." });
+    expect(provider.isConnected()).toBe(true);
+
     const pending = provider
       .request({ method: "eth_getBalance", params: ["0xabc", "latest"] })
       .catch((error: unknown) => error);
     transport.receive({
-      type: "disconnected",
+      type: "transport_disconnected",
       error: { kind: "disconnected", message: "Connection lost." },
     });
 
@@ -181,26 +253,76 @@ describe("EIP-155 provider", () => {
     expect(provider.selectedAddress).toBeNull();
     expect(disconnected).toHaveBeenCalledOnce();
     expect(disconnected.mock.calls[0]?.[0]).toBeInstanceOf(ProviderRpcError);
-    expect(disconnected.mock.calls[0]?.[0]).toMatchObject({ code: 1013, message: "Connection lost." });
+    expect(disconnected.mock.calls[0]?.[0]).toMatchObject({ code: 4900, message: "Connection lost." });
+    expect(statesAtDisconnect).toEqual([{ connected: false, chainId: null, selectedAddress: null }]);
+
+    transport.receive({
+      type: "transport_disconnected",
+      error: { kind: "disconnected", message: "Repeated disconnect." },
+    });
+    expect(disconnected).toHaveBeenCalledOnce();
 
     await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({ code: 4900 });
-    expect(transport.send).toHaveBeenCalledTimes(4);
+    expect(transport.send).toHaveBeenCalledTimes(5);
 
-    open(transport.receive, { chainRef: "eip155:137", accounts: ["0x123"] });
+    transport.receive({ type: "success", namespace: "eip155", id: 4, result: "late result" });
+    expect(provider.isConnected()).toBe(false);
+
+    const largeChainReference = "99999999999999999999999999999999";
+    open(transport.receive, { chainRef: `eip155:${largeChainReference}`, accounts: ["0x123"] });
     expect(provider.isConnected()).toBe(true);
-    expect(provider.chainId).toBe("0x89");
+    const largeChainId = `0x${BigInt(largeChainReference).toString(16)}`;
+    expect(provider.chainId).toBe(largeChainId);
     expect(connected).toHaveBeenCalledTimes(2);
-    expect(transport.send).toHaveBeenCalledTimes(4);
+    expect(transport.send).toHaveBeenCalledTimes(5);
 
     const recovered = provider.request({ method: "eth_chainId" });
     expect(transport.send).toHaveBeenLastCalledWith({
       type: "request",
       namespace: "eip155",
-      id: 4,
+      id: 5,
       method: "eth_chainId",
     });
-    transport.receive({ type: "success", namespace: "eip155", id: 4, result: "0x89" });
-    await expect(recovered).resolves.toBe("0x89");
+    transport.receive({ type: "success", namespace: "eip155", id: 5, result: largeChainId });
+    await expect(recovered).resolves.toBe(largeChainId);
+  });
+
+  it("settles queued requests when opening fails", async () => {
+    const transport = createTestChannel();
+    const provider = createEip155Provider({ channel: transport.channel });
+    const disconnected = vi.fn();
+    provider.on("disconnect", disconnected);
+    const first = provider.request({ method: "eth_chainId" }).catch((error: unknown) => error);
+    const second = provider.request({ method: "eth_accounts" }).catch((error: unknown) => error);
+
+    transport.receive({
+      type: "open_failed",
+      namespace: "eip155",
+      error: { kind: "internal", message: "Unable to open the provider." },
+    });
+
+    await expect(first).resolves.toMatchObject({ code: 4900, message: "Unable to open the provider." });
+    await expect(second).resolves.toMatchObject({ code: 4900, message: "Unable to open the provider." });
+    expect(disconnected).toHaveBeenCalledOnce();
+    expect(transport.send).toHaveBeenCalledOnce();
+  });
+
+  it("settles every pending request after send or channel failure", async () => {
+    const sendFailure = createTestChannel();
+    const sendFailureProvider = createEip155Provider({ channel: sendFailure.channel });
+    open(sendFailure.receive);
+    const sent = sendFailureProvider.request({ method: "eth_chainId" }).catch((error: unknown) => error);
+    sendFailure.rejectNextSend();
+    const failedSend = sendFailureProvider.request({ method: "eth_accounts" }).catch((error: unknown) => error);
+    await expect(sent).resolves.toMatchObject({ code: 4900 });
+    await expect(failedSend).resolves.toMatchObject({ code: 4900 });
+
+    const channelFailure = createTestChannel();
+    const channelFailureProvider = createEip155Provider({ channel: channelFailure.channel });
+    open(channelFailure.receive);
+    const channelPending = channelFailureProvider.request({ method: "eth_chainId" }).catch((error: unknown) => error);
+    channelFailure.disconnect();
+    await expect(channelPending).resolves.toMatchObject({ code: 4900 });
   });
 
   it("announces through EIP-6963 and injects window.ethereum only when absent", () => {

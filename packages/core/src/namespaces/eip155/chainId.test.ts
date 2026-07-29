@@ -3,27 +3,28 @@ import { ChainNamespaceMismatchError } from "../../networks/errors.js";
 import { chainIdFromChainRef, chainRefFromChainId } from "./chainId.js";
 import { Eip155InvalidChainIdError } from "./errors.js";
 
-const MAX_SAFE_CHAIN_ID = BigInt(Number.MAX_SAFE_INTEGER);
+const MAX_EIP155_CHAIN_ID = 10n ** 32n - 1n;
 
 describe("EIP-155 chain ID", () => {
   it("converts chain IDs to CAIP-2 chain refs", () => {
     expect(chainRefFromChainId(1n)).toBe("eip155:1");
     expect(chainRefFromChainId(8453n)).toBe("eip155:8453");
-    expect(chainRefFromChainId(MAX_SAFE_CHAIN_ID)).toBe(`eip155:${MAX_SAFE_CHAIN_ID}`);
+    expect(chainRefFromChainId(MAX_EIP155_CHAIN_ID)).toBe(`eip155:${MAX_EIP155_CHAIN_ID}`);
   });
 
   it("reads chain IDs from CAIP-2 chain refs", () => {
     expect(chainIdFromChainRef("eip155:1")).toBe(1n);
     expect(chainIdFromChainRef("eip155:8453")).toBe(8453n);
+    expect(chainIdFromChainRef(`eip155:${MAX_EIP155_CHAIN_ID}`)).toBe(MAX_EIP155_CHAIN_ID);
   });
 
   it("rejects negative chain IDs", () => {
     expect(() => chainRefFromChainId(-1n)).toThrow(Eip155InvalidChainIdError);
   });
 
-  it("rejects chain IDs outside the supported positive safe-integer range", () => {
+  it("rejects chain IDs outside the positive 32-digit CAIP-2 range", () => {
     expect(() => chainRefFromChainId(0n)).toThrow(Eip155InvalidChainIdError);
-    expect(() => chainRefFromChainId(MAX_SAFE_CHAIN_ID + 1n)).toThrow(Eip155InvalidChainIdError);
+    expect(() => chainRefFromChainId(MAX_EIP155_CHAIN_ID + 1n)).toThrow(Eip155InvalidChainIdError);
   });
 
   it("rejects chain refs outside EIP-155", () => {
@@ -33,5 +34,6 @@ describe("EIP-155 chain ID", () => {
   it("rejects non-decimal EIP-155 references", () => {
     expect(() => chainIdFromChainRef("eip155:mainnet")).toThrow(Eip155InvalidChainIdError);
     expect(() => chainIdFromChainRef("eip155:01")).toThrow(Eip155InvalidChainIdError);
+    expect(() => chainIdFromChainRef("eip155:0")).toThrow(Eip155InvalidChainIdError);
   });
 });

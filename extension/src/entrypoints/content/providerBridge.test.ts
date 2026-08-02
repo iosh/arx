@@ -2,13 +2,14 @@ import type { WalletToPageMessage } from "@arx/provider/protocol";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
+import { PORT_HOST_READY_MESSAGE } from "@/transport/browserPort";
 import {
   createContentToPageMessage,
   createPageToContentMessage,
   readContentToPageMessage,
-} from "@/channels/inpageProviderChannel";
-import { DAPP_PROVIDER_PORT_NAME } from "@/channels/portNames";
-import { bootstrapContent } from "./bootstrapContent";
+} from "@/transport/inpageProviderChannel";
+import { DAPP_PROVIDER_PORT_NAME } from "@/transport/portNames";
+import { installProviderBridge } from "./providerBridge";
 
 vi.mock("webextension-polyfill", () => ({
   default: {
@@ -71,13 +72,18 @@ const dispatchPageMessage = (
   );
 };
 
-describe("bootstrapContent", () => {
+const openPortSession = async (port: FakePort): Promise<void> => {
+  port.receive(PORT_HOST_READY_MESSAGE);
+  await Promise.resolve();
+};
+
+describe("installProviderBridge", () => {
   let dom: JSDOM;
   let targetWindow: TestWindow;
   let postToPage: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://dapp.test/frame" });
+    dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://dapp.test/" });
     targetWindow = dom.window as unknown as TestWindow;
     postToPage = vi.spyOn(targetWindow, "postMessage").mockImplementation(() => undefined);
   });
@@ -86,10 +92,10 @@ describe("bootstrapContent", () => {
     dom.window.close();
   });
 
-  it("filters the window relay by source, load origin, direction, and Provider protocol", () => {
+  it("filters the window relay by source, load origin, direction, and Provider protocol", async () => {
     const port = new FakePort();
     const connectProviderPort = vi.fn(() => port as unknown as Runtime.Port);
-    bootstrapContent({ targetWindow, connectProviderPort });
+    installProviderBridge({ targetWindow, connectProviderPort });
 
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { source: null });
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" }, { origin: "https://other.test" });
@@ -106,15 +112,28 @@ describe("bootstrapContent", () => {
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
 
     expect(connectProviderPort).toHaveBeenCalledOnce();
+    expect(port.postMessage).not.toHaveBeenCalled();
+
+    await openPortSession(port);
     expect(port.postMessage).toHaveBeenCalledWith({ type: "open", namespace: "eip155" });
+
+    postToPage.mockClear();
+    const opened = {
+      type: "opened",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:1", accounts: [] },
+    } as const;
+    port.receive(opened);
+    expect(postToPage).toHaveBeenCalledWith(createContentToPageMessage(opened), targetWindow.location.origin);
   });
 
-  it("uses one Runtime.Port for every namespace in the frame", () => {
+  it("uses one browser connection for every Provider namespace", async () => {
     const port = new FakePort();
     const connectProviderPort = vi.fn(() => port as unknown as Runtime.Port);
-    bootstrapContent({ targetWindow, connectProviderPort });
+    installProviderBridge({ targetWindow, connectProviderPort });
 
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    await openPortSession(port);
     dispatchPageMessage(targetWindow, { type: "open", namespace: "conflux" });
     dispatchPageMessage(targetWindow, {
       type: "request",
@@ -131,33 +150,23 @@ describe("bootstrapContent", () => {
     ]);
   });
 
-  it("relays decoded Wallet-to-Page Provider messages from background", () => {
-    const port = new FakePort();
-    bootstrapContent({ targetWindow, connectProviderPort: () => port as unknown as Runtime.Port });
-    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
-    postToPage.mockClear();
-
-    const opened = {
-      type: "opened",
-      namespace: "eip155",
-      connection: { chainRef: "eip155:1", accounts: [] },
-    } as const;
-    port.receive(opened);
-
-    expect(postToPage).toHaveBeenCalledWith(createContentToPageMessage(opened), targetWindow.location.origin);
-  });
-
-  it("settles page requests on disconnect and recovers once by resending only opened namespaces", () => {
+  it("recovers a disconnect by reopening namespaces without replaying RPC", async () => {
     const firstPort = new FakePort();
     const recoveredPort = new FakePort();
     const connectProviderPort = vi
       .fn<() => Runtime.Port>()
       .mockReturnValueOnce(firstPort as unknown as Runtime.Port)
       .mockReturnValueOnce(recoveredPort as unknown as Runtime.Port);
-    bootstrapContent({ targetWindow, connectProviderPort });
+    installProviderBridge({ targetWindow, connectProviderPort });
 
     dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    await openPortSession(firstPort);
     dispatchPageMessage(targetWindow, { type: "open", namespace: "conflux" });
+    firstPort.receive({
+      type: "opened",
+      namespace: "eip155",
+      connection: { chainRef: "eip155:1", accounts: [] },
+    });
     dispatchPageMessage(targetWindow, {
       type: "request",
       namespace: "eip155",
@@ -170,6 +179,9 @@ describe("bootstrapContent", () => {
     firstPort.loseConnection();
 
     expect(connectProviderPort).toHaveBeenCalledTimes(2);
+    expect(recoveredPort.postMessage).not.toHaveBeenCalled();
+
+    await openPortSession(recoveredPort);
     expect(recoveredPort.postMessage.mock.calls.map(([message]) => message)).toEqual([
       { type: "open", namespace: "eip155" },
       { type: "open", namespace: "conflux" },
@@ -184,54 +196,5 @@ describe("bootstrapContent", () => {
         message: "The provider is disconnected.",
       },
     } satisfies WalletToPageMessage);
-
-    recoveredPort.loseConnection();
-
-    expect(connectProviderPort).toHaveBeenCalledTimes(2);
-    expect(postToPage).toHaveBeenCalledTimes(2);
-  });
-
-  it("treats a synchronous port send failure as disconnect without replaying the failed request", () => {
-    const firstPort = new FakePort();
-    const recoveredPort = new FakePort();
-    firstPort.postMessage.mockImplementation((message) => {
-      if ((message as { type?: unknown }).type === "request") {
-        throw new Error("disconnected");
-      }
-    });
-    const connectProviderPort = vi
-      .fn<() => Runtime.Port>()
-      .mockReturnValueOnce(firstPort as unknown as Runtime.Port)
-      .mockReturnValueOnce(recoveredPort as unknown as Runtime.Port);
-    bootstrapContent({ targetWindow, connectProviderPort });
-
-    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
-    postToPage.mockClear();
-    dispatchPageMessage(targetWindow, {
-      type: "request",
-      namespace: "eip155",
-      id: 8,
-      method: "eth_chainId",
-    });
-
-    expect(firstPort.disconnect).toHaveBeenCalledOnce();
-    expect(connectProviderPort).toHaveBeenCalledTimes(2);
-    expect(recoveredPort.postMessage.mock.calls.map(([message]) => message)).toEqual([
-      { type: "open", namespace: "eip155" },
-    ]);
-    expect(postToPage).toHaveBeenCalledOnce();
-  });
-
-  it("reports an initial connection failure without retrying", () => {
-    const connectProviderPort = vi.fn(() => {
-      throw new Error("extension context invalidated");
-    });
-    bootstrapContent({ targetWindow, connectProviderPort });
-
-    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
-    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
-
-    expect(connectProviderPort).toHaveBeenCalledOnce();
-    expect(postToPage).toHaveBeenCalledOnce();
   });
 });

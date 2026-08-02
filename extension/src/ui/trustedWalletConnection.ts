@@ -1,8 +1,8 @@
 import { createWalletClient, type WalletClient } from "@arx/wallet-api/client";
 import browserDefault from "webextension-polyfill";
-import { createPortChannel } from "@/channels/portChannel";
-import { WALLET_UI_PORT_NAME } from "@/channels/portNames";
-import { WALLET_UI_INPUT_MESSAGE } from "@/channels/walletUiInput";
+import { createPortChannel, waitForPortHost } from "@/transport/browserPort";
+import { WALLET_UI_PORT_NAME } from "@/transport/portNames";
+import { WALLET_UI_INPUT_MESSAGE } from "@/transport/walletUiInput";
 
 const INPUT_SIGNAL_INTERVAL_MS = 10_000;
 const INPUT_EVENTS = ["pointerdown", "pointermove", "keydown", "touchstart", "wheel"] as const;
@@ -10,28 +10,33 @@ const INPUT_LISTENER_OPTIONS = { capture: true, passive: true } as const;
 
 type TrustedUiBrowser = Pick<typeof browserDefault, "runtime">;
 
-export type TrustedUiConnection = Readonly<{
+export type TrustedWalletConnection = Readonly<{
   wallet: WalletClient;
   stopInputReporting(): void;
 }>;
 
-export type CreateTrustedUiConnectionOptions = Readonly<{
+export type ConnectTrustedWalletOptions = Readonly<{
   browser?: TrustedUiBrowser;
   inputTarget?: EventTarget;
 }>;
 
-export const createTrustedUiConnection = ({
+export const connectTrustedWallet = async ({
   browser: browserApi = browserDefault,
   inputTarget = window,
-}: CreateTrustedUiConnectionOptions = {}): TrustedUiConnection => {
+}: ConnectTrustedWalletOptions = {}): Promise<TrustedWalletConnection> => {
   const port = browserApi.runtime.connect({ name: WALLET_UI_PORT_NAME });
+  await waitForPortHost(port);
   const channel = createPortChannel(port);
   const wallet = createWalletClient({ channel });
   let lastInputSignalAt: number | null = null;
   let stopped = false;
   let unsubscribeDisconnect: () => void = () => undefined;
 
-  const reportInput = () => {
+  const reportInput = (event: Event) => {
+    if (!event.isTrusted) {
+      return;
+    }
+
     const now = Date.now();
     if (lastInputSignalAt !== null && now >= lastInputSignalAt && now - lastInputSignalAt < INPUT_SIGNAL_INTERVAL_MS) {
       return;

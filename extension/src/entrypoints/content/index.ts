@@ -1,12 +1,12 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { injectScript } from "wxt/utils/inject-script";
-import { bootstrapContent } from "./bootstrapContent";
+import { installProviderBridge } from "./providerBridge";
 
 export default defineContentScript({
   matches: ["http://*/*", "https://*/*"],
   runAt: "document_start",
   async main() {
-    bootstrapContent();
+    installProviderBridge();
 
     await injectScript("/inpage.js", {
       keepInDom: true,

@@ -148,3 +148,6 @@ dist
 
 # TanStack Router generated files
 **/routeTree.gen.ts
+
+# Local editor settings
+.vscode/settings.json

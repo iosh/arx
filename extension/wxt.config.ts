@@ -6,6 +6,7 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   imports: false,
   manifest: {
+    permissions: ["storage"],
     web_accessible_resources: [
       {
         resources: ["inpage.js"],

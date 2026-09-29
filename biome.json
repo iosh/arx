@@ -35,6 +35,16 @@
       "quoteStyle": "double"
     }
   },
+  "overrides": [
+    {
+      "includes": ["extension/src/ui/**/*.css"],
+      "css": {
+        "parser": {
+          "tailwindDirectives": true
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

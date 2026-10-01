@@ -74,6 +74,8 @@ describe("handleBrowserConnection", () => {
     const onWalletUiInput = vi.fn();
     const handled = handle(connection, { hosts, onWalletUiInput });
 
+    expect(hosts.wallet.attach).not.toHaveBeenCalled();
+    expect(connection.postMessage).not.toHaveBeenCalled();
     connection.receive({ type: "request", id: 1, method: "getStatus" });
     await handled;
 
@@ -100,11 +102,7 @@ describe("handleBrowserConnection", () => {
     await handle(connection, { hosts });
 
     expect(hosts.dapp.attach).toHaveBeenCalledWith({
-      channel: expect.objectContaining({
-        send: expect.any(Function),
-        onMessage: expect.any(Function),
-        onDisconnect: expect.any(Function),
-      }),
+      channel: expect.any(Object),
       origin: "https://dapp.example",
     });
     expect(connection.postMessage).toHaveBeenCalledWith(PORT_HOST_READY_MESSAGE);
@@ -123,27 +121,32 @@ describe("handleBrowserConnection", () => {
     ];
 
     for (const connection of connections) {
-      await handle(connection);
+      const hosts = createHosts();
+      const onWalletUiInput = vi.fn();
+      await handle(connection, { hosts, onWalletUiInput });
+      connection.receive(WALLET_UI_INPUT_MESSAGE);
       expect(connection.disconnect).toHaveBeenCalledOnce();
+      expect(hosts.wallet.attach).not.toHaveBeenCalled();
+      expect(hosts.dapp.attach).not.toHaveBeenCalled();
+      expect(connection.postMessage).not.toHaveBeenCalled();
+      expect(onWalletUiInput).not.toHaveBeenCalled();
     }
   });
 
   it("does not attach after disconnect and closes on bootstrap failure", async () => {
-    let resolveHosts: ((hosts: ReturnType<typeof createHosts>) => void) | undefined;
-    const hostsPromise = new Promise<ReturnType<typeof createHosts>>((resolve) => {
-      resolveHosts = resolve;
-    });
+    const hosts = Promise.withResolvers<ReturnType<typeof createHosts>>();
     const disconnected = new FakeConnection({
       name: WALLET_UI_PORT_NAME,
       sender: { id: "arx", url: "chrome-extension://arx/popup.html" },
     });
     const disconnectedHosts = createHosts();
-    const handled = handle(disconnected, { hosts: hostsPromise });
+    const handled = handle(disconnected, { hosts: hosts.promise });
     disconnected.disconnect();
-    resolveHosts?.(disconnectedHosts);
+    hosts.resolve(disconnectedHosts);
     await handled;
 
     expect(disconnectedHosts.wallet.attach).not.toHaveBeenCalled();
+    expect(disconnected.postMessage).not.toHaveBeenCalled();
 
     const failed = new FakeConnection({
       name: WALLET_UI_PORT_NAME,

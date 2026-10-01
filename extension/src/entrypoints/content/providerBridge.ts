@@ -10,7 +10,6 @@ import { createContentToPageMessage, readPageToContentMessage } from "@/transpor
 import { DAPP_PROVIDER_PORT_NAME } from "@/transport/portNames";
 
 type ActiveProviderPort = {
-  port: Runtime.Port;
   channel: ReturnType<typeof createPortChannel>;
   ready: boolean;
   unsubscribeMessage(): void;
@@ -29,14 +28,6 @@ const DISCONNECTED_MESSAGE = {
     message: "The provider is disconnected.",
   },
 } as const satisfies WalletToPageMessage;
-
-const closePort = (port: Runtime.Port): void => {
-  try {
-    port.disconnect();
-  } catch {
-    // The port is already unavailable.
-  }
-};
 
 export const installProviderBridge = ({
   targetWindow = window,
@@ -72,7 +63,6 @@ export const installProviderBridge = ({
 
     const channel = createPortChannel(port);
     const connection: ActiveProviderPort = {
-      port,
       channel,
       ready: false,
       unsubscribeMessage: () => undefined,
@@ -102,30 +92,21 @@ export const installProviderBridge = ({
       recoverOpenedNamespaces();
     });
 
-    void waitForPortHost(port)
-      .then(() => {
+    void waitForPortHost(port).then(
+      () => {
         if (activePort !== connection) {
           return;
         }
 
         connection.ready = true;
-        try {
-          for (const namespace of openedNamespaces) {
-            connection.channel.send({ type: "open", namespace } satisfies PageToWalletMessage);
-          }
-        } catch {
-          if (!releasePort(connection)) {
-            return;
-          }
-
-          closePort(connection.port);
-          sendToPage(DISCONNECTED_MESSAGE);
-          recoverOpenedNamespaces();
+        for (const namespace of openedNamespaces) {
+          connection.channel.send({ type: "open", namespace } satisfies PageToWalletMessage);
         }
-      })
-      .catch(() => {
+      },
+      () => {
         // The channel disconnect listener owns transport failure and recovery.
-      });
+      },
+    );
 
     return connection;
   };
@@ -159,17 +140,7 @@ export const installProviderBridge = ({
       return;
     }
 
-    try {
-      connection.channel.send(message);
-    } catch {
-      if (!releasePort(connection)) {
-        return;
-      }
-
-      closePort(connection.port);
-      sendToPage(DISCONNECTED_MESSAGE);
-      recoverOpenedNamespaces();
-    }
+    connection.channel.send(message);
   };
 
   targetWindow.addEventListener("message", (event: MessageEvent) => {

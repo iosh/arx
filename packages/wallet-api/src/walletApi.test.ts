@@ -1,6 +1,5 @@
 import { ArxBaseError } from "@arx/core";
 import type { WalletApi, WalletApiEvent } from "@arx/core/wallet";
-import type { DuplexChannel } from "@arx/message-channel";
 import { createInMemoryChannelPair, type InMemoryChannelPair } from "@arx/message-channel/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createWalletClient, WalletApiError, WalletChannelDisconnectedError } from "./client.js";
@@ -43,24 +42,30 @@ describe("WalletClient and WalletHost", () => {
     pair.disconnect();
   });
 
-  it("keeps concurrent request IDs isolated per channel", async () => {
-    const getAccount = vi.fn(async (accountId: string) => accountId);
+  it("matches out-of-order responses and keeps request IDs isolated per channel", async () => {
+    const firstResult = Promise.withResolvers<string>();
+    const getAccount = vi.fn((accountId: string) =>
+      accountId === "first" ? firstResult.promise : Promise.resolve(accountId),
+    );
     const api = createTestWalletApi({ accounts: { get: getAccount } });
     const host = createWalletHost({ api });
     const firstPair = createInMemoryChannelPair();
     const secondPair = createInMemoryChannelPair();
     host.attach(firstPair.right);
     host.attach(secondPair.right);
-    const first = { client: createWalletClient({ channel: firstPair.left }), pair: firstPair };
-    const second = { client: createWalletClient({ channel: secondPair.left }), pair: secondPair };
+    const first = createWalletClient({ channel: firstPair.left });
+    const second = createWalletClient({ channel: secondPair.left });
 
-    await expect(
-      Promise.all([first.client.accounts.get("first"), second.client.accounts.get("second")]),
-    ).resolves.toEqual(["first", "second"]);
-    expect(getAccount).toHaveBeenCalledTimes(2);
+    const pendingFirst = first.accounts.get("first");
+    await expect(Promise.all([first.accounts.get("later"), second.accounts.get("second")])).resolves.toEqual([
+      "later",
+      "second",
+    ]);
+    firstResult.resolve("first");
+    await expect(pendingFirst).resolves.toBe("first");
 
-    first.pair.disconnect();
-    second.pair.disconnect();
+    firstPair.disconnect();
+    secondPair.disconnect();
   });
 
   it("serializes domain errors and hides unexpected error details", async () => {
@@ -72,6 +77,7 @@ describe("WalletClient and WalletHost", () => {
       throw new Error("private unexpected detail");
     });
     const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
+    const sent = vi.spyOn(pair.right, "send");
 
     const domainFailure = await client.accounts.get("domain").catch((error: unknown) => error);
     expect(domainFailure).toBeInstanceOf(WalletApiError);
@@ -80,14 +86,35 @@ describe("WalletClient and WalletHost", () => {
       message: "The domain operation failed.",
       details: { field: "accountId" },
     });
-    expect(domainFailure).not.toHaveProperty("cause");
 
     const unexpectedFailure = await client.accounts.get("unexpected").catch((error: unknown) => error);
     expect(unexpectedFailure).toMatchObject({
       code: "wallet_api.internal_error",
       message: "Wallet operation failed.",
     });
-    expect((unexpectedFailure as Error).message).not.toContain("private unexpected detail");
+    expect(sent.mock.calls).toEqual([
+      [
+        {
+          type: "failure",
+          id: 1,
+          error: {
+            code: TestDomainError.code,
+            message: "The domain operation failed.",
+            details: { field: "accountId" },
+          },
+        },
+      ],
+      [
+        {
+          type: "failure",
+          id: 2,
+          error: {
+            code: "wallet_api.internal_error",
+            message: "Wallet operation failed.",
+          },
+        },
+      ],
+    ]);
 
     pair.disconnect();
   });
@@ -104,13 +131,13 @@ describe("WalletClient and WalletHost", () => {
     const secondPair = createInMemoryChannelPair();
     host.attach(firstPair.right);
     host.attach(secondPair.right);
-    const first = { client: createWalletClient({ channel: firstPair.left }), pair: firstPair };
-    const second = { client: createWalletClient({ channel: secondPair.left }), pair: secondPair };
+    const first = createWalletClient({ channel: firstPair.left });
+    const second = createWalletClient({ channel: secondPair.left });
     const firstListener = vi.fn();
     const secondListener = vi.fn();
 
-    first.client.subscribe(firstListener);
-    second.client.subscribe(secondListener);
+    first.subscribe(firstListener);
+    second.subscribe(secondListener);
     expect(subscribe).toHaveBeenCalledOnce();
 
     const event = { type: "walletStatusChanged", status: "locked" } as const;
@@ -118,26 +145,23 @@ describe("WalletClient and WalletHost", () => {
     expect(firstListener).toHaveBeenCalledWith(event);
     expect(secondListener).toHaveBeenCalledWith(event);
 
-    const unknownMethod = (first.client as unknown as { missing(): Promise<unknown> }).missing();
+    const unknownMethod = (first as unknown as { missing(): Promise<unknown> }).missing();
     await expect(unknownMethod).rejects.toMatchObject({ code: "wallet_api.method_not_found" });
 
-    first.pair.disconnect();
-    second.pair.disconnect();
+    firstPair.disconnect();
+    firstListener.mockClear();
+    secondListener.mockClear();
+    publishEvent?.(event);
+    expect(firstListener).not.toHaveBeenCalled();
+    expect(secondListener).toHaveBeenCalledWith(event);
+    secondPair.disconnect();
   });
 
-  it("rejects pending and future calls on disconnect while the host command continues", async () => {
-    let finishCommand: (() => void) | undefined;
-    let commandFinished = false;
-    const getAccount = vi.fn(
-      () =>
-        new Promise<string>((resolve) => {
-          finishCommand = () => {
-            commandFinished = true;
-            resolve("completed");
-          };
-        }),
-    );
+  it("rejects pending and future calls on disconnect and drops late results", async () => {
+    const command = Promise.withResolvers<string>();
+    const getAccount = vi.fn(() => command.promise);
     const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
+    const sent = vi.spyOn(pair.right, "send");
 
     const pending = client.accounts.get("slow");
     expect(getAccount).toHaveBeenCalledOnce();
@@ -146,22 +170,29 @@ describe("WalletClient and WalletHost", () => {
     await expect(pending).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
     await expect(client.accounts.get("later")).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
 
-    finishCommand?.();
-    await Promise.resolve();
-    expect(commandFinished).toBe(true);
+    command.resolve("completed");
+    await command.promise;
+    expect(sent).not.toHaveBeenCalled();
   });
 
-  it("treats a synchronous send failure as a permanent disconnect", async () => {
-    const channel: DuplexChannel = {
-      send: () => {
-        throw new Error("send failed");
-      },
-      onMessage: () => () => undefined,
-      onDisconnect: () => () => undefined,
-    };
-    const client = createWalletClient({ channel });
+  it("does not disconnect other requests when one send fails", async () => {
+    const firstResult = Promise.withResolvers<string>();
+    const getAccount = vi.fn((accountId: string) =>
+      accountId === "first" ? firstResult.promise : Promise.resolve(accountId),
+    );
+    const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
+    const first = client.accounts.get("first");
+    const completedFirst = expect(first).resolves.toBe("first");
+    const sendError = new Error("postMessage failed");
+    vi.spyOn(pair.left, "send").mockImplementationOnce(() => {
+      throw sendError;
+    });
 
-    await expect(client.accounts.get("first")).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
-    await expect(client.accounts.get("second")).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
+    await expect(client.accounts.get("failed")).rejects.toBe(sendError);
+    await expect(client.accounts.get("later")).resolves.toBe("later");
+    firstResult.resolve("first");
+    await completedFirst;
+    expect(getAccount.mock.calls).toEqual([["first"], ["later"]]);
+    pair.disconnect();
   });
 });

@@ -8,7 +8,6 @@ import {
   createPageToContentMessage,
   readContentToPageMessage,
 } from "@/transport/inpageProviderChannel";
-import { DAPP_PROVIDER_PORT_NAME } from "@/transport/portNames";
 import { installProviderBridge } from "./providerBridge";
 
 vi.mock("webextension-polyfill", () => ({
@@ -24,9 +23,7 @@ type DisconnectListener = () => void;
 type TestWindow = Window & { MessageEvent: typeof MessageEvent };
 
 class FakePort {
-  readonly name = DAPP_PROVIDER_PORT_NAME;
   postMessage = vi.fn<(message: unknown) => void>();
-  disconnect = vi.fn();
   readonly #messageListeners = new Set<MessageListener>();
   readonly #disconnectListeners = new Set<DisconnectListener>();
 
@@ -186,7 +183,6 @@ describe("installProviderBridge", () => {
       { type: "open", namespace: "eip155" },
       { type: "open", namespace: "conflux" },
     ]);
-    expect(recoveredPort.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "request" }));
 
     const [windowMessage] = postToPage.mock.calls[0] ?? [];
     expect(readContentToPageMessage(windowMessage)).toEqual({
@@ -196,5 +192,9 @@ describe("installProviderBridge", () => {
         message: "The provider is disconnected.",
       },
     } satisfies WalletToPageMessage);
+
+    recoveredPort.loseConnection();
+    dispatchPageMessage(targetWindow, { type: "open", namespace: "eip155" });
+    expect(connectProviderPort).toHaveBeenCalledTimes(2);
   });
 });

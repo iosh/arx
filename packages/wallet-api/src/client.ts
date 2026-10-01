@@ -20,13 +20,15 @@ class WalletClientConnection {
   readonly #channel: DuplexChannel;
   readonly #pending = new Map<number, PendingRequest>();
   readonly #eventListeners = new Set<(event: WalletApiEvent) => void>();
+  readonly #unsubscribeMessage: () => void;
+  readonly #unsubscribeDisconnect: () => void;
   #nextRequestId = 1;
   #disconnectedError: WalletChannelDisconnectedError | undefined;
 
   constructor(channel: DuplexChannel) {
     this.#channel = channel;
-    channel.onMessage((raw) => this.#receive(raw));
-    channel.onDisconnect(() => this.#disconnect());
+    this.#unsubscribeMessage = channel.onMessage((raw) => this.#receive(raw));
+    this.#unsubscribeDisconnect = channel.onDisconnect(() => this.#disconnect());
   }
 
   call<TResult>(method: string, input?: unknown): Promise<TResult> {
@@ -54,7 +56,7 @@ class WalletClientConnection {
         this.#channel.send(request);
       } catch (cause) {
         this.#pending.delete(id);
-        reject(this.#disconnect(cause));
+        reject(cause);
       }
     });
   }
@@ -66,17 +68,19 @@ class WalletClientConnection {
     };
   }
 
-  #disconnect(cause?: unknown): WalletChannelDisconnectedError {
+  #disconnect(): void {
     if (this.#disconnectedError) {
-      return this.#disconnectedError;
+      return;
     }
 
-    this.#disconnectedError = new WalletChannelDisconnectedError(cause);
+    this.#disconnectedError = new WalletChannelDisconnectedError();
+    this.#unsubscribeMessage();
+    this.#unsubscribeDisconnect();
     for (const request of this.#pending.values()) {
       request.reject(this.#disconnectedError);
     }
     this.#pending.clear();
-    return this.#disconnectedError;
+    this.#eventListeners.clear();
   }
 
   #receive(raw: unknown): void {

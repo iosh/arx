@@ -5,7 +5,9 @@ export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
   imports: false,
-  manifest: {
+  manifest: ({ browser }) => ({
+    // Vite and Tailwind target Chrome 111.
+    ...(browser === "chrome" ? { minimum_chrome_version: "111" } : {}),
     permissions: ["storage"],
     web_accessible_resources: [
       {
@@ -13,7 +15,7 @@ export default defineConfig({
         matches: ["<all_urls>"],
       },
     ],
-  },
+  }),
   vite: () => ({
     plugins: [tailwindcss()],
     define: {

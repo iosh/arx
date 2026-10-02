@@ -4,6 +4,7 @@ import { createDexiePersistence } from "@arx/storage-dexie";
 import { createWalletHost } from "@arx/wallet-api/host";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
+import { startBackgroundHeartbeat } from "./backgroundHeartbeat";
 import { handleBrowserConnection } from "./browserConnection";
 
 const DATABASE_NAME = "arx-extension";
@@ -21,12 +22,18 @@ const createBackgroundHosts = async () => {
 export default defineBackground(() => {
   const extensionUrl = browser.runtime.getURL("");
   const runtimeId = browser.runtime.id;
-  const hosts = createBackgroundHosts();
+  const stopHeartbeat = startBackgroundHeartbeat();
+  let hosts: ReturnType<typeof createBackgroundHosts> | undefined;
+  const initialize = () => (hosts ??= createBackgroundHosts());
+
+  browser.runtime.onStartup.addListener(() => {
+    void initialize();
+  });
 
   browser.runtime.onConnect.addListener((connection) => {
     void handleBrowserConnection({
       connection,
-      hosts,
+      hosts: initialize(),
       extensionUrl,
       runtimeId,
     }).catch((error) => {
@@ -34,7 +41,8 @@ export default defineBackground(() => {
     });
   });
 
-  void hosts.catch((error) => {
+  void initialize().catch((error) => {
+    stopHeartbeat();
     console.error("[arx:bg]", "failed to create background hosts", error);
   });
 });

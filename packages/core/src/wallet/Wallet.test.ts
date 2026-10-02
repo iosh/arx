@@ -290,21 +290,22 @@ describe("WalletCoordinator", () => {
     expect(state.keyrings.get(created.hdKeyringId)?.keySourceId).toBe(created.keySourceId);
   });
 
-  it("rejects another create command after initialization", async () => {
+  it("commits only one wallet when initialization commands compete", async () => {
     const { wallet, commits } = createHarness();
-    await wallet.createFromMnemonic({
+    const first = wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       namespace: "eip155",
     });
 
-    await expect(
-      wallet.restoreFromMnemonic({
-        password: "password",
-        mnemonic: SECONDARY_MNEMONIC,
-        namespace: "eip155",
-      }),
-    ).rejects.toMatchObject({ code: "wallet.already_initialized" });
+    const second = wallet.restoreFromMnemonic({
+      password: "password",
+      mnemonic: SECONDARY_MNEMONIC,
+      namespace: "eip155",
+    });
+    const results = await Promise.allSettled([first, second]);
+    expect(results[0]?.status).toBe("fulfilled");
+    expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "wallet.already_initialized" } });
     expect(commits).toHaveLength(1);
   });
 

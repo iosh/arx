@@ -1,7 +1,7 @@
 import { CircleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
 import { Button } from "@/ui/components/ui/button";
-import { OnboardingLayout } from "./OnboardingLayout";
 
 export function OnboardingError() {
   const { t } = useTranslation();

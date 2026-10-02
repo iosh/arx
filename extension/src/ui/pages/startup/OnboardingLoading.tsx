@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
+import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { OnboardingLayout } from "./OnboardingLayout";
 
 export function OnboardingLoading() {
   const { t } = useTranslation();

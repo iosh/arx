@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export function OnboardingLayout({ children }: Readonly<{ children: ReactNode }>) {
+export function OnboardingLayout({ children }: Readonly<{ children?: ReactNode }>) {
   return (
     <div className="flex min-h-dvh flex-col font-sans">
       <header className="flex h-16 shrink-0 items-center px-10">

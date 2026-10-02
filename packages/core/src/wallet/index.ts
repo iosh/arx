@@ -1,3 +1,4 @@
+export { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "../vault/passwordPolicy.js";
 export {
   DEFAULT_AUTO_LOCK_DURATION_MS,
   MAX_AUTO_LOCK_DURATION_MS,

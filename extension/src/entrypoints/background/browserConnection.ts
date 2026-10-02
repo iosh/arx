@@ -4,7 +4,6 @@ import type { WalletHost } from "@arx/wallet-api/host";
 import type { Runtime } from "webextension-polyfill";
 import { createPortChannel, PORT_HOST_READY_MESSAGE } from "@/transport/browserPort";
 import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/transport/portNames";
-import { isWalletUiInputMessage } from "@/transport/walletUiInput";
 
 type BackgroundHosts = Readonly<{
   wallet: WalletHost;
@@ -23,7 +22,6 @@ export type HandleBrowserConnectionOptions = Readonly<{
   hosts: Promise<BackgroundHosts>;
   extensionUrl: string;
   runtimeId: string;
-  onWalletUiInput(): void;
 }>;
 
 const parseUrl = (value: string | undefined): URL | null => {
@@ -79,29 +77,9 @@ const closeBrowserConnection = (connection: Runtime.Port): void => {
   }
 };
 
-const filterWalletUiInput = (channel: DuplexChannel, onWalletUiInput: () => void): DuplexChannel => ({
-  send: channel.send,
-  onDisconnect: channel.onDisconnect,
-  onMessage(listener) {
-    return channel.onMessage((message) => {
-      if (isWalletUiInputMessage(message)) {
-        onWalletUiInput();
-        return;
-      }
-
-      listener(message);
-    });
-  },
-});
-
-const attachBrowserClient = (
-  client: BrowserClient,
-  hosts: BackgroundHosts,
-  channel: DuplexChannel,
-  onWalletUiInput: () => void,
-): void => {
+const attachBrowserClient = (client: BrowserClient, hosts: BackgroundHosts, channel: DuplexChannel): void => {
   if (client.kind === "wallet-ui") {
-    hosts.wallet.attach(filterWalletUiInput(channel, onWalletUiInput));
+    hosts.wallet.attach(channel);
     return;
   }
 
@@ -113,7 +91,6 @@ export const handleBrowserConnection = async ({
   hosts,
   extensionUrl,
   runtimeId,
-  onWalletUiInput,
 }: HandleBrowserConnectionOptions): Promise<void> => {
   const client = identifyBrowserClient(connection, { extensionUrl, runtimeId });
   if (!client) {
@@ -152,7 +129,7 @@ export const handleBrowserConnection = async ({
   stopWaiting();
   try {
     const channel = createPortChannel(connection);
-    attachBrowserClient(client, availableHosts, channel, onWalletUiInput);
+    attachBrowserClient(client, availableHosts, channel);
   } catch (error) {
     closeBrowserConnection(connection);
     throw error;

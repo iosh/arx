@@ -145,6 +145,8 @@ export type WalletApi = Readonly<{
   changePassword(input: { currentPassword: string; newPassword: string }): Promise<void>;
   getAutoLockDuration(): Promise<number>;
   setAutoLockDuration(input: { durationMs: number }): Promise<void>;
+  /** Notifies the wallet of authenticated first-party UI input; expired sessions stay locked. */
+  notifyUserActivity(): Promise<void>;
 
   keySources: WalletKeySourcesApi;
   hdKeyrings: WalletHdKeyringsApi;

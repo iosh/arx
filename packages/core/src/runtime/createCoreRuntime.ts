@@ -66,7 +66,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const networkAdapters = [eip155NetworksAdapter] as const satisfies NetworksNamespaceAdapters;
 
   const vault = new Vault(bootstrap.vault.encryptedVault);
-  const walletStatusReader = { getStatus: () => vault.getStatus() };
+  const walletStatusReader = { getStatus: () => walletCoordinator.getStatus() };
   const keyring = new Keyring({
     bootstrap: bootstrap.keyring,
     namespaceAdapters: keyringAdapters,
@@ -106,7 +106,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     time: systemTime,
   });
 
-  const eip155AccountSigning = createEip155AccountSigning({ keyring, accounts });
+  const eip155AccountSigning = createEip155AccountSigning({ keyring, accounts, wallet: walletStatusReader });
   const chainJsonRpc = createChainJsonRpc({
     endpoints: networks,
     transport: jsonRpcHttpTransport,
@@ -193,7 +193,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
         walletEventListeners.delete(listener);
       };
     },
-    vault,
     autoLock,
     coordinator: walletCoordinator,
     keyring,
@@ -226,7 +225,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     },
   };
 
-  input.userActivity.subscribe(() => autoLock.recordActivity());
   transactionMonitor.restore(bootstrap.transactions.pendingTransactions);
 
   return { wallet: walletApi, dappConnections: dappConnectionsApi };

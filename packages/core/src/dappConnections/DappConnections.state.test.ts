@@ -94,6 +94,28 @@ describe("DappConnections active state", () => {
     expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
   });
 
+  it("hides expired-session accounts before the queued lock refresh without consuming its event", () => {
+    const scope = { origin: "https://dapp.example", namespace: "eip155" } as const;
+    const { dappConnections, setWalletStatus, stateChanges } = createDappConnections({
+      permissions: [{ ...scope, accountIds: [EIP155_ACCOUNT_A] }],
+    });
+    expect(dappConnections.openConnection(scope).accounts).toHaveLength(1);
+
+    setWalletStatus("locked");
+    expect(dappConnections.getConnectionState(scope).accounts).toEqual([]);
+    expect(dappConnections.openConnection(scope).accounts).toEqual([]);
+    expect(stateChanges).toEqual([]);
+
+    dappConnections.refreshAccountsForOpenConnections();
+    expect(stateChanges).toEqual([
+      {
+        scope,
+        state: { chainRef: "eip155:1", accounts: [] },
+        changedFields: { chainRef: false, accounts: true },
+      },
+    ]);
+  });
+
   it("projects a non-EIP active scope through the generic Accounts port", () => {
     const scope = { origin: "https://dapp.example", namespace: "solana" } as const;
     const permission: PermissionRecord = { ...scope, accountIds: [SOLANA_ACCOUNT] };

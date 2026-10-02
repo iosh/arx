@@ -11,6 +11,7 @@ import type { Keyring } from "../../keyring/Keyring.js";
 import type { KeySourceId } from "../../keyring/persistence.js";
 import { findKeySourceSecret, type KeySourceSecret } from "../../keyring/secrets.js";
 import { WalletLockedError } from "../../wallet/errors.js";
+import type { WalletStatusReader } from "../../wallet/Wallet.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 import { type Eip155DigestSignature, signEip155HdDigest, signEip155PrivateKeyDigest } from "./keyring.js";
 
@@ -37,11 +38,14 @@ const getKeySourceSecret = (keyring: Pick<Keyring, "getSecrets">, keySourceId: K
 export const createEip155AccountSigning = ({
   keyring,
   accounts,
+  wallet,
 }: {
   keyring: Pick<Keyring, "getHdKeyring" | "getKeySource" | "getSecrets">;
   accounts: Pick<Accounts, "getAccountRecord">;
+  wallet: WalletStatusReader;
 }): Eip155AccountSigning => ({
   signDigest: async ({ accountId, digest }) => {
+    if (wallet.getStatus() !== "unlocked") throw new WalletLockedError();
     const account = accounts.getAccountRecord(accountId);
     if (!account) throw new AccountNotFoundError(accountId);
 
@@ -56,7 +60,9 @@ export const createEip155AccountSigning = ({
       if (source.type !== "bip39") throw new KeySourceNotFoundError(hdKeyring.keySourceId);
 
       const seed = await deriveBip39Seed(source);
-      if (!keyring.getSecrets()) throw new WalletLockedError();
+      if (wallet.getStatus() !== "unlocked" || getKeySourceSecret(keyring, hdKeyring.keySourceId) !== source) {
+        throw new WalletLockedError();
+      }
 
       return signEip155HdDigest({
         accountId,

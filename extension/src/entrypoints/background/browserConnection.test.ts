@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { PORT_HOST_READY_MESSAGE } from "@/transport/browserPort";
 import { DAPP_PROVIDER_PORT_NAME, WALLET_UI_PORT_NAME } from "@/transport/portNames";
-import { WALLET_UI_INPUT_MESSAGE } from "@/transport/walletUiInput";
 import { handleBrowserConnection } from "./browserConnection";
 
 type MessageListener = (message: unknown) => void;
@@ -49,18 +48,15 @@ const handle = (
   connection: FakeConnection,
   input: Readonly<{
     hosts?: ReturnType<typeof createHosts> | Promise<ReturnType<typeof createHosts>>;
-    onWalletUiInput?: () => void;
   }> = {},
 ) => {
   const hosts = input.hosts ?? createHosts();
-  const onWalletUiInput = input.onWalletUiInput ?? vi.fn();
 
   return handleBrowserConnection({
     connection: connection as unknown as Runtime.Port,
     hosts: Promise.resolve(hosts),
     extensionUrl: "chrome-extension://arx/",
     runtimeId: "arx",
-    onWalletUiInput,
   });
 };
 
@@ -71,8 +67,7 @@ describe("handleBrowserConnection", () => {
       sender: { id: "arx", url: "chrome-extension://arx/popup.html" },
     });
     const hosts = createHosts();
-    const onWalletUiInput = vi.fn();
-    const handled = handle(connection, { hosts, onWalletUiInput });
+    const handled = handle(connection, { hosts });
 
     expect(hosts.wallet.attach).not.toHaveBeenCalled();
     expect(connection.postMessage).not.toHaveBeenCalled();
@@ -85,11 +80,9 @@ describe("handleBrowserConnection", () => {
     const channel = hosts.wallet.attach.mock.calls[0]?.[0] as DuplexChannel;
     const messages: unknown[] = [];
     channel.onMessage((message) => messages.push(message));
-    const request = { type: "request", id: 2, method: "accounts.list" };
-    connection.receive(WALLET_UI_INPUT_MESSAGE);
+    const request = { type: "request", id: 2, method: "notifyUserActivity" };
     connection.receive(request);
 
-    expect(onWalletUiInput).toHaveBeenCalledOnce();
     expect(messages).toEqual([request]);
   });
 
@@ -105,6 +98,7 @@ describe("handleBrowserConnection", () => {
       channel: expect.any(Object),
       origin: "https://dapp.example",
     });
+    expect(hosts.wallet.attach).not.toHaveBeenCalled();
     expect(connection.postMessage).toHaveBeenCalledWith(PORT_HOST_READY_MESSAGE);
   });
 
@@ -122,14 +116,12 @@ describe("handleBrowserConnection", () => {
 
     for (const connection of connections) {
       const hosts = createHosts();
-      const onWalletUiInput = vi.fn();
-      await handle(connection, { hosts, onWalletUiInput });
-      connection.receive(WALLET_UI_INPUT_MESSAGE);
+      await handle(connection, { hosts });
+      connection.receive({ type: "request", id: 1, method: "notifyUserActivity" });
       expect(connection.disconnect).toHaveBeenCalledOnce();
       expect(hosts.wallet.attach).not.toHaveBeenCalled();
       expect(hosts.dapp.attach).not.toHaveBeenCalled();
       expect(connection.postMessage).not.toHaveBeenCalled();
-      expect(onWalletUiInput).not.toHaveBeenCalled();
     }
   });
 

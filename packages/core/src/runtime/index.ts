@@ -1,2 +1,2 @@
-export type { CoreRuntime, CreateCoreRuntimeInput, UserActivitySource } from "./coreRuntime.js";
+export type { CoreRuntime, CreateCoreRuntimeInput } from "./coreRuntime.js";
 export { createCoreRuntime } from "./createCoreRuntime.js";

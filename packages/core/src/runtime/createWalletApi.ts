@@ -8,14 +8,12 @@ import type { Networks } from "../networks/Networks.js";
 import type { CustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import type { DappAuthorization } from "../permissions/createDappAuthorization.js";
 import type { Transactions } from "../transactions/Transactions.js";
-import type { Vault } from "../vault/Vault.js";
 import type { AutoLockController } from "../wallet/AutoLockController.js";
 import type { WalletApi, WalletChainRpcApi } from "../wallet/WalletApi.js";
 import type { WalletCoordinator } from "../wallet/WalletCoordinator.js";
 
 type CreateWalletApiOptions = Readonly<{
   subscribe: WalletApi["subscribe"];
-  vault: Pick<Vault, "getStatus">;
   autoLock: Pick<AutoLockController, "getDuration">;
   coordinator: WalletCoordinator;
   keyring: Keyring;
@@ -31,7 +29,7 @@ type CreateWalletApiOptions = Readonly<{
 export const createWalletApi = (options: CreateWalletApiOptions): WalletApi => ({
   subscribe: options.subscribe,
 
-  getStatus: async () => options.vault.getStatus(),
+  getStatus: async () => options.coordinator.getStatus(),
   createFromMnemonic: async (input) => options.coordinator.createFromMnemonic(input),
   restoreFromMnemonic: async (input) => options.coordinator.restoreFromMnemonic(input),
   createFromPrivateKey: async (input) => options.coordinator.createFromPrivateKey(input),
@@ -40,6 +38,7 @@ export const createWalletApi = (options: CreateWalletApiOptions): WalletApi => (
   changePassword: async (input) => options.coordinator.changePassword(input),
   getAutoLockDuration: async () => options.autoLock.getDuration(),
   setAutoLockDuration: async ({ durationMs }) => options.coordinator.setAutoLockDuration(durationMs),
+  notifyUserActivity: async () => options.coordinator.notifyUserActivity(),
 
   keySources: {
     generateMnemonic: async () => ({ mnemonic: generateBip39Mnemonic() }),

@@ -15,11 +15,12 @@ export const assertAutoLockDuration = (durationMs: number): void => {
   }
 };
 
-/** Owns the scheduled lock task for the current unlocked session. */
+/** Owns the deadline for the current unlocked session; timers only wake the expiry check. */
 export class AutoLockController {
   #durationMs: number;
+  #deadline: number | null = null;
   #cancelScheduledLock: (() => void) | null = null;
-  #lock: (() => void) | null = null;
+  #onExpired: (() => void) | null = null;
 
   readonly #time: CoreTime;
 
@@ -32,35 +33,51 @@ export class AutoLockController {
     return this.#durationMs;
   }
 
-  applyDuration(durationMs: number): void {
-    this.#durationMs = durationMs;
-    if (this.#cancelScheduledLock) this.schedule();
+  isExpired(): boolean {
+    return this.#deadline !== null && this.#time.now() >= this.#deadline;
   }
 
-  start(lock: () => void): void {
-    this.#lock = lock;
+  applyDuration(durationMs: number): void {
+    const deadline = this.#deadline;
+    const previousDuration = this.#durationMs;
+    this.#durationMs = durationMs;
+    if (deadline === null || this.#time.now() >= deadline) return;
+
+    const lastActivityAt = deadline - previousDuration;
+    this.#deadline = lastActivityAt + durationMs;
+    this.schedule();
+  }
+
+  start(onExpired: () => void): void {
+    this.#onExpired = onExpired;
+    this.#deadline = this.#time.now() + this.#durationMs;
     this.schedule();
   }
 
   recordActivity(): void {
-    if (this.#cancelScheduledLock) this.schedule();
+    const now = this.#time.now();
+    if (this.#deadline === null || now >= this.#deadline) return;
+
+    this.#deadline = now + this.#durationMs;
+    this.schedule();
   }
 
   stop(): void {
     this.#cancelScheduledLock?.();
     this.#cancelScheduledLock = null;
-    this.#lock = null;
+    this.#deadline = null;
+    this.#onExpired = null;
   }
 
   private schedule(): void {
-    const lock = this.#lock;
-    if (!lock) return;
+    if (this.#deadline === null) return;
 
     this.#cancelScheduledLock?.();
 
-    this.#cancelScheduledLock = this.#time.schedule(this.#durationMs, () => {
+    this.#cancelScheduledLock = this.#time.schedule(Math.max(0, this.#deadline - this.#time.now()), () => {
       this.#cancelScheduledLock = null;
-      lock();
+      if (this.isExpired()) this.#onExpired?.();
+      else this.schedule();
     });
   }
 }

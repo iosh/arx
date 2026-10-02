@@ -1,17 +1,12 @@
-import { type ReactNode, use, useEffect } from "react";
+import type { WalletClient } from "@arx/wallet-api/client";
+import { type ReactNode, use } from "react";
 import type { WalletConnectionResult } from "./connectWallet";
-import { reportUserActivity } from "./reportUserActivity";
+import { useWalletActivity } from "./useWalletActivity";
 import { WalletClientContext } from "./WalletClientContext";
 
-function ConnectedWallet({
-  connection,
-  children,
-}: {
-  connection: Extract<WalletConnectionResult, { status: "ready" }>;
-  children?: ReactNode;
-}) {
-  useEffect(() => reportUserActivity(connection.port), [connection.port]);
-  return <WalletClientContext value={connection.wallet}>{children}</WalletClientContext>;
+function ConnectedWallet({ wallet, children }: { wallet: WalletClient; children?: ReactNode }) {
+  useWalletActivity(wallet);
+  return <WalletClientContext value={wallet}>{children}</WalletClientContext>;
 }
 
 export function WalletConnection({
@@ -25,5 +20,5 @@ export function WalletConnection({
 }>) {
   const result = use(connection);
   if (result.status === "error") return failure;
-  return <ConnectedWallet connection={result}>{children}</ConnectedWallet>;
+  return <ConnectedWallet wallet={result.wallet}>{children}</ConnectedWallet>;
 }

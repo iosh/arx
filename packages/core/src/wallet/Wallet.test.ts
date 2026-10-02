@@ -803,6 +803,87 @@ describe("WalletCoordinator", () => {
     expect(events).toEqual([{ type: "walletStatusChanged", status: "unlocked" }]);
   });
 
+  it("requires the password again after expiry even before the lock timer runs", async () => {
+    const { wallet, vault, keyring } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    wallet.notifyUserActivity();
+    expect(wallet.getStatus()).toBe("locked");
+    expect(vault.getStatus()).toBe("unlocked");
+
+    await expect(wallet.unlock("incorrect-password")).rejects.toMatchObject({ code: "vault.incorrect_password" });
+    expect(vault.getStatus()).toBe("locked");
+    expect(keyring.getSecrets()).toBeNull();
+  });
+
+  it("does not let a queued expiry lock a newly unlocked session", async () => {
+    const { wallet, events } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+
+    const unlocking = wallet.unlock("password");
+    vi.advanceTimersByTime(DEFAULT_AUTO_LOCK_DURATION_MS);
+    await unlocking;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(wallet.getStatus()).toBe("unlocked");
+    expect(events.map((event) => event.status)).toEqual(["unlocked", "locked", "unlocked"]);
+  });
+
+  it("does not return a secret when the session expires during password verification", async () => {
+    const { wallet, vault } = createHarness();
+    const { keySourceId } = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      namespace: "eip155",
+    });
+    const readRecord = vi.spyOn(vault, "requireRecord");
+    const exporting = wallet.exportMnemonic({ keySourceId, password: "password" });
+    await Promise.resolve();
+    expect(readRecord).toHaveBeenCalledOnce();
+
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    await expect(exporting).rejects.toMatchObject({ code: "wallet.locked" });
+  });
+
+  it("does not commit a password change that finishes preparation after expiry", async () => {
+    const { wallet, vault, commits } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    const readUnlocked = vi.spyOn(vault, "requireUnlocked");
+    const changing = wallet.changePassword({ currentPassword: "password", newPassword: "new-password" });
+    await Promise.resolve();
+    expect(readUnlocked).toHaveBeenCalledOnce();
+
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    await expect(changing).rejects.toMatchObject({ code: "wallet.locked" });
+    expect(commits).toHaveLength(1);
+    await expect(wallet.unlock("password")).resolves.toBeUndefined();
+  });
+
+  it("finishes an in-flight commit successfully and then clears the expired session", async () => {
+    const { wallet, commit, vault, keyring, state } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    const commitStarted = Promise.withResolvers<void>();
+    const releaseCommit = Promise.withResolvers<void>();
+    commit.mockImplementationOnce(async (changes) => {
+      commitStarted.resolve();
+      await releaseCommit.promise;
+      applyChanges(state, changes);
+    });
+
+    const importing = wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, namespace: "eip155" });
+    await commitStarted.promise;
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    wallet.notifyUserActivity();
+    expect(wallet.getStatus()).toBe("locked");
+    releaseCommit.resolve();
+
+    const added = await importing;
+    expect(state.keySources.has(added.keySourceId)).toBe(true);
+    expect(vault.getStatus()).toBe("locked");
+    expect(keyring.getSecrets()).toBeNull();
+  });
+
   it("does not activate Vault or Keyring state when decrypted secrets cannot be decoded", async () => {
     const state = emptyState();
     const unlocked = await createUnlockedVault({
@@ -819,7 +900,7 @@ describe("WalletCoordinator", () => {
     expect(keyring.getSecrets()).toBeNull();
   });
 
-  it("changes the password without publishing a status event", async () => {
+  it("changes the password without renewing the session or publishing a status event", async () => {
     const { wallet, commits, events, vault } = createHarness();
     await wallet.createFromMnemonic({
       password: "password",
@@ -827,11 +908,14 @@ describe("WalletCoordinator", () => {
       namespace: "eip155",
     });
     const eventCount = events.length;
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS / 2);
 
     await wallet.changePassword({ currentPassword: "password", newPassword: "new-password" });
 
     expect(commits).toHaveLength(2);
     expect(events).toHaveLength(eventCount);
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    expect(wallet.getStatus()).toBe("locked");
 
     await wallet.lock();
     await expect(wallet.unlock("password")).rejects.toMatchObject({ code: "vault.incorrect_password" });
@@ -867,13 +951,30 @@ describe("WalletCoordinator", () => {
     });
   });
 
-  it("keeps the auto-lock duration unchanged when persistence fails", async () => {
+  it("keeps the active deadline and auto-lock duration unchanged when persistence fails", async () => {
     const failure = new Error("commit failed");
-    const { autoLock, wallet } = createHarness({ rejectCommit: failure });
+    const { autoLock, wallet, setCommitFailure } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    vi.setSystemTime(91_000);
+    setCommitFailure(failure);
 
-    await expect(wallet.setAutoLockDuration(120_000)).rejects.toBe(failure);
+    await expect(wallet.setAutoLockDuration(60_000)).rejects.toBe(failure);
 
     expect(autoLock.getDuration()).toBe(DEFAULT_AUTO_LOCK_DURATION_MS);
+    expect(wallet.getStatus()).toBe("unlocked");
+    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    expect(wallet.getStatus()).toBe("locked");
+  });
+
+  it("locks immediately when a shorter duration puts the last input beyond the deadline", async () => {
+    const { wallet, keyring } = createHarness();
+    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    vi.setSystemTime(91_000);
+
+    await wallet.setAutoLockDuration(60_000);
+
+    expect(wallet.getStatus()).toBe("locked");
+    expect(keyring.getSecrets()).toBeNull();
   });
 
   it("rejects an unsupported auto-lock duration before persistence", async () => {

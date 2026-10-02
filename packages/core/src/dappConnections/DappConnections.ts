@@ -121,7 +121,7 @@ export class DappConnections {
   openConnection(scope: DappConnectionScope): DappConnectionState {
     const key = dappConnectionScopeKey(scope);
     const active = this.#activeConnections.get(key);
-    if (active) return active.state;
+    if (active) return this.#createConnectionState(scope, active.state.chainRef);
 
     const state = this.#createConnectionState(scope, this.#getCurrentConnectionChainRef(scope));
     this.#activeConnections.set(key, { scope, state });
@@ -130,7 +130,7 @@ export class DappConnections {
 
   getConnectionState(scope: DappConnectionScope): DappConnectionState {
     const active = this.#activeConnections.get(dappConnectionScopeKey(scope));
-    if (active) return active.state;
+    if (active) return this.#createConnectionState(scope, active.state.chainRef);
 
     return this.#createConnectionState(scope, this.#getCurrentConnectionChainRef(scope));
   }

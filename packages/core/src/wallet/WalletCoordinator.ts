@@ -51,6 +51,7 @@ import type {
   PrivateKeySourceInput,
   PrivateKeyWalletCreated,
   RestoreFromMnemonicInput,
+  WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
 
@@ -100,6 +101,15 @@ export class WalletCoordinator {
     this.#publishKeyringChanged = options.publishKeyringChanged;
     this.#publishAccountsChanged = options.publishAccountsChanged;
     this.#publishPermissionsChanged = options.publishPermissionsChanged;
+  }
+
+  getStatus(): WalletStatus {
+    const status = this.#vault.getStatus();
+    return status === "unlocked" && this.#autoLock.isExpired() ? "locked" : status;
+  }
+
+  notifyUserActivity(): void {
+    this.#autoLock.recordActivity();
   }
 
   createFromMnemonic(params: CreateFromMnemonicInput): Promise<Bip39WalletCreated> {
@@ -166,6 +176,7 @@ export class WalletCoordinator {
 
   async unlock(password: string): Promise<void> {
     await this.#mutations.run(async () => {
+      this.lockIfExpired();
       if (this.#vault.getStatus() === "unlocked") return;
 
       const draft = await unlockVaultRecord(this.#vault.requireRecord(), password);
@@ -187,29 +198,24 @@ export class WalletCoordinator {
 
   async lock(): Promise<void> {
     await this.#mutations.run(async () => {
-      if (this.#vault.getStatus() !== "unlocked") return;
-
-      this.#autoLock.stop();
-      this.#keyring.lock();
-      this.#vault.lock();
-      this.#dappConnections.refreshAccountsForOpenConnections();
-      this.#approvals.cancelAll();
-      this.#publishStatusChanged({ type: "walletStatusChanged", status: "locked" });
+      this.lockSession();
     });
   }
 
   async changePassword(params: { currentPassword: string; newPassword: string }): Promise<void> {
     await this.#mutations.run(async (commit) => {
+      this.assertUnlocked();
       const draft = await changeVaultPassword({
         unlocked: this.#vault.requireUnlocked(),
         currentPassword: params.currentPassword,
         newPassword: params.newPassword,
       });
+      this.assertUnlocked();
 
       await commit([encryptedVaultWrites.put(draft.record)]);
 
       this.#vault.activate(draft);
-      this.#autoLock.recordActivity();
+      this.lockIfExpired();
     });
   }
 
@@ -230,6 +236,7 @@ export class WalletCoordinator {
       await commit([change]);
 
       this.#autoLock.applyDuration(durationMs);
+      this.lockIfExpired();
     });
   }
 
@@ -276,6 +283,7 @@ export class WalletCoordinator {
       const accountsUpdate = this.#accounts.prepareAddAccount(account);
       const nextSecrets = createKeyringSecrets([...secrets.keySources, source]);
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
+      this.assertUnlocked();
 
       await commit([
         encryptedVaultWrites.put(nextUnlocked.record),
@@ -287,9 +295,9 @@ export class WalletCoordinator {
       this.#keyring.applyCommittedUpdate(keyringUpdate);
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(nextSecrets);
-      this.#autoLock.recordActivity();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      this.lockIfExpired();
 
       return { keySourceId, accountId };
     });
@@ -318,6 +326,7 @@ export class WalletCoordinator {
         secrets.keySources.filter((candidate) => candidate.keySourceId !== params.keySourceId),
       );
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
+      this.assertUnlocked();
 
       await commit([
         encryptedVaultWrites.put(nextUnlocked.record),
@@ -331,11 +340,11 @@ export class WalletCoordinator {
       if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
       this.#keyring.activateSecrets(nextSecrets);
-      this.#autoLock.recordActivity();
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
+      this.lockIfExpired();
     });
   }
 
@@ -365,7 +374,6 @@ export class WalletCoordinator {
 
       await this.verifyCurrentPassword(params.password);
 
-      this.#autoLock.recordActivity();
       return { mnemonic: source.mnemonic };
     });
   }
@@ -384,7 +392,6 @@ export class WalletCoordinator {
 
       await this.verifyCurrentPassword(params.password);
 
-      this.#autoLock.recordActivity();
       return { privateKey: source.privateKey };
     });
   }
@@ -404,6 +411,7 @@ export class WalletCoordinator {
       });
       const source = this.requireBip39Source(secrets, params.keySourceId);
       const seed = await deriveBip39Seed(source);
+      this.assertUnlocked();
       const accountId = this.#keyring.deriveHdAccountId({
         namespace: params.namespace,
         seed,
@@ -420,9 +428,9 @@ export class WalletCoordinator {
 
       this.#keyring.applyCommittedUpdate(keyringUpdate);
       this.#accounts.applyCommittedUpdate(accountsUpdate);
-      this.#autoLock.recordActivity();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      this.lockIfExpired();
 
       return { hdKeyringId, accountId };
     });
@@ -436,6 +444,7 @@ export class WalletCoordinator {
 
       const source = this.requireBip39Source(secrets, hdKeyring.keySourceId);
       const seed = await deriveBip39Seed(source);
+      this.assertUnlocked();
       const accountId = this.#keyring.deriveHdAccountId({
         namespace: hdKeyring.namespace,
         seed,
@@ -457,9 +466,9 @@ export class WalletCoordinator {
 
       this.#keyring.applyCommittedUpdate(keyringUpdate);
       this.#accounts.applyCommittedUpdate(accountsUpdate);
-      this.#autoLock.recordActivity();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      this.lockIfExpired();
 
       return accountId;
     });
@@ -620,6 +629,7 @@ export class WalletCoordinator {
       const accountsUpdate = this.#accounts.prepareAddAccount(account);
       const nextSecrets = createKeyringSecrets([...secrets.keySources, source]);
       const nextUnlocked = await replaceVaultPlaintext(unlocked, encodeKeyringSecrets(nextSecrets));
+      this.assertUnlocked();
 
       await commit([
         encryptedVaultWrites.put(nextUnlocked.record),
@@ -631,15 +641,16 @@ export class WalletCoordinator {
       this.#keyring.applyCommittedUpdate(keyringUpdate);
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       this.#keyring.activateSecrets(nextSecrets);
-      this.#autoLock.recordActivity();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      this.lockIfExpired();
 
       return { keySourceId, hdKeyringId, accountId };
     });
   }
 
   private requireKeyringSecrets(): KeyringSecrets {
+    this.assertUnlocked();
     const secrets = this.#keyring.getSecrets();
     if (!secrets) throw new WalletLockedError();
     return secrets;
@@ -654,11 +665,33 @@ export class WalletCoordinator {
   private async verifyCurrentPassword(password: string): Promise<void> {
     // Authenticated decryption verifies the supplied password without changing session state.
     await unlockVaultRecord(this.#vault.requireRecord(), password);
+    this.assertUnlocked();
+  }
+
+  private assertUnlocked(): void {
+    this.lockIfExpired();
+    if (this.#vault.getStatus() !== "unlocked") throw new WalletLockedError();
+  }
+
+  private lockIfExpired(): void {
+    if (this.#autoLock.isExpired()) this.lockSession();
+  }
+
+  /** Runs only inside the mutation queue, after any in-flight commit has settled. */
+  private lockSession(): void {
+    if (this.#vault.getStatus() !== "unlocked") return;
+
+    this.#autoLock.stop();
+    this.#keyring.lock();
+    this.#vault.lock();
+    this.#dappConnections.refreshAccountsForOpenConnections();
+    this.#approvals.cancelAll();
+    this.#publishStatusChanged({ type: "walletStatusChanged", status: "locked" });
   }
 
   private startAutoLock(): void {
     this.#autoLock.start(() => {
-      void this.lock();
+      void this.#mutations.run(async () => this.lockIfExpired());
     });
   }
 }

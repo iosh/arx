@@ -16,6 +16,25 @@ export const onboarding = {
   back: "Back",
   progress: "Step {{current}} of {{total}}",
   createFailed: "Could not create the wallet. Please try again.",
+  backupTitle: "Back up your recovery phrase",
+  backupDescription: "These 12 words are the only way to recover your wallet. Write them on paper in order.",
+  showPhrase: "Click to reveal your recovery phrase",
+  showPhraseHint: "Make sure no one can see your screen",
+  hidePhrase: "Hide recovery phrase",
+  phraseWarning: "Your recovery phrase controls all assets in your wallet. Never share it with anyone or any website.",
+  deferBackup: "Back up later",
+  deferBackupTitle: "Skip backing up your recovery phrase?",
+  deferBackupDescription:
+    "Without a backup, you cannot recover your wallet if browser data is cleared or your device is lost. You can back up later from the wallet home screen.",
+  enterWallet: "Enter wallet",
+  continueBackup: "Continue backup",
+  verifyPhraseTitle: "Check your recovery phrase",
+  verifyPhraseDescription: "Check the recovery phrase you wrote down and select the word at each position.",
+  verifyWordPosition: "Word {{position}}",
+  verifyPhraseIncorrect: "Incorrect selection. Check the recovery phrase you wrote down and try again.",
+  backupSaveFailed: "Could not save the backup status. Please try again.",
+  completeBackup: "Complete backup",
+  backToPhrase: "Back to recovery phrase",
 } as const;
 
 export type OnboardingMessages = { [Key in keyof typeof onboarding]: string };

@@ -16,7 +16,7 @@ function Onboarding() {
   if (status === "error") return <OnboardingError />;
 
   if (screen === "create") {
-    return <CreateWalletFlow status={status} onExit={() => setScreen("welcome")} />;
+    return <CreateWalletFlow walletStatus={status} onExit={() => setScreen("welcome")} />;
   }
   if (status !== "uninitialized") {
     return <OnboardingLayout />;

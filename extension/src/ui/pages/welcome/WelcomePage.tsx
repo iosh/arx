@@ -1,15 +1,10 @@
 import { ChevronRight, Plus } from "lucide-react";
-import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/ui/components/ui/button";
 import { LanguageMenu } from "@/ui/language/LanguageMenu";
 
 export function WelcomePage({ onCreate }: { onCreate: () => void }) {
   const { t } = useTranslation("onboarding");
-  const createButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    createButton.current?.focus();
-  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col font-sans">
@@ -22,7 +17,6 @@ export function WelcomePage({ onCreate }: { onCreate: () => void }) {
         <section className="flex min-h-120 w-full max-w-onboarding flex-col gap-6 rounded-xl bg-card p-8 text-card-foreground shadow-onboarding">
           <h1 className="text-3xl leading-snug font-semibold">{t("welcomeTitle")}</h1>
           <Button
-            ref={createButton}
             type="button"
             variant="outline"
             className="h-18 w-full justify-start gap-3.5 bg-card px-4 text-left whitespace-normal shadow-none has-[>svg]:px-4"

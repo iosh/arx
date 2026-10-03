@@ -28,7 +28,6 @@ export function PasswordInput({
           size="icon"
           className="disabled:opacity-100"
           aria-label={t(visible ? "hidePassword" : "showPassword", { field: fieldLabel })}
-          aria-pressed={visible}
           onClick={() => setVisible(!visible)}
           disabled={disabled}
         >

@@ -1,41 +1,60 @@
+import type { KeySourceId } from "@arx/core/keyring";
 import type { WalletStatus } from "@arx/core/wallet";
 import { useEffect, useState } from "react";
 import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
+import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
 import { useWalletClient } from "@/ui/wallet/WalletClientContext";
 import { CreatePasswordForm } from "./CreatePasswordForm";
+import { FirstBackupFlow } from "./FirstBackupFlow";
 
-export function CreateWalletFlow({ status, onExit }: { status: WalletStatus; onExit: () => void }) {
+type CreationState =
+  | { status: "idle" | "pending" | "failed" }
+  | { status: "created"; keySourceId: KeySourceId; words: readonly MnemonicWord[] };
+
+export function CreateWalletFlow({ walletStatus, onExit }: { walletStatus: WalletStatus; onExit: () => void }) {
   const wallet = useWalletClient();
-  const [step, setStep] = useState<"password" | "creating" | "backup">("password");
-  const [failed, setFailed] = useState(false);
+  const [creation, setCreation] = useState<CreationState>({ status: "idle" });
 
   useEffect(() => {
-    // A submitted creation owns its next step, including when unlocked arrives before its response.
-    if (step === "password" && status !== "uninitialized") onExit();
-  }, [step, status, onExit]);
+    // The unlocked event may precede the creation response; keep the submitted flow mounted.
+    if (creation.status === "pending") return;
+
+    if (creation.status === "created") {
+      if (walletStatus === "locked") onExit();
+      return;
+    }
+
+    if (walletStatus !== "uninitialized") onExit();
+  }, [creation.status, walletStatus, onExit]);
 
   async function createWallet(password: string) {
-    if (step !== "password") return;
-    setStep("creating");
-    setFailed(false);
+    setCreation({ status: "pending" });
     try {
       const { mnemonic } = await wallet.keySources.generateMnemonic();
-      await wallet.createFromMnemonic({ password, mnemonic, namespace: "eip155" });
-      setStep("backup");
+      const { keySourceId } = await wallet.createFromMnemonic({ password, mnemonic, namespace: "eip155" });
+      setCreation({
+        status: "created",
+        keySourceId,
+        words: mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })),
+      });
     } catch {
-      setFailed(true);
-      setStep("password");
+      setCreation({ status: "failed" });
     }
   }
 
-  if (step === "backup") {
-    return status === "unlocked" ? <OnboardingStepLayout currentStep={2} totalSteps={3} /> : <OnboardingLayout />;
+  if (creation.status === "created") {
+    return walletStatus === "unlocked" ? (
+      <FirstBackupFlow keySourceId={creation.keySourceId} words={creation.words} onExit={onExit} />
+    ) : (
+      <OnboardingLayout />
+    );
   }
 
+  const pending = creation.status === "pending";
   return (
-    <OnboardingStepLayout currentStep={1} totalSteps={3} onBack={onExit} backDisabled={step === "creating"}>
-      <CreatePasswordForm onSubmit={createWallet} pending={step === "creating"} failed={failed} />
+    <OnboardingStepLayout currentStep={1} totalSteps={3} onBack={onExit} backDisabled={pending}>
+      <CreatePasswordForm onSubmit={createWallet} pending={pending} failed={creation.status === "failed"} />
     </OnboardingStepLayout>
   );
 }

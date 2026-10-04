@@ -12,7 +12,15 @@ type CreationState =
   | { status: "idle" | "pending" | "failed" }
   | { status: "created"; keySourceId: KeySourceId; words: readonly MnemonicWord[] };
 
-export function CreateWalletFlow({ walletStatus, onExit }: { walletStatus: WalletStatus; onExit: () => void }) {
+export function CreateWalletFlow({
+  walletStatus,
+  onExit,
+  onComplete,
+}: {
+  walletStatus: WalletStatus;
+  onExit: () => void;
+  onComplete: () => void;
+}) {
   const wallet = useWalletClient();
   const [creation, setCreation] = useState<CreationState>({ status: "idle" });
 
@@ -45,7 +53,7 @@ export function CreateWalletFlow({ walletStatus, onExit }: { walletStatus: Walle
 
   if (creation.status === "created") {
     return walletStatus === "unlocked" ? (
-      <FirstBackupFlow keySourceId={creation.keySourceId} words={creation.words} onExit={onExit} />
+      <FirstBackupFlow keySourceId={creation.keySourceId} words={creation.words} onExit={onComplete} />
     ) : (
       <OnboardingLayout />
     );

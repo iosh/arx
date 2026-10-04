@@ -35,6 +35,9 @@ export const onboarding = {
   backupSaveFailed: "Could not save the backup status. Please try again.",
   completeBackup: "Complete backup",
   backToPhrase: "Back to recovery phrase",
+  walletReadyTitle: "Your wallet is ready",
+  openWalletDescription: "Open your wallet below, or click the ARX icon in your browser toolbar.",
+  openWallet: "Open wallet",
 } as const;
 
 export type OnboardingMessages = { [Key in keyof typeof onboarding]: string };

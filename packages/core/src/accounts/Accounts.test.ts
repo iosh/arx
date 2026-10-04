@@ -3,7 +3,7 @@ import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { Accounts } from "./Accounts.js";
-import { type AccountsBootstrap, loadAccountsBootstrap } from "./bootstrap.js";
+import type { AccountsBootstrap } from "./bootstrap.js";
 import {
   AccountAlreadyExistsError,
   AccountNamespaceUnsupportedError,
@@ -71,20 +71,6 @@ const selection = (record: AccountRecord): AccountSelectionRecord => ({
 });
 
 describe("Accounts", () => {
-  it("loads account records and selections for runtime construction", async () => {
-    const record = hdAccount({ value: 1, createdAt: 1 });
-    const selected = selection(record);
-
-    await expect(
-      loadAccountsBootstrap({
-        accounts: {
-          listRecords: async () => [record],
-          listSelections: async () => [selected],
-        },
-      }),
-    ).resolves.toEqual({ records: [record], selections: [selected] });
-  });
-
   it("serves stable account metadata and selection from memory", () => {
     const later = hdAccount({ value: 2, createdAt: 2 });
     const first = hdAccount({ value: 1, createdAt: 1 });

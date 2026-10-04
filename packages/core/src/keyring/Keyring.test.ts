@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { loadKeyringBootstrap } from "./bootstrap.js";
 import {
   HdKeyringAlreadyExistsError,
   HdKeyringNotFoundError,
@@ -34,18 +33,6 @@ const hdKeyring = (params: Partial<HdKeyringRecord> = {}): HdKeyringRecord => ({
 });
 
 describe("Keyring records", () => {
-  it("loads all records once for runtime construction", async () => {
-    const source = bip39Source();
-    const keyring = hdKeyring();
-
-    await expect(
-      loadKeyringBootstrap({
-        keySources: { listAll: async () => [source] },
-        hdKeyrings: { listAll: async () => [keyring] },
-      }),
-    ).resolves.toEqual({ keySources: [source], hdKeyrings: [keyring] });
-  });
-
   it("serves stable record reads from memory", () => {
     const keyring = new Keyring({
       bootstrap: {

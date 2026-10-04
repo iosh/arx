@@ -6,14 +6,15 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "./ui/input-group";
 
 export function PasswordInput({
   fieldLabel,
+  groupClassName,
   disabled,
   ...props
-}: Omit<ComponentProps<typeof InputGroupInput>, "type"> & { fieldLabel: string }) {
+}: Omit<ComponentProps<typeof InputGroupInput>, "type"> & { fieldLabel: string; groupClassName?: string }) {
   const [visible, setVisible] = useState(false);
   const { t } = useTranslation();
 
   return (
-    <InputGroup>
+    <InputGroup className={groupClassName}>
       <InputGroupInput
         spellCheck={false}
         autoCapitalize="none"

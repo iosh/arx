@@ -1,4 +1,3 @@
-import type { WalletStatus } from "@arx/core/wallet";
 import { WalletChannelDisconnectedError, type WalletClient } from "@arx/wallet-api/client";
 import { useEffect } from "react";
 
@@ -6,9 +5,10 @@ const ACTIVITY_INTERVAL_MS = 1_000;
 const INPUT_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "input", "click"] as const;
 const LISTENER_OPTIONS = { capture: true, passive: true } as const;
 
-export function useWalletActivity(wallet: WalletClient): void {
+export function useWalletActivity(wallet: WalletClient, unlocked: boolean): void {
   useEffect(() => {
-    let status: WalletStatus | undefined;
+    if (!unlocked) return;
+
     let stopped = false;
     let lastNotifiedAt = -Infinity;
 
@@ -25,24 +25,8 @@ export function useWalletActivity(wallet: WalletClient): void {
       for (const event of INPUT_EVENTS) document.removeEventListener(event, handleInput, LISTENER_OPTIONS);
     };
 
-    const applyStatus = (nextStatus: WalletStatus) => {
-      if (stopped || status === nextStatus) return;
-      status = nextStatus;
-      if (status === "unlocked") {
-        lastNotifiedAt = -Infinity;
-        for (const event of INPUT_EVENTS) document.addEventListener(event, handleInput, LISTENER_OPTIONS);
-      } else {
-        removeInputListeners();
-      }
-    };
-
-    const unsubscribe = wallet.subscribe((event) => {
-      if (event.type === "walletStatusChanged") applyStatus(event.status);
-    });
-
     const stop = () => {
       stopped = true;
-      unsubscribe();
       removeInputListeners();
     };
 
@@ -60,11 +44,8 @@ export function useWalletActivity(wallet: WalletClient): void {
       }
     }
 
-    void wallet.getStatus().then((initialStatus) => {
-      // An event received after subscribing is newer than the initial read.
-      if (status === undefined) applyStatus(initialStatus);
-    }, handleFailure);
+    for (const event of INPUT_EVENTS) document.addEventListener(event, handleInput, LISTENER_OPTIONS);
 
     return stop;
-  }, [wallet]);
+  }, [wallet, unlocked]);
 }

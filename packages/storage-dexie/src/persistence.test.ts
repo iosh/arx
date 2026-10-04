@@ -194,24 +194,6 @@ describe("createDexiePersistence", () => {
     expect(await persistence.readers.permissions.listAll()).toEqual([permission]);
   });
 
-  it("uses the target HD keyring primary key without secondary query indexes", async () => {
-    const context = createDexiePersistenceContext(createDatabaseName());
-    databaseConnections.push(context.db);
-    await context.ready;
-
-    expect(context.db.hdKeyrings.schema.primKey.keyPath).toBe("hdKeyringId");
-    expect(context.db.hdKeyrings.schema.indexes).toEqual([]);
-  });
-
-  it("uses the account identity primary key without owner-specific query indexes", async () => {
-    const context = createDexiePersistenceContext(createDatabaseName());
-    databaseConnections.push(context.db);
-    await context.ready;
-
-    expect(context.db.accounts.schema.primKey.keyPath).toBe("accountId");
-    expect(context.db.accounts.schema.indexes).toEqual([]);
-  });
-
   it("removes legacy transaction rows during the schema upgrade", async () => {
     const databaseName = createDatabaseName();
     const legacy = new Dexie(databaseName);

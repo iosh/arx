@@ -12,7 +12,7 @@ export const createUiI18n = (language: UiLanguage) => {
     fallbackLng: false,
     resources,
     defaultNS: "common",
-    ns: ["common", "onboarding"],
+    ns: ["common", "onboarding", "wallet"],
     initAsync: false,
     returnNull: false,
     interpolation: { escapeValue: false },

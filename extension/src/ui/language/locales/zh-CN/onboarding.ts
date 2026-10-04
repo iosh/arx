@@ -36,4 +36,7 @@ export const onboarding = {
   backupSaveFailed: "备份状态保存失败。请重试。",
   completeBackup: "完成备份",
   backToPhrase: "返回查看恢复短语",
+  walletReadyTitle: "钱包已就绪",
+  openWalletDescription: "点击下方按钮打开钱包，也可点击浏览器工具栏中的 ARX 图标。",
+  openWallet: "打开钱包",
 } as const satisfies OnboardingMessages;

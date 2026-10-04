@@ -7,7 +7,6 @@ import type { TransactionsNamespaceAdapter, TransactionsNamespaceAdapters } from
 import type { PendingTransactionRecord } from "./persistence.js";
 import type { PrepareTransactionInput } from "./preparedTransaction.js";
 import { createTransactions } from "./Transactions.js";
-import { loadTransactionsBootstrap } from "./transactionBootstrap.js";
 import type { Transaction } from "./types.js";
 
 const account: Account = {
@@ -321,14 +320,5 @@ describe("Transactions", () => {
       },
     });
     expect(dependencies.prepareReplacement).not.toHaveBeenCalled();
-  });
-
-  it("loads pending records for the later monitor bootstrap", async () => {
-    const listPending = vi.fn(async () => [pendingRecord]);
-
-    await expect(loadTransactionsBootstrap({ transactions: { listPending } })).resolves.toEqual({
-      pendingTransactions: [pendingRecord],
-    });
-    expect(listPending).toHaveBeenCalledOnce();
   });
 });

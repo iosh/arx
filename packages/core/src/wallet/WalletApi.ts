@@ -73,6 +73,7 @@ export type WalletHdKeyringsApi = Readonly<{
 
 export type WalletAccountsApi = Readonly<{
   get(accountId: AccountId): Promise<Account>;
+  getSelected(): Promise<Account>;
   list(): Promise<readonly Account[]>;
   getAddress(input: { accountId: AccountId; chainRef: ChainRef }): Promise<AccountAddress>;
   listAddresses(chainRef: ChainRef): Promise<readonly AccountAddress[]>;

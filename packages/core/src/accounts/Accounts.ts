@@ -125,6 +125,12 @@ export class Accounts {
     return this.#selections.get(namespace) ?? null;
   }
 
+  getSelectedAccount(namespace: Namespace): Account {
+    const accountId = this.getSelectedAccountId(namespace);
+    if (!accountId) throw new AccountSelectionMissingError(namespace);
+    return this.toAccount(this.requireAccountRecord(accountId));
+  }
+
   accountIdFromAddress(input: { chainRef: ChainRef; address: string }): AccountId {
     const { namespace } = parseChainRef(input.chainRef);
     return getAccountsNamespaceAdapter(this.#adapters, namespace).accountIdFromAddress(input);

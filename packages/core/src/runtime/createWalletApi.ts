@@ -75,6 +75,10 @@ export const createWalletApi = (options: CreateWalletApiOptions): WalletApi => (
       if (!account) throw new AccountNotFoundError(accountId);
       return account;
     },
+    getSelected: async () => {
+      const { selectedNamespace } = options.networks.getSelection();
+      return options.accounts.getSelectedAccount(selectedNamespace);
+    },
     list: async () => options.accounts.listAccounts(),
     getAddress: async (input) => options.accounts.getAddress(input),
     listAddresses: async (chainRef) => options.accounts.listAddresses(chainRef),

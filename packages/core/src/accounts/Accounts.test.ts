@@ -147,6 +147,7 @@ describe("Accounts", () => {
 
     accounts.applyCommittedUpdate(firstUpdate);
     expect(accounts.getAccountRecord(first.accountId)).toMatchObject({ hidden: false });
+    expect(accounts.getSelectedAccount("eip155")).toMatchObject({ accountId: first.accountId, selected: true });
     expect(accounts.getSelectedAccountId("eip155")).toBe(first.accountId);
 
     const secondUpdate = accounts.prepareAddAccount(second);
@@ -209,7 +210,7 @@ describe("Accounts", () => {
     });
 
     await accounts.select(second.accountId);
-    expect(accounts.getSelectedAccountId("eip155")).toBe(second.accountId);
+    expect(accounts.getSelectedAccount("eip155")).toMatchObject({ accountId: second.accountId, selected: true });
 
     await accounts.select(second.accountId);
     expect(accounts.getSelectedAccountId("eip155")).toBe(second.accountId);
@@ -323,6 +324,7 @@ describe("Accounts", () => {
     accounts.applyCommittedUpdate(removal);
     expect(accounts.listAccounts()).toEqual([]);
     expect(accounts.getSelectedAccountId("eip155")).toBeNull();
+    expect(() => accounts.getSelectedAccount("eip155")).toThrow(AccountSelectionMissingError);
   });
 
   it("rejects removal when hidden records would be left without a visible selection", () => {

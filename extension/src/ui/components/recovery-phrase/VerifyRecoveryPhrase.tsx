@@ -15,7 +15,7 @@ export function VerifyRecoveryPhrase({
   failed,
 }: {
   words: readonly MnemonicWord[];
-  onSubmit: () => Promise<void>;
+  onSubmit: () => void;
   onBack: () => void;
   pending: boolean;
   failed: boolean;
@@ -38,7 +38,7 @@ export function VerifyRecoveryPhrase({
             return;
           }
           setIncorrect(false);
-          void onSubmit();
+          onSubmit();
         }}
         aria-busy={pending}
       >

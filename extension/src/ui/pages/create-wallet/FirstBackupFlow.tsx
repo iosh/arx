@@ -1,12 +1,11 @@
 import type { KeySourceId } from "@arx/core/keyring";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
 import { RecoveryPhrase } from "@/ui/components/recovery-phrase/RecoveryPhrase";
 import { VerifyRecoveryPhrase } from "@/ui/components/recovery-phrase/VerifyRecoveryPhrase";
 import { useWalletClient } from "@/ui/wallet/WalletClientContext";
-
-type BackupStep = { page: "phrase" } | { page: "verify"; submission: "idle" | "pending" | "failed" };
 
 export function FirstBackupFlow({
   keySourceId,
@@ -18,44 +17,34 @@ export function FirstBackupFlow({
   onExit: () => void;
 }) {
   const wallet = useWalletClient();
-  const [step, setStep] = useState<BackupStep>({ page: "phrase" });
+  const [step, setStep] = useState<"phrase" | "verify">("phrase");
+  const confirmBackup = useMutation({
+    mutationFn: () => wallet.keySources.confirmMnemonicBackup({ keySourceId }),
+    networkMode: "always",
+    retry: false,
+  });
 
   function showPhrase() {
-    setStep({ page: "phrase" });
+    confirmBackup.reset();
+    setStep("phrase");
   }
 
-  async function confirmBackup() {
-    setStep({ page: "verify", submission: "pending" });
-    try {
-      await wallet.keySources.confirmMnemonicBackup({ keySourceId });
-    } catch {
-      setStep({ page: "verify", submission: "failed" });
-      return;
-    }
-    onExit();
-  }
-
-  if (step.page === "phrase") {
+  if (step === "phrase") {
     return (
       <OnboardingStepLayout currentStep={2} totalSteps={3}>
-        <RecoveryPhrase
-          words={words}
-          onContinue={() => setStep({ page: "verify", submission: "idle" })}
-          onDefer={onExit}
-        />
+        <RecoveryPhrase words={words} onContinue={() => setStep("verify")} onDefer={onExit} />
       </OnboardingStepLayout>
     );
   }
 
-  const pending = step.submission === "pending";
   return (
-    <OnboardingStepLayout currentStep={3} totalSteps={3} onBack={showPhrase} backDisabled={pending}>
+    <OnboardingStepLayout currentStep={3} totalSteps={3} onBack={showPhrase} backDisabled={confirmBackup.isPending}>
       <VerifyRecoveryPhrase
         words={words}
-        onSubmit={confirmBackup}
+        onSubmit={() => confirmBackup.mutate(undefined, { onSuccess: onExit })}
         onBack={showPhrase}
-        pending={pending}
-        failed={step.submission === "failed"}
+        pending={confirmBackup.isPending}
+        failed={confirmBackup.isError}
       />
     </OnboardingStepLayout>
   );

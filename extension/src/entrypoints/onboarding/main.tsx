@@ -1,4 +1,5 @@
 import "@/ui/styles/styles.css";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createUiI18n } from "@/ui/language/i18n";
@@ -12,11 +13,14 @@ if (!container) throw new Error("Onboarding root element is missing");
 
 const walletConnectionPromise = connectWallet();
 const i18n = createUiI18n(readUiLanguage());
+const queryClient = new QueryClient();
 
 createRoot(container).render(
   <StrictMode>
     <UiLanguageProvider i18n={i18n}>
-      <App connection={walletConnectionPromise} />
+      <QueryClientProvider client={queryClient}>
+        <App connection={walletConnectionPromise} />
+      </QueryClientProvider>
     </UiLanguageProvider>
   </StrictMode>,
 );

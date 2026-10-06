@@ -1,26 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import type { WalletClient } from "@arx/wallet-api/client";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useWalletClient } from "./WalletClientContext";
 
-const walletStatusKey = ["walletStatus"] as const;
+export const walletStatusQueryKey = ["walletStatus"] as const;
 
-export function useWalletStatus() {
-  const wallet = useWalletClient();
-  const queryClient = useQueryClient();
-
-  useEffect(
-    () =>
-      wallet.subscribe((event) => {
-        if (event.type !== "walletStatusChanged") return;
-        // A committed status event takes precedence over an earlier query.
-        void queryClient.cancelQueries({ queryKey: walletStatusKey, exact: true });
-        queryClient.setQueryData(walletStatusKey, event.status);
-      }),
-    [wallet, queryClient],
-  );
-
-  return useQuery({
-    queryKey: walletStatusKey,
+const walletStatusQueryOptions = (wallet: WalletClient) =>
+  queryOptions({
+    queryKey: walletStatusQueryKey,
     queryFn: () => wallet.getStatus(),
     networkMode: "always",
     retry: false,
@@ -28,4 +14,13 @@ export function useWalletStatus() {
     staleTime: Infinity,
     gcTime: 0,
   });
+
+export function useWalletStatus() {
+  const wallet = useWalletClient();
+  return useQuery(walletStatusQueryOptions(wallet));
+}
+
+export function useSuspenseWalletStatus() {
+  const wallet = useWalletClient();
+  return useSuspenseQuery(walletStatusQueryOptions(wallet)).data;
 }

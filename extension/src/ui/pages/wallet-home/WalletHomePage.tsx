@@ -14,11 +14,11 @@ import {
 } from "@/ui/components/ui/dropdown-menu";
 import { PopupError } from "@/ui/pages/startup/PopupError";
 import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
-import { useWalletClient } from "@/ui/wallet/WalletClientContext";
+import { useWallet } from "@/ui/wallet/WalletContext";
 import { useHomeAccount } from "./useHomeAccount";
 
 export function WalletHomePage() {
-  const wallet = useWalletClient();
+  const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const accountQuery = useHomeAccount();
   const [menuOpen, setMenuOpen] = useState(false);

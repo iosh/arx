@@ -6,17 +6,15 @@ import { PopupError } from "@/ui/pages/startup/PopupError";
 import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
 import { UnlockPage } from "@/ui/pages/unlock/UnlockPage";
 import type { WalletConnectionResult } from "@/ui/wallet/connectWallet";
-import { useWalletActivity } from "@/ui/wallet/useWalletActivity";
-import { useWalletStatus } from "@/ui/wallet/useWalletStatus";
-import { useWalletClient } from "@/ui/wallet/WalletClientContext";
-import { WalletConnection } from "@/ui/wallet/WalletConnection";
+import { WalletConnection, WalletLockBoundary } from "@/ui/wallet/WalletConnection";
+import { useWallet } from "@/ui/wallet/WalletContext";
 
 const router = createUiRouter("popup");
 
 export function App({ connection }: { connection: Promise<WalletConnectionResult> }) {
   return (
     <Suspense fallback={<PopupLoading />}>
-      <WalletConnection connection={connection} failure={<PopupError />}>
+      <WalletConnection connection={connection} loading={<PopupLoading />} failure={<PopupError />}>
         <Popup />
       </WalletConnection>
     </Suspense>
@@ -24,20 +22,20 @@ export function App({ connection }: { connection: Promise<WalletConnectionResult
 }
 
 function Popup() {
-  const wallet = useWalletClient();
-  const statusQuery = useWalletStatus();
+  const { status } = useWallet();
   const [focusInitialUnlock, setFocusInitialUnlock] = useState(true);
-  useWalletActivity(wallet, statusQuery.isSuccess && statusQuery.data === "unlocked");
 
   useEffect(() => {
-    if (!statusQuery.isPending) setFocusInitialUnlock(false);
-  }, [statusQuery.isPending]);
+    setFocusInitialUnlock(false);
+  }, []);
 
-  if (statusQuery.isPending) return <PopupLoading />;
-  if (statusQuery.isError) return <PopupError />;
-  if (statusQuery.data === "uninitialized") return <OpenOnboarding />;
-  if (statusQuery.data === "locked") return <UnlockPage focusPassword={focusInitialUnlock} />;
-  return <RouterProvider router={router} />;
+  return (
+    <WalletLockBoundary>
+      {status === "uninitialized" && <OpenOnboarding />}
+      {status === "locked" && <UnlockPage focusPassword={focusInitialUnlock} />}
+      {status === "unlocked" && <RouterProvider router={router} />}
+    </WalletLockBoundary>
+  );
 }
 
 function OpenOnboarding() {

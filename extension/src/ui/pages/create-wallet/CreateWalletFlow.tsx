@@ -1,11 +1,9 @@
 import type { KeySourceId } from "@arx/core/keyring";
-import type { WalletStatus } from "@arx/core/wallet";
-import { useBlocker } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
+import { Navigate, useBlocker, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
-import { useWalletClient } from "@/ui/wallet/WalletClientContext";
+import { useWallet } from "@/ui/wallet/WalletContext";
 import { CreatePasswordForm } from "./CreatePasswordForm";
 import { FirstBackupFlow } from "./FirstBackupFlow";
 
@@ -13,19 +11,19 @@ type CreationState =
   | { status: "idle" | "pending" | "failed" }
   | { status: "created"; keySourceId: KeySourceId; words: readonly MnemonicWord[] };
 
-export function CreateWalletFlow({ walletStatus, onExit }: { walletStatus: WalletStatus; onExit: () => void }) {
-  const wallet = useWalletClient();
+const exitLocation = { to: "/onboarding", replace: true } as const;
+
+export function CreateWalletFlow() {
+  const { client: wallet, status } = useWallet();
+  const navigate = useNavigate();
   const [creation, setCreation] = useState<CreationState>({ status: "idle" });
   const pending = creation.status === "pending";
-  const shouldExit =
-    creation.status === "created" ? walletStatus === "locked" : !pending && walletStatus !== "uninitialized";
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
-  useEffect(() => {
-    // The unlocked event may precede the creation response; keep the submitted flow mounted.
-    if (shouldExit) onExit();
-  }, [shouldExit, onExit]);
+  function exit() {
+    void navigate(exitLocation);
+  }
 
   async function createWallet(password: string) {
     setCreation({ status: "pending" });
@@ -42,18 +40,15 @@ export function CreateWalletFlow({ walletStatus, onExit }: { walletStatus: Walle
     }
   }
 
-  if (shouldExit) return <OnboardingLayout />;
-
   if (creation.status === "created") {
-    return walletStatus === "unlocked" ? (
-      <FirstBackupFlow keySourceId={creation.keySourceId} words={creation.words} onExit={onExit} />
-    ) : (
-      <OnboardingLayout />
-    );
+    return <FirstBackupFlow keySourceId={creation.keySourceId} words={creation.words} onExit={exit} />;
   }
 
+  // Initialization is published before the create response; let this submission finish.
+  if (status !== "uninitialized" && !pending) return <Navigate {...exitLocation} />;
+
   return (
-    <OnboardingStepLayout currentStep={1} totalSteps={3} onBack={onExit} backDisabled={pending}>
+    <OnboardingStepLayout currentStep={1} totalSteps={3} onBack={exit} backDisabled={pending}>
       <CreatePasswordForm onSubmit={createWallet} pending={pending} failed={creation.status === "failed"} />
     </OnboardingStepLayout>
   );

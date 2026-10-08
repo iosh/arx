@@ -5,7 +5,7 @@ import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
 import { RecoveryPhrase } from "@/ui/components/recovery-phrase/RecoveryPhrase";
 import { VerifyRecoveryPhrase } from "@/ui/components/recovery-phrase/VerifyRecoveryPhrase";
-import { useWalletClient } from "@/ui/wallet/WalletClientContext";
+import { useWallet } from "@/ui/wallet/WalletContext";
 
 export function FirstBackupFlow({
   keySourceId,
@@ -16,7 +16,7 @@ export function FirstBackupFlow({
   words: readonly MnemonicWord[];
   onExit: () => void;
 }) {
-  const wallet = useWalletClient();
+  const { client: wallet } = useWallet();
   const [step, setStep] = useState<"phrase" | "verify">("phrase");
   const confirmBackup = useMutation({
     mutationFn: () => wallet.keySources.confirmMnemonicBackup({ keySourceId }),

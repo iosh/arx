@@ -1,29 +1,18 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { useWalletClient } from "@/ui/wallet/WalletClientContext";
+import { useWalletEvents } from "@/ui/wallet/useWalletEvents";
+import { useWallet } from "@/ui/wallet/WalletContext";
 
 const homeAccountKey = ["homeAccount"] as const;
 
 export function useHomeAccount() {
-  const wallet = useWalletClient();
+  const { client: wallet } = useWallet();
   const queryClient = useQueryClient();
 
-  useEffect(
-    () =>
-      wallet.subscribe((event) => {
-        if (
-          event.type !== "keyringChanged" &&
-          event.type !== "accountsChanged" &&
-          event.type !== "networkSelectionChanged"
-        ) {
-          return;
-        }
-        // Invalidation alone can reuse an in-flight initial read.
-        void queryClient.cancelQueries({ queryKey: homeAccountKey, exact: true });
-        void queryClient.invalidateQueries({ queryKey: homeAccountKey, exact: true });
-      }),
-    [wallet, queryClient],
-  );
+  useWalletEvents(wallet, ["keyringChanged", "accountsChanged", "networkSelectionChanged"], () => {
+    // Invalidation alone can reuse an in-flight initial read.
+    void queryClient.cancelQueries({ queryKey: homeAccountKey, exact: true });
+    void queryClient.invalidateQueries({ queryKey: homeAccountKey, exact: true });
+  });
 
   return useQuery({
     queryKey: homeAccountKey,

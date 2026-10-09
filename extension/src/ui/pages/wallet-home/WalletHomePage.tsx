@@ -4,7 +4,6 @@ import { Ellipsis, Lock, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountIdenticon } from "@/ui/components/AccountIdenticon";
-import { CardError } from "@/ui/components/CardError";
 import { Button } from "@/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -12,8 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
-import { PopupError } from "@/ui/pages/startup/PopupError";
-import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
+import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/WalletContext";
 import { useHomeAccount } from "./useHomeAccount";
 
@@ -24,24 +22,23 @@ export function WalletHomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const lockMutation = useMutation({
     mutationFn: () => wallet.lock(),
-    networkMode: "always",
-    retry: false,
   });
 
-  if (accountQuery.isPending) return <PopupLoading />;
-  if (accountQuery.isError) return <PopupError />;
-
-  const { account, backupPending } = accountQuery.data;
-  const name =
-    account.alias ??
-    t("accountName", { number: account.origin.type === "hd" ? account.origin.derivationIndex + 1 : 1 });
+  const account = accountQuery.data?.account;
+  const backupPending = accountQuery.data?.backupPending;
+  const name = account
+    ? (account.alias ??
+      t("accountName", { number: account.origin.type === "hd" ? account.origin.derivationIndex + 1 : 1 }))
+    : null;
 
   return (
     <main className="flex h-full flex-col gap-2.5 px-3.5 font-sans">
-      <title>{`${name} · ARX`}</title>
+      <title>{name ? `${name} · ARX` : "ARX"}</title>
       <header className="flex h-14 shrink-0 items-center gap-2 px-1.5 py-1">
-        <AccountIdenticon accountId={account.accountId} />
-        <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">{name}</h1>
+        {account && <AccountIdenticon accountId={account.accountId} />}
+        <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">
+          {accountQuery.isPending ? <Spinner aria-label={t("loadingAccount")} /> : (name ?? t("accountUnavailable"))}
+        </h1>
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
@@ -73,7 +70,6 @@ export function WalletHomePage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      {lockMutation.isError && <CardError>{t("lockFailed")}</CardError>}
       <section className="overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
         <div aria-hidden="true" className="h-35.5" />
         {backupPending && (

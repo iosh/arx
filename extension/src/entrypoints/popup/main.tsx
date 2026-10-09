@@ -1,10 +1,10 @@
 import "@/ui/styles/styles.css";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createUiI18n } from "@/ui/language/i18n";
-import { readUiLanguage } from "@/ui/language/preferences";
+import { i18n } from "@/ui/language/i18n";
 import { UiLanguageProvider } from "@/ui/language/UiLanguageProvider";
+import { queryClient } from "@/ui/queryClient";
 import { connectWallet } from "@/ui/wallet/connectWallet";
 import { App } from "./App";
 
@@ -12,8 +12,6 @@ const container = document.getElementById("root");
 if (!container) throw new Error("Popup root element is missing");
 
 const walletConnectionPromise = connectWallet();
-const i18n = createUiI18n(readUiLanguage());
-const queryClient = new QueryClient();
 
 createRoot(container).render(
   <StrictMode>

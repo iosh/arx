@@ -11,11 +11,10 @@ export function OnboardingError() {
         <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
           <CircleAlert aria-hidden="true" className="size-5.5" />
         </div>
-        <h1 className="mt-1 text-3xl leading-snug font-semibold">{t("startupFailed")}</h1>
-        <p className="text-sm leading-normal font-medium text-muted-foreground">{t("startupFailedDescription")}</p>
+        <h1 className="mt-1 text-3xl leading-snug font-semibold">{t("pageUnavailable")}</h1>
       </div>
       <Button type="button" onClick={() => location.reload()} size="lg" className="w-full">
-        {t("retry")}
+        {t("reload")}
       </Button>
     </OnboardingLayout>
   );

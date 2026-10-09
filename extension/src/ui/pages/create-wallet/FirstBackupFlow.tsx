@@ -20,12 +20,9 @@ export function FirstBackupFlow({
   const [step, setStep] = useState<"phrase" | "verify">("phrase");
   const confirmBackup = useMutation({
     mutationFn: () => wallet.keySources.confirmMnemonicBackup({ keySourceId }),
-    networkMode: "always",
-    retry: false,
   });
 
   function showPhrase() {
-    confirmBackup.reset();
     setStep("phrase");
   }
 
@@ -44,7 +41,6 @@ export function FirstBackupFlow({
         onSubmit={() => confirmBackup.mutate(undefined, { onSuccess: onExit })}
         onBack={showPhrase}
         pending={confirmBackup.isPending}
-        failed={confirmBackup.isError}
       />
     </OnboardingStepLayout>
   );

@@ -32,7 +32,6 @@ export const onboarding = {
   verifyPhraseDescription: "Check the recovery phrase you wrote down and select the word at each position.",
   verifyWordPosition: "Word {{position}}",
   verifyPhraseIncorrect: "Incorrect selection. Check the recovery phrase you wrote down and try again.",
-  backupSaveFailed: "Could not save the backup status. Please try again.",
   completeBackup: "Complete backup",
   backToPhrase: "Back to recovery phrase",
   walletReadyTitle: "Your wallet is ready",

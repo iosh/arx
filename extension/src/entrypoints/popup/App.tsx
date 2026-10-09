@@ -2,7 +2,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { Suspense, useEffect, useRef, useState } from "react";
 import browser from "webextension-polyfill";
 import { createUiRouter } from "@/router";
-import { PopupError } from "@/ui/pages/startup/PopupError";
+import { PopupError } from "@/ui/pages/error/PopupError";
 import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
 import { UnlockPage } from "@/ui/pages/unlock/UnlockPage";
 import type { WalletConnectionResult } from "@/ui/wallet/connectWallet";

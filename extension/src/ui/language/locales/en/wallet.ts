@@ -4,9 +4,10 @@ export const wallet = {
   incorrectPassword: "Incorrect password.",
   unlockFailed: "Could not unlock the wallet. Please try again.",
   accountName: "Account {{number}}",
+  loadingAccount: "Loading account",
+  accountUnavailable: "Account information unavailable",
   moreMenu: "More options",
   lockWallet: "Lock wallet",
-  lockFailed: "Could not lock the wallet. Please try again.",
   backupNotice: "Recovery phrase not backed up",
 } as const;
 

@@ -32,12 +32,7 @@ export function useWalletActivity(wallet: WalletClient, unlocked: boolean): void
 
     function handleFailure(error: unknown): void {
       if (stopped) return;
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === WalletChannelDisconnectedError.code
-      ) {
+      if (error instanceof WalletChannelDisconnectedError) {
         stop();
       } else {
         console.error("[arx:ui] Failed to track wallet activity", error);

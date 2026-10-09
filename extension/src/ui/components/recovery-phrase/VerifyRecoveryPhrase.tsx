@@ -12,13 +12,11 @@ export function VerifyRecoveryPhrase({
   onSubmit,
   onBack,
   pending,
-  failed,
 }: {
   words: readonly MnemonicWord[];
   onSubmit: () => void;
   onBack: () => void;
   pending: boolean;
-  failed: boolean;
 }) {
   const { t } = useTranslation("onboarding");
   const id = useId();
@@ -86,7 +84,7 @@ export function VerifyRecoveryPhrase({
             </div>
           ))}
         </div>
-        {(incorrect || failed) && <CardError>{t(incorrect ? "verifyPhraseIncorrect" : "backupSaveFailed")}</CardError>}
+        {incorrect && <CardError>{t("verifyPhraseIncorrect")}</CardError>}
         <div className="flex flex-col gap-2.5">
           <Button
             type="submit"

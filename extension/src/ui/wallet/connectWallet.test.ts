@@ -66,6 +66,6 @@ it("returns a failure when disconnected before the host is ready", async () => {
   vi.mocked(browser.runtime.connect).mockReturnValue(port as unknown as Runtime.Port);
   const ready = connectWallet();
   port.disconnect();
-  expect(await ready).toMatchObject({ status: "error", error: expect.any(Error) });
+  expect(await ready).toEqual({ status: "error" });
   expect(port.postMessage).not.toHaveBeenCalled();
 });

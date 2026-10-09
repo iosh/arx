@@ -10,12 +10,11 @@ export function PopupError() {
         <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
           <CircleAlert aria-hidden="true" className="size-5.5" />
         </div>
-        <h1 className="mt-1 text-lg font-semibold">{t("startupFailed")}</h1>
-        <p className="text-xs leading-normal font-medium text-muted-foreground">{t("startupFailedDescription")}</p>
+        <h1 className="mt-1 text-lg font-semibold">{t("pageUnavailable")}</h1>
       </div>
       <footer className="px-3.5 pt-2 pb-3.5">
         <Button type="button" onClick={() => location.reload()} className="w-full">
-          {t("retry")}
+          {t("reload")}
         </Button>
       </footer>
     </main>

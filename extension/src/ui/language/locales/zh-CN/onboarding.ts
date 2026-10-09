@@ -33,7 +33,6 @@ export const onboarding = {
   verifyPhraseDescription: "对照抄下的恢复短语，选出以下位置的单词。",
   verifyWordPosition: "第 {{position}} 个词",
   verifyPhraseIncorrect: "选择不正确。请对照抄下的恢复短语重新核对。",
-  backupSaveFailed: "备份状态保存失败。请重试。",
   completeBackup: "完成备份",
   backToPhrase: "返回查看恢复短语",
   walletReadyTitle: "钱包已就绪",

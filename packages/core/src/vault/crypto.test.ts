@@ -1,7 +1,7 @@
 import * as Base64 from "ox/Base64";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { changeVaultPassword, createUnlockedVault, replaceVaultPlaintext, unlockVaultRecord } from "./crypto.js";
-import { VaultIncorrectPasswordError, VaultPasswordTooShortError, VaultRecordDecodeError } from "./errors.js";
+import { VaultPasswordTooShortError, VaultRecordDecodeError } from "./errors.js";
 import { VAULT_PASSWORD_MIN_LENGTH } from "./passwordPolicy.js";
 import type { EncryptedVaultRecord } from "./persistence.js";
 
@@ -17,6 +17,7 @@ describe("vault crypto", () => {
   it("decrypts the fixed scrypt and AES-256-GCM vector", async () => {
     const draft = await unlockVaultRecord(fixedRecord, "correct horse battery staple");
 
+    assert(draft);
     expect(new TextDecoder().decode(draft.plaintext)).toBe("ARX vault test");
     expect(draft.unlocked.record).toEqual(fixedRecord);
     expect(draft.unlocked.encryptionKey).toHaveLength(32);
@@ -27,7 +28,7 @@ describe("vault crypto", () => {
     const first = await createUnlockedVault({ password: "password", plaintext: firstPlaintext });
     const firstUnlocked = await unlockVaultRecord(first.record, "password");
 
-    expect(firstUnlocked.plaintext).toEqual(firstPlaintext);
+    expect(firstUnlocked?.plaintext).toEqual(firstPlaintext);
     expect(Base64.toBytes(first.record.salt)).toHaveLength(16);
     expect(Base64.toBytes(first.record.iv)).toHaveLength(12);
 
@@ -37,7 +38,7 @@ describe("vault crypto", () => {
 
     expect(second.record.salt).toBe(first.record.salt);
     expect(second.record.iv).not.toBe(first.record.iv);
-    expect(secondUnlocked.plaintext).toEqual(secondPlaintext);
+    expect(secondUnlocked?.plaintext).toEqual(secondPlaintext);
   });
 
   it("uses a new salt when changing the password", async () => {
@@ -50,9 +51,7 @@ describe("vault crypto", () => {
     });
 
     expect(changed.record.salt).not.toBe(current.record.salt);
-    await expect(unlockVaultRecord(changed.record, "current-password")).rejects.toBeInstanceOf(
-      VaultIncorrectPasswordError,
-    );
+    await expect(unlockVaultRecord(changed.record, "current-password")).resolves.toBeNull();
     await expect(unlockVaultRecord(changed.record, "next-password")).resolves.toMatchObject({ plaintext });
   });
 
@@ -98,14 +97,14 @@ describe("vault crypto", () => {
     });
   });
 
-  it("maps a wrong password or corrupted ciphertext to authentication failure", async () => {
-    await expect(unlockVaultRecord(fixedRecord, "wrong password")).rejects.toBeInstanceOf(VaultIncorrectPasswordError);
+  it("returns null when the password or ciphertext fails authentication", async () => {
+    await expect(unlockVaultRecord(fixedRecord, "wrong password")).resolves.toBeNull();
 
     const ciphertext = Base64.toBytes(fixedRecord.ciphertext);
     ciphertext[0] = (ciphertext[0] ?? 0) ^ 1;
     await expect(
       unlockVaultRecord({ ...fixedRecord, ciphertext: Base64.fromBytes(ciphertext) }, "correct horse battery staple"),
-    ).rejects.toBeInstanceOf(VaultIncorrectPasswordError);
+    ).resolves.toBeNull();
   });
 
   it("maps an undecodable persisted record to the Vault boundary error", async () => {

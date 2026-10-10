@@ -27,6 +27,7 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import { AUTO_LOCK_SETTING_KEY, settingWrites } from "../settings/persistence.js";
 import { changeVaultPassword, createUnlockedVault, replaceVaultPlaintext, unlockVaultRecord } from "../vault/crypto.js";
+import { VaultIncorrectPasswordError } from "../vault/errors.js";
 import { encryptedVaultWrites } from "../vault/persistence.js";
 import type { Vault } from "../vault/Vault.js";
 import {
@@ -174,12 +175,13 @@ export class WalletCoordinator {
     });
   }
 
-  async unlock(password: string): Promise<void> {
-    await this.#mutations.run(async () => {
+  async unlock(password: string): Promise<boolean> {
+    return await this.#mutations.run(async () => {
       this.lockIfExpired();
-      if (this.#vault.getStatus() === "unlocked") return;
+      if (this.#vault.getStatus() === "unlocked") return true;
 
       const draft = await unlockVaultRecord(this.#vault.requireRecord(), password);
+      if (draft === null) return false;
 
       let secrets: KeyringSecrets;
       try {
@@ -193,6 +195,7 @@ export class WalletCoordinator {
       this.startAutoLock();
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
+      return true;
     });
   }
 
@@ -360,7 +363,7 @@ export class WalletCoordinator {
     });
   }
 
-  async exportMnemonic(params: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string }> {
+  async exportMnemonic(params: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null> {
     return await this.#mutations.run(async () => {
       const source = findKeySourceSecret(this.requireKeyringSecrets(), params.keySourceId);
       if (!source) throw new KeySourceNotFoundError(params.keySourceId);
@@ -372,7 +375,7 @@ export class WalletCoordinator {
         });
       }
 
-      await this.verifyCurrentPassword(params.password);
+      if (!(await this.verifyCurrentPassword(params.password))) return null;
 
       return { mnemonic: source.mnemonic };
     });
@@ -390,7 +393,7 @@ export class WalletCoordinator {
         });
       }
 
-      await this.verifyCurrentPassword(params.password);
+      if (!(await this.verifyCurrentPassword(params.password))) throw new VaultIncorrectPasswordError();
 
       return { privateKey: source.privateKey };
     });
@@ -662,10 +665,12 @@ export class WalletCoordinator {
     return source;
   }
 
-  private async verifyCurrentPassword(password: string): Promise<void> {
+  private async verifyCurrentPassword(password: string): Promise<boolean> {
     // Authenticated decryption verifies the supplied password without changing session state.
-    await unlockVaultRecord(this.#vault.requireRecord(), password);
+    const draft = await unlockVaultRecord(this.#vault.requireRecord(), password);
+    if (draft === null) return false;
     this.assertUnlocked();
+    return true;
   }
 
   private assertUnlocked(): void {

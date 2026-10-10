@@ -2,7 +2,6 @@ export const wallet = {
   unlockPassword: "Password",
   unlock: "Unlock",
   incorrectPassword: "Incorrect password.",
-  unlockFailed: "Could not unlock the wallet. Please try again.",
   accountName: "Account {{number}}",
   loadingAccount: "Loading account",
   accountUnavailable: "Account information unavailable",

@@ -58,7 +58,8 @@ export type WalletKeySourcesApi = Readonly<{
   importMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
   importPrivateKey(input: PrivateKeySourceInput): Promise<PrivateKeySourceAdded>;
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
-  exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string }>;
+  /** Requires an unlocked wallet. Returns null if the password does not match. */
+  exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
   exportPrivateKey(input: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string }>;
   remove(input: { keySourceId: KeySourceId }): Promise<void>;
 }>;
@@ -141,7 +142,11 @@ export type WalletApi = Readonly<{
   createFromMnemonic(input: CreateFromMnemonicInput): Promise<Bip39WalletCreated>;
   restoreFromMnemonic(input: RestoreFromMnemonicInput): Promise<Bip39WalletCreated>;
   createFromPrivateKey(input: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletCreated>;
-  unlock(input: { password: string }): Promise<void>;
+  /**
+   * Returns false if the password does not match.
+   * An already unlocked wallet returns true without checking the password.
+   */
+  unlock(input: { password: string }): Promise<boolean>;
   lock(): Promise<void>;
   changePassword(input: { currentPassword: string; newPassword: string }): Promise<void>;
   getAutoLockDuration(): Promise<number>;

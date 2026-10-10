@@ -461,6 +461,12 @@ describe("WalletCoordinator", () => {
         keySourceId: mnemonicSource.keySourceId,
         password: "incorrect",
       }),
+    ).resolves.toBeNull();
+    await expect(
+      wallet.exportPrivateKey({
+        keySourceId: privateKeySource.keySourceId,
+        password: "incorrect",
+      }),
     ).rejects.toMatchObject({ code: "vault.incorrect_password" });
     await expect(
       wallet.exportPrivateKey({
@@ -734,7 +740,7 @@ describe("WalletCoordinator", () => {
     deriveHdAccountId.mockClear();
     accountIdFromPrivateKey.mockClear();
     await wallet.lock();
-    await wallet.unlock("password");
+    await expect(wallet.unlock("password")).resolves.toBe(true);
     expect(keyring.getSecrets()?.keySources).toEqual([
       expect.objectContaining({ keySourceId: source.keySourceId, type: "private-key" }),
     ]);
@@ -791,7 +797,7 @@ describe("WalletCoordinator", () => {
     expect(vault.getStatus()).toBe("locked");
   });
 
-  it("does not publish another event when unlock is already satisfied", async () => {
+  it("returns true without checking the password when already unlocked", async () => {
     const { wallet, events } = createHarness();
     await wallet.createFromMnemonic({
       password: "password",
@@ -799,7 +805,7 @@ describe("WalletCoordinator", () => {
       namespace: "eip155",
     });
 
-    await wallet.unlock("password");
+    await expect(wallet.unlock("incorrect-password")).resolves.toBe(true);
 
     expect(events).toEqual([{ type: "walletStatusChanged", status: "unlocked" }]);
   });
@@ -813,7 +819,7 @@ describe("WalletCoordinator", () => {
     expect(wallet.getStatus()).toBe("locked");
     expect(vault.getStatus()).toBe("unlocked");
 
-    await expect(wallet.unlock("incorrect-password")).rejects.toMatchObject({ code: "vault.incorrect_password" });
+    await expect(wallet.unlock("incorrect-password")).resolves.toBe(false);
     expect(vault.getStatus()).toBe("locked");
     expect(keyring.getSecrets()).toBeNull();
   });
@@ -858,7 +864,7 @@ describe("WalletCoordinator", () => {
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
     await expect(changing).rejects.toMatchObject({ code: "wallet.locked" });
     expect(commits).toHaveLength(1);
-    await expect(wallet.unlock("password")).resolves.toBeUndefined();
+    await expect(wallet.unlock("password")).resolves.toBe(true);
   });
 
   it("finishes an in-flight commit successfully and then clears the expired session", async () => {
@@ -919,8 +925,8 @@ describe("WalletCoordinator", () => {
     expect(wallet.getStatus()).toBe("locked");
 
     await wallet.lock();
-    await expect(wallet.unlock("password")).rejects.toMatchObject({ code: "vault.incorrect_password" });
-    await expect(wallet.unlock("new-password")).resolves.toBeUndefined();
+    await expect(wallet.unlock("password")).resolves.toBe(false);
+    await expect(wallet.unlock("new-password")).resolves.toBe(true);
     expect(vault.getStatus()).toBe("unlocked");
   });
 

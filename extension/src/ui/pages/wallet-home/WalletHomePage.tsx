@@ -1,8 +1,10 @@
 import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
 import { useMutation } from "@tanstack/react-query";
-import { Ellipsis, Lock, ShieldAlert } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
+import { ChevronRight, Ellipsis, Lock, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import browser from "webextension-polyfill";
 import { AccountIdenticon } from "@/ui/components/AccountIdenticon";
 import { Button } from "@/ui/components/ui/button";
 import {
@@ -17,6 +19,7 @@ import { useHomeAccount } from "./useHomeAccount";
 
 export function WalletHomePage() {
   const { client: wallet } = useWallet();
+  const router = useRouter();
   const { t } = useTranslation("wallet");
   const accountQuery = useHomeAccount();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -25,7 +28,13 @@ export function WalletHomePage() {
   });
 
   const account = accountQuery.data?.account;
-  const backupPending = accountQuery.data?.backupPending;
+  const backupKeySourceId = accountQuery.data?.backupKeySourceId;
+  const backupPath = backupKeySourceId
+    ? router.buildLocation({
+        to: "/onboarding/backup/$keySourceId",
+        params: { keySourceId: backupKeySourceId },
+      }).href
+    : null;
   const name = account
     ? (account.alias ??
       t("accountName", { number: account.origin.type === "hd" ? account.origin.derivationIndex + 1 : 1 }))
@@ -72,11 +81,17 @@ export function WalletHomePage() {
       </header>
       <section className="overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
         <div aria-hidden="true" className="h-35.5" />
-        {backupPending && (
-          <div className="flex h-10 items-center gap-2 bg-warning-subtle px-4 text-xs font-semibold text-warning-foreground">
+        {backupPath && (
+          <a
+            href={`${browser.runtime.getURL("/onboarding.html")}#${backupPath}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-10 items-center gap-2 bg-warning-subtle px-4 text-xs font-semibold text-warning-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
             <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-            <span>{t("backupNotice")}</span>
-          </div>
+            <span className="flex-1">{t("backupNotice")}</span>
+            <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-warning" />
+          </a>
         )}
       </section>
     </main>

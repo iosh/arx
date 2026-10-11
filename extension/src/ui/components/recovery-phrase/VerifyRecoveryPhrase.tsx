@@ -35,7 +35,6 @@ export function VerifyRecoveryPhrase({
             setIncorrect(true);
             return;
           }
-          setIncorrect(false);
           onSubmit();
         }}
         aria-busy={pending}

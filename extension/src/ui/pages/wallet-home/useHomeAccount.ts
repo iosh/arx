@@ -18,11 +18,14 @@ export function useHomeAccount() {
     queryKey: homeAccountKey,
     queryFn: async () => {
       const account = await wallet.accounts.getSelected();
-      if (account.origin.type !== "hd") return { account, backupPending: false };
+      if (account.origin.type !== "hd") return { account, backupKeySourceId: null };
 
       const keyring = await wallet.hdKeyrings.get(account.origin.hdKeyringId);
       const source = await wallet.keySources.get(keyring.keySourceId);
-      return { account, backupPending: source.type === "bip39" && source.backupStatus === "pending" };
+      return {
+        account,
+        backupKeySourceId: source.type === "bip39" && source.backupStatus === "pending" ? source.keySourceId : null,
+      };
     },
     networkMode: "always",
     retry: false,

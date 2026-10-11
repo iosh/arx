@@ -5,14 +5,12 @@ import { Button } from "./ui/button";
 
 export function OnboardingStepLayout({
   children,
-  currentStep,
-  totalSteps,
+  progress,
   onBack,
   backDisabled,
 }: Readonly<{
   children?: ReactNode;
-  currentStep: number;
-  totalSteps: number;
+  progress?: { current: number; total: number };
   onBack?: () => void;
   backDisabled?: boolean;
 }>) {
@@ -35,18 +33,23 @@ export function OnboardingStepLayout({
             </Button>
           )}
         </div>
-        <div
-          role="progressbar"
-          aria-label={t("progress", { current: currentStep, total: totalSteps })}
-          aria-valuemin={1}
-          aria-valuemax={totalSteps}
-          aria-valuenow={currentStep}
-          className="flex h-1 w-30 gap-1.5"
-        >
-          {Array.from({ length: totalSteps }, (_, index) => index + 1).map((step) => (
-            <span key={step} className={`h-1 flex-1 rounded-full ${step <= currentStep ? "bg-brand" : "bg-border"}`} />
-          ))}
-        </div>
+        {progress && (
+          <div
+            role="progressbar"
+            aria-label={t("progress", progress)}
+            aria-valuemin={1}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.current}
+            className="flex h-1 w-30 gap-1.5"
+          >
+            {Array.from({ length: progress.total }, (_, index) => index + 1).map((step) => (
+              <span
+                key={step}
+                className={`h-1 flex-1 rounded-full ${step <= progress.current ? "bg-brand" : "bg-border"}`}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex-1" />
       </header>
       <main className="flex flex-1 items-start justify-center px-6 py-16 sm:px-10">{children}</main>

@@ -7,14 +7,18 @@ import { RecoveryPhrase } from "@/ui/components/recovery-phrase/RecoveryPhrase";
 import { VerifyRecoveryPhrase } from "@/ui/components/recovery-phrase/VerifyRecoveryPhrase";
 import { useWallet } from "@/ui/wallet/WalletContext";
 
-export function FirstBackupFlow({
+export function RecoveryPhraseBackup({
   keySourceId,
   words,
-  onExit,
+  totalSteps,
+  onComplete,
+  onDefer,
 }: {
   keySourceId: KeySourceId;
   words: readonly MnemonicWord[];
-  onExit: () => void;
+  totalSteps: 2 | 3;
+  onComplete: () => void;
+  onDefer?: () => void;
 }) {
   const { client: wallet } = useWallet();
   const [step, setStep] = useState<"phrase" | "verify">("phrase");
@@ -28,17 +32,21 @@ export function FirstBackupFlow({
 
   if (step === "phrase") {
     return (
-      <OnboardingStepLayout currentStep={2} totalSteps={3}>
-        <RecoveryPhrase words={words} onContinue={() => setStep("verify")} onDefer={onExit} />
+      <OnboardingStepLayout progress={{ current: totalSteps - 1, total: totalSteps }}>
+        <RecoveryPhrase words={words} onContinue={() => setStep("verify")} onDefer={onDefer} />
       </OnboardingStepLayout>
     );
   }
 
   return (
-    <OnboardingStepLayout currentStep={3} totalSteps={3} onBack={showPhrase} backDisabled={confirmBackup.isPending}>
+    <OnboardingStepLayout
+      progress={{ current: totalSteps, total: totalSteps }}
+      onBack={showPhrase}
+      backDisabled={confirmBackup.isPending}
+    >
       <VerifyRecoveryPhrase
         words={words}
-        onSubmit={() => confirmBackup.mutate(undefined, { onSuccess: onExit })}
+        onSubmit={() => confirmBackup.mutate(undefined, { onSuccess: onComplete })}
         onBack={showPhrase}
         pending={confirmBackup.isPending}
       />

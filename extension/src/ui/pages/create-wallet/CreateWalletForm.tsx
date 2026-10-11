@@ -13,10 +13,10 @@ import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/WalletContext";
 
-export type CreatedWallet = { keySourceId: KeySourceId; words: readonly MnemonicWord[] };
+export type WalletCreationResult = { keySourceId: KeySourceId; words: readonly MnemonicWord[] };
 const exitLocation = { to: "/onboarding", replace: true } as const;
 
-export function CreateWalletForm({ onCreated }: { onCreated: (wallet: CreatedWallet) => void }) {
+export function CreateWalletForm({ onCreated }: { onCreated: (result: WalletCreationResult) => void }) {
   const { client: wallet, status } = useWallet();
   const navigate = useNavigate();
   const { t } = useTranslation("onboarding");
@@ -55,8 +55,7 @@ export function CreateWalletForm({ onCreated }: { onCreated: (wallet: CreatedWal
 
   return (
     <OnboardingStepLayout
-      currentStep={1}
-      totalSteps={3}
+      progress={{ current: 1, total: 3 }}
       onBack={() => void navigate(exitLocation)}
       backDisabled={pending}
     >

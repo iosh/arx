@@ -7,7 +7,12 @@ import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
 
-export function VerifyPasswordForm({ onSubmit }: { onSubmit: (password: string) => Promise<boolean> }) {
+export function VerifyPasswordForm({
+  onSubmit,
+}: {
+  /** Returns false only when the password does not match. */
+  onSubmit: (password: string) => Promise<boolean>;
+}) {
   const { t } = useTranslation("onboarding");
   const { t: walletText } = useTranslation("wallet");
   const id = useId();

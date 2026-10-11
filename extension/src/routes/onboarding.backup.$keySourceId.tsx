@@ -17,7 +17,10 @@ function BackupRoute() {
     <BackupPage
       key={keySourceId}
       keySourceId={keySourceId}
-      onComplete={() => void navigate({ to: "/onboarding", replace: true })}
+      onComplete={() => {
+        void navigate({ to: "/onboarding", replace: true });
+        window.close();
+      }}
     />
   );
 }

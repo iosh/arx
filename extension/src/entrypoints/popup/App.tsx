@@ -1,8 +1,8 @@
 import { RouterProvider } from "@tanstack/react-router";
-import { Suspense, useEffect, useRef, useState } from "react";
-import browser from "webextension-polyfill";
+import { Suspense, useEffect, useState } from "react";
 import { createUiRouter } from "@/router";
 import { PopupError } from "@/ui/pages/error/PopupError";
+import { OpenOnboarding } from "@/ui/pages/open-onboarding/OpenOnboarding";
 import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
 import { UnlockPage } from "@/ui/pages/unlock/UnlockPage";
 import type { WalletConnectionResult } from "@/ui/wallet/connectWallet";
@@ -10,16 +10,6 @@ import { WalletConnection, WalletLockBoundary } from "@/ui/wallet/WalletConnecti
 import { useWallet } from "@/ui/wallet/WalletContext";
 
 const router = createUiRouter("popup");
-
-export function App({ connection }: { connection: Promise<WalletConnectionResult> }) {
-  return (
-    <Suspense fallback={<PopupLoading />}>
-      <WalletConnection connection={connection} loading={<PopupLoading />} failure={<PopupError />}>
-        <Popup />
-      </WalletConnection>
-    </Suspense>
-  );
-}
 
 function Popup() {
   const { status } = useWallet();
@@ -38,18 +28,12 @@ function Popup() {
   );
 }
 
-function OpenOnboarding() {
-  const requested = useRef(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (requested.current) return;
-    requested.current = true;
-    void browser.tabs.create({ url: browser.runtime.getURL("onboarding.html") }).then(
-      () => window.close(),
-      () => setFailed(true),
-    );
-  }, []);
-
-  return failed ? <PopupError /> : <PopupLoading />;
+export function App({ connection }: { connection: Promise<WalletConnectionResult> }) {
+  return (
+    <Suspense fallback={<PopupLoading />}>
+      <WalletConnection connection={connection} loading={<PopupLoading />} failure={<PopupError />}>
+        <Popup />
+      </WalletConnection>
+    </Suspense>
+  );
 }

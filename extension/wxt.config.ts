@@ -17,8 +17,8 @@ export default defineConfig({
     ],
   },
   manifest: ({ browser }) => ({
-    // Vite and Tailwind target Chrome 111.
-    ...(browser === "chrome" ? { minimum_chrome_version: "111" } : {}),
+    // action.openPopup requires Chrome 127 for extensions not installed by policy.
+    ...(browser === "chrome" ? { minimum_chrome_version: "127" } : {}),
     permissions: ["storage"],
     web_accessible_resources: [
       {

@@ -11,7 +11,7 @@ export function OpenWalletPage() {
   return (
     <OnboardingLayout>
       <OnboardingCard title={t("walletReadyTitle")} description={t("openWalletDescription")}>
-        <Button type="button" size="lg" className="w-full" onClick={async () => await browser.action.openPopup()}>
+        <Button type="button" size="lg" className="w-full" onClick={() => browser.action.openPopup()}>
           <Wallet aria-hidden="true" />
           {t("openWallet")}
         </Button>

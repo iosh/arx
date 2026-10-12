@@ -1,8 +1,8 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { createUiRouter } from "@/router";
-import { OnboardingError } from "@/ui/pages/error/OnboardingError";
-import { OnboardingLoading } from "@/ui/pages/startup/OnboardingLoading";
+import { OnboardingError } from "@/ui/components/OnboardingError";
+import { OnboardingLoading } from "@/ui/components/OnboardingLoading";
 import type { WalletConnectionResult } from "@/ui/wallet/connectWallet";
 import { WalletConnection, WalletLockBoundary } from "@/ui/wallet/WalletConnection";
 

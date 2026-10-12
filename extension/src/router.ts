@@ -1,8 +1,8 @@
 import { createHashHistory, createRouter } from "@tanstack/react-router";
-import { OnboardingError } from "@/ui/pages/error/OnboardingError";
-import { PopupError } from "@/ui/pages/error/PopupError";
-import { OnboardingLoading } from "@/ui/pages/startup/OnboardingLoading";
-import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
+import { OnboardingError } from "@/ui/components/OnboardingError";
+import { OnboardingLoading } from "@/ui/components/OnboardingLoading";
+import { PopupError } from "@/ui/components/PopupError";
+import { PopupLoading } from "@/ui/components/PopupLoading";
 import type { UiRouterContext } from "./routes/__root";
 import { routeTree } from "./routeTree.gen";
 

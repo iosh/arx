@@ -1,4 +1,3 @@
-import type { KeySourceId } from "@arx/core/keyring";
 import { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "@arx/core/wallet";
 import { Navigate, useBlocker, useNavigate } from "@tanstack/react-router";
 import { useId } from "react";
@@ -7,17 +6,21 @@ import { useTranslation } from "react-i18next";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { PasswordInput } from "@/ui/components/PasswordInput";
-import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/WalletContext";
 
-export type WalletCreationResult = { keySourceId: KeySourceId; words: readonly MnemonicWord[] };
 const exitLocation = { to: "/onboarding", replace: true } as const;
 
-export function CreateWalletForm({ onCreated }: { onCreated: (result: WalletCreationResult) => void }) {
-  const { client: wallet, status } = useWallet();
+export function CreatePasswordForm({
+  totalSteps,
+  onSubmit,
+}: {
+  totalSteps: number;
+  onSubmit: (password: string) => void | Promise<void>;
+}) {
+  const { status } = useWallet();
   const navigate = useNavigate();
   const { t } = useTranslation("onboarding");
   const id = useId();
@@ -36,31 +39,23 @@ export function CreateWalletForm({ onCreated }: { onCreated: (result: WalletCrea
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
-  async function createWallet({ password }: { password: string }) {
-    const { mnemonic } = await wallet.keySources.generateMnemonic();
-    const { keySourceId } = await wallet.createFromMnemonic({ password, mnemonic, namespace: "eip155" });
-    onCreated({
-      keySourceId,
-      words: mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })),
-    });
-  }
-
   const helper =
     length > 0 && length < VAULT_PASSWORD_MIN_LENGTH
       ? t("passwordRemaining", { count: VAULT_PASSWORD_MIN_LENGTH - length })
       : t("passwordMinimum", { count: VAULT_PASSWORD_MIN_LENGTH });
 
-  // Initialization is published before the create response; let this submission finish.
-  if (status !== "uninitialized" && !pending) return <Navigate {...exitLocation} />;
+  // Initialization is published before the command response; let this submission finish.
+  // Navigate runs before the previous render's blocker effect is removed.
+  if (status !== "uninitialized" && !pending) return <Navigate {...exitLocation} ignoreBlocker />;
 
   return (
     <OnboardingStepLayout
-      progress={{ current: 1, total: 3 }}
+      progress={{ current: 1, total: totalSteps }}
       onBack={() => void navigate(exitLocation)}
       backDisabled={pending}
     >
       <OnboardingCard asChild title={t("passwordTitle")} description={t("passwordDescription")}>
-        <form onSubmit={handleSubmit(createWallet)} aria-busy={pending}>
+        <form onSubmit={handleSubmit(({ password }) => onSubmit(password))} aria-busy={pending}>
           <div className="flex flex-col gap-4">
             <Field>
               <FieldLabel htmlFor={passwordId}>{t("password")}</FieldLabel>
@@ -113,7 +108,7 @@ export function CreateWalletForm({ onCreated }: { onCreated: (result: WalletCrea
             disabled={!isValid || pending}
             aria-busy={pending}
           >
-            {pending && <Spinner aria-label={t("createWallet")} />}
+            {pending && <Spinner aria-label={t("continue")} />}
             {t("continue")}
           </Button>
         </form>

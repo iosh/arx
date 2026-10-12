@@ -1,13 +1,13 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { Suspense, useEffect, useState } from "react";
 import { createUiRouter } from "@/router";
-import { PopupError } from "@/ui/pages/error/PopupError";
-import { OpenOnboarding } from "@/ui/pages/open-onboarding/OpenOnboarding";
-import { PopupLoading } from "@/ui/pages/startup/PopupLoading";
-import { UnlockPage } from "@/ui/pages/unlock/UnlockPage";
+import { PopupError } from "@/ui/components/PopupError";
+import { PopupLoading } from "@/ui/components/PopupLoading";
 import type { WalletConnectionResult } from "@/ui/wallet/connectWallet";
 import { WalletConnection, WalletLockBoundary } from "@/ui/wallet/WalletConnection";
 import { useWallet } from "@/ui/wallet/WalletContext";
+import { OpenOnboarding } from "./OpenOnboarding";
+import { Unlock } from "./Unlock";
 
 const router = createUiRouter("popup");
 
@@ -22,7 +22,7 @@ function Popup() {
   return (
     <WalletLockBoundary>
       {status === "uninitialized" && <OpenOnboarding />}
-      {status === "locked" && <UnlockPage focusPassword={focusInitialUnlock} />}
+      {status === "locked" && <Unlock focusPassword={focusInitialUnlock} />}
       {status === "unlocked" && <RouterProvider router={router} />}
     </WalletLockBoundary>
   );

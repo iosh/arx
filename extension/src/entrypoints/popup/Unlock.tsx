@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { UnlockForm } from "@/ui/components/unlock-form/UnlockForm";
 
-export function UnlockPage({ focusPassword }: { focusPassword: boolean }) {
+export function Unlock({ focusPassword }: { focusPassword: boolean }) {
   const { t } = useTranslation("wallet");
 
   return (

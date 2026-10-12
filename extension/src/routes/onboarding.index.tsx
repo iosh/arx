@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronRight, Plus, Wallet } from "lucide-react";
+import { ChevronRight, FileKey, Plus, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
@@ -46,6 +46,27 @@ function Welcome() {
               <ChevronRight aria-hidden="true" className="size-4.5 text-placeholder" />
             </Link>
           </Button>
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xs text-muted-foreground">{t("existingWallet")}</h2>
+            <Button
+              asChild
+              variant="outline"
+              className="h-18 w-full justify-start gap-3.5 bg-card px-4 text-left whitespace-normal shadow-none has-[>svg]:px-4"
+            >
+              <Link to="/onboarding/import">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                  <FileKey aria-hidden="true" className="size-4.5" />
+                </span>
+                <span className="flex flex-1 flex-col gap-1">
+                  <span className="text-sm font-semibold">{t("importRecoveryPhrase")}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {t("importRecoveryPhraseDescription")}
+                  </span>
+                </span>
+                <ChevronRight aria-hidden="true" className="size-4.5 text-placeholder" />
+              </Link>
+            </Button>
+          </div>
         </section>
       </main>
     </div>

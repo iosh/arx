@@ -1,4 +1,5 @@
-import { WalletApiError } from "@arx/wallet-api/client";
+import { KeyringInvalidMnemonicError } from "@arx/core/keyring";
+import { isWalletApiError } from "@arx/wallet-api/client";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { createFileRoute, Navigate, useBlocker } from "@tanstack/react-router";
 import { type ClipboardEvent, useId, useState } from "react";
@@ -75,7 +76,7 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
         namespace: "eip155",
       });
     } catch (error) {
-      if (error instanceof WalletApiError && error.code === "keyring.invalid_mnemonic") {
+      if (isWalletApiError(error, KeyringInvalidMnemonicError)) {
         setError("root.phrase", { type: "invalid" });
         return;
       }

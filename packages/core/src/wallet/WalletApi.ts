@@ -52,6 +52,7 @@ export type WalletApiEvent =
 
 export type WalletKeySourcesApi = Readonly<{
   generateMnemonic(): Promise<{ mnemonic: string }>;
+  getAddressFromPrivateKey(input: { privateKey: string; chainRef: ChainRef }): Promise<AccountAddress>;
   get(keySourceId: KeySourceId): Promise<KeySource>;
   list(): Promise<readonly KeySource[]>;
   addMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;

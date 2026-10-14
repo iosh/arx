@@ -4,6 +4,7 @@ import type { Approvals } from "../approvals/Approvals.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import type { Networks } from "../networks/Networks.js";
 import type { CustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import type { DappAuthorization } from "../permissions/createDappAuthorization.js";
@@ -26,109 +27,126 @@ type CreateWalletApiOptions = Readonly<{
   transactions: Transactions;
 }>;
 
-export const createWalletApi = (options: CreateWalletApiOptions): WalletApi => ({
-  subscribe: options.subscribe,
+export const createWalletApi = ({
+  subscribe,
+  autoLock,
+  coordinator,
+  keyring,
+  accounts,
+  networks,
+  customNetworkRemoval,
+  chainRpc,
+  permissions,
+  approvals,
+  transactions,
+}: CreateWalletApiOptions): WalletApi => ({
+  subscribe,
 
-  getStatus: async () => options.coordinator.getStatus(),
-  createFromMnemonic: async (input) => options.coordinator.createFromMnemonic(input),
-  restoreFromMnemonic: async (input) => options.coordinator.restoreFromMnemonic(input),
-  createFromPrivateKey: async (input) => options.coordinator.createFromPrivateKey(input),
-  unlock: async ({ password }) => options.coordinator.unlock(password),
-  lock: async () => options.coordinator.lock(),
-  changePassword: async (input) => options.coordinator.changePassword(input),
-  getAutoLockDuration: async () => options.autoLock.getDuration(),
-  setAutoLockDuration: async ({ durationMs }) => options.coordinator.setAutoLockDuration(durationMs),
-  notifyUserActivity: async () => options.coordinator.notifyUserActivity(),
+  getStatus: async () => coordinator.getStatus(),
+  createFromMnemonic: async (input) => coordinator.createFromMnemonic(input),
+  restoreFromMnemonic: async (input) => coordinator.restoreFromMnemonic(input),
+  createFromPrivateKey: async (input) => coordinator.createFromPrivateKey(input),
+  unlock: async ({ password }) => coordinator.unlock(password),
+  lock: async () => coordinator.lock(),
+  changePassword: async (input) => coordinator.changePassword(input),
+  getAutoLockDuration: async () => autoLock.getDuration(),
+  setAutoLockDuration: async ({ durationMs }) => coordinator.setAutoLockDuration(durationMs),
+  notifyUserActivity: async () => coordinator.notifyUserActivity(),
 
   keySources: {
     generateMnemonic: async () => ({ mnemonic: generateBip39Mnemonic() }),
+    getAddressFromPrivateKey: async ({ privateKey, chainRef }) => {
+      const { namespace } = parseChainRef(chainRef);
+      const accountId = keyring.accountIdFromPrivateKey({ namespace, privateKey });
+      return accounts.getAddress({ accountId, chainRef });
+    },
     get: async (keySourceId) => {
-      const keySource = options.keyring.getKeySource(keySourceId);
+      const keySource = keyring.getKeySource(keySourceId);
       if (!keySource) throw new KeySourceNotFoundError(keySourceId);
       return keySource;
     },
-    list: async () => options.keyring.listKeySources(),
-    addMnemonic: async (input) => options.coordinator.addMnemonic(input),
-    importMnemonic: async (input) => options.coordinator.importMnemonic(input),
-    importPrivateKey: async (input) => options.coordinator.importPrivateKey(input),
-    confirmMnemonicBackup: async (input) => options.coordinator.confirmMnemonicBackup(input),
-    exportMnemonic: async (input) => options.coordinator.exportMnemonic(input),
-    exportPrivateKey: async (input) => options.coordinator.exportPrivateKey(input),
-    remove: async (input) => options.coordinator.removeKeySource(input),
+    list: async () => keyring.listKeySources(),
+    addMnemonic: async (input) => coordinator.addMnemonic(input),
+    importMnemonic: async (input) => coordinator.importMnemonic(input),
+    importPrivateKey: async (input) => coordinator.importPrivateKey(input),
+    confirmMnemonicBackup: async (input) => coordinator.confirmMnemonicBackup(input),
+    exportMnemonic: async (input) => coordinator.exportMnemonic(input),
+    exportPrivateKey: async (input) => coordinator.exportPrivateKey(input),
+    remove: async (input) => coordinator.removeKeySource(input),
   },
 
   hdKeyrings: {
     get: async (hdKeyringId) => {
-      const hdKeyring = options.keyring.getHdKeyring(hdKeyringId);
+      const hdKeyring = keyring.getHdKeyring(hdKeyringId);
       if (!hdKeyring) throw new HdKeyringNotFoundError(hdKeyringId);
       return hdKeyring;
     },
-    list: async () => options.keyring.listHdKeyrings(),
-    add: async (input) => options.coordinator.addHdKeyring(input),
-    deriveAccount: async (input) => options.coordinator.deriveHdAccount(input),
-    remove: async (input) => options.coordinator.removeHdKeyring(input),
+    list: async () => keyring.listHdKeyrings(),
+    add: async (input) => coordinator.addHdKeyring(input),
+    deriveAccount: async (input) => coordinator.deriveHdAccount(input),
+    remove: async (input) => coordinator.removeHdKeyring(input),
   },
 
   accounts: {
     get: async (accountId) => {
-      const account = options.accounts.getAccount(accountId);
+      const account = accounts.getAccount(accountId);
       if (!account) throw new AccountNotFoundError(accountId);
       return account;
     },
     getSelected: async () => {
-      const { selectedNamespace } = options.networks.getSelection();
-      return options.accounts.getSelectedAccount(selectedNamespace);
+      const { selectedNamespace } = networks.getSelection();
+      return accounts.getSelectedAccount(selectedNamespace);
     },
-    list: async () => options.accounts.listAccounts(),
-    getAddress: async (input) => options.accounts.getAddress(input),
-    listAddresses: async (chainRef) => options.accounts.listAddresses(chainRef),
-    rename: async (input) => options.accounts.rename(input),
-    setHidden: async (input) => options.coordinator.setAccountHidden(input),
-    select: async ({ accountId }) => options.accounts.select(accountId),
+    list: async () => accounts.listAccounts(),
+    getAddress: async (input) => accounts.getAddress(input),
+    listAddresses: async (chainRef) => accounts.listAddresses(chainRef),
+    rename: async (input) => accounts.rename(input),
+    setHidden: async (input) => coordinator.setAccountHidden(input),
+    select: async ({ accountId }) => accounts.select(accountId),
   },
 
   networks: {
-    get: async (chainRef) => options.networks.get(chainRef),
-    list: async () => options.networks.list(),
-    listByNamespace: async (namespace) => options.networks.listByNamespace(namespace),
-    getSelection: async () => options.networks.getSelection(),
-    getRpcConfiguration: async (chainRef) => options.networks.getRpcConfiguration(chainRef),
-    addCustom: async (input) => options.networks.addCustom(input),
-    updateCustom: async (input) => options.networks.updateCustom(input),
-    removeCustom: async (chainRef) => options.customNetworkRemoval.removeCustom(chainRef),
-    setRpcOverride: async (input) => options.networks.setRpcOverride(input),
-    clearRpcOverride: async (chainRef) => options.networks.clearRpcOverride(chainRef),
-    selectNetwork: async (chainRef) => options.networks.selectNetwork(chainRef),
-    selectNamespace: async (namespace) => options.networks.selectNamespace(namespace),
+    get: async (chainRef) => networks.get(chainRef),
+    list: async () => networks.list(),
+    listByNamespace: async (namespace) => networks.listByNamespace(namespace),
+    getSelection: async () => networks.getSelection(),
+    getRpcConfiguration: async (chainRef) => networks.getRpcConfiguration(chainRef),
+    addCustom: async (input) => networks.addCustom(input),
+    updateCustom: async (input) => networks.updateCustom(input),
+    removeCustom: async (chainRef) => customNetworkRemoval.removeCustom(chainRef),
+    setRpcOverride: async (input) => networks.setRpcOverride(input),
+    clearRpcOverride: async (chainRef) => networks.clearRpcOverride(chainRef),
+    selectNetwork: async (chainRef) => networks.selectNetwork(chainRef),
+    selectNamespace: async (namespace) => networks.selectNamespace(namespace),
   },
 
-  chainRpc: options.chainRpc,
+  chainRpc,
 
   permissions: {
-    get: async (scope) => options.permissions.get(scope),
-    list: async () => options.permissions.list(),
-    listByOrigin: async (origin) => options.permissions.listByOrigin(origin),
-    setAccounts: async (input) => options.permissions.setAccounts(input),
-    revoke: async (scope) => options.permissions.revoke(scope),
-    disconnectOrigin: async (input) => options.permissions.disconnectOrigin(input),
+    get: async (scope) => permissions.get(scope),
+    list: async () => permissions.list(),
+    listByOrigin: async (origin) => permissions.listByOrigin(origin),
+    setAccounts: async (input) => permissions.setAccounts(input),
+    revoke: async (scope) => permissions.revoke(scope),
+    disconnectOrigin: async (input) => permissions.disconnectOrigin(input),
   },
 
   approvals: {
-    get: async (approvalId) => options.approvals.get(approvalId),
-    list: async () => options.approvals.list(),
-    approve: async (decision) => options.approvals.approve(decision),
-    reject: async (approvalId) => options.approvals.reject(approvalId),
+    get: async (approvalId) => approvals.get(approvalId),
+    list: async () => approvals.list(),
+    approve: async (decision) => approvals.approve(decision),
+    reject: async (approvalId) => approvals.reject(approvalId),
   },
 
   transactions: {
     prepare: async (input) =>
-      options.transactions.prepare({
+      transactions.prepare({
         ...input,
         initiator: { type: "wallet" },
       }),
-    submit: async (prepared) => (await options.transactions.submit(prepared)).transaction,
-    prepareReplacement: async (input) => options.transactions.prepareReplacement(input),
-    get: async (transactionId) => options.transactions.get(transactionId),
-    list: async (query) => options.transactions.list(query),
+    submit: async (prepared) => (await transactions.submit(prepared)).transaction,
+    prepareReplacement: async (input) => transactions.prepareReplacement(input),
+    get: async (transactionId) => transactions.get(transactionId),
+    list: async (query) => transactions.list(query),
   },
 });

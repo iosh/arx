@@ -159,4 +159,4 @@ export const createWalletClient = (options: CreateWalletClientOptions): WalletCl
   return createWalletProxy(new WalletClientConnection(options.channel));
 };
 
-export { WalletApiError, WalletChannelDisconnectedError } from "./errors.js";
+export { isWalletApiError, WalletApiError, WalletChannelDisconnectedError } from "./errors.js";

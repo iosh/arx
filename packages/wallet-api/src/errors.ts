@@ -25,6 +25,11 @@ export class WalletApiError extends Error {
   }
 }
 
+/** Matches the definition's code; the received error remains a WalletApiError. */
+export function isWalletApiError(error: unknown, expected: { readonly code: string }): error is WalletApiError {
+  return error instanceof WalletApiError && error.code === expected.code;
+}
+
 export class WalletChannelDisconnectedError extends WalletApiError {
   static readonly code = "wallet_api.channel_disconnected";
 

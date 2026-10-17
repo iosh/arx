@@ -6,6 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { CreatePasswordForm } from "@/ui/components/CreatePasswordForm";
+import { EvmNetworkIcon } from "@/ui/components/EvmNetworkIcon";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
@@ -131,13 +132,8 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
             <section aria-label={t("privateKeyAddress")} className="flex flex-col gap-3 rounded-lg bg-background p-4">
               <h2 className="text-xs font-medium text-muted-foreground">{t("privateKeyAddress")}</h2>
               <div className="flex items-center gap-2.5">
-                <span aria-hidden="true" className="grid size-8 shrink-0 grid-cols-2 gap-0.5">
-                  <span className="rounded-full bg-[#627eea]" />
-                  <span className="rounded-full bg-[#0052ff]" />
-                  <span className="rounded-full bg-[#12aaff]" />
-                  <span className="rounded-full bg-[#8247e5]" />
-                </span>
-                <span className="text-sm font-semibold">Ethereum · Base · Arbitrum · Polygon</span>
+                <EvmNetworkIcon />
+                <span className="text-sm font-semibold">{t("common:evmNetworks")}</span>
               </div>
               <p>
                 <span className="sr-only">{address}</span>

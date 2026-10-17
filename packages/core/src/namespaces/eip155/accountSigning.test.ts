@@ -7,6 +7,7 @@ import type { AccountRecord } from "../../accounts/persistence.js";
 import { Keyring } from "../../keyring/Keyring.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../../keyring/persistence.js";
 import { createKeyringSecrets, type KeySourceSecret } from "../../keyring/secrets.js";
+import { createCoreMutationQueue } from "../../persistence/mutationQueue.js";
 import type { WalletStatusReader } from "../../wallet/Wallet.js";
 import { createEip155AccountSigning } from "./accountSigning.js";
 import { Eip155SigningAccountMismatchError } from "./errors.js";
@@ -48,6 +49,8 @@ const createSigningFixture = (params: {
       keySources: sourceRecord ? [sourceRecord] : [],
       hdKeyrings: params.hdKeyring ? [params.hdKeyring] : [],
     },
+    mutations: createCoreMutationQueue({ commit: vi.fn() }),
+    publishChanged: vi.fn(),
   });
   keyring.activateSecrets(createKeyringSecrets([params.source]));
 

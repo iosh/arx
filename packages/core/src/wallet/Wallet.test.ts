@@ -126,6 +126,13 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   });
   const { adapter, deriveHdAccountId, accountIdFromPrivateKey } = createAdapter();
   const { adapter: secondKeyringAdapter } = createAdapter(SECOND_NAMESPACE);
+  const events: WalletStatusChanged[] = [];
+  const keyringChanges: KeyringChanged[] = [];
+  const accountChanges: AccountsChanged[] = [];
+  const mutations = createCoreMutationQueue({ commit });
+  const publishKeyringChanged = (change: KeyringChanged): void => {
+    keyringChanges.push(change);
+  };
   const keyring = new Keyring({
     bootstrap: {
       keySources: [...state.keySources.values()],
@@ -135,11 +142,9 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
       [adapter.namespace]: adapter,
       [secondKeyringAdapter.namespace]: secondKeyringAdapter,
     },
+    mutations,
+    publishChanged: publishKeyringChanged,
   });
-  const events: WalletStatusChanged[] = [];
-  const keyringChanges: KeyringChanged[] = [];
-  const accountChanges: AccountsChanged[] = [];
-  const mutations = createCoreMutationQueue({ commit });
   const publishAccountsChanged = (change: AccountsChanged): void => {
     accountChanges.push(change);
   };
@@ -186,7 +191,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     dappConnections: { refreshAccountsForOpenConnections: refreshDappConnections },
     autoLock,
     publishStatusChanged: (event) => events.push(event),
-    publishKeyringChanged: (event) => keyringChanges.push(event),
+    publishKeyringChanged,
     publishAccountsChanged,
     publishPermissionsChanged: () => undefined,
   });
@@ -717,6 +722,81 @@ describe("WalletCoordinator", () => {
     ]);
   });
 
+  it("persists a source rename without changing its accounts or encrypted vault", async () => {
+    const { wallet, accounts, commits, keyring, keyringChanges, state } = createHarness();
+    const { keySourceId } = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: EIP155_NAMESPACE,
+    });
+    const previousSource = keyring.getKeySource(keySourceId);
+    const previousAccounts = accounts.listAccounts();
+    const encryptedVault = state.encryptedVault;
+    const commitCount = commits.length;
+    const eventCount = keyringChanges.length;
+
+    await keyring.renameMnemonicSource({ keySourceId, name: "Savings" });
+
+    const renamedSource = { ...previousSource, name: "Savings" };
+    expect(keyring.getKeySource(keySourceId)).toEqual(renamedSource);
+    expect(state.keySources.get(keySourceId)).toEqual(renamedSource);
+    expect(accounts.listAccounts()).toEqual(previousAccounts);
+    expect(state.encryptedVault).toBe(encryptedVault);
+    expect(commits).toHaveLength(commitCount + 1);
+    expect(keyringChanges).toHaveLength(eventCount + 1);
+    expect(keyringChanges.at(-1)).toEqual({ type: "keyringChanged" });
+
+    await keyring.renameMnemonicSource({ keySourceId, name: "Savings" });
+
+    expect(commits).toHaveLength(commitCount + 1);
+    expect(keyringChanges).toHaveLength(eventCount + 1);
+    expect(createHarness({ state }).keyring.getKeySource(keySourceId)).toEqual(renamedSource);
+  });
+
+  it("keeps the previous source name when persistence rejects a rename", async () => {
+    const { wallet, keyring, keyringChanges, state, setCommitFailure } = createHarness();
+    const { keySourceId } = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: EIP155_NAMESPACE,
+    });
+    const previousSource = keyring.getKeySource(keySourceId);
+    const eventCount = keyringChanges.length;
+    const failure = new Error("Storage transaction failed");
+    setCommitFailure(failure);
+
+    await expect(keyring.renameMnemonicSource({ keySourceId, name: "Savings" })).rejects.toBe(failure);
+
+    expect(keyring.getKeySource(keySourceId)).toEqual(previousSource);
+    expect(state.keySources.get(keySourceId)).toEqual(previousSource);
+    expect(keyringChanges).toHaveLength(eventCount);
+  });
+
+  it("preserves a source rename when an account is derived concurrently", async () => {
+    const { wallet, accounts, keyring, state } = createHarness();
+    const { keySourceId, hdKeyringId } = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: EIP155_NAMESPACE,
+    });
+
+    const [, derivedAccountId] = await Promise.all([
+      keyring.renameMnemonicSource({ keySourceId, name: "Savings" }),
+      wallet.deriveHdAccount({ hdKeyringId }),
+    ]);
+
+    expect(keyring.getKeySource(keySourceId)).toMatchObject({ name: "Savings" });
+    expect(keyring.getHdKeyring(hdKeyringId)?.nextDerivationIndex).toBe(2);
+    expect(accounts.getAccount(derivedAccountId)?.origin).toEqual({ type: "hd", hdKeyringId, derivationIndex: 1 });
+    const restarted = createHarness({ state });
+    expect(restarted.keyring.getKeySource(keySourceId)).toEqual(keyring.getKeySource(keySourceId));
+    expect(restarted.keyring.getHdKeyring(hdKeyringId)).toEqual(keyring.getHdKeyring(hdKeyringId));
+    expect(restarted.accounts.getAccount(derivedAccountId)).toEqual(accounts.getAccount(derivedAccountId));
+  });
+
   it("confirms mnemonic backup while locked without reading the secret", async () => {
     const { wallet, commits, keyring, keyringChanges, vault } = createHarness();
     await wallet.createFromMnemonic({
@@ -729,7 +809,7 @@ describe("WalletCoordinator", () => {
     if (source?.type !== "bip39") throw new Error("missing test source");
     await wallet.lock();
 
-    await wallet.confirmMnemonicBackup({ keySourceId: source.keySourceId });
+    await keyring.confirmMnemonicBackup({ keySourceId: source.keySourceId });
 
     expect(vault.getStatus()).toBe("locked");
     expect(keyring.getKeySource(source.keySourceId)).toMatchObject({ backupStatus: "confirmed" });
@@ -738,7 +818,7 @@ describe("WalletCoordinator", () => {
 
     const commitCount = commits.length;
     const eventCount = keyringChanges.length;
-    await wallet.confirmMnemonicBackup({ keySourceId: source.keySourceId });
+    await keyring.confirmMnemonicBackup({ keySourceId: source.keySourceId });
 
     expect(commits).toHaveLength(commitCount);
     expect(keyringChanges).toHaveLength(eventCount);

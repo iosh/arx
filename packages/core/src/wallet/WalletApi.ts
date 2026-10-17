@@ -58,6 +58,7 @@ export type WalletKeySourcesApi = Readonly<{
   addMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
   importMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
   importPrivateKey(input: PrivateKeySourceInput): Promise<PrivateKeySourceAdded>;
+  renameMnemonic(input: { keySourceId: KeySourceId; name: string }): Promise<void>;
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;

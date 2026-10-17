@@ -1,0 +1,53 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
+import { PageHeader } from "@/ui/components/PageHeader";
+import { Spinner } from "@/ui/components/ui/spinner";
+import { useMnemonicWallet } from "@/ui/wallet/useMnemonicSources";
+import { useVisibleAccounts } from "@/ui/wallet/useVisibleAccounts";
+import { useWallet } from "@/ui/wallet/WalletContext";
+import { RenameSheet } from "./-wallet/RenameSheet";
+
+export const Route = createFileRoute("/wallet/wallets/$keySourceId")({
+  component: WalletDetails,
+  remountDeps: ({ params }) => params.keySourceId,
+});
+
+function WalletDetails() {
+  const { keySourceId } = Route.useParams();
+  const { client: wallet } = useWallet();
+  const { t } = useTranslation("wallet");
+  const accountsQuery = useVisibleAccounts("eip155");
+  const walletQuery = useMnemonicWallet(keySourceId, accountsQuery.data);
+  const mnemonicWallet = walletQuery.data;
+  const name = mnemonicWallet?.source.name ?? t("walletDetails");
+  const subtitle = mnemonicWallet?.accounts
+    ? t("walletAccountCount", { count: mnemonicWallet.accounts.length })
+    : t("recoveryPhrase");
+
+  return (
+    <main className="flex h-full flex-col font-sans">
+      <title>{`${name} · ARX`}</title>
+      <PageHeader
+        title={name}
+        backTo="/wallet/accounts"
+        backLabel={t("backToAccounts")}
+        subtitle={mnemonicWallet ? subtitle : undefined}
+      />
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
+        {mnemonicWallet ? (
+          <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+            <RenameSheet
+              label={t("walletNameLabel")}
+              name={mnemonicWallet.source.name}
+              onRename={(name) => wallet.keySources.renameMnemonic({ keySourceId, name })}
+            />
+          </div>
+        ) : (
+          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
+            {walletQuery.isPending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}

@@ -1,5 +1,6 @@
 export const common = {
   language: "Language",
+  evmNetworks: "EVM networks",
   reload: "Reload",
   showPassword: "Show {{field}}",
   hidePassword: "Hide {{field}}",

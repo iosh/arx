@@ -1,6 +1,6 @@
 import type { Account } from "@arx/core/accounts";
-import { createFileRoute } from "@tanstack/react-router";
-import { KeyRound } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChevronRight, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AccountIdenticon } from "@/ui/components/AccountIdenticon";
 import { PageHeader } from "@/ui/components/PageHeader";
@@ -9,7 +9,7 @@ import { getAccountName } from "@/ui/wallet/getAccountName";
 import { useMnemonicWallets } from "@/ui/wallet/useMnemonicSources";
 import { useVisibleAccounts } from "@/ui/wallet/useVisibleAccounts";
 
-export const Route = createFileRoute("/wallet/accounts")({
+export const Route = createFileRoute("/wallet/accounts/")({
   component: Accounts,
 });
 
@@ -68,10 +68,17 @@ function Accounts() {
             aria-label={source?.name}
           >
             {source && (
-              <h2 className="flex h-11 items-center gap-2 px-4">
-                <KeyRound aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                <span className="truncate text-sm font-semibold">{source.name}</span>
-                <span className="shrink-0 text-xs font-medium text-muted-foreground">{`· ${t("recoveryPhrase")}`}</span>
+              <h2>
+                <Link
+                  to="/wallet/wallets/$keySourceId"
+                  params={{ keySourceId: source.keySourceId }}
+                  className="flex h-11 items-center gap-2 rounded-xl px-4 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <KeyRound aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm font-semibold">{source.name}</span>
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">{`· ${t("recoveryPhrase")}`}</span>
+                  <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
+                </Link>
               </h2>
             )}
             <AccountRows accounts={accounts} />
@@ -88,21 +95,27 @@ function AccountRows({ accounts }: { accounts: readonly Account[] }) {
   return (
     <ul>
       {accounts.map((account) => (
-        <li key={account.accountId} className="flex h-14 items-center gap-3 px-4">
-          <AccountIdenticon accountId={account.accountId} size={32} />
-          <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="truncate text-sm font-semibold">{getAccountName(account, t)}</span>
-            {account.origin.type === "private-key" && (
-              <span className="shrink-0 rounded bg-secondary px-1.5 py-px text-xs font-medium text-muted-foreground">
-                {t("privateKey")}
-              </span>
-            )}
-            {account.selected && (
-              <span className="shrink-0 rounded bg-brand-subtle px-1.5 py-px text-xs font-semibold text-brand">
-                {t("currentAccount")}
-              </span>
-            )}
-          </span>
+        <li key={account.accountId}>
+          <Link
+            to="/wallet/accounts/$accountId"
+            params={{ accountId: account.accountId }}
+            className="flex h-14 items-center gap-3 rounded-xl px-4 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            <AccountIdenticon accountId={account.accountId} size={32} />
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <span className="truncate text-sm font-semibold">{getAccountName(account, t)}</span>
+              {account.origin.type === "private-key" && (
+                <span className="shrink-0 rounded bg-secondary px-1.5 py-px text-xs font-medium text-muted-foreground">
+                  {t("privateKey")}
+                </span>
+              )}
+              {account.selected && (
+                <span className="shrink-0 rounded bg-brand-subtle px-1.5 py-px text-xs font-semibold text-brand">
+                  {t("currentAccount")}
+                </span>
+              )}
+            </span>
+          </Link>
         </li>
       ))}
     </ul>

@@ -1,5 +1,6 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { Namespace } from "../namespaces/types.js";
+import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { KeyringBootstrap } from "./bootstrap.js";
 import {
@@ -9,6 +10,7 @@ import {
   KeySourceBackupUnsupportedError,
   KeySourceNotFoundError,
   KeySourceRequiresHdKeyringError,
+  KeySourceTypeMismatchError,
 } from "./errors.js";
 import { getKeyringNamespaceAdapter, type KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 import {
@@ -22,6 +24,7 @@ import {
   type PrivateKeySourceRecord,
 } from "./persistence.js";
 import type { KeyringSecrets } from "./secrets.js";
+import type { KeyringChanged } from "./types.js";
 
 type KeyringUpdate = Readonly<{
   nextKeySources: ReadonlyMap<KeySourceId, KeySourceRecord>;
@@ -34,6 +37,8 @@ const EMPTY_BOOTSTRAP: KeyringBootstrap = { keySources: [], hdKeyrings: [] };
 type KeyringOptions = Readonly<{
   bootstrap?: KeyringBootstrap;
   namespaceAdapters?: KeyringNamespaceAdapters;
+  mutations: CoreMutationQueue;
+  publishChanged(change: KeyringChanged): void;
 }>;
 
 const sharesDerivationSequence = (left: HdKeyringRecord, right: HdKeyringRecord): boolean =>
@@ -42,14 +47,18 @@ const sharesDerivationSequence = (left: HdKeyringRecord, right: HdKeyringRecord)
 /** Owns key source/HD keyring records and decoded secrets for the current runtime. */
 export class Keyring {
   readonly #namespaceAdapters: KeyringNamespaceAdapters;
+  readonly #mutations: CoreMutationQueue;
+  readonly #publishChanged: KeyringOptions["publishChanged"];
   #keySources: ReadonlyMap<KeySourceId, KeySourceRecord>;
   #hdKeyrings: ReadonlyMap<HdKeyringId, HdKeyringRecord>;
   #secrets: KeyringSecrets | null = null;
 
-  constructor(options: KeyringOptions = {}) {
+  constructor(options: KeyringOptions) {
     const bootstrap = options.bootstrap ?? EMPTY_BOOTSTRAP;
 
     this.#namespaceAdapters = options.namespaceAdapters ?? {};
+    this.#mutations = options.mutations;
+    this.#publishChanged = options.publishChanged;
     this.#keySources = new Map(bootstrap.keySources.map((source) => [source.keySourceId, source]));
     this.#hdKeyrings = new Map(bootstrap.hdKeyrings.map((hdKeyring) => [hdKeyring.hdKeyringId, hdKeyring]));
   }
@@ -105,6 +114,22 @@ export class Keyring {
     this.#secrets = null;
   }
 
+  renameMnemonicSource({ keySourceId, name }: { keySourceId: KeySourceId; name: string }): Promise<void> {
+    return this.commitKeySourceUpdate(keySourceId, (source) => {
+      if (source.type !== "bip39") {
+        throw new KeySourceTypeMismatchError({ keySourceId, expectedType: "bip39", actualType: source.type });
+      }
+      return source.name === name ? null : { ...source, name };
+    });
+  }
+
+  confirmMnemonicBackup({ keySourceId }: { keySourceId: KeySourceId }): Promise<void> {
+    return this.commitKeySourceUpdate(keySourceId, (source) => {
+      if (source.type !== "bip39") throw new KeySourceBackupUnsupportedError(keySourceId);
+      return source.backupStatus === "confirmed" ? null : { ...source, backupStatus: "confirmed" };
+    });
+  }
+
   prepareAddBip39Source(params: {
     source: Bip39KeySourceRecord;
     hdKeyring: Omit<HdKeyringRecord, "keySourceId">;
@@ -130,21 +155,6 @@ export class Keyring {
     nextKeySources.set(source.keySourceId, source);
 
     const persistenceChanges = [keySourceWrites.put(source)];
-
-    return { nextKeySources, nextHdKeyrings: this.#hdKeyrings, persistenceChanges };
-  }
-
-  prepareConfirmBackup(keySourceId: KeySourceId): KeyringUpdate | null {
-    const source = this.#keySources.get(keySourceId);
-    if (!source) throw new KeySourceNotFoundError(keySourceId);
-    if (source.type !== "bip39") throw new KeySourceBackupUnsupportedError(keySourceId);
-    if (source.backupStatus === "confirmed") return null;
-
-    const confirmedSource = { ...source, backupStatus: "confirmed" } as const;
-    const nextKeySources = new Map(this.#keySources);
-    nextKeySources.set(keySourceId, confirmedSource);
-
-    const persistenceChanges = [keySourceWrites.put(confirmedSource)];
 
     return { nextKeySources, nextHdKeyrings: this.#hdKeyrings, persistenceChanges };
   }
@@ -218,6 +228,27 @@ export class Keyring {
   applyCommittedUpdate(update: KeyringUpdate): void {
     this.#keySources = update.nextKeySources;
     this.#hdKeyrings = update.nextHdKeyrings;
+  }
+
+  private async commitKeySourceUpdate(
+    keySourceId: KeySourceId,
+    update: (source: KeySourceRecord) => KeySourceRecord | null,
+  ): Promise<void> {
+    await this.#mutations.run(async (commit) => {
+      const source = this.#keySources.get(keySourceId);
+      if (!source) throw new KeySourceNotFoundError(keySourceId);
+      const nextSource = update(source);
+      if (!nextSource) return;
+
+      const nextKeySources = new Map(this.#keySources);
+      nextKeySources.set(keySourceId, nextSource);
+      const changes = [keySourceWrites.put(nextSource)];
+
+      await commit(changes);
+
+      this.#keySources = nextKeySources;
+      this.#publishChanged({ type: "keyringChanged" });
+    });
   }
 
   private assertBip39Source(keySourceId: KeySourceId): void {

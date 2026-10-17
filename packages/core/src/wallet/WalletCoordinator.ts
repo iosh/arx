@@ -351,18 +351,6 @@ export class WalletCoordinator {
     });
   }
 
-  async confirmMnemonicBackup(params: { keySourceId: KeySourceId }): Promise<void> {
-    await this.#mutations.run(async (commit) => {
-      const keyringUpdate = this.#keyring.prepareConfirmBackup(params.keySourceId);
-      if (!keyringUpdate) return;
-
-      await commit(keyringUpdate.persistenceChanges);
-
-      this.#keyring.applyCommittedUpdate(keyringUpdate);
-      this.#publishKeyringChanged({ type: "keyringChanged" });
-    });
-  }
-
   async exportMnemonic(params: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null> {
     return await this.#mutations.run(async () => {
       const source = findKeySourceSecret(this.requireKeyringSecrets(), params.keySourceId);

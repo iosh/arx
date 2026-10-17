@@ -1,15 +1,20 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "./ui/button";
 
 export function PageHeader({
   title,
   backTo,
   backLabel,
+  icon,
+  subtitle,
 }: Readonly<{
   title: string;
   backTo: NonNullable<LinkProps["to"]>;
   backLabel: string;
+  icon?: ReactNode;
+  subtitle?: string;
 }>) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2.5 px-1.5">
@@ -18,7 +23,11 @@ export function PageHeader({
           <ArrowLeft aria-hidden="true" className="size-4.5" />
         </Link>
       </Button>
-      <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
+      {icon}
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-base font-semibold">{title}</h1>
+        {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
+      </div>
     </header>
   );
 }

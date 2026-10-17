@@ -1,5 +1,5 @@
 import type { Account } from "@arx/core/accounts";
-import type { HdKeyring, KeySource } from "@arx/core/keyring";
+import type { HdKeyring, KeySource, KeySourceId } from "@arx/core/keyring";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWalletEvents } from "./useWalletEvents";
 import { useWallet } from "./WalletContext";
@@ -12,6 +12,23 @@ type MnemonicSources = Readonly<{
   sources: readonly MnemonicSource[];
   hdKeyrings: readonly HdKeyring[];
 }>;
+
+function groupAccountsBySource(accounts: readonly Account[], hdKeyrings: readonly HdKeyring[]) {
+  const sourceByKeyring = new Map(hdKeyrings.map((keyring) => [keyring.hdKeyringId, keyring.keySourceId]));
+  const accountsBySource = new Map<KeySourceId, Account[]>();
+
+  for (const account of accounts) {
+    if (account.origin.type !== "hd") continue;
+    const keySourceId = sourceByKeyring.get(account.origin.hdKeyringId);
+    if (keySourceId === undefined) continue;
+
+    const sourceAccounts = accountsBySource.get(keySourceId);
+    if (sourceAccounts) sourceAccounts.push(account);
+    else accountsBySource.set(keySourceId, [account]);
+  }
+
+  return accountsBySource;
+}
 
 function useMnemonicSources<TData>({
   enabled,
@@ -61,19 +78,31 @@ export function useMnemonicSource(account: Account | undefined) {
   });
 }
 
+export function useMnemonicWallet(keySourceId: KeySourceId, accounts: readonly Account[] | undefined) {
+  return useMnemonicSources({
+    enabled: true,
+    select: ({ sources, hdKeyrings }) => {
+      const source = sources.find((source) => source.keySourceId === keySourceId);
+      if (!source) return null;
+
+      return {
+        source,
+        accounts: accounts ? (groupAccountsBySource(accounts, hdKeyrings).get(keySourceId) ?? []) : undefined,
+      };
+    },
+  });
+}
+
 export function useMnemonicWallets(accounts: readonly Account[] | undefined) {
   return useMnemonicSources({
     enabled: accounts?.some((account) => account.origin.type === "hd") ?? false,
     select: ({ sources, hdKeyrings }) => {
       if (!accounts) return [];
-      const sourceByKeyring = new Map(hdKeyrings.map((keyring) => [keyring.hdKeyringId, keyring.keySourceId]));
+      const accountsBySource = groupAccountsBySource(accounts, hdKeyrings);
       return sources
         .map((source) => ({
           source,
-          accounts: accounts.filter(
-            (account) =>
-              account.origin.type === "hd" && sourceByKeyring.get(account.origin.hdKeyringId) === source.keySourceId,
-          ),
+          accounts: accountsBySource.get(source.keySourceId) ?? [],
         }))
         .filter((wallet) => wallet.accounts.length > 0);
     },

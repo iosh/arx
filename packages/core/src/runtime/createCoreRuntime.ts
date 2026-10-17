@@ -70,6 +70,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const keyring = new Keyring({
     bootstrap: bootstrap.keyring,
     namespaceAdapters: keyringAdapters,
+    mutations,
+    publishChanged: publishWalletEvent,
   });
   const accounts = new Accounts({
     adapters: accountAdapters,

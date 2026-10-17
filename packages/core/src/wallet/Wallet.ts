@@ -31,6 +31,7 @@ export type PrivateKeyWalletCreated = PrivateKeySourceAdded;
 export type CreateFromMnemonicInput = Readonly<{
   password: string;
   mnemonic: string;
+  name: string;
   namespace: Namespace;
 }>;
 
@@ -44,6 +45,7 @@ export type CreateFromPrivateKeyInput = Readonly<{
 
 export type MnemonicSourceInput = Readonly<{
   mnemonic: string;
+  name: string;
   namespace: Namespace;
 }>;
 

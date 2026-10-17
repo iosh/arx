@@ -12,6 +12,7 @@ import type { Bip39KeySourceRecord, HdKeyringRecord, PrivateKeySourceRecord } fr
 const bip39Source = (keySourceId = "source-1"): Bip39KeySourceRecord => ({
   keySourceId,
   type: "bip39",
+  name: "Wallet 1",
   backupStatus: "pending",
   createdAt: 1,
 });

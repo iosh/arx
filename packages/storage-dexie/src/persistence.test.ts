@@ -150,6 +150,7 @@ describe("createDexiePersistence", () => {
     const source: Bip39KeySourceRecord = {
       keySourceId: "source-1",
       type: "bip39",
+      name: "Personal",
       backupStatus: "pending",
       createdAt: 1,
     };

@@ -238,6 +238,7 @@ describe("WalletCoordinator", () => {
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: `  ${PRIMARY_MNEMONIC.replaceAll(" ", "   ")}  `,
+      name: "Personal",
       namespace: "eip155",
     });
 
@@ -257,6 +258,7 @@ describe("WalletCoordinator", () => {
     expect(keyring.getSecrets()?.keySources).toHaveLength(1);
     expect([...state.keySources.values()][0]).toMatchObject({
       type: "bip39",
+      name: "Personal",
       backupStatus: "pending",
       createdAt: expect.any(Number),
     });
@@ -280,11 +282,13 @@ describe("WalletCoordinator", () => {
     const created = await wallet.restoreFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Recovered",
       namespace: "eip155",
     });
 
     expect(state.keySources.get(created.keySourceId)).toMatchObject({
       type: "bip39",
+      name: "Recovered",
       backupStatus: "confirmed",
     });
     expect(state.keyrings.get(created.hdKeyringId)?.keySourceId).toBe(created.keySourceId);
@@ -295,12 +299,14 @@ describe("WalletCoordinator", () => {
     const first = wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
 
     const second = wallet.restoreFromMnemonic({
       password: "password",
       mnemonic: SECONDARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const results = await Promise.allSettled([first, second]);
@@ -316,6 +322,7 @@ describe("WalletCoordinator", () => {
       wallet.createFromMnemonic({
         password: "password",
         mnemonic: "not a bip39 mnemonic",
+        name: "Wallet 1",
         namespace: "eip155",
       }),
     ).rejects.toMatchObject({ code: "keyring.invalid_mnemonic" });
@@ -330,6 +337,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const existingSource = keyring.listKeySources()[0];
@@ -339,6 +347,7 @@ describe("WalletCoordinator", () => {
     await expect(
       wallet.importMnemonic({
         mnemonic: `  ${PRIMARY_MNEMONIC.replaceAll(" ", "   ")}  `,
+        name: "Wallet 2",
         namespace: "eip155",
       }),
     ).rejects.toMatchObject({
@@ -355,24 +364,29 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
 
     const added = await wallet.addMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
+      name: "Savings",
       namespace: EIP155_NAMESPACE,
     });
     const imported = await wallet.importMnemonic({
       mnemonic: TERTIARY_MNEMONIC,
+      name: "Recovered",
       namespace: EIP155_NAMESPACE,
     });
 
     expect(keyring.getKeySource(added.keySourceId)).toMatchObject({
       type: "bip39",
+      name: "Savings",
       backupStatus: "pending",
     });
     expect(keyring.getKeySource(imported.keySourceId)).toMatchObject({
       type: "bip39",
+      name: "Recovered",
       backupStatus: "confirmed",
     });
     expect(keyring.getHdKeyring(added.hdKeyringId)).toMatchObject({
@@ -405,6 +419,7 @@ describe("WalletCoordinator", () => {
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
 
@@ -435,6 +450,7 @@ describe("WalletCoordinator", () => {
     const mnemonicSource = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
     const privateKeySource = await wallet.importPrivateKey({
@@ -502,6 +518,7 @@ describe("WalletCoordinator", () => {
       wallet.createFromMnemonic({
         password: "short",
         mnemonic: PRIMARY_MNEMONIC,
+        name: "Wallet 1",
         namespace: "eip155",
       }),
     ).rejects.toMatchObject({ code: VaultPasswordTooShortError.code });
@@ -519,6 +536,7 @@ describe("WalletCoordinator", () => {
       wallet.createFromMnemonic({
         password: "password",
         mnemonic: PRIMARY_MNEMONIC,
+        name: "Wallet 1",
         namespace: "eip155",
       }),
     ).rejects.toBe(failure);
@@ -535,6 +553,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const keyring = [...state.keyrings.values()][0];
@@ -556,6 +575,7 @@ describe("WalletCoordinator", () => {
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
     const accountId = await wallet.deriveHdAccount({ hdKeyringId: created.hdKeyringId });
@@ -595,6 +615,7 @@ describe("WalletCoordinator", () => {
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
     const added = await wallet.addHdKeyring({
@@ -626,6 +647,7 @@ describe("WalletCoordinator", () => {
     const first = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
     const commitCount = commits.length;
@@ -636,6 +658,7 @@ describe("WalletCoordinator", () => {
 
     const second = await wallet.importMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
+      name: "Wallet 2",
       namespace: EIP155_NAMESPACE,
     });
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
@@ -666,6 +689,7 @@ describe("WalletCoordinator", () => {
     const first = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
     const imported = await wallet.importPrivateKey({
@@ -698,6 +722,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const source = keyring.listKeySources()[0];
@@ -753,6 +778,7 @@ describe("WalletCoordinator", () => {
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const selectableAccounts = [accounts.getAddress({ accountId: created.accountId, chainRef: "eip155:1" })] as const;
@@ -786,6 +812,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     await wallet.lock();
@@ -802,6 +829,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
 
@@ -812,7 +840,12 @@ describe("WalletCoordinator", () => {
 
   it("requires the password again after expiry even before the lock timer runs", async () => {
     const { wallet, vault, keyring } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
 
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
     wallet.notifyUserActivity();
@@ -826,7 +859,12 @@ describe("WalletCoordinator", () => {
 
   it("does not let a queued expiry lock a newly unlocked session", async () => {
     const { wallet, events } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
 
     const unlocking = wallet.unlock("password");
     vi.advanceTimersByTime(DEFAULT_AUTO_LOCK_DURATION_MS);
@@ -842,6 +880,7 @@ describe("WalletCoordinator", () => {
     const { keySourceId } = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const readRecord = vi.spyOn(vault, "requireRecord");
@@ -855,7 +894,12 @@ describe("WalletCoordinator", () => {
 
   it("does not commit a password change that finishes preparation after expiry", async () => {
     const { wallet, vault, commits } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
     const readUnlocked = vi.spyOn(vault, "requireUnlocked");
     const changing = wallet.changePassword({ currentPassword: "password", newPassword: "new-password" });
     await Promise.resolve();
@@ -869,7 +913,12 @@ describe("WalletCoordinator", () => {
 
   it("finishes an in-flight commit successfully and then clears the expired session", async () => {
     const { wallet, commit, vault, keyring, state } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
     const commitStarted = Promise.withResolvers<void>();
     const releaseCommit = Promise.withResolvers<void>();
     commit.mockImplementationOnce(async (changes) => {
@@ -878,7 +927,7 @@ describe("WalletCoordinator", () => {
       applyChanges(state, changes);
     });
 
-    const importing = wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, namespace: "eip155" });
+    const importing = wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, name: "Wallet 2", namespace: "eip155" });
     await commitStarted.promise;
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
     wallet.notifyUserActivity();
@@ -912,6 +961,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const eventCount = events.length;
@@ -935,6 +985,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
     const committedRecord = state.encryptedVault;
@@ -944,14 +995,18 @@ describe("WalletCoordinator", () => {
     const failure = new Error("commit failed");
     setCommitFailure(failure);
 
-    await expect(wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, namespace: "eip155" })).rejects.toBe(failure);
+    await expect(
+      wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, name: "Wallet 2", namespace: "eip155" }),
+    ).rejects.toBe(failure);
     expect(state.encryptedVault).toBe(committedRecord);
     expect(keyring.listKeySources().map((source) => source.keySourceId)).toEqual(keySourceIds);
     expect(keyring.getSecrets()?.keySources.map((source) => source.keySourceId)).toEqual(secretIds);
     expect(keyringChanges).toHaveLength(eventCount);
 
     setCommitFailure(null);
-    await expect(wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, namespace: "eip155" })).resolves.toMatchObject({
+    await expect(
+      wallet.importMnemonic({ mnemonic: SECONDARY_MNEMONIC, name: "Wallet 2", namespace: "eip155" }),
+    ).resolves.toMatchObject({
       keySourceId: expect.any(String),
       hdKeyringId: expect.any(String),
       accountId: expect.stringMatching(/^eip155:/),
@@ -961,7 +1016,12 @@ describe("WalletCoordinator", () => {
   it("keeps the active deadline and auto-lock duration unchanged when persistence fails", async () => {
     const failure = new Error("commit failed");
     const { autoLock, wallet, setCommitFailure } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
     vi.setSystemTime(91_000);
     setCommitFailure(failure);
 
@@ -975,7 +1035,12 @@ describe("WalletCoordinator", () => {
 
   it("locks immediately when a shorter duration puts the last input beyond the deadline", async () => {
     const { wallet, keyring } = createHarness();
-    await wallet.createFromMnemonic({ password: "password", mnemonic: PRIMARY_MNEMONIC, namespace: "eip155" });
+    await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: "eip155",
+    });
     vi.setSystemTime(91_000);
 
     await wallet.setAutoLockDuration(60_000);
@@ -1027,6 +1092,7 @@ describe("WalletCoordinator", () => {
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
       namespace: "eip155",
     });
 

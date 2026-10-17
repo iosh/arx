@@ -1,6 +1,7 @@
 import type { KeySourceId } from "@arx/core/keyring";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CreatePasswordForm } from "@/ui/components/CreatePasswordForm";
 import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
 import { RecoveryPhraseBackup } from "@/ui/components/recovery-phrase/RecoveryPhraseBackup";
@@ -15,12 +16,18 @@ const exitLocation = { to: "/onboarding", replace: true } as const;
 
 function CreateWallet() {
   const { client: wallet } = useWallet();
+  const { t } = useTranslation("wallet");
   const navigate = useNavigate();
   const [creation, setCreation] = useState<WalletCreationResult | null>(null);
 
   async function createWallet(password: string) {
     const { mnemonic } = await wallet.keySources.generateMnemonic();
-    const { keySourceId } = await wallet.createFromMnemonic({ password, mnemonic, namespace: "eip155" });
+    const { keySourceId } = await wallet.createFromMnemonic({
+      password,
+      mnemonic,
+      name: t("defaultWalletName", { number: 1 }),
+      namespace: "eip155",
+    });
     setCreation({
       keySourceId,
       words: mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })),

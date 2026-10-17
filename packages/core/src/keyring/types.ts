@@ -8,6 +8,8 @@ export type KeySource =
   | Readonly<{
       keySourceId: KeySourceId;
       type: "bip39";
+      /** Local display name shared by this source's namespace keyrings. */
+      name: string;
       backupStatus: BackupStatus;
       createdAt: number;
     }>

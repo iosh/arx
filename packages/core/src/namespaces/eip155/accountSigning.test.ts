@@ -38,6 +38,7 @@ const createSigningFixture = (params: {
       ? {
           keySourceId: params.source.keySourceId,
           type: "bip39" as const,
+          name: "Wallet 1",
           backupStatus: "confirmed" as const,
           createdAt: 1,
         }

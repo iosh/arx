@@ -34,7 +34,7 @@ const wordPositions = Array.from({ length: 24 }, (_, index) => index + 1);
 
 function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: () => void }) {
   const { client: wallet, status } = useWallet();
-  const { t } = useTranslation("onboarding");
+  const { t } = useTranslation(["onboarding", "wallet"]);
   const id = useId();
   const [wordCount, setWordCount] = useState<WordCount>(12);
   const {
@@ -69,6 +69,7 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
     try {
       await wallet.restoreFromMnemonic({
         password,
+        name: t("defaultWalletName", { ns: "wallet", number: 1 }),
         mnemonic: words
           .slice(0, wordCount)
           .map((word) => word.trim().toLowerCase())

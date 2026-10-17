@@ -550,6 +550,7 @@ export class WalletCoordinator {
         source: {
           keySourceId,
           type: "bip39",
+          name: params.name,
           backupStatus,
           createdAt,
         },
@@ -619,6 +620,7 @@ export class WalletCoordinator {
         source: {
           keySourceId,
           type: "bip39",
+          name: params.name,
           backupStatus,
           createdAt,
         },

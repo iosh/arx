@@ -1,8 +1,8 @@
 import type { Account } from "@arx/core/accounts";
 import type { HdKeyring, KeySource, KeySourceId } from "@arx/core/keyring";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWalletEvents } from "./useWalletEvents";
-import { useWallet } from "./WalletContext";
+import { useWalletEvents } from "@/ui/wallet/connection/useWalletEvents";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 const mnemonicSourcesKey = ["mnemonicSources"] as const;
 
@@ -93,18 +93,13 @@ export function useMnemonicWallet(keySourceId: KeySourceId, accounts: readonly A
   });
 }
 
-export function useMnemonicWallets(accounts: readonly Account[] | undefined) {
+export function useHdWallets() {
   return useMnemonicSources({
-    enabled: accounts?.some((account) => account.origin.type === "hd") ?? false,
-    select: ({ sources, hdKeyrings }) => {
-      if (!accounts) return [];
-      const accountsBySource = groupAccountsBySource(accounts, hdKeyrings);
-      return sources
-        .map((source) => ({
-          source,
-          accounts: accountsBySource.get(source.keySourceId) ?? [],
-        }))
-        .filter((wallet) => wallet.accounts.length > 0);
-    },
+    enabled: true,
+    select: ({ sources, hdKeyrings }) =>
+      sources.flatMap((source) => {
+        const sourceKeyrings = hdKeyrings.filter((candidate) => candidate.keySourceId === source.keySourceId);
+        return sourceKeyrings.length > 0 ? [{ source, hdKeyrings: sourceKeyrings }] : [];
+      }),
   });
 }

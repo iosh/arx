@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
 import { Button } from "@/ui/components/ui/button";
 
-export function OnboardingError() {
+export function OnboardingErrorScreen() {
   const { t } = useTranslation();
   return (
     <OnboardingLayout>

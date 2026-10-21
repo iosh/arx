@@ -9,7 +9,7 @@ import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useWallet } from "@/ui/wallet/WalletContext";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 const exitLocation = { to: "/onboarding", replace: true } as const;
 

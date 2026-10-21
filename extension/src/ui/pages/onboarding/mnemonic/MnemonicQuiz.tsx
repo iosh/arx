@@ -1,13 +1,13 @@
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CardError } from "@/ui/components/CardError";
+import { FormErrorAlert } from "@/ui/components/FormErrorAlert";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { buildMnemonicQuiz, type MnemonicWord } from "./mnemonic";
 
-export function VerifyRecoveryPhrase({
+export function MnemonicQuiz({
   words,
   onSubmit,
   onBack,
@@ -83,7 +83,7 @@ export function VerifyRecoveryPhrase({
             </div>
           ))}
         </div>
-        {incorrect && <CardError>{t("verifyPhraseIncorrect")}</CardError>}
+        {incorrect && <FormErrorAlert>{t("verifyPhraseIncorrect")}</FormErrorAlert>}
         <div className="flex flex-col gap-2.5">
           <Button
             type="submit"

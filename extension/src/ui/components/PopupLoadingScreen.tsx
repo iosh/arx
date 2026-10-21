@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Spinner } from "@/ui/components/ui/spinner";
 
-export function PopupLoading() {
+export function PopupLoadingScreen() {
   const { t } = useTranslation();
   return (
     <main className="flex h-full flex-col items-center gap-10 px-6 pt-35 pb-6 font-sans">

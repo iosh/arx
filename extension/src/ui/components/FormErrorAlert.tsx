@@ -1,7 +1,7 @@
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
-export function CardError({ children, id }: { children: ReactNode; id?: string }) {
+export function FormErrorAlert({ children, id }: { children: ReactNode; id?: string }) {
   return (
     <div
       id={id}

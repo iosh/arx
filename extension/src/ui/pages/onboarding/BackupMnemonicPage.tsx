@@ -1,36 +1,31 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import type { KeySourceId } from "@arx/core/keyring";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { PasswordInput } from "@/ui/components/PasswordInput";
-import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
-import { RecoveryPhraseBackup } from "@/ui/components/recovery-phrase/RecoveryPhraseBackup";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useWallet } from "@/ui/wallet/WalletContext";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { MnemonicBackup } from "./mnemonic/MnemonicBackup";
+import type { MnemonicWord } from "./mnemonic/mnemonic";
 
-export const Route = createFileRoute("/onboarding/backup/$keySourceId")({
-  component: Backup,
-  remountDeps: ({ params }) => params.keySourceId,
-});
-
-function Backup() {
+export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }) {
   const { client: wallet, status } = useWallet();
-  const { keySourceId } = Route.useParams();
-  const navigate = Route.useNavigate();
+  const navigate = useNavigate();
   const [words, setWords] = useState<readonly MnemonicWord[] | null>(null);
 
-  async function readPhrase(password: string) {
+  async function readMnemonic(password: string) {
     const unlocked = await wallet.unlock({ password });
     if (!unlocked) return false;
 
-    const phrase = await wallet.keySources.exportMnemonic({ keySourceId, password });
-    if (phrase === null) return false;
+    const result = await wallet.keySources.exportMnemonic({ keySourceId, password });
+    if (result === null) return false;
 
-    setWords(phrase.mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })));
+    setWords(result.mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })));
     return true;
   }
 
@@ -44,12 +39,12 @@ function Backup() {
   if (!words) {
     return (
       <OnboardingStepLayout>
-        <VerifyPasswordForm onSubmit={readPhrase} />
+        <VerifyPasswordForm onSubmit={readMnemonic} />
       </OnboardingStepLayout>
     );
   }
 
-  return <RecoveryPhraseBackup keySourceId={keySourceId} words={words} totalSteps={2} onComplete={complete} />;
+  return <MnemonicBackup keySourceId={keySourceId} words={words} totalSteps={2} onComplete={complete} />;
 }
 
 function VerifyPasswordForm({

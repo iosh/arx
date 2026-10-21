@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { OnboardingLayout } from "@/ui/components/OnboardingLayout";
 import { Spinner } from "@/ui/components/ui/spinner";
 
-export function OnboardingLoading() {
+export function OnboardingLoadingScreen() {
   const { t } = useTranslation();
   return (
     <OnboardingLayout>

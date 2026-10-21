@@ -5,7 +5,8 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AccountIdenticon } from "@/ui/components/AccountIdenticon";
+import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
+import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,22 +16,24 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { getAccountName } from "@/ui/wallet/getAccountName";
-import { useWallet } from "@/ui/wallet/WalletContext";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 export function AccountSwitcher({
   accounts,
+  selectedAccount,
+  isSelectedPending,
   isPending,
   isLoadingError,
 }: Readonly<{
   accounts: readonly Account[] | undefined;
+  selectedAccount: Account | undefined;
+  isSelectedPending: boolean;
   isPending: boolean;
   isLoadingError: boolean;
 }>) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const [open, setOpen] = useState(false);
-  const selectedAccount = accounts?.find((account) => account.selected);
   const { mutate: selectAccount, isPending: isSelectingAccount } = useMutation({
     mutationFn: (accountId: Account["accountId"]) => wallet.accounts.select({ accountId }),
   });
@@ -46,7 +49,9 @@ export function AccountSwitcher({
           >
             {selectedAccount && <AccountIdenticon accountId={selectedAccount.accountId} />}
             <span className="flex min-w-0 items-center gap-1 px-1">
-              <span className="truncate">{isPending ? <Spinner aria-label={t("loadingAccount")} /> : name}</span>
+              <span className="truncate">
+                {isSelectedPending ? <Spinner aria-label={t("loadingAccount")} /> : name}
+              </span>
               <ChevronDown
                 aria-hidden="true"
                 className="size-3.25 shrink-0 text-muted-foreground group-data-[state=open]:rotate-180"
@@ -88,7 +93,7 @@ export function AccountSwitcher({
                   className="h-13 gap-3 rounded-none px-4 pr-11 text-sm font-semibold [&>span:first-child]:right-4 [&>span:first-child]:size-4"
                   onSelect={(event) => {
                     event.preventDefault();
-                    if (account.selected) {
+                    if (account.accountId === selectedAccount?.accountId) {
                       setOpen(false);
                       return;
                     }

@@ -1,40 +1,38 @@
 import { KeyringInvalidMnemonicError } from "@arx/core/keyring";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { createFileRoute, Navigate, useBlocker } from "@tanstack/react-router";
+import { Navigate, useBlocker } from "@tanstack/react-router";
 import { type ClipboardEvent, useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { CardError } from "@/ui/components/CardError";
-import { CreatePasswordForm } from "@/ui/components/CreatePasswordForm";
+import { FormErrorAlert } from "@/ui/components/FormErrorAlert";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui/input-group";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useWallet } from "@/ui/wallet/WalletContext";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { useWalletError } from "@/ui/wallet/useWalletError";
+import { CreatePasswordForm } from "./CreatePasswordForm";
 
-export const Route = createFileRoute("/onboarding/import")({
-  component: ImportRecoveryPhrase,
-});
-
-function ImportRecoveryPhrase() {
+export function ImportMnemonicPage() {
   const [password, setPassword] = useState<string | null>(null);
 
   return password === null ? (
     <CreatePasswordForm totalSteps={2} onSubmit={setPassword} />
   ) : (
-    <RecoveryPhraseForm password={password} onBack={() => setPassword(null)} />
+    <MnemonicForm password={password} onBack={() => setPassword(null)} />
   );
 }
 
 type WordCount = 12 | 24;
-type PhraseFields = { words: string[] };
+type MnemonicFields = { words: string[] };
 const wordPositions = Array.from({ length: 24 }, (_, index) => index + 1);
 
-function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: () => void }) {
+function MnemonicForm({ password, onBack }: { password: string; onBack: () => void }) {
   const { client: wallet, status } = useWallet();
   const { t } = useTranslation(["onboarding", "wallet"]);
+  const showError = useWalletError();
   const id = useId();
   const [wordCount, setWordCount] = useState<WordCount>(12);
   const {
@@ -45,19 +43,19 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
     setError,
     clearErrors,
     formState: { errors, isSubmitting: pending },
-  } = useForm<PhraseFields>({ defaultValues: { words: wordPositions.map(() => "") } });
+  } = useForm<MnemonicFields>({ defaultValues: { words: wordPositions.map(() => "") } });
   const words = useWatch({ control, name: "words" }).slice(0, wordCount);
   const canSubmit = words.every((word) => word.trim().length > 0);
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
-  function pastePhrase(event: ClipboardEvent<HTMLInputElement>) {
+  function pasteMnemonic(event: ClipboardEvent<HTMLInputElement>) {
     const pasted = event.clipboardData.getData("text/plain").trim().toLowerCase().split(/\s+/u);
     if (pasted.length < 2) return;
     event.preventDefault();
 
     if (pasted.length !== 12 && pasted.length !== 24) {
-      setError("root.phrase", { type: "invalid" });
+      setError("root.mnemonic", { type: "invalid" });
       return;
     }
 
@@ -65,8 +63,9 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
     reset({ words: [...pasted, ...Array.from({ length: 24 - pasted.length }, () => "")] }, { keepDefaultValues: true });
   }
 
-  async function importWallet({ words }: PhraseFields) {
+  async function importWallet({ words }: MnemonicFields) {
     try {
+      const { selectedNamespace } = await wallet.networks.getSelection();
       await wallet.restoreFromMnemonic({
         password,
         name: t("defaultWalletName", { ns: "wallet", number: 1 }),
@@ -74,14 +73,14 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
           .slice(0, wordCount)
           .map((word) => word.trim().toLowerCase())
           .join(" "),
-        namespace: "eip155",
+        namespace: selectedNamespace,
       });
     } catch (error) {
       if (isWalletApiError(error, KeyringInvalidMnemonicError)) {
-        setError("root.phrase", { type: "invalid" });
+        setError("root.mnemonic", { type: "invalid" });
         return;
       }
-      throw error;
+      showError(error);
     }
   }
 
@@ -99,7 +98,7 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
         >
           <fieldset
             aria-labelledby={`${id}-label`}
-            aria-describedby={errors.root?.phrase ? `${id}-error` : undefined}
+            aria-describedby={errors.root?.mnemonic ? `${id}-error` : undefined}
             className="flex min-w-0 flex-col gap-3"
           >
             <div className="flex items-center justify-between gap-3">
@@ -145,13 +144,13 @@ function RecoveryPhraseForm({ password, onBack }: { password: string; onBack: ()
                     lang="en"
                     disabled={pending}
                     className="px-2.5 py-2 font-normal"
-                    onPaste={pastePhrase}
+                    onPaste={pasteMnemonic}
                   />
                 </InputGroup>
               ))}
             </div>
           </fieldset>
-          {errors.root?.phrase && <CardError id={`${id}-error`}>{t("importPhraseIncorrect")}</CardError>}
+          {errors.root?.mnemonic && <FormErrorAlert id={`${id}-error`}>{t("importPhraseIncorrect")}</FormErrorAlert>}
           <Button
             type="submit"
             size="lg"

@@ -2,7 +2,7 @@ import { CircleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/ui/components/ui/button";
 
-export function PopupError() {
+export function PopupErrorScreen() {
   const { t } = useTranslation();
   return (
     <main className="flex h-full flex-col font-sans">

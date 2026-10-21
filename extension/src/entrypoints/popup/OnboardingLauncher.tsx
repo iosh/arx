@@ -8,7 +8,7 @@ async function openOnboarding() {
   window.close();
 }
 
-export function OpenOnboarding() {
+export function OnboardingLauncher() {
   const { t } = useTranslation("onboarding");
   const requested = useRef(false);
 

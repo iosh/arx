@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { i18n } from "@/ui/language/i18n";
 import { UiLanguageProvider } from "@/ui/language/UiLanguageProvider";
 import { queryClient } from "@/ui/queryClient";
-import { connectWallet } from "@/ui/wallet/connectWallet";
+import { connectWallet } from "@/ui/wallet/connection/connectWallet";
 import { App } from "./App";
 
 const container = document.getElementById("root");

@@ -15,7 +15,7 @@ import {
 import { Button } from "@/ui/components/ui/button";
 import type { MnemonicWord } from "./mnemonic";
 
-export function RecoveryPhrase({
+export function MnemonicDisplay({
   words,
   onContinue,
   onDefer,

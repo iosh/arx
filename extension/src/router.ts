@@ -1,8 +1,8 @@
 import { createHashHistory, createRouter } from "@tanstack/react-router";
-import { OnboardingError } from "@/ui/components/OnboardingError";
-import { OnboardingLoading } from "@/ui/components/OnboardingLoading";
-import { PopupError } from "@/ui/components/PopupError";
-import { PopupLoading } from "@/ui/components/PopupLoading";
+import { OnboardingErrorScreen } from "@/ui/components/OnboardingErrorScreen";
+import { OnboardingLoadingScreen } from "@/ui/components/OnboardingLoadingScreen";
+import { PopupErrorScreen } from "@/ui/components/PopupErrorScreen";
+import { PopupLoadingScreen } from "@/ui/components/PopupLoadingScreen";
 import type { UiRouterContext } from "./routes/__root";
 import { routeTree } from "./routeTree.gen";
 
@@ -11,8 +11,8 @@ export function createUiRouter(surface: UiRouterContext["surface"]) {
     routeTree,
     history: createHashHistory(),
     context: { surface },
-    defaultPendingComponent: surface === "onboarding" ? OnboardingLoading : PopupLoading,
-    defaultErrorComponent: surface === "onboarding" ? OnboardingError : PopupError,
+    defaultPendingComponent: surface === "onboarding" ? OnboardingLoadingScreen : PopupLoadingScreen,
+    defaultErrorComponent: surface === "onboarding" ? OnboardingErrorScreen : PopupErrorScreen,
   });
 }
 

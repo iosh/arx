@@ -2,12 +2,12 @@ import type { KeySourceId } from "@arx/core/keyring";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
-import type { MnemonicWord } from "@/ui/components/recovery-phrase/mnemonic";
-import { RecoveryPhrase } from "@/ui/components/recovery-phrase/RecoveryPhrase";
-import { VerifyRecoveryPhrase } from "@/ui/components/recovery-phrase/VerifyRecoveryPhrase";
-import { useWallet } from "@/ui/wallet/WalletContext";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { MnemonicDisplay } from "./MnemonicDisplay";
+import { MnemonicQuiz } from "./MnemonicQuiz";
+import type { MnemonicWord } from "./mnemonic";
 
-export function RecoveryPhraseBackup({
+export function MnemonicBackup({
   keySourceId,
   words,
   totalSteps,
@@ -21,19 +21,19 @@ export function RecoveryPhraseBackup({
   onDefer?: () => void;
 }) {
   const { client: wallet } = useWallet();
-  const [step, setStep] = useState<"phrase" | "verify">("phrase");
+  const [step, setStep] = useState<"display" | "quiz">("display");
   const confirmBackup = useMutation({
     mutationFn: () => wallet.keySources.confirmMnemonicBackup({ keySourceId }),
   });
 
-  function showPhrase() {
-    setStep("phrase");
+  function showMnemonic() {
+    setStep("display");
   }
 
-  if (step === "phrase") {
+  if (step === "display") {
     return (
       <OnboardingStepLayout progress={{ current: totalSteps - 1, total: totalSteps }}>
-        <RecoveryPhrase words={words} onContinue={() => setStep("verify")} onDefer={onDefer} />
+        <MnemonicDisplay words={words} onContinue={() => setStep("quiz")} onDefer={onDefer} />
       </OnboardingStepLayout>
     );
   }
@@ -41,13 +41,13 @@ export function RecoveryPhraseBackup({
   return (
     <OnboardingStepLayout
       progress={{ current: totalSteps, total: totalSteps }}
-      onBack={showPhrase}
+      onBack={showMnemonic}
       backDisabled={confirmBackup.isPending}
     >
-      <VerifyRecoveryPhrase
+      <MnemonicQuiz
         words={words}
         onSubmit={() => confirmBackup.mutate(undefined, { onSuccess: onComplete })}
-        onBack={showPhrase}
+        onBack={showMnemonic}
         pending={confirmBackup.isPending}
       />
     </OnboardingStepLayout>

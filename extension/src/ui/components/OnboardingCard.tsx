@@ -8,7 +8,7 @@ export function OnboardingCard({
   asChild = false,
 }: Readonly<{
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
   asChild?: boolean;
 }>) {
@@ -19,7 +19,7 @@ export function OnboardingCard({
       <title>{title} · ARX</title>
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl leading-snug font-semibold">{title}</h1>
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        {description && <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>}
       </div>
       <Slottable>{children}</Slottable>
     </Component>

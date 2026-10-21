@@ -1,11 +1,10 @@
-import type { Namespace } from "@arx/core/namespaces";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWalletEvents } from "./useWalletEvents";
-import { useWallet } from "./WalletContext";
+import { useWalletEvents } from "@/ui/wallet/connection/useWalletEvents";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 const accountsKey = ["accounts"] as const;
 
-export function useVisibleAccounts(namespace: Namespace) {
+export function useVisibleAccounts() {
   const { client: wallet } = useWallet();
   const queryClient = useQueryClient();
 
@@ -18,7 +17,7 @@ export function useVisibleAccounts(namespace: Namespace) {
   return useQuery({
     queryKey: accountsKey,
     queryFn: () => wallet.accounts.list(),
-    select: (accounts) => accounts.filter((account) => account.namespace === namespace && !account.hidden),
+    select: (accounts) => accounts.filter((account) => !account.hidden),
     networkMode: "always",
     retry: false,
     refetchOnWindowFocus: false,

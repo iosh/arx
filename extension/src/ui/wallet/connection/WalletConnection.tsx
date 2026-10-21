@@ -1,6 +1,7 @@
 import type { WalletClient } from "@arx/wallet-api/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, type ReactNode, use, useState } from "react";
+import { toast } from "sonner";
 import type { WalletConnectionResult } from "./connectWallet";
 import { useWalletActivity } from "./useWalletActivity";
 import { useWalletEvents } from "./useWalletEvents";
@@ -60,7 +61,11 @@ export function WalletLockBoundary({ children }: { children: ReactNode }) {
 
   useWalletEvents(wallet, "walletStatusChanged", (event) => {
     // Locking discards page state; unlocking must preserve the pending password submission.
-    if (event.status === "locked") setLockCount((current) => current + 1);
+    if (event.status === "locked") {
+      // Sonner replays active notifications when its container remounts.
+      toast.dismiss();
+      setLockCount((current) => current + 1);
+    }
   });
 
   return <Fragment key={lockCount}>{children}</Fragment>;

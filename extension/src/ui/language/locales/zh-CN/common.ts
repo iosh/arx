@@ -2,7 +2,11 @@ import type { CommonMessages } from "../en/common";
 
 export const common = {
   language: "语言",
+  close: "关闭",
+  notifications: "操作提示",
   evmNetworks: "EVM 网络",
+  loadingNetwork: "正在读取网络",
+  networkUnavailable: "无法读取网络信息",
   reload: "重新加载",
   showPassword: "显示{{field}}",
   hidePassword: "隐藏{{field}}",

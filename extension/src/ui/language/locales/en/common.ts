@@ -1,6 +1,10 @@
 export const common = {
   language: "Language",
+  close: "Close",
+  notifications: "Notifications",
   evmNetworks: "EVM networks",
+  loadingNetwork: "Loading network",
+  networkUnavailable: "Network information unavailable",
   reload: "Reload",
   showPassword: "Show {{field}}",
   hidePassword: "Hide {{field}}",

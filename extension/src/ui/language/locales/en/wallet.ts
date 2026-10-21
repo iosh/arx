@@ -42,6 +42,24 @@ export const wallet = {
   lockWallet: "Lock wallet",
   backupNotice: "Recovery phrase not backed up",
   backupStatusUnavailable: "Backup status unavailable",
+  addAccount: "Add account",
+  add: "Add",
+  createAccount: "Create account",
+  creatingAccount: "Creating account",
+  addToWallet: "Add to {{walletName}}",
+  noHdWallet: "A recovery phrase wallet is required to create an account.",
+  accountCreated: "Account created",
+  accountAlreadyExists: "Account already exists",
+  accountMoveDescription:
+    "The next account in “{{walletName}}” has already been imported with a private key, under the name “{{accountName}}”.",
+  moveTargetWallet: "Destination wallet",
+  accountMoveScope:
+    "After moving, this account will be managed by “{{walletName}}” and will no longer be listed separately. Its address and assets will remain unchanged.",
+  moveAccount: "Move to wallet",
+  accountMoved: "“{{accountName}}” moved to “{{walletName}}”",
+  cancel: "Cancel",
+  operationFailed: "The operation could not be completed.",
+  operationDisconnected: "The wallet connection was closed. Reopen the wallet and check the account list.",
 } as const;
 
 export type WalletMessages = { [Key in keyof typeof wallet]: string };

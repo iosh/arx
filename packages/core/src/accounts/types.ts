@@ -13,6 +13,13 @@ export type Account = Readonly<{
   createdAt: number;
 }>;
 
+/** A complete address in the network context used to obtain it. */
+export type Address = Readonly<{
+  address: string;
+  namespace: Namespace;
+  chainRef: ChainRef;
+}>;
+
 export type AccountAddress = Readonly<{
   accountId: AccountId;
   chainRef: ChainRef;

@@ -55,11 +55,6 @@ export const createWalletApi = ({
 
   keySources: {
     generateMnemonic: async () => ({ mnemonic: generateBip39Mnemonic() }),
-    getAddressFromPrivateKey: async ({ privateKey, chainRef }) => {
-      const { namespace } = parseChainRef(chainRef);
-      const accountId = keyring.accountIdFromPrivateKey({ namespace, privateKey });
-      return accounts.getAddress({ accountId, chainRef });
-    },
     get: async (keySourceId) => {
       const keySource = keyring.getKeySource(keySourceId);
       if (!keySource) throw new KeySourceNotFoundError(keySourceId);
@@ -84,7 +79,6 @@ export const createWalletApi = ({
     },
     list: async () => keyring.listHdKeyrings(),
     add: async (input) => coordinator.addHdKeyring(input),
-    deriveAccount: async (input) => coordinator.deriveHdAccount(input),
     remove: async (input) => coordinator.removeHdKeyring(input),
   },
 
@@ -99,8 +93,14 @@ export const createWalletApi = ({
       return accounts.getSelectedAccount(selectedNamespace);
     },
     list: async () => accounts.listAccounts(),
-    getAddress: async (input) => accounts.getAddress(input),
-    listAddresses: async (chainRef) => accounts.listAddresses(chainRef),
+    getAddresses: async (input) => accounts.getAddresses(input),
+    fromPrivateKey: async ({ privateKey, chainRef }) => {
+      const { namespace } = parseChainRef(chainRef);
+      const accountId = keyring.accountIdFromPrivateKey({ privateKey, namespace });
+      return { accountId, namespace, addresses: accounts.getAddresses({ accountId, chainRef }) };
+    },
+    create: async (input) => coordinator.createHdAccount(input),
+    move: async (input) => coordinator.movePrivateKeyAccount(input),
     rename: async (input) => accounts.rename(input),
     setHidden: async (input) => coordinator.setAccountHidden(input),
     select: async ({ accountId }) => accounts.select(accountId),

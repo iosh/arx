@@ -23,12 +23,13 @@ import {
 } from "./errors.js";
 import { type AccountsNamespaceAdapters, getAccountsNamespaceAdapter } from "./namespaceAdapter.js";
 import {
+  type AccountOrigin,
   type AccountRecord,
   type AccountSelectionRecord,
   accountSelectionWrites,
   accountWrites,
 } from "./persistence.js";
-import type { Account, AccountAddress, AccountsChanged } from "./types.js";
+import type { Account, AccountAddress, AccountsChanged, Address } from "./types.js";
 
 export type AccountsUpdate = Readonly<{
   nextRecords: ReadonlyMap<AccountId, AccountRecord>;
@@ -37,6 +38,8 @@ export type AccountsUpdate = Readonly<{
   changedAccountIds: readonly AccountId[];
   changedNamespaces: readonly Namespace[];
 }>;
+
+export type AccountUpdate = AccountsUpdate & Readonly<{ account: Account }>;
 
 export type AccountsRemovalUpdate = AccountsUpdate &
   Readonly<{
@@ -151,6 +154,11 @@ export class Accounts {
     return { accountId: input.accountId, chainRef: input.chainRef, ...address };
   }
 
+  getAddresses(input: { accountId: AccountId; chainRef: ChainRef }): readonly Address[] {
+    const { displayAddress } = this.getAddress(input);
+    return [{ address: displayAddress, namespace: getAccountIdNamespace(input.accountId), chainRef: input.chainRef }];
+  }
+
   listAddresses(chainRef: ChainRef): readonly AccountAddress[] {
     const { namespace } = parseChainRef(chainRef);
     getAccountsNamespaceAdapter(this.#adapters, namespace);
@@ -185,7 +193,7 @@ export class Accounts {
     return this.commitUpdate(() => this.prepareSelectAccount(accountId));
   }
 
-  prepareAddAccount(account: Omit<AccountRecord, "hidden">): AccountsUpdate {
+  prepareAddAccount(account: Omit<AccountRecord, "hidden">): AccountUpdate {
     const namespace = getAccountIdNamespace(account.accountId);
     getAccountsNamespaceAdapter(this.#adapters, namespace);
     if (this.#records.has(account.accountId)) throw new AccountAlreadyExistsError(account.accountId);
@@ -203,7 +211,10 @@ export class Accounts {
       persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, record.accountId)));
     }
 
-    return this.update(nextRecords, nextSelections, persistenceChanges, [record.accountId], [namespace]);
+    return {
+      ...this.update(nextRecords, nextSelections, persistenceChanges, [record.accountId], [namespace]),
+      account: this.toAccount(record, nextSelections),
+    };
   }
 
   prepareRenameAccount(accountId: AccountId, alias: string | undefined): AccountsUpdate | null {
@@ -222,6 +233,25 @@ export class Accounts {
       [accountId],
       [getAccountIdNamespace(accountId)],
     );
+  }
+
+  /** The wallet command must check that both sources control the same account. */
+  prepareAccountOriginUpdate(accountId: AccountId, origin: AccountOrigin): AccountUpdate {
+    const current = this.requireAccountRecord(accountId);
+    const updated: AccountRecord = { ...current, origin };
+    const nextRecords = new Map(this.#records);
+    nextRecords.set(updated.accountId, updated);
+
+    return {
+      ...this.update(
+        nextRecords,
+        this.#selections,
+        [accountWrites.put(updated)],
+        [updated.accountId],
+        [getAccountIdNamespace(updated.accountId)],
+      ),
+      account: this.toAccount(updated),
+    };
   }
 
   prepareSelectAccount(accountId: AccountId): AccountsUpdate | null {
@@ -354,12 +384,12 @@ export class Accounts {
     };
   }
 
-  private toAccount(record: AccountRecord): Account {
+  private toAccount(record: AccountRecord, selections = this.#selections): Account {
     const namespace = getAccountIdNamespace(record.accountId);
     return {
       ...record,
       namespace,
-      selected: this.#selections.get(namespace) === record.accountId,
+      selected: selections.get(namespace) === record.accountId,
     };
   }
 

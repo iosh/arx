@@ -3,9 +3,10 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
 import { type AccountId, formatAccountId } from "../../accounts/accountId.js";
+import { KeyringInvalidPrivateKeyError } from "../../keyring/errors.js";
 import type { KeyringNamespaceAdapter } from "../../keyring/namespaceAdapter.js";
 import { EIP155_NAMESPACE } from "./constants.js";
-import { Eip155InvalidPrivateKeyError, Eip155SigningAccountMismatchError } from "./errors.js";
+import { Eip155SigningAccountMismatchError } from "./errors.js";
 
 const DERIVATION_PREFIX = "m/44'/60'/0'/0";
 
@@ -26,7 +27,7 @@ const deriveHdPrivateKey = (params: { seed: Uint8Array; derivationIndex: number 
 const privateKeyBytes = (value: string): Uint8Array => {
   const hex = value.startsWith("0x") ? value.slice(2) : value;
   if (!secp256k1.utils.isValidPrivateKey(hex)) {
-    throw new Eip155InvalidPrivateKeyError();
+    throw new KeyringInvalidPrivateKeyError(EIP155_NAMESPACE);
   }
 
   return hexToBytes(hex);

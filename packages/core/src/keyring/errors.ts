@@ -1,4 +1,16 @@
 import { ArxBaseError } from "../errors.js";
+import type { Namespace } from "../namespaces/types.js";
+
+export class KeyringInvalidPrivateKeyError extends ArxBaseError {
+  static readonly code = "keyring.invalid_private_key";
+
+  constructor(namespace: Namespace) {
+    super(`Private key is invalid for namespace "${namespace}".`, {
+      code: KeyringInvalidPrivateKeyError.code,
+      details: { namespace },
+    });
+  }
+}
 
 export class KeyringInvalidMnemonicError extends ArxBaseError {
   static readonly code = "keyring.invalid_mnemonic";

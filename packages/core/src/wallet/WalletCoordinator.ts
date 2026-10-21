@@ -1,7 +1,8 @@
 import { type Accounts, accountsChangedFromUpdate } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
+import { AccountNotFoundError } from "../accounts/errors.js";
 import type { AccountRecord } from "../accounts/persistence.js";
-import type { AccountsChanged } from "../accounts/types.js";
+import type { Account, AccountsChanged } from "../accounts/types.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { DappConnections } from "../dappConnections/DappConnections.js";
 import { deriveBip39Seed, importBip39KeySourceSecret } from "../keyring/bip39.js";
@@ -12,6 +13,7 @@ import {
   KeySourceTypeMismatchError,
 } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
+import type { HdKeyringRecord } from "../keyring/persistence.js";
 import {
   type Bip39KeySourceSecret,
   createKeyringSecrets,
@@ -36,6 +38,7 @@ import {
   DEFAULT_AUTO_LOCK_DURATION_MS,
 } from "./AutoLockController.js";
 import {
+  WalletAccountKeyMismatchError,
   WalletAlreadyInitializedError,
   WalletLastKeySourceRemovalError,
   WalletLockedError,
@@ -47,7 +50,9 @@ import type {
   Bip39WalletCreated,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
+  HdAccountCreationResult,
   MnemonicSourceInput,
+  MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
   PrivateKeyWalletCreated,
@@ -427,20 +432,17 @@ export class WalletCoordinator {
     });
   }
 
-  async deriveHdAccount(params: { hdKeyringId: HdKeyringId }): Promise<AccountId> {
+  async createHdAccount(params: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult> {
     return await this.#mutations.run(async (commit) => {
       const secrets = this.requireKeyringSecrets();
       const hdKeyring = this.#keyring.getHdKeyring(params.hdKeyringId);
       if (!hdKeyring) throw new HdKeyringNotFoundError(params.hdKeyringId);
 
-      const source = this.requireBip39Source(secrets, hdKeyring.keySourceId);
-      const seed = await deriveBip39Seed(source);
-      this.assertUnlocked();
-      const accountId = this.#keyring.deriveHdAccountId({
-        namespace: hdKeyring.namespace,
-        seed,
-        derivationIndex: hdKeyring.nextDerivationIndex,
-      });
+      const accountId = await this.deriveNextHdAccountId(secrets, hdKeyring);
+      const existing = this.#accounts.getAccount(accountId);
+      if (existing?.origin.type === "private-key") {
+        return { status: "move-available", account: existing };
+      }
       const account: Omit<AccountRecord, "hidden"> = {
         accountId,
         origin: {
@@ -450,8 +452,8 @@ export class WalletCoordinator {
         },
         createdAt: this.#time.now(),
       };
-      const keyringUpdate = this.#keyring.prepareAdvanceHdKeyring(params.hdKeyringId);
       const accountsUpdate = this.#accounts.prepareAddAccount(account);
+      const keyringUpdate = this.#keyring.prepareAdvanceHdKeyring(params.hdKeyringId);
 
       await commit([...accountsUpdate.persistenceChanges, ...keyringUpdate.persistenceChanges]);
 
@@ -461,7 +463,66 @@ export class WalletCoordinator {
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       this.lockIfExpired();
 
-      return accountId;
+      return { status: "created", account: accountsUpdate.account };
+    });
+  }
+
+  async movePrivateKeyAccount({ accountId, hdKeyringId }: MovePrivateKeyAccountInput): Promise<Account> {
+    return await this.#mutations.run(async (commit) => {
+      const secrets = this.requireKeyringSecrets();
+      const hdKeyring = this.#keyring.getHdKeyring(hdKeyringId);
+      if (!hdKeyring) throw new HdKeyringNotFoundError(hdKeyringId);
+      const account = this.#accounts.getAccount(accountId);
+      if (!account) throw new AccountNotFoundError(accountId);
+
+      // Another window may have already completed this move.
+      if (account.origin.type === "hd" && account.origin.hdKeyringId === hdKeyringId) {
+        return account;
+      }
+
+      if (account.origin.type !== "private-key") throw new WalletAccountKeyMismatchError(accountId);
+
+      const privateKeySourceId = account.origin.keySourceId;
+      // Check both keys before removing the stored private key.
+      const nextAccountId = await this.deriveNextHdAccountId(secrets, hdKeyring);
+      if (nextAccountId !== accountId) throw new WalletAccountKeyMismatchError(accountId);
+      const privateKeyAccountId = this.derivePrivateKeyAccountId(secrets, privateKeySourceId);
+      if (privateKeyAccountId !== accountId) throw new WalletAccountKeyMismatchError(accountId);
+
+      const derivationIndex = hdKeyring.nextDerivationIndex;
+      const hdKeyringUpdate = this.#keyring.prepareAdvanceHdKeyring(hdKeyringId);
+      const keySourceUpdate = this.#keyring.prepareRemoveKeySource(privateKeySourceId);
+      const accountsUpdate = this.#accounts.prepareAccountOriginUpdate(accountId, {
+        type: "hd",
+        hdKeyringId,
+        derivationIndex,
+      });
+      const nextSecrets = createKeyringSecrets(
+        secrets.keySources.filter((source) => source.keySourceId !== privateKeySourceId),
+      );
+      const nextUnlocked = await replaceVaultPlaintext(
+        this.#vault.requireUnlocked(),
+        encodeKeyringSecrets(nextSecrets),
+      );
+      this.assertUnlocked();
+
+      await commit([
+        encryptedVaultWrites.put(nextUnlocked.record),
+        ...hdKeyringUpdate.persistenceChanges,
+        ...keySourceUpdate.persistenceChanges,
+        ...accountsUpdate.persistenceChanges,
+      ]);
+
+      this.#vault.activate(nextUnlocked);
+      this.#keyring.applyCommittedUpdate(hdKeyringUpdate);
+      this.#keyring.applyCommittedUpdate(keySourceUpdate);
+      this.#accounts.applyCommittedUpdate(accountsUpdate);
+      this.#keyring.activateSecrets(nextSecrets);
+      this.#publishKeyringChanged({ type: "keyringChanged" });
+      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      this.lockIfExpired();
+
+      return accountsUpdate.account;
     });
   }
 
@@ -649,10 +710,31 @@ export class WalletCoordinator {
     return secrets;
   }
 
+  private async deriveNextHdAccountId(secrets: KeyringSecrets, hdKeyring: HdKeyringRecord): Promise<AccountId> {
+    const source = this.requireBip39Source(secrets, hdKeyring.keySourceId);
+    const seed = await deriveBip39Seed(source);
+    this.assertUnlocked();
+    return this.#keyring.deriveHdAccountId({
+      namespace: hdKeyring.namespace,
+      seed,
+      derivationIndex: hdKeyring.nextDerivationIndex,
+    });
+  }
+
   private requireBip39Source(secrets: KeyringSecrets, keySourceId: KeySourceId): Bip39KeySourceSecret {
     const source = findKeySourceSecret(secrets, keySourceId);
     if (source?.type !== "bip39") throw new KeySourceNotFoundError(keySourceId);
     return source;
+  }
+
+  private derivePrivateKeyAccountId(secrets: KeyringSecrets, keySourceId: KeySourceId): AccountId {
+    const source = this.#keyring.getKeySource(keySourceId);
+    const secret = findKeySourceSecret(secrets, keySourceId);
+    if (!source || !secret) throw new KeySourceNotFoundError(keySourceId);
+    if (source.type !== "private-key" || secret.type !== "private-key") {
+      throw new KeySourceTypeMismatchError({ keySourceId, expectedType: "private-key", actualType: "bip39" });
+    }
+    return this.#keyring.accountIdFromPrivateKey({ namespace: source.namespace, privateKey: secret.privateKey });
   }
 
   private async verifyCurrentPassword(password: string): Promise<boolean> {

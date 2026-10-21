@@ -1,5 +1,5 @@
 import type { AccountId } from "../accounts/accountId.js";
-import type { Account, AccountAddress, AccountsChanged } from "../accounts/types.js";
+import type { Account, AccountsChanged, Address } from "../accounts/types.js";
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
 import type { JsonRpcParams } from "../chainJsonRpc/types.js";
 import type { HdKeyring, HdKeyringId, KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
@@ -31,7 +31,9 @@ import type {
   Bip39WalletCreated,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
+  HdAccountCreationResult,
   MnemonicSourceInput,
+  MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
   PrivateKeyWalletCreated,
@@ -52,7 +54,6 @@ export type WalletApiEvent =
 
 export type WalletKeySourcesApi = Readonly<{
   generateMnemonic(): Promise<{ mnemonic: string }>;
-  getAddressFromPrivateKey(input: { privateKey: string; chainRef: ChainRef }): Promise<AccountAddress>;
   get(keySourceId: KeySourceId): Promise<KeySource>;
   list(): Promise<readonly KeySource[]>;
   addMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
@@ -70,7 +71,6 @@ export type WalletHdKeyringsApi = Readonly<{
   get(hdKeyringId: HdKeyringId): Promise<HdKeyring>;
   list(): Promise<readonly HdKeyring[]>;
   add(input: AddHdKeyringInput): Promise<{ hdKeyringId: HdKeyringId; accountId: AccountId }>;
-  deriveAccount(input: { hdKeyringId: HdKeyringId }): Promise<AccountId>;
   remove(input: { hdKeyringId: HdKeyringId }): Promise<void>;
 }>;
 
@@ -78,8 +78,14 @@ export type WalletAccountsApi = Readonly<{
   get(accountId: AccountId): Promise<Account>;
   getSelected(): Promise<Account>;
   list(): Promise<readonly Account[]>;
-  getAddress(input: { accountId: AccountId; chainRef: ChainRef }): Promise<AccountAddress>;
-  listAddresses(chainRef: ChainRef): Promise<readonly AccountAddress[]>;
+  getAddresses(input: { accountId: AccountId; chainRef: ChainRef }): Promise<readonly Address[]>;
+  fromPrivateKey(input: { privateKey: string; chainRef: ChainRef }): Promise<{
+    accountId: AccountId;
+    namespace: Namespace;
+    addresses: readonly Address[];
+  }>;
+  create(input: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult>;
+  move(input: MovePrivateKeyAccountInput): Promise<Account>;
   rename(input: { accountId: AccountId; alias?: string }): Promise<void>;
   setHidden(input: { accountId: AccountId; hidden: boolean }): Promise<void>;
   select(input: { accountId: AccountId }): Promise<void>;

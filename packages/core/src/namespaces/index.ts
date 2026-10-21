@@ -1,10 +1,6 @@
 export { chainIdFromChainRef, chainRefFromChainId, validateEip155ChainReference } from "./eip155/chainId.js";
 export { EIP155_NAMESPACE } from "./eip155/constants.js";
-export {
-  Eip155InvalidChainIdError,
-  Eip155InvalidPrivateKeyError,
-  Eip155SigningAccountMismatchError,
-} from "./eip155/errors.js";
+export { Eip155InvalidChainIdError, Eip155SigningAccountMismatchError } from "./eip155/errors.js";
 export type {
   Eip155PersonalMessage,
   Eip155SignRequest,

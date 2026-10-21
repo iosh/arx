@@ -26,9 +26,13 @@ import {
 import type { KeyringSecrets } from "./secrets.js";
 import type { KeyringChanged } from "./types.js";
 
+/**
+ * Each update includes only changed collections.
+ * Separate updates can be combined only when they change different collections.
+ */
 type KeyringUpdate = Readonly<{
-  nextKeySources: ReadonlyMap<KeySourceId, KeySourceRecord>;
-  nextHdKeyrings: ReadonlyMap<HdKeyringId, HdKeyringRecord>;
+  nextKeySources?: ReadonlyMap<KeySourceId, KeySourceRecord>;
+  nextHdKeyrings?: ReadonlyMap<HdKeyringId, HdKeyringRecord>;
   persistenceChanges: readonly PersistenceChange[];
 }>;
 
@@ -156,7 +160,7 @@ export class Keyring {
 
     const persistenceChanges = [keySourceWrites.put(source)];
 
-    return { nextKeySources, nextHdKeyrings: this.#hdKeyrings, persistenceChanges };
+    return { nextKeySources, persistenceChanges };
   }
 
   prepareAddHdKeyring(hdKeyring: HdKeyringRecord): KeyringUpdate {
@@ -175,7 +179,7 @@ export class Keyring {
 
     const persistenceChanges = [hdKeyringWrites.put(hdKeyring)];
 
-    return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
+    return { nextHdKeyrings, persistenceChanges };
   }
 
   prepareAdvanceHdKeyring(hdKeyringId: HdKeyringId): KeyringUpdate {
@@ -188,7 +192,7 @@ export class Keyring {
 
     const persistenceChanges = [hdKeyringWrites.put(advanced)];
 
-    return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
+    return { nextHdKeyrings, persistenceChanges };
   }
 
   prepareRemoveHdKeyring(hdKeyringId: HdKeyringId): KeyringUpdate {
@@ -203,7 +207,7 @@ export class Keyring {
 
     const persistenceChanges = [hdKeyringWrites.remove(hdKeyringId)];
 
-    return { nextKeySources: this.#keySources, nextHdKeyrings, persistenceChanges };
+    return { nextHdKeyrings, persistenceChanges };
   }
 
   prepareRemoveKeySource(keySourceId: KeySourceId): KeyringUpdate {
@@ -214,20 +218,21 @@ export class Keyring {
     const nextKeySources = new Map(this.#keySources);
     nextKeySources.delete(keySourceId);
 
-    const nextHdKeyrings = new Map(this.#hdKeyrings);
-    for (const hdKeyring of removedHdKeyrings) nextHdKeyrings.delete(hdKeyring.hdKeyringId);
-
     const persistenceChanges = [
       keySourceWrites.remove(keySourceId),
       ...removedHdKeyrings.map((hdKeyring) => hdKeyringWrites.remove(hdKeyring.hdKeyringId)),
     ];
+    if (removedHdKeyrings.length === 0) return { nextKeySources, persistenceChanges };
+
+    const nextHdKeyrings = new Map(this.#hdKeyrings);
+    for (const hdKeyring of removedHdKeyrings) nextHdKeyrings.delete(hdKeyring.hdKeyringId);
 
     return { nextKeySources, nextHdKeyrings, persistenceChanges };
   }
 
   applyCommittedUpdate(update: KeyringUpdate): void {
-    this.#keySources = update.nextKeySources;
-    this.#hdKeyrings = update.nextHdKeyrings;
+    if (update.nextKeySources) this.#keySources = update.nextKeySources;
+    if (update.nextHdKeyrings) this.#hdKeyrings = update.nextHdKeyrings;
   }
 
   private async commitKeySourceUpdate(

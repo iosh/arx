@@ -1,4 +1,5 @@
 import type { AccountId } from "../accounts/accountId.js";
+import type { Account } from "../accounts/types.js";
 import type { HdKeyringId, KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
 
@@ -58,3 +59,16 @@ export type AddHdKeyringInput = Readonly<{
   keySourceId: KeySourceId;
   namespace: Namespace;
 }>;
+
+export type MovePrivateKeyAccountInput = Readonly<{
+  accountId: AccountId;
+  hdKeyringId: HdKeyringId;
+}>;
+
+export type HdAccountCreationResult =
+  | Readonly<{ status: "created"; account: Account }>
+  | Readonly<{
+      /** Leaves state unchanged. The move command checks the current account source. */
+      status: "move-available";
+      account: Account;
+    }>;

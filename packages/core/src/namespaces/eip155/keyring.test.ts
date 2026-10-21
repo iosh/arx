@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveBip39Seed } from "../../keyring/bip39.js";
-import { Eip155InvalidPrivateKeyError } from "./errors.js";
+import { KeyringInvalidPrivateKeyError } from "../../keyring/errors.js";
 import { eip155KeyringAdapter } from "./keyring.js";
 
 const MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -29,8 +29,8 @@ describe("eip155KeyringAdapter", () => {
 
   it("rejects invalid secp256k1 private keys", () => {
     expect(() => eip155KeyringAdapter.accountIdFromPrivateKey("not-a-private-key")).toThrow(
-      Eip155InvalidPrivateKeyError,
+      KeyringInvalidPrivateKeyError,
     );
-    expect(() => eip155KeyringAdapter.accountIdFromPrivateKey("00".repeat(32))).toThrow(Eip155InvalidPrivateKeyError);
+    expect(() => eip155KeyringAdapter.accountIdFromPrivateKey("00".repeat(32))).toThrow(KeyringInvalidPrivateKeyError);
   });
 });

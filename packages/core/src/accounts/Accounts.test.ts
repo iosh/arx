@@ -85,7 +85,7 @@ describe("Accounts", () => {
     expect(accounts.getAccount(accountId(3))).toBeNull();
   });
 
-  it("projects canonical and display addresses without requiring ownership", () => {
+  it("projects an EVM identity into complete addresses in each requested network without requiring ownership", () => {
     const accounts = createAccounts();
     const derivedAccountId = accounts.accountIdFromAddress({
       chainRef: "eip155:1",
@@ -99,6 +99,12 @@ describe("Accounts", () => {
       canonicalAddress: "0x52908400098527886e0f7030069857d2e4169ee7",
       displayAddress: "0x52908400098527886E0F7030069857D2E4169EE7",
     });
+
+    for (const chainRef of ["eip155:1", "eip155:8453"]) {
+      expect(accounts.getAddresses({ accountId: derivedAccountId, chainRef })).toEqual([
+        { address: "0x52908400098527886E0F7030069857D2E4169EE7", namespace: "eip155", chainRef },
+      ]);
+    }
   });
 
   it("requires a selected account for selected-address queries", () => {

@@ -1,5 +1,6 @@
-import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import { HDKey } from "@scure/bip32";
+import { mnemonicToSeedSync } from "@scure/bip39";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Accounts } from "../accounts/Accounts.js";
 import { type AccountId, formatAccountId, parseAccountId } from "../accounts/accountId.js";
@@ -14,6 +15,7 @@ import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js
 import type { KeyringChanged } from "../keyring/types.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
+import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
 import { Permissions } from "../permissions/Permissions.js";
 import type { PermissionRecord } from "../permissions/persistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
@@ -33,6 +35,10 @@ const PRIMARY_MNEMONIC =
 const SECONDARY_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const TERTIARY_MNEMONIC = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 const SECOND_NAMESPACE = "test";
+const PRIVATE_KEY = "11".repeat(32);
+const NEXT_PRIVATE_KEY = bytesToHex(
+  HDKey.fromMasterSeed(mnemonicToSeedSync(PRIMARY_MNEMONIC)).derive("m/44'/60'/0'/0/1").privateKey as Uint8Array,
+);
 
 type State = {
   encryptedVault: EncryptedVaultRecord | null;
@@ -54,23 +60,19 @@ const emptyState = (): State => ({
   autoLock: null,
 });
 
-const accountIdFor = (sourceId: string, index: number, namespace = EIP155_NAMESPACE): AccountId => {
-  const sourcePayload = bytesToHex(keccak_256(new TextEncoder().encode(sourceId))).slice(0, 32);
-  const payload = `${sourcePayload}${index.toString(16).padStart(8, "0")}`;
-  return formatAccountId({ namespace, payload });
-};
-
-const createAdapter = (namespace = EIP155_NAMESPACE) => {
-  const deriveHdAccountId = vi.fn(({ seed, derivationIndex }: { seed: Uint8Array; derivationIndex: number }) =>
-    accountIdFor(bytesToHex(seed.slice(0, 16)), derivationIndex, namespace),
-  );
-  const accountIdFromPrivateKey = vi.fn((privateKey: string) => accountIdFor(privateKey, 0, namespace));
-  const adapter: KeyringNamespaceAdapter = {
-    namespace,
-    deriveHdAccountId,
-    accountIdFromPrivateKey,
-  };
-  return { adapter, deriveHdAccountId, accountIdFromPrivateKey };
+// A synthetic namespace exercises source sharing and removal, not another chain's cryptography.
+const secondKeyringAdapter: KeyringNamespaceAdapter = {
+  namespace: SECOND_NAMESPACE,
+  deriveHdAccountId: (params) =>
+    formatAccountId({
+      namespace: SECOND_NAMESPACE,
+      payload: parseAccountId(eip155KeyringAdapter.deriveHdAccountId(params)).payload,
+    }),
+  accountIdFromPrivateKey: (privateKey) =>
+    formatAccountId({
+      namespace: SECOND_NAMESPACE,
+      payload: parseAccountId(eip155KeyringAdapter.accountIdFromPrivateKey(privateKey)).payload,
+    }),
 };
 
 const secondAccountsAdapter: AccountsNamespaceAdapter = {
@@ -117,15 +119,13 @@ const applyChanges = (state: State, changes: readonly PersistenceChange[]): void
 
 const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => {
   const state = params.state ?? emptyState();
-  const commits: readonly PersistenceChange[][] = [];
+  const commits: PersistenceChange[][] = [];
   let commitFailure = params.rejectCommit ?? null;
   const commit = vi.fn(async (changes: readonly PersistenceChange[]) => {
     if (commitFailure) throw commitFailure;
-    (commits as PersistenceChange[][]).push([...changes]);
+    commits.push([...changes]);
     applyChanges(state, changes);
   });
-  const { adapter, deriveHdAccountId, accountIdFromPrivateKey } = createAdapter();
-  const { adapter: secondKeyringAdapter } = createAdapter(SECOND_NAMESPACE);
   const events: WalletStatusChanged[] = [];
   const keyringChanges: KeyringChanged[] = [];
   const accountChanges: AccountsChanged[] = [];
@@ -139,8 +139,8 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
       hdKeyrings: [...state.keyrings.values()],
     },
     namespaceAdapters: {
-      [adapter.namespace]: adapter,
-      [secondKeyringAdapter.namespace]: secondKeyringAdapter,
+      [EIP155_NAMESPACE]: eip155KeyringAdapter,
+      [SECOND_NAMESPACE]: secondKeyringAdapter,
     },
     mutations,
     publishChanged: publishKeyringChanged,
@@ -165,12 +165,12 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     accounts: ReturnType<Accounts["listAccounts"]>;
     permissions: ReturnType<Permissions["list"]>;
   }> = [];
-  const refreshDappConnections = vi.fn(() => {
+  const refreshDappConnections = () => {
     dappRefreshSnapshots.push({
       accounts: accounts.listAccounts(),
       permissions: permissions.list(),
     });
-  });
+  };
   const approvals = new Approvals({
     time: systemTime,
     publishChanged: () => undefined,
@@ -216,13 +216,10 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     accountChanges,
     permissions,
     dappRefreshSnapshots,
-    refreshDappConnections,
     grantPermission,
     keyring,
     vault,
     autoLock,
-    deriveHdAccountId,
-    accountIdFromPrivateKey,
     setCommitFailure: (failure: Error | null) => {
       commitFailure = failure;
     },
@@ -459,7 +456,7 @@ describe("WalletCoordinator", () => {
       namespace: EIP155_NAMESPACE,
     });
     const privateKeySource = await wallet.importPrivateKey({
-      privateKey: "private-key",
+      privateKey: PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
     const commitCount = commits.length;
@@ -476,7 +473,7 @@ describe("WalletCoordinator", () => {
         keySourceId: privateKeySource.keySourceId,
         password: "password",
       }),
-    ).resolves.toEqual({ privateKey: "private-key" });
+    ).resolves.toEqual({ privateKey: PRIVATE_KEY });
     await expect(
       wallet.exportMnemonic({
         keySourceId: mnemonicSource.keySourceId,
@@ -554,24 +551,75 @@ describe("WalletCoordinator", () => {
   });
 
   it("commits a derived account and the advanced cursor together", async () => {
-    const { wallet, accounts, commits, state } = createHarness();
-    await wallet.createFromMnemonic({
+    const { wallet, accounts, commits } = createHarness();
+    const first = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       name: "Wallet 1",
       namespace: "eip155",
     });
-    const keyring = [...state.keyrings.values()][0];
-    if (!keyring) throw new Error("missing test keyring");
+    const result = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
 
-    await wallet.deriveHdAccount({ hdKeyringId: keyring.hdKeyringId });
-
+    expect(result).toMatchObject({
+      status: "created",
+      account: {
+        accountId: eip155KeyringAdapter.accountIdFromPrivateKey(NEXT_PRIVATE_KEY),
+        origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 1 },
+        selected: false,
+        hidden: false,
+      },
+    });
+    expect(result.account).toEqual(accounts.getAccount(result.account.accountId));
+    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
     expect(commits[1]?.map((change) => change.persistenceType)).toEqual(["account", "hdKeyring"]);
     expect(commits[1]?.[1]).toMatchObject({
       operation: "put",
-      value: { hdKeyringId: keyring.hdKeyringId, nextDerivationIndex: 2 },
+      value: { hdKeyringId: first.hdKeyringId, nextDerivationIndex: 2 },
     });
     expect(accounts.listAccountRecords()).toHaveLength(2);
+  });
+
+  it("moves an imported private-key account into an HD wallet and creates the next account", async () => {
+    const { wallet, accounts, keyring } = createHarness();
+    const first = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: EIP155_NAMESPACE,
+    });
+    const imported = await wallet.importPrivateKey({
+      privateKey: NEXT_PRIVATE_KEY,
+      namespace: EIP155_NAMESPACE,
+    });
+    await accounts.select(imported.accountId);
+
+    const candidate = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
+    expect(candidate).toEqual({
+      status: "move-available",
+      account: accounts.getAccount(imported.accountId),
+    });
+
+    const moved = await wallet.movePrivateKeyAccount({
+      accountId: candidate.account.accountId,
+      hdKeyringId: first.hdKeyringId,
+    });
+    expect(moved).toEqual({
+      ...candidate.account,
+      origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 1 },
+    });
+    expect(accounts.getAccount(imported.accountId)).toEqual(moved);
+    expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
+    expect(keyring.getSecrets()?.keySources.map((source) => source.keySourceId)).toEqual([first.keySourceId]);
+
+    const next = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
+    expect(next).toMatchObject({
+      status: "created",
+      account: {
+        origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 2 },
+      },
+    });
+    expect(next.account.accountId).not.toBe(imported.accountId);
+    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
   });
 
   it("hides an HD account with its permission in one committed cascade", async () => {
@@ -583,7 +631,8 @@ describe("WalletCoordinator", () => {
       name: "Wallet 1",
       namespace: EIP155_NAMESPACE,
     });
-    const accountId = await wallet.deriveHdAccount({ hdKeyringId: created.hdKeyringId });
+    const result = await wallet.createHdAccount({ hdKeyringId: created.hdKeyringId });
+    const { accountId } = result.account;
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
     await accounts.select(accountId);
     await grantPermission({ ...scope, accountIds: [accountId] });
@@ -698,7 +747,7 @@ describe("WalletCoordinator", () => {
       namespace: EIP155_NAMESPACE,
     });
     const imported = await wallet.importPrivateKey({
-      privateKey: "private-key",
+      privateKey: PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
@@ -783,10 +832,11 @@ describe("WalletCoordinator", () => {
       namespace: EIP155_NAMESPACE,
     });
 
-    const [, derivedAccountId] = await Promise.all([
+    const [, derived] = await Promise.all([
       keyring.renameMnemonicSource({ keySourceId, name: "Savings" }),
-      wallet.deriveHdAccount({ hdKeyringId }),
+      wallet.createHdAccount({ hdKeyringId }),
     ]);
+    const derivedAccountId = derived.account.accountId;
 
     expect(keyring.getKeySource(keySourceId)).toMatchObject({ name: "Savings" });
     expect(keyring.getHdKeyring(hdKeyringId)?.nextDerivationIndex).toBe(2);
@@ -824,11 +874,11 @@ describe("WalletCoordinator", () => {
     expect(keyringChanges).toHaveLength(eventCount);
   });
 
-  it("stores private keys with an explicit namespace without deriving accounts on unlock", async () => {
-    const { wallet, state, keyring, deriveHdAccountId, accountIdFromPrivateKey } = createHarness();
+  it("restores the private-key account and source after locking and unlocking", async () => {
+    const { wallet, state, accounts, keyring } = createHarness();
     const created = await wallet.createFromPrivateKey({
       password: "password",
-      privateKey: "private-key",
+      privateKey: PRIVATE_KEY,
       namespace: "eip155",
     });
 
@@ -837,20 +887,15 @@ describe("WalletCoordinator", () => {
       namespace: "eip155",
       createdAt: expect.any(Number),
     });
-    const source = [...state.keySources.values()][0];
-    if (!source) throw new Error("missing test source");
-    expect(created.keySourceId).toBe(source.keySourceId);
-    expect(created.accountId).toBe([...state.accounts.keys()][0]);
-
-    deriveHdAccountId.mockClear();
-    accountIdFromPrivateKey.mockClear();
+    const account = accounts.getAccount(created.accountId);
+    const source = keyring.getKeySource(created.keySourceId);
     await wallet.lock();
     await expect(wallet.unlock("password")).resolves.toBe(true);
+    expect(accounts.getAccount(created.accountId)).toEqual(account);
+    expect(keyring.getKeySource(created.keySourceId)).toEqual(source);
     expect(keyring.getSecrets()?.keySources).toEqual([
-      expect.objectContaining({ keySourceId: source.keySourceId, type: "private-key" }),
+      expect.objectContaining({ keySourceId: created.keySourceId, type: "private-key", privateKey: PRIVATE_KEY }),
     ]);
-    expect(deriveHdAccountId).not.toHaveBeenCalled();
-    expect(accountIdFromPrivateKey).not.toHaveBeenCalled();
   });
 
   it("locks by clearing decoded secrets and cancelling a pending approval without committing persistence", async () => {

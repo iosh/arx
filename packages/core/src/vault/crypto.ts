@@ -125,6 +125,7 @@ export const unlockVaultRecord = async (
   try {
     plaintext = gcm(encryptionKey, decoded.iv).decrypt(decoded.ciphertext);
   } catch {
+    encryptionKey.fill(0);
     return null;
   }
   return {
@@ -156,8 +157,13 @@ export const changeVaultPassword = async (params: {
 }): Promise<UnlockedVault> => {
   const current = await unlockVaultRecord(params.unlocked.record, params.currentPassword);
   if (current === null) throw new VaultIncorrectPasswordError();
-  return await createUnlockedVault({
-    password: params.newPassword,
-    plaintext: current.plaintext,
-  });
+  try {
+    return await createUnlockedVault({
+      password: params.newPassword,
+      plaintext: current.plaintext,
+    });
+  } finally {
+    current.plaintext.fill(0);
+    current.unlocked.encryptionKey.fill(0);
+  }
 };

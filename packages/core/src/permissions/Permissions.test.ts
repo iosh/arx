@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { AccountId } from "../accounts/accountId.js";
-import {
-  AccountHiddenSelectionError,
-  AccountNamespaceMismatchError,
-  AccountNotFoundError,
-} from "../accounts/errors.js";
 import type { Account } from "../accounts/types.js";
 import type { Namespace } from "../namespaces/types.js";
 import { Permissions, permissionsChangedFromUpdate } from "./Permissions.js";
@@ -54,7 +49,7 @@ const createPermissions = (options: {
 };
 
 describe("Permissions", () => {
-  it("loads stable synchronous readers and rejects broken owner references", () => {
+  it("loads stable synchronous permission readers", () => {
     const first = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A]);
     const second = permission("https://a.example", "solana", [SOLANA_ACCOUNT]);
     const third = permission("https://b.example", "eip155", [EIP155_ACCOUNT_B]);
@@ -63,16 +58,6 @@ describe("Permissions", () => {
     expect(permissions.get(first)).toEqual(first);
     expect(permissions.list()).toEqual([first, second, third]);
     expect(permissions.listByOrigin(first.origin)).toEqual([first, second]);
-
-    expect(() => createPermissions({ records: [permission(first.origin, "eip155", [MISSING_ACCOUNT])] })).toThrow(
-      AccountNotFoundError,
-    );
-    expect(() => createPermissions({ records: [permission(first.origin, "eip155", [EIP155_HIDDEN_ACCOUNT])] })).toThrow(
-      AccountHiddenSelectionError,
-    );
-    expect(() => createPermissions({ records: [permission(first.origin, "solana", [EIP155_ACCOUNT_A])] })).toThrow(
-      AccountNamespaceMismatchError,
-    );
   });
 
   it("builds exact ordered replacements and ignores unchanged account lists", () => {

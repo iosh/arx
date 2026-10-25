@@ -1,8 +1,6 @@
 export {
   VaultCryptoOperationError,
   VaultIncorrectPasswordError,
-  VaultLockedError,
-  VaultNotInitializedError,
   VaultPasswordTooShortError,
   VaultRecordDecodeError,
 } from "./errors.js";

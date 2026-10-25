@@ -24,7 +24,6 @@ import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.
 import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAdapter.js";
 import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
 import { createTransactions } from "../transactions/Transactions.js";
-import { Vault } from "../vault/Vault.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
 import type { WalletApiEvent, WalletChainRpcApi, WalletChainRpcRequest } from "../wallet/WalletApi.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
@@ -65,7 +64,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const eip155NetworksAdapter = createEip155NetworksAdapter({ transport: jsonRpcHttpTransport });
   const networkAdapters = [eip155NetworksAdapter] as const satisfies NetworksNamespaceAdapters;
 
-  const vault = new Vault(bootstrap.vault.encryptedVault);
   const walletStatusReader = { getStatus: () => walletCoordinator.getStatus() };
   const keyring = new Keyring({
     bootstrap: bootstrap.keyring,
@@ -140,7 +138,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const walletCoordinator = new WalletCoordinator({
     mutations,
     time: systemTime,
-    vault,
     keyring,
     accounts,
     permissions,

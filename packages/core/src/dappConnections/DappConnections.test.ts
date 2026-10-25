@@ -1,19 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ChainNamespaceMismatchError, NetworkNotFoundError } from "../networks/errors.js";
 import { createDappConnections, selection } from "./__tests__/DappConnections.testSupport.js";
-import { DappOriginInvalidError } from "./errors.js";
-import { parseDappOrigin } from "./origin.js";
 
 describe("DappConnections selections", () => {
-  it("derives canonical HTTP origins and rejects unsupported source URLs", () => {
-    expect(parseDappOrigin("https://DAPP.example:443/path?q=1")).toBe("https://dapp.example");
-    expect(parseDappOrigin("http://localhost:5173/app")).toBe("http://localhost:5173");
-
-    for (const sourceUrl of ["file:///wallet.html", "chrome-extension://wallet/page.html", "not a URL"]) {
-      expect(() => parseDappOrigin(sourceUrl)).toThrow(DappOriginInvalidError);
-    }
-  });
-
   it("loads valid selections into synchronous indexes", () => {
     const first = selection("https://a.example", "eip155", "eip155:1");
     const second = selection("https://a.example", "solana", "solana:mainnet");
@@ -24,18 +12,6 @@ describe("DappConnections selections", () => {
     expect(dappConnections.listNetworkSelections()).toEqual([first, second, third]);
     expect(dappConnections.listNetworkSelectionsByOrigin("https://a.example")).toEqual([first, second]);
     expect(dappConnections.listNetworkSelectionsByChainRef("eip155:1")).toEqual([first, third]);
-  });
-
-  it("rejects invalid persisted selections during construction", () => {
-    expect(() =>
-      createDappConnections({ networkSelections: [selection("https://DAPP.example", "eip155", "eip155:1")] }),
-    ).toThrow(DappOriginInvalidError);
-    expect(() =>
-      createDappConnections({ networkSelections: [selection("https://dapp.example", "eip155", "eip155:999")] }),
-    ).toThrow(NetworkNotFoundError);
-    expect(() =>
-      createDappConnections({ networkSelections: [selection("https://dapp.example", "solana", "eip155:1")] }),
-    ).toThrow(ChainNamespaceMismatchError);
   });
 
   it("activates standalone changes only after a successful commit", async () => {

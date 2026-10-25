@@ -9,14 +9,12 @@ import { isSameChainDefinition } from "./definition.js";
 import {
   BuiltinNetworkConflictError,
   BuiltinNetworkImmutableError,
-  ChainNamespaceMismatchError,
   CustomNetworkAlreadyExistsError,
   NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointVerificationError,
-  NetworkSelectionMissingError,
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 import {
@@ -46,6 +44,7 @@ type NetworksChange = NetworksChanged | NetworkSelectionChanged;
 
 type StoredNetworkSelection = Readonly<{
   selectedNamespace: Namespace;
+  /** First-run defaults and complete network commands keep a selected chain for every installed namespace. */
   selectedChainRefByNamespace: Readonly<Record<Namespace, ChainRef>>;
 }>;
 
@@ -118,15 +117,11 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     for (const record of options.bootstrap.customNetworks) {
       const chainRef = record.definition.chainRef;
       const namespace = parseChainRef(chainRef).namespace;
-      if (!adapters.has(namespace)) throw new NetworkNamespaceUnsupportedError(namespace);
-      if (networks.get(chainRef)?.network.source === "builtin") throw new BuiltinNetworkConflictError(chainRef);
-
       networks.set(chainRef, createInstalledCustomNetwork(record, namespace));
     }
 
     const rpcOverrides = new Map<ChainRef, NonEmptyRpcEndpoints>();
     for (const record of options.bootstrap.networkRpcOverrides) {
-      if (!networks.has(record.chainRef)) throw new NetworkNotFoundError(record.chainRef);
       rpcOverrides.set(record.chainRef, record.endpoints);
     }
 
@@ -144,7 +139,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     this.#publishChanged = options.publishChanged;
     this.#networks = networks;
     this.#rpcOverrides = rpcOverrides;
-    this.#selection = this.createSelection(storedSelection);
+    this.#selection = storedSelection;
   }
 
   get(chainRef: ChainRef): Network | null {
@@ -167,12 +162,9 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
   }
 
   getSelection(): NetworkSelection {
-    const selectedChainRef = this.#selection.selectedChainRefByNamespace[this.#selection.selectedNamespace];
-    if (!selectedChainRef) throw new NetworkSelectionMissingError(this.#selection.selectedNamespace);
-
     return {
       ...this.#selection,
-      selectedChainRef,
+      selectedChainRef: this.#selection.selectedChainRefByNamespace[this.#selection.selectedNamespace] as ChainRef,
     };
   }
 
@@ -497,34 +489,5 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     const installed = this.#networks.get(chainRef);
     if (installed?.network.source === "builtin") throw new BuiltinNetworkConflictError(chainRef);
     if (installed) throw new CustomNetworkAlreadyExistsError(chainRef);
-  }
-
-  private createSelection(record: NetworkSelectionRecord): StoredNetworkSelection {
-    if (!this.#adapters.has(record.selectedNamespace)) {
-      throw new NetworkNamespaceUnsupportedError(record.selectedNamespace);
-    }
-    for (const namespace of Object.keys(record.selectedChainRefByNamespace)) {
-      if (!this.#adapters.has(namespace)) throw new NetworkNamespaceUnsupportedError(namespace);
-    }
-    for (const namespace of this.#adapters.keys()) {
-      const chainRef = record.selectedChainRefByNamespace[namespace];
-      if (!chainRef) throw new NetworkSelectionMissingError(namespace);
-
-      const installed = this.#networks.get(chainRef);
-      if (!installed) throw new NetworkNotFoundError(chainRef);
-      const actualNamespace = installed.network.namespace;
-      if (actualNamespace !== namespace) {
-        throw new ChainNamespaceMismatchError({
-          chainRef,
-          expectedNamespace: namespace,
-          actualNamespace,
-        });
-      }
-    }
-
-    return {
-      selectedNamespace: record.selectedNamespace,
-      selectedChainRefByNamespace: record.selectedChainRefByNamespace,
-    };
   }
 }

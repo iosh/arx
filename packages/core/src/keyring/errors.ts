@@ -1,6 +1,22 @@
 import { ArxBaseError } from "../errors.js";
 import type { Namespace } from "../namespaces/types.js";
 
+export class KeyringLockedError extends ArxBaseError {
+  static readonly code = "keyring.locked";
+
+  constructor() {
+    super("Software key material is not unlocked.", { code: KeyringLockedError.code });
+  }
+}
+
+export class KeyringNotInitializedError extends ArxBaseError {
+  static readonly code = "keyring.not_initialized";
+
+  constructor() {
+    super("Software key storage has not been initialized.", { code: KeyringNotInitializedError.code });
+  }
+}
+
 export class KeyringInvalidPrivateKeyError extends ArxBaseError {
   static readonly code = "keyring.invalid_private_key";
 
@@ -47,10 +63,11 @@ export class HdKeyringNotFoundError extends ArxBaseError {
 export class KeyringDuplicateSourceError extends ArxBaseError {
   static readonly code = "keyring.source_duplicate";
 
-  constructor(existingKeySourceId: string) {
+  /** Mnemonic duplication includes the wallet name; private-key sources have no wallet name. */
+  constructor(existingKeySourceId: string, existingWalletName?: string) {
     super("A matching key source already exists.", {
       code: KeyringDuplicateSourceError.code,
-      details: { existingKeySourceId },
+      details: { existingKeySourceId, ...(existingWalletName === undefined ? {} : { existingWalletName }) },
     });
   }
 }

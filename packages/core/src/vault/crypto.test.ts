@@ -1,7 +1,7 @@
 import * as Base64 from "ox/Base64";
 import { assert, describe, expect, it } from "vitest";
 import { changeVaultPassword, createUnlockedVault, replaceVaultPlaintext, unlockVaultRecord } from "./crypto.js";
-import { VaultPasswordTooShortError, VaultRecordDecodeError } from "./errors.js";
+import { VaultPasswordTooShortError } from "./errors.js";
 import { VAULT_PASSWORD_MIN_LENGTH } from "./passwordPolicy.js";
 import type { EncryptedVaultRecord } from "./persistence.js";
 
@@ -101,17 +101,9 @@ describe("vault crypto", () => {
     await expect(unlockVaultRecord(fixedRecord, "wrong password")).resolves.toBeNull();
 
     const ciphertext = Base64.toBytes(fixedRecord.ciphertext);
-    ciphertext[0] = (ciphertext[0] ?? 0) ^ 1;
+    ciphertext[0] = (ciphertext[0] as number) ^ 1;
     await expect(
       unlockVaultRecord({ ...fixedRecord, ciphertext: Base64.fromBytes(ciphertext) }, "correct horse battery staple"),
     ).resolves.toBeNull();
-  });
-
-  it("maps an undecodable persisted record to the Vault boundary error", async () => {
-    const undecodable = { ...fixedRecord, salt: null } as unknown as EncryptedVaultRecord;
-
-    await expect(unlockVaultRecord(undecodable, "password")).rejects.toMatchObject({
-      code: VaultRecordDecodeError.code,
-    });
   });
 });

@@ -14,20 +14,16 @@ import {
   AccountNotFoundError,
   AccountRemovalSelectionUnavailableError,
   AccountSelectionMissingError,
-  AccountSelectionNamespaceMismatchError,
-  AccountSelectionTargetHiddenError,
-  AccountSelectionTargetMissingError,
-  AccountSelectionUnexpectedError,
   LastVisibleAccountHiddenError,
   PrivateKeyAccountHiddenUnsupportedError,
 } from "./errors.js";
 import { type AccountsNamespaceAdapters, getAccountsNamespaceAdapter } from "./namespaceAdapter.js";
 import {
-  type AccountOrigin,
   type AccountRecord,
   type AccountSelectionRecord,
   accountSelectionWrites,
   accountWrites,
+  type HdAccountOrigin,
 } from "./persistence.js";
 import type { Account, AccountAddress, AccountsChanged, Address } from "./types.js";
 
@@ -79,8 +75,6 @@ export class Accounts {
     this.#publishChanged = options.publishChanged;
     this.#records = new Map(bootstrap.records.map((record) => [record.accountId, record]));
     this.#selections = new Map(bootstrap.selections.map((selection) => [selection.namespace, selection.accountId]));
-
-    this.assertBootstrapState();
   }
 
   getAccountRecord(accountId: AccountId): AccountRecord | null {
@@ -193,28 +187,16 @@ export class Accounts {
     return this.commitUpdate(() => this.prepareSelectAccount(accountId));
   }
 
-  prepareAddAccount(account: Omit<AccountRecord, "hidden">): AccountUpdate {
+  prepareAddAccount(
+    account: Omit<AccountRecord, "hidden">,
+    { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
+  ): AccountUpdate {
     const namespace = getAccountIdNamespace(account.accountId);
     getAccountsNamespaceAdapter(this.#adapters, namespace);
     if (this.#records.has(account.accountId)) throw new AccountAlreadyExistsError(account.accountId);
 
-    const record: AccountRecord = { ...account, hidden: false };
-
-    const nextRecords = new Map(this.#records);
-    nextRecords.set(record.accountId, record);
-
-    const nextSelections = new Map(this.#selections);
-    const persistenceChanges: PersistenceChange[] = [accountWrites.put(record)];
-
-    if (!this.hasAccountsInNamespace(namespace)) {
-      nextSelections.set(namespace, record.accountId);
-      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, record.accountId)));
-    }
-
-    return {
-      ...this.update(nextRecords, nextSelections, persistenceChanges, [record.accountId], [namespace]),
-      account: this.toAccount(record, nextSelections),
-    };
+    const shouldSelectAccount = selectAsCurrent || !this.#selections.has(namespace);
+    return this.prepareAccountAndSelectionUpdate({ ...account, hidden: false }, shouldSelectAccount);
   }
 
   prepareRenameAccount(accountId: AccountId, alias: string | undefined): AccountsUpdate | null {
@@ -236,21 +218,34 @@ export class Accounts {
   }
 
   /** The wallet command must check that both sources control the same account. */
-  prepareAccountOriginUpdate(accountId: AccountId, origin: AccountOrigin): AccountUpdate {
+  prepareAssignHdOrigin(
+    accountId: AccountId,
+    origin: HdAccountOrigin,
+    { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
+  ): AccountUpdate {
     const current = this.requireAccountRecord(accountId);
-    const updated: AccountRecord = { ...current, origin };
+    return this.prepareAccountAndSelectionUpdate({ ...current, origin }, selectAsCurrent);
+  }
+
+  private prepareAccountAndSelectionUpdate(record: AccountRecord, selectAsCurrent: boolean): AccountUpdate {
+    const accountId = record.accountId;
+    const namespace = getAccountIdNamespace(accountId);
     const nextRecords = new Map(this.#records);
-    nextRecords.set(updated.accountId, updated);
+    nextRecords.set(accountId, record);
+
+    const nextSelections = new Map(this.#selections);
+    const persistenceChanges: PersistenceChange[] = [accountWrites.put(record)];
+    const changedAccountIds = [accountId];
+    const previousAccountId = this.#selections.get(namespace);
+    if (selectAsCurrent && previousAccountId !== accountId) {
+      nextSelections.set(namespace, accountId);
+      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, accountId)));
+      if (previousAccountId) changedAccountIds.push(previousAccountId);
+    }
 
     return {
-      ...this.update(
-        nextRecords,
-        this.#selections,
-        [accountWrites.put(updated)],
-        [updated.accountId],
-        [getAccountIdNamespace(updated.accountId)],
-      ),
-      account: this.toAccount(updated),
+      ...this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, [namespace]),
+      account: this.toAccount(record, nextSelections),
     };
   }
 
@@ -334,10 +329,6 @@ export class Accounts {
     return record;
   }
 
-  private hasAccountsInNamespace(namespace: Namespace): boolean {
-    return [...this.#records.keys()].some((accountId) => getAccountIdNamespace(accountId) === namespace);
-  }
-
   private listVisibleRecords(namespace: Namespace): readonly AccountRecord[] {
     return this.listAccountRecords().filter(
       (record) => getAccountIdNamespace(record.accountId) === namespace && !record.hidden,
@@ -407,34 +398,6 @@ export class Accounts {
       changedAccountIds: uniqueSortedStrings(changedAccountIds),
       changedNamespaces: uniqueSortedStrings(changedNamespaces),
     };
-  }
-
-  private assertBootstrapState(): void {
-    const accountNamespaces = new Set<Namespace>();
-    for (const accountId of this.#records.keys()) {
-      accountNamespaces.add(getAccountIdNamespace(accountId));
-    }
-
-    for (const namespace of uniqueSortedStrings([...accountNamespaces])) {
-      getAccountsNamespaceAdapter(this.#adapters, namespace);
-
-      const accountId = this.#selections.get(namespace);
-      if (!accountId) throw new AccountSelectionMissingError(namespace);
-
-      const selected = this.#records.get(accountId);
-      if (!selected) throw new AccountSelectionTargetMissingError({ namespace, accountId });
-
-      const accountNamespace = getAccountIdNamespace(accountId);
-      if (accountNamespace !== namespace) {
-        throw new AccountSelectionNamespaceMismatchError({ namespace, accountId, accountNamespace });
-      }
-
-      if (selected.hidden) throw new AccountSelectionTargetHiddenError({ namespace, accountId });
-    }
-
-    for (const [namespace, accountId] of this.#selections) {
-      if (!accountNamespaces.has(namespace)) throw new AccountSelectionUnexpectedError({ namespace, accountId });
-    }
   }
 }
 

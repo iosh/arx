@@ -11,8 +11,6 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { WalletStatusReader } from "../wallet/Wallet.js";
 import type { DappConnectionsBootstrap } from "./bootstrap.js";
-import { DappOriginInvalidError } from "./errors.js";
-import { parseDappOrigin } from "./origin.js";
 import {
   type DappConnectionScope,
   type DappNetworkSelectionRecord,
@@ -88,18 +86,9 @@ export class DappConnections {
     this.#mutations = options.mutations;
     this.#publishStateChanged = options.publishStateChanged;
 
-    const networkSelections = new Map<string, DappNetworkSelectionRecord>();
-
-    for (const selection of options.bootstrap.networkSelections) {
-      if (parseDappOrigin(selection.origin) !== selection.origin) {
-        throw new DappOriginInvalidError(selection.origin);
-      }
-
-      this.#requireNetwork(selection);
-      networkSelections.set(dappConnectionScopeKey(selection), selection);
-    }
-
-    this.#networkSelections = networkSelections;
+    this.#networkSelections = new Map(
+      options.bootstrap.networkSelections.map((selection) => [dappConnectionScopeKey(selection), selection]),
+    );
   }
 
   getNetworkSelection(scope: DappConnectionScope): DappNetworkSelectionRecord | null {

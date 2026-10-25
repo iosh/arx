@@ -38,17 +38,6 @@ export class WalletLockedError extends ArxBaseError {
   }
 }
 
-export class WalletUnlockFailedError extends ArxBaseError {
-  static readonly code = "wallet.unlock_failed";
-
-  constructor(cause: unknown) {
-    super("Wallet could not be unlocked.", {
-      code: WalletUnlockFailedError.code,
-      cause,
-    });
-  }
-}
-
 export class AutoLockDurationOutOfRangeError extends ArxBaseError {
   static readonly code = "wallet.auto_lock_duration_out_of_range";
 

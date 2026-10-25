@@ -53,13 +53,7 @@ export class Permissions implements PermissionsReader {
   constructor(options: PermissionsOptions) {
     this.#accounts = options.accounts;
 
-    const records = new Map<string, PermissionRecord>();
-    for (const record of options.bootstrap.records) {
-      this.#requireVisibleAccounts(record);
-      records.set(dappConnectionScopeKey(record), record);
-    }
-
-    this.#records = records;
+    this.#records = new Map(options.bootstrap.records.map((record) => [dappConnectionScopeKey(record), record]));
   }
 
   get(scope: PermissionScope): Permission | null {

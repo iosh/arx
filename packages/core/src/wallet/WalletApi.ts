@@ -27,12 +27,14 @@ import type {
 } from "../transactions/types.js";
 import type {
   AddHdKeyringInput,
+  AddMnemonicAndMoveAccountInput,
+  AddMnemonicSourceInput,
+  AddMnemonicSourceResult,
   Bip39SourceAdded,
   Bip39WalletCreated,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
-  MnemonicSourceInput,
   MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
@@ -56,8 +58,13 @@ export type WalletKeySourcesApi = Readonly<{
   generateMnemonic(): Promise<{ mnemonic: string }>;
   get(keySourceId: KeySourceId): Promise<KeySource>;
   list(): Promise<readonly KeySource[]>;
-  addMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
-  importMnemonic(input: MnemonicSourceInput): Promise<Bip39SourceAdded>;
+  /** Saves the source and selects its first account atomically; a move candidate leaves state unchanged. */
+  addMnemonic(input: AddMnemonicSourceInput): Promise<AddMnemonicSourceResult>;
+  /**
+   * Adds the source and moves its existing private-key first account atomically.
+   * Repeating a completed move returns its existing IDs without changing state.
+   */
+  addMnemonicAndMoveAccount(input: AddMnemonicAndMoveAccountInput): Promise<Bip39SourceAdded>;
   importPrivateKey(input: PrivateKeySourceInput): Promise<PrivateKeySourceAdded>;
   renameMnemonic(input: { keySourceId: KeySourceId; name: string }): Promise<void>;
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;

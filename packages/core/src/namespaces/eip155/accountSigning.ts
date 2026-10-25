@@ -2,17 +2,12 @@ import type { Accounts } from "../../accounts/Accounts.js";
 import type { AccountId } from "../../accounts/accountId.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
 import { deriveBip39Seed } from "../../keyring/bip39.js";
-import {
-  HdKeyringNotFoundError,
-  KeyringUnsupportedNamespaceError,
-  KeySourceNotFoundError,
-} from "../../keyring/errors.js";
+import { KeySourceNotFoundError } from "../../keyring/errors.js";
 import type { Keyring } from "../../keyring/Keyring.js";
-import type { KeySourceId } from "../../keyring/persistence.js";
-import { findKeySourceSecret, type KeySourceSecret } from "../../keyring/secrets.js";
+import type { HdKeyringRecord } from "../../keyring/persistence.js";
+import type { Bip39KeySourceSecret, PrivateKeySourceSecret } from "../../keyring/secrets.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { WalletStatusReader } from "../../wallet/Wallet.js";
-import { EIP155_NAMESPACE } from "./constants.js";
 import { type Eip155DigestSignature, signEip155HdDigest, signEip155PrivateKeyDigest } from "./keyring.js";
 
 export type Eip155AccountSigning = Readonly<{
@@ -22,25 +17,14 @@ export type Eip155AccountSigning = Readonly<{
 export const isAccountSigningUnavailableError = (error: unknown): boolean =>
   error instanceof AccountNotFoundError ||
   error instanceof WalletLockedError ||
-  error instanceof KeySourceNotFoundError ||
-  error instanceof HdKeyringNotFoundError;
-
-const getKeySourceSecret = (keyring: Pick<Keyring, "getSecrets">, keySourceId: KeySourceId): KeySourceSecret => {
-  const secrets = keyring.getSecrets();
-  if (!secrets) throw new WalletLockedError();
-
-  const source = findKeySourceSecret(secrets, keySourceId);
-  if (!source) throw new KeySourceNotFoundError(keySourceId);
-
-  return source;
-};
+  error instanceof KeySourceNotFoundError;
 
 export const createEip155AccountSigning = ({
   keyring,
   accounts,
   wallet,
 }: {
-  keyring: Pick<Keyring, "getHdKeyring" | "getKeySource" | "getSecrets">;
+  keyring: Pick<Keyring, "getHdKeyring" | "requireKeySourceSecret">;
   accounts: Pick<Accounts, "getAccountRecord">;
   wallet: WalletStatusReader;
 }): Eip155AccountSigning => ({
@@ -50,36 +34,28 @@ export const createEip155AccountSigning = ({
     if (!account) throw new AccountNotFoundError(accountId);
 
     if (account.origin.type === "hd") {
-      const hdKeyring = keyring.getHdKeyring(account.origin.hdKeyringId);
-      if (!hdKeyring) throw new HdKeyringNotFoundError(account.origin.hdKeyringId);
-      if (hdKeyring.namespace !== EIP155_NAMESPACE) {
-        throw new KeyringUnsupportedNamespaceError(hdKeyring.namespace);
-      }
-
-      const source = getKeySourceSecret(keyring, hdKeyring.keySourceId);
-      if (source.type !== "bip39") throw new KeySourceNotFoundError(hdKeyring.keySourceId);
+      // Complete wallet commands maintain the account's HD and source references.
+      const hdKeyring = keyring.getHdKeyring(account.origin.hdKeyringId) as HdKeyringRecord;
+      const source = keyring.requireKeySourceSecret(hdKeyring.keySourceId) as Bip39KeySourceSecret;
 
       const seed = await deriveBip39Seed(source);
-      if (wallet.getStatus() !== "unlocked" || getKeySourceSecret(keyring, hdKeyring.keySourceId) !== source) {
-        throw new WalletLockedError();
+      try {
+        if (wallet.getStatus() !== "unlocked" || keyring.requireKeySourceSecret(hdKeyring.keySourceId) !== source) {
+          throw new WalletLockedError();
+        }
+
+        return signEip155HdDigest({
+          accountId,
+          seed,
+          derivationIndex: account.origin.derivationIndex,
+          digest,
+        });
+      } finally {
+        seed.fill(0);
       }
-
-      return signEip155HdDigest({
-        accountId,
-        seed,
-        derivationIndex: account.origin.derivationIndex,
-        digest,
-      });
     }
 
-    const sourceRecord = keyring.getKeySource(account.origin.keySourceId);
-    if (sourceRecord?.type !== "private-key") throw new KeySourceNotFoundError(account.origin.keySourceId);
-    if (sourceRecord.namespace !== EIP155_NAMESPACE) {
-      throw new KeyringUnsupportedNamespaceError(sourceRecord.namespace);
-    }
-
-    const source = getKeySourceSecret(keyring, sourceRecord.keySourceId);
-    if (source.type !== "private-key") throw new KeySourceNotFoundError(sourceRecord.keySourceId);
+    const source = keyring.requireKeySourceSecret(account.origin.keySourceId) as PrivateKeySourceSecret;
 
     return signEip155PrivateKeyDigest({ accountId, privateKey: source.privateKey, digest });
   },

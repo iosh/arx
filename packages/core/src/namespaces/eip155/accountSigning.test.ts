@@ -1,17 +1,18 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import type { AccountId } from "../../accounts/accountId.js";
 import type { AccountRecord } from "../../accounts/persistence.js";
 import { Keyring } from "../../keyring/Keyring.js";
 import type { HdKeyringRecord, KeySourceRecord } from "../../keyring/persistence.js";
-import { createKeyringSecrets, type KeySourceSecret } from "../../keyring/secrets.js";
+import { createKeyringSecrets, encodeKeyringSecrets, type KeySourceSecret } from "../../keyring/secrets.js";
 import { createCoreMutationQueue } from "../../persistence/mutationQueue.js";
+import { createUnlockedVault } from "../../vault/crypto.js";
 import type { WalletStatusReader } from "../../wallet/Wallet.js";
 import { createEip155AccountSigning } from "./accountSigning.js";
 import { Eip155SigningAccountMismatchError } from "./errors.js";
-import type { Eip155DigestSignature } from "./keyring.js";
+import { type Eip155DigestSignature, eip155KeyringAdapter } from "./keyring.js";
 
 const DIGEST = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const PRIVATE_ACCOUNT_ID = "eip155:fcad0b19bb29d4674531d6f115237e16afce377c";
@@ -27,32 +28,48 @@ const recoverAccountId = (signature: Eip155DigestSignature): AccountId => {
   return `eip155:${address}`;
 };
 
-const createSigningFixture = (params: {
+const createSigningFixture = async (params: {
   account: AccountRecord;
   source: KeySourceSecret;
   sourceRecord?: KeySourceRecord;
   hdKeyring?: HdKeyringRecord;
 }) => {
-  const sourceRecord =
+  const sourceRecord: KeySourceRecord =
     params.sourceRecord ??
     (params.source.type === "bip39"
       ? {
           keySourceId: params.source.keySourceId,
-          type: "bip39" as const,
+          type: "bip39",
           name: "Wallet 1",
-          backupStatus: "confirmed" as const,
+          backupStatus: "confirmed",
           createdAt: 1,
         }
-      : undefined);
+      : {
+          keySourceId: params.source.keySourceId,
+          type: "private-key",
+          namespace: "eip155",
+          createdAt: 1,
+        });
+  const encrypted = await createUnlockedVault({
+    password: "password",
+    plaintext: encodeKeyringSecrets(createKeyringSecrets([params.source])),
+  });
+  const mutations = createCoreMutationQueue({ commit: vi.fn() });
   const keyring = new Keyring({
     bootstrap: {
-      keySources: sourceRecord ? [sourceRecord] : [],
+      encryptedVault: encrypted.record,
+      keySources: [sourceRecord],
       hdKeyrings: params.hdKeyring ? [params.hdKeyring] : [],
     },
-    mutations: createCoreMutationQueue({ commit: vi.fn() }),
+    namespaceAdapters: { eip155: eip155KeyringAdapter },
+    mutations,
     publishChanged: vi.fn(),
   });
-  keyring.activateSecrets(createKeyringSecrets([params.source]));
+  await mutations.run(async () => {
+    const unlocked = await keyring.prepareUnlock("password");
+    assert(unlocked !== null);
+    unlocked.activate();
+  });
 
   const wallet = { getStatus: vi.fn<WalletStatusReader["getStatus"]>(() => "unlocked") };
   const signing = createEip155AccountSigning({
@@ -79,7 +96,7 @@ describe("Eip155AccountSigning", () => {
       hidden: false,
       createdAt: 1,
     };
-    const { signing, wallet } = createSigningFixture({
+    const { signing, wallet } = await createSigningFixture({
       account,
       source,
       sourceRecord: {
@@ -120,7 +137,7 @@ describe("Eip155AccountSigning", () => {
       hidden: false,
       createdAt: 1,
     };
-    const { signing } = createSigningFixture({ account, source, hdKeyring });
+    const { signing } = await createSigningFixture({ account, source, hdKeyring });
 
     const signature = await signing.signDigest({ accountId: account.accountId, digest: DIGEST });
 
@@ -128,10 +145,7 @@ describe("Eip155AccountSigning", () => {
     expect(recoverAccountId(signature)).toBe(HD_ACCOUNT_ID);
   });
 
-  it.each([
-    "expired",
-    "unlocked again",
-  ] as const)("does not finish an HD signature after the session is %s", async (status) => {
+  it("does not finish an HD signature after the session expires", async () => {
     const source: KeySourceSecret = {
       keySourceId: "mnemonic-source",
       type: "bip39",
@@ -150,15 +164,10 @@ describe("Eip155AccountSigning", () => {
       hidden: false,
       createdAt: 1,
     };
-    const { keyring, signing, wallet } = createSigningFixture({ account, source, hdKeyring });
+    const { signing, wallet } = await createSigningFixture({ account, source, hdKeyring });
 
     const pendingSignature = signing.signDigest({ accountId: account.accountId, digest: DIGEST });
-    if (status === "expired") {
-      wallet.getStatus.mockReturnValue("locked");
-    } else {
-      keyring.lock();
-      keyring.activateSecrets(createKeyringSecrets([{ ...source }]));
-    }
+    wallet.getStatus.mockReturnValue("locked");
 
     await expect(pendingSignature).rejects.toMatchObject({ code: "wallet.locked" });
   });
@@ -175,7 +184,7 @@ describe("Eip155AccountSigning", () => {
       hidden: false,
       createdAt: 1,
     };
-    const { signing } = createSigningFixture({
+    const { signing } = await createSigningFixture({
       account,
       source,
       sourceRecord: {
@@ -211,7 +220,7 @@ describe("Eip155AccountSigning", () => {
       hidden: false,
       createdAt: 1,
     };
-    const { signing } = createSigningFixture({ account, source, hdKeyring });
+    const { signing } = await createSigningFixture({ account, source, hdKeyring });
 
     await expect(signing.signDigest({ accountId: account.accountId, digest: DIGEST })).rejects.toMatchObject({
       code: Eip155SigningAccountMismatchError.code,

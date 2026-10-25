@@ -48,17 +48,6 @@ export class NetworkNamespaceUnsupportedError extends ArxBaseError {
   }
 }
 
-export class NetworkSelectionMissingError extends ArxBaseError {
-  static readonly code = "network.selection_missing";
-
-  constructor(namespace: Namespace) {
-    super(`Namespace "${namespace}" has no selected network.`, {
-      code: NetworkSelectionMissingError.code,
-      details: { namespace },
-    });
-  }
-}
-
 export class BuiltinNetworkConflictError extends ArxBaseError {
   static readonly code = "network.builtin_conflict";
 

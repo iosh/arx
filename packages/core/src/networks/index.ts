@@ -21,7 +21,6 @@ export {
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointVerificationError,
-  NetworkSelectionMissingError,
 } from "./errors.js";
 export { Networks } from "./Networks.js";
 export type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";

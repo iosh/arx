@@ -9,7 +9,6 @@ import {
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointVerificationError,
-  NetworkSelectionMissingError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { NetworksNamespaceAdapters } from "./namespaceAdapter.js";
@@ -133,17 +132,6 @@ describe("Networks", () => {
       selectedNamespace: "solana",
       selectedChainRef: "solana:mainnet",
     });
-  });
-
-  it("rejects an incomplete stored selection instead of merging defaults", () => {
-    expect(() =>
-      createNetworks({
-        bootstrap: bootstrap({
-          selectedNamespace: "eip155",
-          selectedChainRefByNamespace: { eip155: "eip155:10" },
-        }),
-      }),
-    ).toThrow(NetworkSelectionMissingError);
   });
 
   it("adds and fully replaces custom networks while preserving no-op semantics", async () => {

@@ -62,7 +62,7 @@ export const createWalletApi = ({
     },
     list: async () => keyring.listKeySources(),
     addMnemonic: async (input) => coordinator.addMnemonic(input),
-    importMnemonic: async (input) => coordinator.importMnemonic(input),
+    addMnemonicAndMoveAccount: async (input) => coordinator.addMnemonicAndMoveAccount(input),
     importPrivateKey: async (input) => coordinator.importPrivateKey(input),
     renameMnemonic: async (input) => keyring.renameMnemonicSource(input),
     confirmMnemonicBackup: async (input) => keyring.confirmMnemonicBackup(input),

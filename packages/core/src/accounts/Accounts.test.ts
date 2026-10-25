@@ -329,9 +329,4 @@ describe("Accounts", () => {
 
     expect(() => accounts.prepareRemoveHdAccounts(["selected"])).toThrow(AccountRemovalSelectionUnavailableError);
   });
-
-  it("fails construction when a namespace has records but no selection", () => {
-    const record = hdAccount({ value: 1, createdAt: 1 });
-    expect(() => createAccounts({ records: [record], selections: [] })).toThrow(AccountSelectionMissingError);
-  });
 });

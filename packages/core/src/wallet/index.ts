@@ -9,12 +9,14 @@ export { loadWalletBootstrap } from "./bootstrap.js";
 export * from "./errors.js";
 export type {
   AddHdKeyringInput,
+  AddMnemonicAndMoveAccountInput,
+  AddMnemonicSourceInput,
+  AddMnemonicSourceResult,
   Bip39SourceAdded,
   Bip39WalletCreated,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
-  MnemonicSourceInput,
   MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,

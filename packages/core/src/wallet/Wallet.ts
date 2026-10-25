@@ -1,6 +1,6 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { Account } from "../accounts/types.js";
-import type { HdKeyringId, KeySourceId } from "../keyring/types.js";
+import type { BackupStatus, HdKeyringId, KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
 
 export type WalletStatus = "uninitialized" | "locked" | "unlocked";
@@ -44,11 +44,18 @@ export type CreateFromPrivateKeyInput = Readonly<{
   namespace: Namespace;
 }>;
 
-export type MnemonicSourceInput = Readonly<{
+export type AddMnemonicSourceInput = Readonly<{
   mnemonic: string;
   name: string;
   namespace: Namespace;
+  backupStatus: BackupStatus;
 }>;
+
+export type AddMnemonicAndMoveAccountInput = AddMnemonicSourceInput & Readonly<{ accountId: AccountId }>;
+
+export type AddMnemonicSourceResult =
+  | (Bip39SourceAdded & Readonly<{ status: "added" }>)
+  | Readonly<{ status: "move-available"; account: Account }>;
 
 export type PrivateKeySourceInput = Readonly<{
   privateKey: string;

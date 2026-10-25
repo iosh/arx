@@ -1,25 +1,5 @@
 import { ArxBaseError } from "../errors.js";
 
-export class VaultNotInitializedError extends ArxBaseError {
-  static readonly code = "vault.not_initialized";
-
-  constructor() {
-    super("Vault has not been initialized.", {
-      code: VaultNotInitializedError.code,
-    });
-  }
-}
-
-export class VaultLockedError extends ArxBaseError {
-  static readonly code = "vault.locked";
-
-  constructor() {
-    super("Vault is locked.", {
-      code: VaultLockedError.code,
-    });
-  }
-}
-
 export class VaultIncorrectPasswordError extends ArxBaseError {
   static readonly code = "vault.incorrect_password";
 

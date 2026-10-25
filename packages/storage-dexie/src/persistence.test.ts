@@ -122,24 +122,19 @@ describe("createDexiePersistence", () => {
     }
   });
 
-  it("converts raw reader failures and preserves ArxBaseError instances", async () => {
+  it("converts database reader failures to PersistenceReadError", async () => {
     const context = createDexiePersistenceContext(createDatabaseName());
     databaseConnections.push(context.db);
     const reader = createAccountsReader(context);
     await context.ready;
     const failure = new Error("account read failed");
-    const existingError = new PersistenceCommitError(new Error("owner read error"));
-    const toArray = vi
-      .spyOn(context.db.accounts, "toArray")
-      .mockRejectedValueOnce(failure)
-      .mockRejectedValueOnce(existingError);
+    const toArray = vi.spyOn(context.db.accounts, "toArray").mockRejectedValueOnce(failure);
 
     try {
       const rawRead = reader.listRecords();
       await expect(rawRead).rejects.toBeInstanceOf(PersistenceReadError);
       await expect(rawRead).rejects.toMatchObject({ code: PersistenceReadError.code });
       await expect(rawRead).rejects.toHaveProperty("cause", failure);
-      await expect(reader.listRecords()).rejects.toBe(existingError);
     } finally {
       toArray.mockRestore();
     }

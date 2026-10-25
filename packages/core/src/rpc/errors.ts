@@ -1,4 +1,4 @@
-import { ArxBaseError, type JsonObject, type JsonValue, toJsonSafe } from "../errors.js";
+import { ArxBaseError, type JsonObject, type JsonValue } from "../errors.js";
 
 export type RpcErrorInput = {
   message?: string;
@@ -103,8 +103,8 @@ export class RpcJsonRpcResponseError extends ArxBaseError {
   readonly rpcCode: number;
   readonly rpcData?: JsonValue;
 
-  constructor(input: { rpcCode: number; message: string; data?: unknown }) {
-    const rpcData = toJsonSafe(input.data);
+  constructor(input: { rpcCode: number; message: string; data?: JsonValue | undefined }) {
+    const rpcData = input.data;
     super(input.message, {
       code: RpcJsonRpcResponseError.code,
       details: {
@@ -128,7 +128,3 @@ export class RpcInternalError extends ArxBaseError {
     });
   }
 }
-
-export const createRpcInternalErrorFromUnknown = (error: unknown): RpcInternalError => {
-  return new RpcInternalError({ cause: error });
-};

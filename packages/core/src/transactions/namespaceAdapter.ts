@@ -14,6 +14,7 @@ import type {
 } from "./types.js";
 
 export type TerminalTransactionChange = Readonly<{
+  /** Identifies a pending record from the inspected batch. */
   transactionId: TransactionId;
   state: TerminalTransactionState;
 }>;

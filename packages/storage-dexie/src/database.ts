@@ -1,4 +1,3 @@
-import { isArxBaseError } from "@arx/core";
 import { PersistenceCommitError, PersistenceReadError } from "@arx/core/persistence";
 import { Dexie, type Table } from "dexie";
 import type {
@@ -70,7 +69,7 @@ const read = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
   } catch (error) {
-    if (isArxBaseError(error)) throw error;
+    if (error instanceof PersistenceReadError) throw error;
     throw new PersistenceReadError(error);
   }
 };
@@ -79,7 +78,7 @@ const commit = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
   } catch (error) {
-    if (isArxBaseError(error)) throw error;
+    if (error instanceof PersistenceReadError) throw error;
     throw new PersistenceCommitError(error);
   }
 };

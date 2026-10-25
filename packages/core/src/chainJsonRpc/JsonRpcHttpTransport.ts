@@ -55,20 +55,14 @@ const createIdAllocator = () => {
   };
 };
 
-export const createJsonRpcHttpTransport = (
-  options: { fetch?: typeof globalThis.fetch; abortController?: () => AbortController } = {},
-): JsonRpcHttpTransport => {
-  const fetchFn = options.fetch ?? globalThis.fetch?.bind(globalThis);
-  if (!fetchFn) {
-    throw new ChainJsonRpcHttpTransportError("JSON-RPC HTTP transport requires fetch.");
-  }
-  const createAbortController = options.abortController ?? (() => new AbortController());
+export const createJsonRpcHttpTransport = (options: { fetch?: typeof globalThis.fetch } = {}): JsonRpcHttpTransport => {
+  const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
   const allocateId = createIdAllocator();
 
   return {
     async request<TResult = unknown>(request: JsonRpcHttpRequest): Promise<TResult> {
       const requestId = allocateId();
-      const abortController = createAbortController();
+      const abortController = new AbortController();
       const timer = setTimeout(() => abortController.abort(), request.timeoutMs ?? DEFAULT_TIMEOUT_MS);
       try {
         const response = await fetchFn(request.endpoint, {

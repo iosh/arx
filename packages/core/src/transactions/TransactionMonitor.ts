@@ -80,8 +80,8 @@ export class TransactionMonitor {
         return;
       }
 
-      void this.#inspect().catch(() => {
-        this.#schedule(TRANSACTION_INSPECTION_INTERVAL_MS);
+      void this.#inspect().catch((error) => {
+        console.error("[arx:transactions] Failed to inspect pending transactions", error);
       });
     });
   }
@@ -107,8 +107,7 @@ export class TransactionMonitor {
 
       for (const [chainRef, monitoredRecords] of recordsByChainRef) {
         const records = monitoredRecords.map(({ record }) => record);
-        const representativeRecord = records[0];
-        if (!representativeRecord) continue;
+        const representativeRecord = records[0] as PendingTransactionRecord;
 
         const recoveryTransactionIds = monitoredRecords
           .filter(({ needsRecovery }) => needsRecovery)
@@ -155,8 +154,7 @@ export class TransactionMonitor {
       const now = this.#time.now();
       const terminalRecords: TransactionRecord[] = [];
       for (const change of terminalChanges) {
-        const monitored = monitoredById.get(change.transactionId);
-        if (!monitored) return false;
+        const monitored = monitoredById.get(change.transactionId) as MonitoredTransaction;
 
         const { recovery: _recovery, ...transaction } = monitored.record;
         terminalRecords.push({
@@ -165,13 +163,11 @@ export class TransactionMonitor {
           updatedAt: now,
         });
       }
-      if (terminalRecords.length === 0) return true;
-
       await commit(terminalRecords.map(transactionWrites.put));
 
       for (const record of terminalRecords) {
-        const monitored = monitoredById.get(record.transactionId);
-        if (monitored && this.#pending.get(record.transactionId) === monitored) {
+        const monitored = monitoredById.get(record.transactionId) as MonitoredTransaction;
+        if (this.#pending.get(record.transactionId) === monitored) {
           this.#pending.delete(record.transactionId);
         }
       }

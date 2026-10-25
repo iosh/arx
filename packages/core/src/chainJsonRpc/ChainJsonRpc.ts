@@ -25,7 +25,6 @@ export type ChainJsonRpcOptions = Readonly<{
   endpoints: NetworkRpcEndpointsReader;
   transport?: JsonRpcHttpTransport;
   fetch?: typeof globalThis.fetch;
-  abortController?: () => AbortController;
 }>;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
@@ -35,7 +34,6 @@ export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc =
     options.transport ??
     createJsonRpcHttpTransport({
       ...(options.fetch ? { fetch: options.fetch } : {}),
-      ...(options.abortController ? { abortController: options.abortController } : {}),
     });
   return {
     async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {

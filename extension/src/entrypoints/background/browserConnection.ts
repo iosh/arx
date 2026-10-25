@@ -50,8 +50,8 @@ const identifyBrowserClient = (
   }
 
   if (connection.name === WALLET_UI_PORT_NAME) {
-    const extensionUrl = parseUrl(input.extensionUrl);
-    if (!extensionUrl || senderUrl.protocol !== extensionUrl.protocol || senderUrl.host !== extensionUrl.host) {
+    const extensionUrl = new URL(input.extensionUrl);
+    if (senderUrl.protocol !== extensionUrl.protocol || senderUrl.host !== extensionUrl.host) {
       return null;
     }
 
@@ -67,14 +67,6 @@ const identifyBrowserClient = (
   }
 
   return null;
-};
-
-const closeBrowserConnection = (connection: Runtime.Port): void => {
-  try {
-    connection.disconnect();
-  } catch {
-    // The browser connection is already closed.
-  }
 };
 
 const attachBrowserClient = (client: BrowserClient, hosts: BackgroundHosts, channel: DuplexChannel): void => {
@@ -94,7 +86,7 @@ export const handleBrowserConnection = async ({
 }: HandleBrowserConnectionOptions): Promise<void> => {
   const client = identifyBrowserClient(connection, { extensionUrl, runtimeId });
   if (!client) {
-    closeBrowserConnection(connection);
+    connection.disconnect();
     return;
   }
 
@@ -109,7 +101,7 @@ export const handleBrowserConnection = async ({
     }
 
     stopWaiting();
-    closeBrowserConnection(connection);
+    connection.disconnect();
   };
 
   connection.onDisconnect.addListener(stopWaiting);
@@ -131,13 +123,13 @@ export const handleBrowserConnection = async ({
     const channel = createPortChannel(connection);
     attachBrowserClient(client, availableHosts, channel);
   } catch (error) {
-    closeBrowserConnection(connection);
+    connection.disconnect();
     throw error;
   }
 
   try {
     connection.postMessage(PORT_HOST_READY_MESSAGE);
   } catch {
-    closeBrowserConnection(connection);
+    connection.disconnect();
   }
 };

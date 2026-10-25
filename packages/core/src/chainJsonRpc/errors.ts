@@ -1,4 +1,4 @@
-import { ArxBaseError, type JsonValue, toJsonSafe } from "../errors.js";
+import { ArxBaseError, type JsonValue } from "../errors.js";
 
 type RequestDetails = {
   chainRef: string;
@@ -11,8 +11,8 @@ export class ChainJsonRpcResponseError extends ArxBaseError {
   readonly rpcCode: number;
   readonly rpcData?: JsonValue;
 
-  constructor(input: RequestDetails & { rpcCode: number; message: string; data?: unknown }) {
-    const rpcData = toJsonSafe(input.data);
+  constructor(input: RequestDetails & { rpcCode: number; message: string; data?: JsonValue | undefined }) {
+    const rpcData = input.data;
     super(input.message, {
       code: ChainJsonRpcResponseError.code,
       details: {

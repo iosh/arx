@@ -46,12 +46,19 @@ import {
 } from "./secrets.js";
 import type { BackupStatus, KeyringChanged } from "./types.js";
 
-/** Apply only after the complete wallet command commits, inside the shared mutation queue. */
+/**
+ * Prepare and activate within one shared mutation queue operation.
+ * Activate once, after the complete wallet command commits.
+ */
 export type KeyringUpdate = Readonly<{
   persistenceChanges: readonly PersistenceChange[];
   activate(): void;
 }>;
 
+/**
+ * Includes an initial HD keyring with nextDerivationIndex 1.
+ * The same wallet command commits its account at derivation index 0.
+ */
 export type Bip39SourceAddition = KeyringUpdate &
   Readonly<{
     keySourceId: KeySourceId;
@@ -197,12 +204,13 @@ export class Keyring {
   }
 
   /** The wallet command supplies the source of an existing private-key account. */
-  privateKeyAccountId(keySourceId: KeySourceId): AccountId {
+  accountIdFromPrivateKeySource(keySourceId: KeySourceId): AccountId {
     const source = this.#keySources.get(keySourceId) as PrivateKeySourceRecord;
     const secret = this.requireKeySourceSecret(keySourceId) as PrivateKeySourceSecret;
     return this.accountIdFromPrivateKey({ namespace: source.namespace, privateKey: secret.privateKey });
   }
 
+  /** Prepare and activate within one shared mutation queue operation. */
   async prepareUnlock(password: string): Promise<Readonly<{ activate(): void }> | null> {
     const draft = await unlockVaultRecord(this.requireEncryptedRecord(), password);
     if (draft === null) return null;
@@ -234,6 +242,7 @@ export class Keyring {
     return this.encryptedUpdate({ persistenceChanges: [] }, vault, state.secrets);
   }
 
+  /** Runs inside the shared mutation queue after vault operations settle. */
   lock(): void {
     if (this.#softwareState.status === "unlocked") {
       this.#softwareState = { status: "locked", record: this.#softwareState.vault.record };
@@ -413,13 +422,7 @@ export class Keyring {
     } finally {
       plaintext.fill(0);
     }
-    return {
-      persistenceChanges: [encryptedVaultWrites.put(vault.record), ...records.persistenceChanges],
-      activate: () => {
-        this.applyRecords(records);
-        this.#softwareState = { status: "unlocked", vault, secrets };
-      },
-    };
+    return this.encryptedUpdate(records, vault, secrets);
   }
 
   private async prepareSecretsReplacement(records: RecordUpdate, secrets: KeyringSecrets): Promise<KeyringUpdate> {

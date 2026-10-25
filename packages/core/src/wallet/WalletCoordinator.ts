@@ -591,7 +591,7 @@ export class WalletCoordinator {
   }
 
   private assertPrivateKeyControlsAccount(keySourceId: KeySourceId, accountId: AccountId): void {
-    if (this.#keyring.privateKeyAccountId(keySourceId) !== accountId) {
+    if (this.#keyring.accountIdFromPrivateKeySource(keySourceId) !== accountId) {
       throw new WalletAccountKeyMismatchError(accountId);
     }
   }

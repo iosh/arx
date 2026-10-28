@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
 import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
-import { useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
+import { usePendingMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useLockWallet } from "@/ui/wallet/useWalletMutations";
 import { AccountSwitcher } from "./AccountSwitcher";
 
@@ -21,17 +21,10 @@ export function HomePage() {
   const router = useRouter();
   const { t } = useTranslation("wallet");
   const { data: account, isPending: selectedAccountPending } = useSelectedAccount();
-  const { data: source } = useMnemonicSource(account);
+  const { data: source } = usePendingMnemonicSource(account);
   const [menuOpen, setMenuOpen] = useState(false);
   const { mutate: lockWallet, isPending: isLocking } = useLockWallet();
 
-  const backupPath =
-    source?.backupStatus === "pending"
-      ? router.buildLocation({
-          to: "/onboarding/backup-mnemonic/$keySourceId",
-          params: { keySourceId: source.keySourceId },
-        }).href
-      : null;
   const name = account ? getAccountName(account, t) : null;
 
   return (
@@ -72,15 +65,20 @@ export function HomePage() {
       </header>
       <section className="overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
         <div aria-hidden="true" className="h-35.5" />
-        {backupPath && (
+        {source && (
           <a
-            href={`${browser.runtime.getURL("/onboarding.html")}#${backupPath}`}
+            href={`${browser.runtime.getURL("/onboarding.html")}#${
+              router.buildLocation({
+                to: "/onboarding/backup-mnemonic/$keySourceId",
+                params: { keySourceId: source.keySourceId },
+              }).href
+            }`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-10 items-center gap-2 bg-warning-subtle px-4 text-xs font-semibold text-warning-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            className="flex min-h-10 items-center gap-2 bg-warning-subtle px-4 py-2.5 text-xs font-semibold text-warning-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-warning" />
-            <span className="flex-1">{t("backupNotice")}</span>
+            <span className="min-w-0 flex-1 wrap-anywhere">{t("backupNotice", { walletName: source.name })}</span>
             <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-warning" />
           </a>
         )}

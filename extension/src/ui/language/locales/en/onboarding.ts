@@ -1,8 +1,10 @@
 export const onboarding = {
   welcomeTitle: "Get started with ARX",
   createWallet: "Create a new wallet",
+  createWalletDescription: "Generate a new recovery phrase",
   existingWallet: "Existing wallet",
   importRecoveryPhrase: "Import recovery phrase",
+  importRecoveryPhraseDescription: "Use an existing recovery phrase",
   importPhraseInstructions: "Words and order must match your original recovery phrase.",
   recoveryPhrase: "Recovery phrase",
   importPhraseLength: "Recovery phrase length",
@@ -10,6 +12,8 @@ export const onboarding = {
   importWordPlaceholder: "Enter word",
   importWallet: "Import wallet",
   importPhraseIncorrect: "The recovery phrase is incorrect. Check the words and their order.",
+  phraseAlreadyImported: "This recovery phrase is already saved in “{{walletName}}”.",
+  unlockToAddWallet: "Unlock ARX to add a wallet.",
   importPrivateKey: "Import private key",
   importPrivateKeyDescription:
     "Import a single EVM account. Your private key is encrypted on this device and is never uploaded.",

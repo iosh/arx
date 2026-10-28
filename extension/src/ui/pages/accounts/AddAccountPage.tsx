@@ -1,6 +1,7 @@
-import { useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import { Download, ExternalLink, Plus, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import browser from "webextension-polyfill";
 import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccountMoveSheet";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
@@ -10,8 +11,11 @@ import { useHdWallets } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useAccountCreation } from "./useAccountCreation";
 
 export function AddAccountPage() {
-  const { t } = useTranslation("wallet");
+  const { t } = useTranslation(["wallet", "onboarding"]);
   const navigate = useNavigate();
+  const router = useRouter();
+  const createPath = router.buildLocation({ to: "/onboarding/add-wallet/create" }).href;
+  const importPath = router.buildLocation({ to: "/onboarding/add-wallet/import" }).href;
   const { data: wallets = [], isPending, isSuccess } = useHdWallets();
   const {
     data: selectedAccount,
@@ -71,6 +75,52 @@ export function AddAccountPage() {
             ))}
           </section>
         )}
+        <section className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
+          <Button
+            asChild
+            variant="ghost"
+            className="h-auto min-h-15 w-full justify-start gap-3 px-4 py-2 text-left whitespace-normal"
+          >
+            <a
+              href={`${browser.runtime.getURL("/onboarding.html")}#${createPath}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
+                <Wallet aria-hidden="true" className="size-4" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-semibold">{t("onboarding:createWallet")}</span>
+                <span className="text-xs font-medium text-muted-foreground wrap-anywhere">
+                  {t("onboarding:createWalletDescription")}
+                </span>
+              </span>
+              <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+            </a>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            className="h-auto min-h-15 w-full justify-start gap-3 px-4 py-2 text-left whitespace-normal"
+          >
+            <a
+              href={`${browser.runtime.getURL("/onboarding.html")}#${importPath}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
+                <Download aria-hidden="true" className="size-4" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-semibold">{t("onboarding:importRecoveryPhrase")}</span>
+                <span className="text-xs font-medium text-muted-foreground wrap-anywhere">
+                  {t("onboarding:importRecoveryPhraseDescription")}
+                </span>
+              </span>
+              <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+            </a>
+          </Button>
+        </section>
       </div>
       {candidate && (
         <ConfirmAccountMoveSheet

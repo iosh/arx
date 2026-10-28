@@ -45,11 +45,26 @@ function findAccountSource({ sources, hdKeyrings }: MnemonicSources, account: Ac
   return sources.find((source) => source.keySourceId === keySourceId) ?? null;
 }
 
+export function useMnemonicSources() {
+  return useQuery(useMnemonicSourcesOptions());
+}
+
 export function useMnemonicSource(account: Account | undefined) {
   return useQuery({
     ...useMnemonicSourcesOptions(),
     enabled: account?.origin.type === "hd",
     select: (data) => findAccountSource(data, account),
+  });
+}
+
+export function usePendingMnemonicSource(account: Account | undefined) {
+  return useQuery({
+    ...useMnemonicSourcesOptions(),
+    select: (data) => {
+      const currentSource = findAccountSource(data, account);
+      const pending = data.sources.filter((source) => source.backupStatus === "pending");
+      return pending.find((source) => source.keySourceId === currentSource?.keySourceId) ?? pending[0] ?? null;
+    },
   });
 }
 

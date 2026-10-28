@@ -27,7 +27,10 @@ export function CreateWalletPage() {
         totalSteps={3}
         pending={confirmBackup.isPending}
         onComplete={() => confirmBackup.mutate(creation.keySourceId, { onSuccess: exit })}
-        onDefer={exit}
+        onDefer={() => {
+          exit();
+          return true;
+        }}
       />
     );
   }

@@ -49,6 +49,7 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
       <OnboardingStepLayout>
         <RevealMnemonicForm
           keySourceId={keySourceId}
+          walletName={mnemonicWallet.source.name}
           onReveal={(mnemonic) => setWords(mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })))}
         />
       </OnboardingStepLayout>
@@ -58,6 +59,7 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
   return (
     <MnemonicBackup
       words={words}
+      walletName={mnemonicWallet.source.name}
       totalSteps={2}
       pending={confirmBackup.isPending}
       onComplete={() => confirmBackup.mutate(keySourceId, { onSuccess: complete })}
@@ -68,9 +70,11 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
 function RevealMnemonicForm({
   keySourceId,
   onReveal,
+  walletName,
 }: {
   keySourceId: KeySourceId;
   onReveal: (mnemonic: string) => void;
+  walletName: string;
 }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("onboarding");
@@ -103,6 +107,7 @@ function RevealMnemonicForm({
   return (
     <OnboardingCard asChild title={t("viewPhraseTitle")} description={t("viewPhraseDescription")}>
       <form aria-busy={pending} onSubmit={handleSubmit(submit)}>
+        <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>
         <Field>
           <FieldLabel htmlFor={id}>{walletText("unlockPassword")}</FieldLabel>
           <PasswordInput

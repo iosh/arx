@@ -14,6 +14,8 @@ import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 export function ConfirmAccountMoveSheet({
   account,
   walletName,
+  description,
+  className,
   isPending,
   onCancel,
   onConfirm,
@@ -21,6 +23,8 @@ export function ConfirmAccountMoveSheet({
 }: {
   account: Account;
   walletName: string;
+  description?: string;
+  className?: string;
   isPending: boolean;
   onCancel(): void;
   onConfirm(): void;
@@ -43,6 +47,7 @@ export function ConfirmAccountMoveSheet({
       }}
     >
       <SheetContent
+        className={className}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();
@@ -64,7 +69,7 @@ export function ConfirmAccountMoveSheet({
           </SheetClose>
         </div>
         <SheetDescription className="text-sm font-normal text-foreground wrap-anywhere">
-          {t("accountMoveDescription", { accountName, walletName })}
+          {description ?? t("accountMoveDescription", { accountName, walletName })}
         </SheetDescription>
         <div className="flex flex-col gap-2.5 rounded-xl bg-secondary p-3">
           <div className="flex items-center gap-2.5">

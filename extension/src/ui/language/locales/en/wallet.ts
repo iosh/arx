@@ -37,7 +37,7 @@ export const wallet = {
   recoveryPhrase: "Recovery phrase",
   moreMenu: "More options",
   lockWallet: "Lock wallet",
-  backupNotice: "Recovery phrase not backed up",
+  backupNotice: "“{{walletName}}” recovery phrase not backed up",
   addAccount: "Add account",
   add: "Add",
   createAccount: "Create account",
@@ -48,6 +48,8 @@ export const wallet = {
   accountAlreadyExists: "Account already exists",
   accountMoveDescription:
     "The next account in “{{walletName}}” has already been imported with a private key, under the name “{{accountName}}”.",
+  firstAccountMoveDescription:
+    "The first account in “{{walletName}}” has already been imported with a private key, under the name “{{accountName}}”.",
   moveTargetWallet: "Destination wallet",
   accountMoveScope:
     "After moving, this account will be managed by “{{walletName}}” and will no longer be listed separately. Its address and assets will remain unchanged.",

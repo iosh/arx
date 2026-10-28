@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { Eye, EyeOff, TriangleAlert } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import {
@@ -13,16 +13,22 @@ import {
   AlertDialogTrigger,
 } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
+import { Toaster } from "@/ui/components/ui/sonner";
+import { Spinner } from "@/ui/components/ui/spinner";
 import type { MnemonicWord } from "./mnemonic";
 
 export function MnemonicDisplay({
   words,
+  walletName,
+  pending,
   onContinue,
   onDefer,
 }: {
   words: readonly MnemonicWord[];
+  walletName?: string;
+  pending: boolean;
   onContinue: () => void;
-  onDefer?: () => void;
+  onDefer?: (returnFocusElement: HTMLButtonElement | null) => boolean | Promise<boolean>;
 }) {
   const { t } = useTranslation("onboarding");
   const [visible, setVisible] = useState(false);
@@ -31,6 +37,7 @@ export function MnemonicDisplay({
 
   return (
     <OnboardingCard title={t("backupTitle")} description={t("backupDescription")}>
+      {walletName && <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>}
       <div className="relative rounded-md bg-background p-4 pt-12">
         <ol
           className={cn("grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3", !visible && "blur-[5px]")}
@@ -56,6 +63,7 @@ export function MnemonicDisplay({
           }
           aria-label={visible ? t("hidePhrase") : t("showPhrase")}
           aria-describedby={visible ? undefined : hintId}
+          disabled={pending}
           onClick={() => {
             setVisible((current) => !current);
             setHasRevealed(true);
@@ -81,45 +89,79 @@ export function MnemonicDisplay({
         <p>{t("phraseWarning")}</p>
       </div>
       <div className="flex flex-col items-center gap-2.5">
-        <Button type="button" size="lg" className="w-full" disabled={!hasRevealed} onClick={onContinue}>
+        <Button type="button" size="lg" className="w-full" disabled={!hasRevealed || pending} onClick={onContinue}>
           {t("continue")}
         </Button>
-        {onDefer && <DeferBackupDialog onConfirm={onDefer} onOpen={() => setVisible(false)} />}
+        {onDefer && <DeferBackupDialog onConfirm={onDefer} onOpen={() => setVisible(false)} pending={pending} />}
       </div>
     </OnboardingCard>
   );
 }
 
-function DeferBackupDialog({ onConfirm, onOpen }: { onConfirm: () => void; onOpen: () => void }) {
+function DeferBackupDialog({
+  onConfirm,
+  onOpen,
+  pending,
+}: {
+  onConfirm: (returnFocusElement: HTMLButtonElement | null) => boolean | Promise<boolean>;
+  onOpen: () => void;
+  pending: boolean;
+}) {
   const { t } = useTranslation("onboarding");
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <AlertDialog
-      onOpenChange={(open) => {
-        if (open) onOpen();
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (pending) return;
+        if (nextOpen) onOpen();
+        setOpen(nextOpen);
       }}
     >
       <AlertDialogTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="font-normal text-muted-foreground">
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="font-normal text-muted-foreground"
+          disabled={pending}
+        >
           {t("deferBackup")}
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent>
+      <AlertDialogContent aria-busy={pending}>
         <div className="flex flex-col gap-2">
           <AlertDialogTitle>{t("deferBackupTitle")}</AlertDialogTitle>
           <AlertDialogDescription>{t("deferBackupDescription")}</AlertDialogDescription>
         </div>
         <div className="flex flex-wrap justify-end gap-2.5">
           <AlertDialogAction asChild>
-            <Button type="button" variant="outline" className="h-10 rounded-md font-medium" onClick={onConfirm}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-md font-medium"
+              disabled={pending}
+              onClick={async (event) => {
+                event.preventDefault();
+                const shouldClose = await onConfirm(triggerRef.current);
+                if (shouldClose) setOpen(false);
+              }}
+            >
+              {pending && <Spinner aria-label={t("enterWallet")} />}
               {t("enterWallet")}
             </Button>
           </AlertDialogAction>
           <AlertDialogCancel asChild>
-            <Button type="button" className="h-10 rounded-md">
+            <Button type="button" className="h-10 rounded-md" disabled={pending}>
               {t("continueBackup")}
             </Button>
           </AlertDialogCancel>
+        </div>
+        <div className="absolute">
+          <Toaster id="defer-backup" position="top-center" />
         </div>
       </AlertDialogContent>
     </AlertDialog>

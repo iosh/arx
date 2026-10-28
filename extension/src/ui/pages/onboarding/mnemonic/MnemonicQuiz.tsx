@@ -9,11 +9,13 @@ import { buildMnemonicQuiz, type MnemonicWord } from "./mnemonic";
 
 export function MnemonicQuiz({
   words,
+  walletName,
   onSubmit,
   onBack,
   pending,
 }: {
   words: readonly MnemonicWord[];
+  walletName?: string;
   onSubmit: () => void;
   onBack: () => void;
   pending: boolean;
@@ -39,6 +41,7 @@ export function MnemonicQuiz({
         }}
         aria-busy={pending}
       >
+        {walletName && <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>}
         <div className="flex flex-col gap-4">
           {quiz.map(({ position, choices }) => (
             <div key={position} className="flex flex-col gap-1.5">

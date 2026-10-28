@@ -6,16 +6,18 @@ import type { MnemonicWord } from "./mnemonic";
 
 export function MnemonicBackup({
   words,
+  walletName,
   totalSteps,
   pending,
   onComplete,
   onDefer,
 }: {
   words: readonly MnemonicWord[];
+  walletName?: string;
   totalSteps: 2 | 3;
   pending: boolean;
   onComplete: () => void;
-  onDefer?: () => void;
+  onDefer?: (returnFocusElement: HTMLButtonElement | null) => boolean | Promise<boolean>;
 }) {
   const [step, setStep] = useState<"display" | "quiz">("display");
 
@@ -26,7 +28,13 @@ export function MnemonicBackup({
   if (step === "display") {
     return (
       <OnboardingStepLayout progress={{ current: totalSteps - 1, total: totalSteps }}>
-        <MnemonicDisplay words={words} onContinue={() => setStep("quiz")} onDefer={onDefer} />
+        <MnemonicDisplay
+          words={words}
+          walletName={walletName}
+          pending={pending}
+          onContinue={() => setStep("quiz")}
+          onDefer={onDefer}
+        />
       </OnboardingStepLayout>
     );
   }
@@ -37,7 +45,13 @@ export function MnemonicBackup({
       onBack={showMnemonic}
       backDisabled={pending}
     >
-      <MnemonicQuiz words={words} onSubmit={onComplete} onBack={showMnemonic} pending={pending} />
+      <MnemonicQuiz
+        words={words}
+        walletName={walletName}
+        onSubmit={onComplete}
+        onBack={showMnemonic}
+        pending={pending}
+      />
     </OnboardingStepLayout>
   );
 }

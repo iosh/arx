@@ -38,15 +38,7 @@ export function AccountsPage() {
             size="icon-sm"
             className="size-7.5 rounded-md text-muted-foreground"
             aria-label={t("addAccount")}
-            onClick={() => {
-              if (
-                wallets.some(({ hdKeyrings }) =>
-                  hdKeyrings.some((keyring) => keyring.namespace === selectedAccount?.namespace),
-                )
-              ) {
-                void navigate({ to: "/wallet/accounts/add" });
-              }
-            }}
+            onClick={() => void navigate({ to: "/wallet/accounts/add" })}
           >
             <Plus aria-hidden="true" className="size-4.5" />
           </Button>

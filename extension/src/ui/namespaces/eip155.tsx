@@ -29,9 +29,14 @@ function EvmGroupedAddress({ address }: { address: string }) {
   );
 }
 
+function EvmCompactAddress({ address }: { address: string }) {
+  return <span dir="ltr">{`EVM · ${address.slice(0, 6)}…${address.slice(-4)}`}</span>;
+}
+
 export const eip155Ui = {
   labelKey: "common:evmNetworks",
   Icon: EvmNamespaceIcon,
+  CompactAddress: EvmCompactAddress,
   privateKeyImport: {
     descriptionKey: "onboarding:importPrivateKeyDescription",
     formatHintKey: "onboarding:privateKeyFormat",

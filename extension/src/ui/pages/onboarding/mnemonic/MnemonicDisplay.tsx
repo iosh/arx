@@ -38,51 +38,62 @@ export function MnemonicDisplay({
   return (
     <OnboardingCard title={t("backupTitle")} description={t("backupDescription")}>
       {walletName && <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>}
-      <div className="relative rounded-md bg-background p-4 pt-12">
+      <div className="relative flex min-h-50 flex-col gap-2 rounded-xl bg-background px-4 py-3">
+        <div className="flex h-7 items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("phraseWordCount", { count: words.length })}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={
+              visible
+                ? "h-7 gap-1.5 rounded-md px-1 text-xs font-medium text-muted-foreground"
+                : "absolute inset-0 z-10 h-full w-full flex-col gap-1.5 rounded-xl bg-scrim p-4 hover:bg-scrim"
+            }
+            aria-label={visible ? t("hidePhrase") : t("showPhrase")}
+            aria-describedby={visible ? undefined : hintId}
+            disabled={pending}
+            onClick={() => {
+              setVisible((current) => !current);
+              setHasRevealed(true);
+            }}
+          >
+            {visible ? (
+              <>
+                <EyeOff aria-hidden="true" className="size-3.5" />
+                {t("hidePhraseAction")}
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-2 text-sm font-semibold text-brand">
+                  <Eye aria-hidden="true" className="size-4.5" />
+                  {t("showPhrase")}
+                </span>
+                <span id={hintId} className="text-xs font-normal text-muted-foreground">
+                  {t("showPhraseHint")}
+                </span>
+              </>
+            )}
+          </Button>
+        </div>
         <ol
-          className={cn("grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3", !visible && "blur-[5px]")}
+          className={cn(
+            "grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-x-4 gap-y-1 font-mono",
+            !visible && "blur-[5px]",
+          )}
           aria-hidden={!visible}
         >
           {words.map(({ position, word }) => (
-            <li key={position} className="flex h-7.5 items-center gap-2.5">
-              <span className="w-4.5 shrink-0 text-right text-xs text-muted-foreground">{position}</span>
-              <span lang="en" className="text-base">
+            <li key={position} className="flex h-8 min-w-0 items-center gap-2">
+              <span className="w-4.5 shrink-0 select-none text-right text-xs text-muted-foreground">{position}</span>
+              <span lang="en" className="text-base leading-6 font-medium">
                 {visible ? word : "••••••"}
               </span>
             </li>
           ))}
         </ol>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className={
-            visible
-              ? "absolute top-2 right-2 size-7 rounded-md text-muted-foreground"
-              : "absolute inset-0 h-full w-full flex-col gap-1.5 rounded-md bg-scrim p-4 hover:bg-scrim"
-          }
-          aria-label={visible ? t("hidePhrase") : t("showPhrase")}
-          aria-describedby={visible ? undefined : hintId}
-          disabled={pending}
-          onClick={() => {
-            setVisible((current) => !current);
-            setHasRevealed(true);
-          }}
-        >
-          {visible ? (
-            <EyeOff aria-hidden="true" className="size-4" />
-          ) : (
-            <>
-              <span className="flex items-center gap-2 text-sm font-semibold text-brand">
-                <Eye aria-hidden="true" className="size-4.5" />
-                {t("showPhrase")}
-              </span>
-              <span id={hintId} className="text-xs font-normal text-muted-foreground">
-                {t("showPhraseHint")}
-              </span>
-            </>
-          )}
-        </Button>
       </div>
       <div className="flex items-start gap-2.5 rounded-xl bg-warning-subtle p-3 text-sm leading-normal text-warning-foreground">
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />

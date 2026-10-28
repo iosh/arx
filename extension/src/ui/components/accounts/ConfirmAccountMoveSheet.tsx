@@ -1,6 +1,6 @@
 import type { Account } from "@arx/core/accounts";
 import { KeyRound, X } from "lucide-react";
-import { type RefObject, useEffect } from "react";
+import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
@@ -10,7 +10,6 @@ import { Toaster } from "@/ui/components/ui/sonner";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
-import { useWalletError } from "@/ui/wallet/useWalletError";
 
 export function ConfirmAccountMoveSheet({
   account,
@@ -29,14 +28,12 @@ export function ConfirmAccountMoveSheet({
 }) {
   const { t } = useTranslation(["wallet", "common"]);
   const accountName = getAccountName(account, t);
-  const { nameKey } = getNamespaceUi(account.namespace);
-  const { networkSelection, addresses } = useAccountAddresses(account);
-  const showError = useWalletError();
-  const addressError = networkSelection.error ?? addresses.error;
-
-  useEffect(() => {
-    if (addressError) showError(addressError, "account-move");
-  }, [addressError, showError]);
+  const { labelKey } = getNamespaceUi(account.namespace);
+  const {
+    networkSelection: { isPending: networkPending },
+    addresses: { data: addresses, isFetching: addressesFetching },
+  } = useAccountAddresses(account);
+  const loadingAddress = networkPending || addressesFetching;
 
   return (
     <Sheet
@@ -74,20 +71,20 @@ export function ConfirmAccountMoveSheet({
             <AccountIdenticon accountId={account.accountId} size={32} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-semibold wrap-anywhere">{accountName}</span>
-              <span className="text-xs font-medium text-muted-foreground">{`${t(nameKey, { ns: "common" })} · ${t("privateKeyImport")}`}</span>
+              <span className="text-xs font-medium text-muted-foreground">{`${t(labelKey)} · ${t("privateKeyImport")}`}</span>
             </div>
           </div>
-          {addresses.data ? (
-            addresses.data.map((address) => (
+          {addresses ? (
+            addresses.map((address) => (
               <p key={address.address} dir="ltr" className="break-all text-xs leading-4.5">
                 {address.address}
               </p>
             ))
-          ) : (
+          ) : loadingAddress ? (
             <div className="text-xs text-muted-foreground">
-              {addressError ? t("addressUnavailable") : <Spinner aria-label={t("loadingAddress")} />}
+              <Spinner aria-label={t("loadingAddress")} />
             </div>
-          )}
+          ) : null}
         </div>
         <div className="flex items-start gap-2 px-1 text-sm">
           <span className="shrink-0 font-medium text-muted-foreground">{t("moveTargetWallet")}</span>
@@ -101,7 +98,7 @@ export function ConfirmAccountMoveSheet({
           <Button variant="outline" className="flex-1" disabled={isPending} onClick={onCancel}>
             {t("cancel")}
           </Button>
-          <Button className="flex-1" disabled={isPending || !addresses.data} onClick={onConfirm}>
+          <Button className="flex-1" disabled={isPending || !addresses} onClick={onConfirm}>
             {isPending && <Spinner aria-label={t("moveAccount")} />}
             {t("moveAccount")}
           </Button>

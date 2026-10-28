@@ -3,49 +3,27 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, KeyRound, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
+import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccountMoveSheet";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
+import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
 import { useHdWallets } from "@/ui/wallet/keyring/useMnemonicSources";
-import { ConfirmAccountMoveSheet } from "./ConfirmAccountMoveSheet";
 import { useAccountCreation } from "./useAccountCreation";
 
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
-  const { data: accounts = [], isPending, isLoadingError } = useVisibleAccounts();
-  const { data: wallets = [], isPending: walletsPending, isLoadingError: walletsLoadingError } = useHdWallets();
-  const selectedAccount = useSelectedAccount();
+  const { data: accounts = [], isPending } = useVisibleAccounts();
+  const { data: wallets = [], isPending: walletsPending } = useHdWallets();
+  const { data: selectedAccount } = useSelectedAccount();
   const creation = useAccountCreation();
   const { candidate } = creation;
 
-  const walletSections = wallets
-    .map(({ source, hdKeyrings }) => ({
-      type: "hd" as const,
-      id: source.keySourceId,
-      createdAt: source.createdAt,
-      source,
-      hdKeyring: hdKeyrings.find((keyring) => keyring.namespace === selectedAccount.data?.namespace),
-      accounts: accounts.filter(
-        ({ origin }) =>
-          origin.type === "hd" && hdKeyrings.some((keyring) => origin.hdKeyringId === keyring.hdKeyringId),
-      ),
-    }))
-    .filter((section) => section.accounts.length > 0);
-  const privateKeySections = accounts
-    .filter((account) => account.origin.type === "private-key")
-    .map((account) => ({
-      type: "private-key" as const,
-      id: account.accountId,
-      createdAt: account.createdAt,
-      account,
-    }));
-  const sections = [...walletSections, ...privateKeySections].sort(
-    (left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id),
-  );
+  const sections = groupAccountsBySource(accounts, wallets);
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -63,7 +41,7 @@ export function AccountsPage() {
             onClick={() => {
               if (
                 wallets.some(({ hdKeyrings }) =>
-                  hdKeyrings.some((keyring) => keyring.namespace === selectedAccount.data?.namespace),
+                  hdKeyrings.some((keyring) => keyring.namespace === selectedAccount?.namespace),
                 )
               ) {
                 void navigate({ to: "/wallet/accounts/add" });
@@ -80,33 +58,21 @@ export function AccountsPage() {
             <Spinner aria-label={t("loadingAccounts")} />
           </div>
         )}
-        {isLoadingError && (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            {t("accountsUnavailable")}
-          </div>
-        )}
         {walletsPending && !isPending && (
           <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
             <Spinner aria-label={t("loadingAccounts")} />
           </div>
         )}
-        {walletsLoadingError && (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            {t("accountSourcesUnavailable")}
-          </div>
-        )}
-        {selectedAccount.isLoadingError && (
-          <p className="px-4 py-3 text-sm text-muted-foreground">{t("accountUnavailable")}</p>
-        )}
         {sections.map((section) => {
           if (section.type === "private-key") {
             return (
               <section key={section.id} className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
-                <AccountRows accounts={[section.account]} selectedAccountId={selectedAccount.data?.accountId} />
+                <AccountRows accounts={[section.account]} selectedAccountId={selectedAccount?.accountId} />
               </section>
             );
           }
-          const { id, source, accounts, hdKeyring } = section;
+          const { id, source, accounts, hdKeyrings } = section;
+          const hdKeyring = hdKeyrings.find((keyring) => keyring.namespace === selectedAccount?.namespace);
           return (
             <section
               key={id}
@@ -125,7 +91,7 @@ export function AccountsPage() {
                   <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
                 </Link>
               </h2>
-              <AccountRows accounts={accounts} selectedAccountId={selectedAccount.data?.accountId} />
+              <AccountRows accounts={accounts} selectedAccountId={selectedAccount?.accountId} />
               <Button
                 type="button"
                 variant="ghost"

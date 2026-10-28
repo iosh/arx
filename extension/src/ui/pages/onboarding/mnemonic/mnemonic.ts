@@ -3,6 +3,23 @@ export type MnemonicWord = Readonly<{
   word: string;
 }>;
 
+export type MnemonicFields = {
+  wordCount: 12 | 24;
+  words: string[];
+};
+
+export const mnemonicDefaultValues: MnemonicFields = {
+  wordCount: 12,
+  words: Array.from({ length: 24 }, () => ""),
+};
+
+export function mnemonicFromFields({ wordCount, words }: MnemonicFields) {
+  return words
+    .slice(0, wordCount)
+    .map((word) => word.trim().toLowerCase())
+    .join(" ");
+}
+
 function pickRandom<T>(values: readonly T[], count: number): T[] {
   const remaining = [...values];
   const picked: T[] = [];

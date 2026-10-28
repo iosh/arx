@@ -2,6 +2,7 @@ import type { KeySourceId } from "@arx/core/keyring";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Spinner } from "@/ui/components/ui/spinner";
+import { getWalletAccounts } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
@@ -10,13 +11,12 @@ import { RenameSheet } from "./RenameSheet";
 export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
-  const accountsQuery = useVisibleAccounts();
-  const walletQuery = useMnemonicWallet(keySourceId, accountsQuery.data);
-  const mnemonicWallet = walletQuery.data;
+  const { data: visibleAccounts } = useVisibleAccounts();
+  const { data: mnemonicWallet, isPending: walletPending } = useMnemonicWallet(keySourceId);
   const name = mnemonicWallet?.source.name ?? t("walletDetails");
-  const subtitle = mnemonicWallet?.accounts
-    ? t("walletAccountCount", { count: mnemonicWallet.accounts.length })
-    : t("recoveryPhrase");
+  const accounts =
+    mnemonicWallet && visibleAccounts ? getWalletAccounts(visibleAccounts, mnemonicWallet.hdKeyrings) : undefined;
+  const subtitle = accounts ? t("walletAccountCount", { count: accounts.length }) : t("recoveryPhrase");
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -38,7 +38,7 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
           </div>
         ) : (
           <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            {walletQuery.isPending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
+            {walletPending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
           </div>
         )}
       </div>

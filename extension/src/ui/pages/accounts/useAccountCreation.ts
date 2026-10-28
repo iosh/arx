@@ -1,51 +1,47 @@
 import type { Account } from "@arx/core/accounts";
 import type { HdKeyringId } from "@arx/core/keyring";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
-import { useCreateHdAccount, useMovePrivateKeyAccount } from "@/ui/wallet/keyring/useHdAccountMutations";
-import { useWalletError } from "@/ui/wallet/useWalletError";
+import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 type CreationTarget = Readonly<{ hdKeyringId: HdKeyringId; walletName: string }>;
 type MoveCandidate = Readonly<{ account: Account; target: CreationTarget }>;
 
 export function useAccountCreation(onComplete?: () => void) {
+  const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
-  const showError = useWalletError();
-  const creation = useCreateHdAccount();
-  const moving = useMovePrivateKeyAccount();
-  const [target, setTarget] = useState<CreationTarget | null>(null);
+  const creation = useWalletMutation({
+    mutationFn: ({ hdKeyringId }: CreationTarget) => wallet.accounts.create({ hdKeyringId }),
+  });
+  const moving = useWalletMutation({
+    mutationFn: wallet.accounts.move,
+    toasterId: "account-move",
+  });
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const candidate: MoveCandidate | null =
-    target && creation.data?.status === "move-available" ? { account: creation.data.account, target } : null;
-
-  function cancel() {
-    creation.reset();
-    setTarget(null);
-  }
+    creation.isSuccess && creation.data.status === "move-available"
+      ? { account: creation.data.account, target: creation.variables }
+      : null;
 
   function complete() {
-    cancel();
+    creation.reset();
     onComplete?.();
   }
 
-  function create(nextTarget: CreationTarget, button: HTMLElement) {
-    setTarget(nextTarget);
+  function create(target: CreationTarget, button: HTMLElement) {
     returnFocusRef.current = button;
     toast.dismiss();
-    creation.mutate(
-      { hdKeyringId: nextTarget.hdKeyringId },
-      {
-        onSuccess: (result) => {
-          if (result.status === "created") {
-            toast.success(t("accountCreated"));
-            complete();
-          }
-        },
-        onError: (error) => showError(error),
+    creation.mutate(target, {
+      onSuccess: (result) => {
+        if (result.status === "created") {
+          toast.success(t("accountCreated"));
+          complete();
+        }
       },
-    );
+    });
   }
 
   function move({ account, target }: MoveCandidate) {
@@ -62,7 +58,6 @@ export function useAccountCreation(onComplete?: () => void) {
           );
           complete();
         },
-        onError: (error) => showError(error, "account-move"),
       },
     );
   }
@@ -74,6 +69,6 @@ export function useAccountCreation(onComplete?: () => void) {
     returnFocusRef,
     create,
     move,
-    cancel,
+    cancel: creation.reset,
   };
 }

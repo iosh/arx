@@ -1,4 +1,4 @@
-export function EvmNetworkIcon() {
+export function EvmNamespaceIcon() {
   return (
     <span aria-hidden="true" className="grid size-8 shrink-0 grid-cols-2 gap-0.5">
       <span className="rounded-full bg-[#627eea]" />
@@ -11,7 +11,7 @@ export function EvmNetworkIcon() {
 
 const addressGroupOffsets = Array.from({ length: 10 }, (_, index) => 2 + index * 4);
 
-function EvmAddressPreview({ address }: { address: string }) {
+function EvmGroupedAddress({ address }: { address: string }) {
   return (
     <p>
       <span className="sr-only">{address}</span>
@@ -30,9 +30,11 @@ function EvmAddressPreview({ address }: { address: string }) {
 }
 
 export const eip155Ui = {
-  nameKey: "evmNetworks",
-  privateKeyDescriptionKey: "importPrivateKeyDescription",
-  privateKeyFormatKey: "privateKeyFormat",
-  Icon: EvmNetworkIcon,
-  AddressPreview: EvmAddressPreview,
+  labelKey: "common:evmNetworks",
+  Icon: EvmNamespaceIcon,
+  privateKeyImport: {
+    descriptionKey: "onboarding:importPrivateKeyDescription",
+    formatHintKey: "onboarding:privateKeyFormat",
+    GroupedAddress: EvmGroupedAddress,
+  },
 } as const;

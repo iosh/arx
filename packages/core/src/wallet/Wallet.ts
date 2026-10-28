@@ -20,14 +20,18 @@ export type Bip39SourceAdded = Readonly<{
   accountId: AccountId;
 }>;
 
-export type Bip39WalletCreated = Bip39SourceAdded;
+export type Bip39WalletInitializationResult =
+  | (Bip39SourceAdded & Readonly<{ status: "initialized" }>)
+  | Readonly<{ status: "already-initialized" }>;
 
 export type PrivateKeySourceAdded = Readonly<{
   keySourceId: KeySourceId;
   accountId: AccountId;
 }>;
 
-export type PrivateKeyWalletCreated = PrivateKeySourceAdded;
+export type PrivateKeyWalletInitializationResult =
+  | (PrivateKeySourceAdded & Readonly<{ status: "initialized" }>)
+  | Readonly<{ status: "already-initialized" }>;
 
 export type CreateFromMnemonicInput = Readonly<{
   password: string;
@@ -55,7 +59,8 @@ export type AddMnemonicAndMoveAccountInput = AddMnemonicSourceInput & Readonly<{
 
 export type AddMnemonicSourceResult =
   | (Bip39SourceAdded & Readonly<{ status: "added" }>)
-  | Readonly<{ status: "move-available"; account: Account }>;
+  | Readonly<{ status: "move-available"; account: Account }>
+  | Readonly<{ status: "duplicate"; walletName: string }>;
 
 export type PrivateKeySourceInput = Readonly<{
   privateKey: string;

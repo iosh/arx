@@ -1,24 +1,25 @@
-import type { Account } from "@arx/core/accounts";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWalletEvents } from "@/ui/wallet/connection/useWalletEvents";
+import type { Account, AccountId } from "@arx/core/accounts";
+import { type QueryClient, skipToken, useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useNetworkSelection } from "@/ui/wallet/networks/useNetworkSelection";
 
+const accountAddressesKey = (accountId: AccountId) => ["accountAddresses", accountId] as const;
+
+export function refreshAccountAddresses(queryClient: QueryClient, accountIds: readonly AccountId[]) {
+  for (const accountId of accountIds) {
+    const queryKey = accountAddressesKey(accountId);
+    void queryClient.cancelQueries({ queryKey });
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
 export function useAccountAddresses(account: Account) {
   const { client: wallet } = useWallet();
-  const queryClient = useQueryClient();
   const networkSelection = useNetworkSelection();
   const chainRef = networkSelection.data?.selectedChainRefByNamespace[account.namespace];
-  const accountKey = ["accountAddresses", account.accountId] as const;
-
-  useWalletEvents(wallet, "accountsChanged", (event) => {
-    if (!event.accountIds.includes(account.accountId)) return;
-    void queryClient.cancelQueries({ queryKey: accountKey });
-    void queryClient.invalidateQueries({ queryKey: accountKey });
-  });
 
   const addresses = useQuery({
-    queryKey: [...accountKey, chainRef],
+    queryKey: [...accountAddressesKey(account.accountId), chainRef],
     queryFn: chainRef ? () => wallet.accounts.getAddresses({ accountId: account.accountId, chainRef }) : skipToken,
     networkMode: "always",
     retry: false,

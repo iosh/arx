@@ -31,14 +31,14 @@ import type {
   AddMnemonicSourceInput,
   AddMnemonicSourceResult,
   Bip39SourceAdded,
-  Bip39WalletCreated,
+  Bip39WalletInitializationResult,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
   MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
-  PrivateKeyWalletCreated,
+  PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
   WalletStatus,
   WalletStatusChanged,
@@ -58,7 +58,7 @@ export type WalletKeySourcesApi = Readonly<{
   generateMnemonic(): Promise<{ mnemonic: string }>;
   get(keySourceId: KeySourceId): Promise<KeySource>;
   list(): Promise<readonly KeySource[]>;
-  /** Saves the source and selects its first account atomically; a move candidate leaves state unchanged. */
+  /** Saves the source and selects its first account atomically; other outcomes leave state unchanged. */
   addMnemonic(input: AddMnemonicSourceInput): Promise<AddMnemonicSourceResult>;
   /**
    * Adds the source and moves its existing private-key first account atomically.
@@ -70,7 +70,8 @@ export type WalletKeySourcesApi = Readonly<{
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
-  exportPrivateKey(input: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string }>;
+  /** Requires an unlocked wallet. Returns null if the password does not match. */
+  exportPrivateKey(input: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string } | null>;
   remove(input: { keySourceId: KeySourceId }): Promise<void>;
 }>;
 
@@ -86,11 +87,12 @@ export type WalletAccountsApi = Readonly<{
   getSelected(): Promise<Account>;
   list(): Promise<readonly Account[]>;
   getAddresses(input: { accountId: AccountId; chainRef: ChainRef }): Promise<readonly Address[]>;
+  /** Returns null if the private key is invalid for the chain's namespace. */
   fromPrivateKey(input: { privateKey: string; chainRef: ChainRef }): Promise<{
     accountId: AccountId;
     namespace: Namespace;
     addresses: readonly Address[];
-  }>;
+  } | null>;
   create(input: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult>;
   move(input: MovePrivateKeyAccountInput): Promise<Account>;
   rename(input: { accountId: AccountId; alias?: string }): Promise<void>;
@@ -154,9 +156,9 @@ export type WalletApi = Readonly<{
   subscribe(listener: (event: WalletApiEvent) => void): () => void;
 
   getStatus(): Promise<WalletStatus>;
-  createFromMnemonic(input: CreateFromMnemonicInput): Promise<Bip39WalletCreated>;
-  restoreFromMnemonic(input: RestoreFromMnemonicInput): Promise<Bip39WalletCreated>;
-  createFromPrivateKey(input: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletCreated>;
+  createFromMnemonic(input: CreateFromMnemonicInput): Promise<Bip39WalletInitializationResult>;
+  restoreFromMnemonic(input: RestoreFromMnemonicInput): Promise<Bip39WalletInitializationResult>;
+  createFromPrivateKey(input: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletInitializationResult>;
   /**
    * Returns false if the password does not match.
    * An already unlocked wallet returns true without checking the password.

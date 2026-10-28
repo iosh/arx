@@ -1,5 +1,4 @@
 import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
-import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronRight, Ellipsis, Lock, ShieldAlert } from "lucide-react";
 import { useState } from "react";
@@ -14,26 +13,17 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
 import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
-import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
-import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
+import { useLockWallet } from "@/ui/wallet/useWalletMutations";
 import { AccountSwitcher } from "./AccountSwitcher";
 
 export function HomePage() {
-  const { client: wallet } = useWallet();
   const router = useRouter();
   const { t } = useTranslation("wallet");
-  const { data: accounts, isPending, isLoadingError } = useVisibleAccounts();
-  const selectedAccount = useSelectedAccount();
-  const account = selectedAccount.data;
-  const namespaceAccounts = account
-    ? accounts?.filter((candidate) => candidate.namespace === account.namespace)
-    : undefined;
-  const { data: source, isEnabled: sourceEnabled, isLoadingError: sourceLoadingError } = useMnemonicSource(account);
+  const { data: account, isPending: selectedAccountPending } = useSelectedAccount();
+  const { data: source } = useMnemonicSource(account);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { mutate: lockWallet, isPending: isLocking } = useMutation({
-    mutationFn: () => wallet.lock(),
-  });
+  const { mutate: lockWallet, isPending: isLocking } = useLockWallet();
 
   const backupPath =
     source?.backupStatus === "pending"
@@ -48,13 +38,7 @@ export function HomePage() {
     <main className="flex h-full flex-col gap-2.5 px-3.5 font-sans">
       <title>{name ? `${name} · ARX` : "ARX"}</title>
       <header className="flex h-14 shrink-0 items-center gap-2 px-1.5 py-1">
-        <AccountSwitcher
-          accounts={namespaceAccounts}
-          selectedAccount={account}
-          isSelectedPending={selectedAccount.isPending}
-          isPending={isPending || selectedAccount.isPending}
-          isLoadingError={isLoadingError || selectedAccount.isLoadingError}
-        />
+        <AccountSwitcher selectedAccount={account} selectedAccountPending={selectedAccountPending} />
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
@@ -99,9 +83,6 @@ export function HomePage() {
             <span className="flex-1">{t("backupNotice")}</span>
             <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-warning" />
           </a>
-        )}
-        {sourceEnabled && sourceLoadingError && (
-          <p className="flex h-10 items-center px-4 text-xs text-muted-foreground">{t("backupStatusUnavailable")}</p>
         )}
       </section>
     </main>

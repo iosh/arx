@@ -1,6 +1,5 @@
 import type { Account } from "@arx/core/accounts";
 import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
-import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Settings2 } from "lucide-react";
 import { useState } from "react";
@@ -16,28 +15,25 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { useSelectAccount } from "@/ui/wallet/accounts/useSelectAccount";
+import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
 
 export function AccountSwitcher({
-  accounts,
   selectedAccount,
-  isSelectedPending,
-  isPending,
-  isLoadingError,
+  selectedAccountPending,
 }: Readonly<{
-  accounts: readonly Account[] | undefined;
   selectedAccount: Account | undefined;
-  isSelectedPending: boolean;
-  isPending: boolean;
-  isLoadingError: boolean;
+  selectedAccountPending: boolean;
 }>) {
-  const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const [open, setOpen] = useState(false);
-  const { mutate: selectAccount, isPending: isSelectingAccount } = useMutation({
-    mutationFn: (accountId: Account["accountId"]) => wallet.accounts.select({ accountId }),
-  });
-  const name = selectedAccount ? getAccountName(selectedAccount, t) : t("accountUnavailable");
+  const { mutate: selectAccount, isPending: isSelectingAccount } = useSelectAccount();
+  const { data: visibleAccounts, isPending: accountsPending } = useVisibleAccounts();
+  const accounts = selectedAccount
+    ? visibleAccounts?.filter((account) => account.namespace === selectedAccount.namespace)
+    : undefined;
+  const menuPending = accountsPending || selectedAccountPending;
+  const name = selectedAccount ? getAccountName(selectedAccount, t) : null;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -50,7 +46,7 @@ export function AccountSwitcher({
             {selectedAccount && <AccountIdenticon accountId={selectedAccount.accountId} />}
             <span className="flex min-w-0 items-center gap-1 px-1">
               <span className="truncate">
-                {isSelectedPending ? <Spinner aria-label={t("loadingAccount")} /> : name}
+                {selectedAccountPending ? <Spinner aria-label={t("loadingAccount")} /> : name}
               </span>
               <ChevronDown
                 aria-hidden="true"
@@ -72,13 +68,10 @@ export function AccountSwitcher({
         collisionPadding={14}
         className="flex w-93 flex-col overflow-hidden rounded-2xl border-0 bg-card px-0 py-1 text-card-foreground shadow-none"
       >
-        {isPending && (
+        {menuPending && (
           <div className="flex h-13 items-center px-4 text-sm text-muted-foreground">
             <Spinner aria-label={t("loadingAccounts")} />
           </div>
-        )}
-        {isLoadingError && (
-          <div className="flex h-13 items-center px-4 text-sm text-muted-foreground">{t("accountsUnavailable")}</div>
         )}
         {accounts && (
           <DropdownMenuRadioGroup value={selectedAccount?.accountId} className="min-h-0 overflow-y-auto">

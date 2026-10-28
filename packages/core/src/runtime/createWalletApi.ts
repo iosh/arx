@@ -1,8 +1,9 @@
 import type { Accounts } from "../accounts/Accounts.js";
+import type { AccountId } from "../accounts/accountId.js";
 import { AccountNotFoundError } from "../accounts/errors.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
-import { HdKeyringNotFoundError, KeySourceNotFoundError } from "../keyring/errors.js";
+import { HdKeyringNotFoundError, KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
 import { parseChainRef } from "../networks/chainRef.js";
 import type { Networks } from "../networks/Networks.js";
@@ -96,7 +97,13 @@ export const createWalletApi = ({
     getAddresses: async (input) => accounts.getAddresses(input),
     fromPrivateKey: async ({ privateKey, chainRef }) => {
       const { namespace } = parseChainRef(chainRef);
-      const accountId = keyring.accountIdFromPrivateKey({ privateKey, namespace });
+      let accountId: AccountId;
+      try {
+        accountId = keyring.accountIdFromPrivateKey({ privateKey, namespace });
+      } catch (error) {
+        if (error instanceof KeyringInvalidPrivateKeyError) return null;
+        throw error;
+      }
       return { accountId, namespace, addresses: accounts.getAddresses({ accountId, chainRef }) };
     },
     create: async (input) => coordinator.createHdAccount(input),

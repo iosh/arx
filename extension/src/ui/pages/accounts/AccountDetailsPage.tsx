@@ -17,7 +17,7 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const { t } = useTranslation("wallet");
   const { data: accounts, isPending } = useVisibleAccounts();
   const account = accounts?.find((candidate) => candidate.accountId === accountId);
-  const sourceQuery = useMnemonicSource(account);
+  const { data: source, isPending: sourcePending } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : t("accountDetails");
 
   return (
@@ -49,19 +49,19 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
                   <span className="font-medium">{t("accountSource")}</span>
                   <span className="text-muted-foreground">{t("privateKeyImport")}</span>
                 </div>
-              ) : sourceQuery.data ? (
+              ) : source ? (
                 <Link
                   to="/wallet/wallets/$keySourceId"
-                  params={{ keySourceId: sourceQuery.data.keySourceId }}
+                  params={{ keySourceId: source.keySourceId }}
                   className="flex h-12 items-center gap-2 px-4 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="shrink-0 font-medium">{t("parentWallet")}</span>
-                  <span className="ml-auto truncate text-muted-foreground">{sourceQuery.data.name}</span>
+                  <span className="ml-auto truncate text-muted-foreground">{source.name}</span>
                   <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
                 </Link>
               ) : (
                 <div className="flex h-12 items-center px-4 text-sm text-muted-foreground">
-                  {sourceQuery.isPending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
+                  {sourcePending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
                 </div>
               )}
             </div>

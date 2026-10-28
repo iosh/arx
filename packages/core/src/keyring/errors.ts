@@ -63,11 +63,10 @@ export class HdKeyringNotFoundError extends ArxBaseError {
 export class KeyringDuplicateSourceError extends ArxBaseError {
   static readonly code = "keyring.source_duplicate";
 
-  /** Mnemonic duplication includes the wallet name; private-key sources have no wallet name. */
-  constructor(existingKeySourceId: string, existingWalletName?: string) {
+  constructor(existingKeySourceId: string) {
     super("A matching key source already exists.", {
       code: KeyringDuplicateSourceError.code,
-      details: { existingKeySourceId, ...(existingWalletName === undefined ? {} : { existingWalletName }) },
+      details: { existingKeySourceId },
     });
   }
 }

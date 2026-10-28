@@ -10,14 +10,11 @@ export const wallet = {
   manageAccounts: "Manage accounts",
   backToWallet: "Back to wallet",
   loadingAccounts: "Loading accounts",
-  accountsUnavailable: "Account list unavailable",
-  accountSourcesUnavailable: "Wallet groups unavailable",
   currentAccount: "Current",
   backToAccounts: "Back to accounts",
   accountDetails: "Account details",
   accountAddress: "Account address",
   loadingAddress: "Loading address",
-  addressUnavailable: "Address unavailable",
   copyAddress: "Copy address",
   addressCopied: "Address copied",
   copyAddressFailed: "Could not copy the address.",
@@ -41,7 +38,6 @@ export const wallet = {
   moreMenu: "More options",
   lockWallet: "Lock wallet",
   backupNotice: "Recovery phrase not backed up",
-  backupStatusUnavailable: "Backup status unavailable",
   addAccount: "Add account",
   add: "Add",
   createAccount: "Create account",
@@ -59,7 +55,6 @@ export const wallet = {
   accountMoved: "“{{accountName}}” moved to “{{walletName}}”",
   cancel: "Cancel",
   operationFailed: "The operation could not be completed.",
-  operationDisconnected: "The wallet connection was closed. Reopen the wallet and check the account list.",
 } as const;
 
 export type WalletMessages = { [Key in keyof typeof wallet]: string };

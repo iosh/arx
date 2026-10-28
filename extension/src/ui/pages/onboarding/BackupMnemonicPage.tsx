@@ -10,24 +10,18 @@ import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { useConfirmMnemonicBackup } from "@/ui/wallet/keyring/useConfirmMnemonicBackup";
+import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
 import { MnemonicBackup } from "./mnemonic/MnemonicBackup";
 import type { MnemonicWord } from "./mnemonic/mnemonic";
 
 export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }) {
-  const { client: wallet, status } = useWallet();
+  const { status } = useWallet();
+  const { t } = useTranslation(["onboarding", "wallet"]);
+  const { data: mnemonicWallet, isPending: sourcePending } = useMnemonicWallet(keySourceId);
   const navigate = useNavigate();
   const [words, setWords] = useState<readonly MnemonicWord[] | null>(null);
-
-  async function readMnemonic(password: string) {
-    const unlocked = await wallet.unlock({ password });
-    if (!unlocked) return false;
-
-    const result = await wallet.keySources.exportMnemonic({ keySourceId, password });
-    if (result === null) return false;
-
-    setWords(result.mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })));
-    return true;
-  }
+  const confirmBackup = useConfirmMnemonicBackup();
 
   function complete() {
     void navigate({ to: "/onboarding", replace: true });
@@ -36,23 +30,49 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
 
   if (status === "uninitialized") return <Navigate to="/onboarding" replace />;
 
-  if (!words) {
+  if (!mnemonicWallet) {
     return (
       <OnboardingStepLayout>
-        <VerifyPasswordForm onSubmit={readMnemonic} />
+        <OnboardingCard title={t("viewPhraseTitle")} description={t("viewPhraseDescription")}>
+          {sourcePending ? (
+            <Spinner aria-label={t("wallet:loadingWallet")} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("wallet:walletUnavailable")}</p>
+          )}
+        </OnboardingCard>
       </OnboardingStepLayout>
     );
   }
 
-  return <MnemonicBackup keySourceId={keySourceId} words={words} totalSteps={2} onComplete={complete} />;
+  if (!words) {
+    return (
+      <OnboardingStepLayout>
+        <RevealMnemonicForm
+          keySourceId={keySourceId}
+          onReveal={(mnemonic) => setWords(mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })))}
+        />
+      </OnboardingStepLayout>
+    );
+  }
+
+  return (
+    <MnemonicBackup
+      words={words}
+      totalSteps={2}
+      pending={confirmBackup.isPending}
+      onComplete={() => confirmBackup.mutate(keySourceId, { onSuccess: complete })}
+    />
+  );
 }
 
-function VerifyPasswordForm({
-  onSubmit,
+function RevealMnemonicForm({
+  keySourceId,
+  onReveal,
 }: {
-  /** Returns false only when the password does not match. */
-  onSubmit: (password: string) => Promise<boolean>;
+  keySourceId: KeySourceId;
+  onReveal: (mnemonic: string) => void;
 }) {
+  const { client: wallet } = useWallet();
   const { t } = useTranslation("onboarding");
   const { t: walletText } = useTranslation("wallet");
   const id = useId();
@@ -65,10 +85,19 @@ function VerifyPasswordForm({
   const incorrect = errors.password?.type === "incorrectPassword";
 
   async function submit({ password }: { password: string }) {
-    const verified = await onSubmit(password);
-    if (!verified) {
+    const unlocked = await wallet.unlock({ password });
+    if (!unlocked) {
       setError("password", { type: "incorrectPassword" });
+      return;
     }
+
+    const result = await wallet.keySources.exportMnemonic({ keySourceId, password });
+    if (result === null) {
+      setError("password", { type: "incorrectPassword" });
+      return;
+    }
+
+    onReveal(result.mnemonic);
   }
 
   return (

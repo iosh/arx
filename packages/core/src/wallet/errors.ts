@@ -12,14 +12,6 @@ export class WalletAccountKeyMismatchError extends ArxBaseError {
   }
 }
 
-export class WalletAlreadyInitializedError extends ArxBaseError {
-  static readonly code = "wallet.already_initialized";
-
-  constructor() {
-    super("Wallet is already initialized.", { code: WalletAlreadyInitializedError.code });
-  }
-}
-
 export class WalletLastKeySourceRemovalError extends ArxBaseError {
   static readonly code = "wallet.last_key_source_removal";
 

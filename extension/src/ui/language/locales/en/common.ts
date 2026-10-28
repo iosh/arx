@@ -4,7 +4,6 @@ export const common = {
   notifications: "Notifications",
   evmNetworks: "EVM networks",
   loadingNetwork: "Loading network",
-  networkUnavailable: "Network information unavailable",
   reload: "Reload",
   showPassword: "Show {{field}}",
   hidePassword: "Hide {{field}}",

@@ -1,13 +1,12 @@
 import type { WalletClient } from "@arx/wallet-api/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, type ReactNode, use, useState } from "react";
 import { toast } from "sonner";
 import type { WalletConnectionResult } from "./connectWallet";
 import { useWalletActivity } from "./useWalletActivity";
 import { useWalletEvents } from "./useWalletEvents";
+import { useWalletQuerySync } from "./useWalletQuerySync";
+import { useWalletStatus } from "./useWalletStatus";
 import { useWallet, WalletContext } from "./WalletContext";
-
-const walletStatusQueryKey = ["walletStatus"] as const;
 
 type WalletContentProps = Readonly<{
   loading: ReactNode;
@@ -31,27 +30,11 @@ export function WalletConnection({
 }
 
 function WalletProvider({ wallet, loading, failure, children }: WalletContentProps & { wallet: WalletClient }) {
-  const queryClient = useQueryClient();
-
-  useWalletEvents(wallet, "walletStatusChanged", (event) => {
-    // A committed status event takes precedence over an earlier query.
-    void queryClient.cancelQueries({ queryKey: walletStatusQueryKey, exact: true });
-    queryClient.setQueryData(walletStatusQueryKey, event.status);
-  });
-
-  const statusQuery = useQuery({
-    queryKey: walletStatusQueryKey,
-    queryFn: () => wallet.getStatus(),
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
-  });
-  const status = statusQuery.data;
+  const { data: status, isError } = useWalletStatus(wallet);
+  useWalletQuerySync(wallet);
   useWalletActivity(wallet, status === "unlocked");
 
-  if (status === undefined) return statusQuery.isError ? failure : loading;
+  if (status === undefined) return isError ? failure : loading;
   return <WalletContext value={{ client: wallet, status }}>{children}</WalletContext>;
 }
 

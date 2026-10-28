@@ -22,32 +22,26 @@ import type { PersistenceWriter } from "../persistence/corePersistence.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import { AUTO_LOCK_SETTING_KEY, settingWrites } from "../settings/persistence.js";
-import { VaultIncorrectPasswordError } from "../vault/errors.js";
 import {
   type AutoLockController,
   assertAutoLockDuration,
   DEFAULT_AUTO_LOCK_DURATION_MS,
 } from "./AutoLockController.js";
-import {
-  WalletAccountKeyMismatchError,
-  WalletAlreadyInitializedError,
-  WalletLastKeySourceRemovalError,
-  WalletLockedError,
-} from "./errors.js";
+import { WalletAccountKeyMismatchError, WalletLastKeySourceRemovalError, WalletLockedError } from "./errors.js";
 import type {
   AddHdKeyringInput,
   AddMnemonicAndMoveAccountInput,
   AddMnemonicSourceInput,
   AddMnemonicSourceResult,
   Bip39SourceAdded,
-  Bip39WalletCreated,
+  Bip39WalletInitializationResult,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
   MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
-  PrivateKeyWalletCreated,
+  PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
   WalletStatus,
   WalletStatusChanged,
@@ -107,19 +101,19 @@ export class WalletCoordinator {
     this.#autoLock.recordActivity();
   }
 
-  createFromMnemonic(params: CreateFromMnemonicInput): Promise<Bip39WalletCreated> {
+  createFromMnemonic(params: CreateFromMnemonicInput): Promise<Bip39WalletInitializationResult> {
     return this.initializeBip39Wallet(params, "pending");
   }
 
-  restoreFromMnemonic(params: RestoreFromMnemonicInput): Promise<Bip39WalletCreated> {
+  restoreFromMnemonic(params: RestoreFromMnemonicInput): Promise<Bip39WalletInitializationResult> {
     return this.initializeBip39Wallet(params, "confirmed");
   }
 
-  async createFromPrivateKey(params: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletCreated> {
+  async createFromPrivateKey(params: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletInitializationResult> {
     const keySourceId = crypto.randomUUID();
     const secret: PrivateKeySourceSecret = { keySourceId, type: "private-key", privateKey: params.privateKey };
     return this.#mutations.run(async (commit) => {
-      if (this.#keyring.getSoftwareKeyStatus() !== "uninitialized") throw new WalletAlreadyInitializedError();
+      if (this.#keyring.getSoftwareKeyStatus() !== "uninitialized") return { status: "already-initialized" };
       const accountId = this.#keyring.accountIdFromPrivateKey({
         namespace: params.namespace,
         privateKey: secret.privateKey,
@@ -139,7 +133,7 @@ export class WalletCoordinator {
 
       await commit([...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges]);
       this.activateInitializedWallet(keyringUpdate, accountsUpdate);
-      return { keySourceId, accountId };
+      return { status: "initialized", keySourceId, accountId };
     });
   }
 
@@ -201,7 +195,7 @@ export class WalletCoordinator {
     return this.#mutations.run(async (commit) => {
       this.assertUnlocked();
       const existingSource = this.#keyring.findMnemonicSource(source.mnemonic);
-      if (existingSource) throw new KeyringDuplicateSourceError(existingSource.keySourceId, existingSource.name);
+      if (existingSource) return { status: "duplicate", walletName: existingSource.name };
 
       const accountId = await this.#keyring.deriveBip39AccountId({
         namespace: params.namespace,
@@ -228,7 +222,7 @@ export class WalletCoordinator {
         { accountId, origin: { type: "hd", hdKeyringId, derivationIndex: 0 }, createdAt },
         { selectAsCurrent: true },
       );
-      await this.saveKeySourceAddition(commit, addition, accountsUpdate);
+      await this.saveKeyringAndAccounts(commit, addition, accountsUpdate);
       return { status: "added", keySourceId, hdKeyringId, accountId };
     });
   }
@@ -266,7 +260,7 @@ export class WalletCoordinator {
         { type: "hd", hdKeyringId, derivationIndex: 0 },
         { selectAsCurrent: true },
       );
-      await this.saveKeySourceAddition(commit, addition, accountsUpdate);
+      await this.saveKeyringAndAccounts(commit, addition, accountsUpdate);
       return { keySourceId, hdKeyringId, accountId };
     });
   }
@@ -293,7 +287,7 @@ export class WalletCoordinator {
         namespace: params.namespace,
         createdAt,
       });
-      await this.saveKeySourceAddition(commit, keyringUpdate, accountsUpdate);
+      await this.saveKeyringAndAccounts(commit, keyringUpdate, accountsUpdate);
       return { keySourceId, accountId };
     });
   }
@@ -349,7 +343,10 @@ export class WalletCoordinator {
     });
   }
 
-  async exportPrivateKey(params: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string }> {
+  async exportPrivateKey(params: {
+    keySourceId: KeySourceId;
+    password: string;
+  }): Promise<{ privateKey: string } | null> {
     return await this.#mutations.run(async () => {
       this.assertUnlocked();
       const source = this.#keyring.requireKeySourceSecret(params.keySourceId);
@@ -361,7 +358,7 @@ export class WalletCoordinator {
         });
       }
 
-      if (!(await this.verifyCurrentPassword(params.password))) throw new VaultIncorrectPasswordError();
+      if (!(await this.verifyCurrentPassword(params.password))) return null;
 
       return { privateKey: source.privateKey };
     });
@@ -381,18 +378,12 @@ export class WalletCoordinator {
       };
       const keyringUpdate = this.#keyring.prepareAddHdKeyring(hdKeyring);
       const accountId = await this.#keyring.deriveHdAccountId({ hdKeyring, derivationIndex: 0 });
-      this.assertUnlocked();
       const accountsUpdate = this.#accounts.prepareAddAccount({
         accountId,
         origin: { type: "hd", hdKeyringId, derivationIndex: 0 },
         createdAt,
       });
-      await commit([...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges]);
-      keyringUpdate.activate();
-      this.#accounts.applyCommittedUpdate(accountsUpdate);
-      this.lockIfExpired();
-      this.#publishKeyringChanged({ type: "keyringChanged" });
-      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      await this.saveKeyringAndAccounts(commit, keyringUpdate, accountsUpdate);
       return { hdKeyringId, accountId };
     });
   }
@@ -420,13 +411,7 @@ export class WalletCoordinator {
       const accountsUpdate = this.#accounts.prepareAddAccount(account);
       const keyringUpdate = this.#keyring.prepareAdvanceHdKeyring(hdKeyring);
 
-      await commit([...accountsUpdate.persistenceChanges, ...keyringUpdate.persistenceChanges]);
-
-      keyringUpdate.activate();
-      this.#accounts.applyCommittedUpdate(accountsUpdate);
-      this.lockIfExpired();
-      this.#publishKeyringChanged({ type: "keyringChanged" });
-      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
+      await this.saveKeyringAndAccounts(commit, keyringUpdate, accountsUpdate);
 
       return { status: "created", account: accountsUpdate.account };
     });
@@ -516,10 +501,10 @@ export class WalletCoordinator {
   private async initializeBip39Wallet(
     params: CreateFromMnemonicInput,
     backupStatus: BackupStatus,
-  ): Promise<Bip39WalletCreated> {
+  ): Promise<Bip39WalletInitializationResult> {
     const source = importBip39KeySourceSecret({ keySourceId: crypto.randomUUID(), mnemonic: params.mnemonic });
     return this.#mutations.run(async (commit) => {
-      if (this.#keyring.getSoftwareKeyStatus() !== "uninitialized") throw new WalletAlreadyInitializedError();
+      if (this.#keyring.getSoftwareKeyStatus() !== "uninitialized") return { status: "already-initialized" };
       const accountId = await this.#keyring.deriveBip39AccountId({
         namespace: params.namespace,
         source,
@@ -542,7 +527,7 @@ export class WalletCoordinator {
       });
       await commit([...addition.persistenceChanges, ...accountsUpdate.persistenceChanges]);
       this.activateInitializedWallet(addition, accountsUpdate);
-      return { keySourceId, hdKeyringId, accountId };
+      return { status: "initialized", keySourceId, hdKeyringId, accountId };
     });
   }
 
@@ -565,7 +550,7 @@ export class WalletCoordinator {
     return accountId;
   }
 
-  private async saveKeySourceAddition(
+  private async saveKeyringAndAccounts(
     commit: PersistenceWriter["commit"],
     keyringUpdate: KeyringUpdate,
     accountsUpdate: AccountUpdate,

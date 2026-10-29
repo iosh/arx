@@ -35,8 +35,8 @@ import type {
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
+  ImportPrivateKeySourceResult,
   MovePrivateKeyAccountInput,
-  PrivateKeySourceAdded,
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
@@ -65,7 +65,8 @@ export type WalletKeySourcesApi = Readonly<{
    * Repeating a completed move returns its existing IDs without changing state.
    */
   addMnemonicAndMoveAccount(input: AddMnemonicAndMoveAccountInput): Promise<Bip39SourceAdded>;
-  importPrivateKey(input: PrivateKeySourceInput): Promise<PrivateKeySourceAdded>;
+  /** Saves and selects the account atomically; duplicates, including hidden accounts, leave state unchanged. */
+  importPrivateKey(input: PrivateKeySourceInput): Promise<ImportPrivateKeySourceResult>;
   renameMnemonic(input: { keySourceId: KeySourceId; name: string }): Promise<void>;
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */

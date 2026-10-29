@@ -472,6 +472,7 @@ describe("WalletCoordinator", () => {
     });
     assert(imported.status === "initialized");
     const other = await wallet.importPrivateKey({ privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE });
+    assert(other.status === "added");
     await accounts.rename({ accountId: imported.accountId, alias: "Daily" });
     await accounts.select(other.accountId);
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
@@ -563,6 +564,7 @@ describe("WalletCoordinator", () => {
       privateKey: PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
+    assert(privateKeySource.status === "added");
     const commitCount = commits.length;
     const eventCount = keyringChanges.length;
 
@@ -707,6 +709,7 @@ describe("WalletCoordinator", () => {
       privateKey: NEXT_PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
+    assert(imported.status === "added");
     await accounts.select(imported.accountId);
 
     const candidate = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
@@ -865,6 +868,43 @@ describe("WalletCoordinator", () => {
     ]);
   });
 
+  it("imports and selects once while private-key and hidden HD duplicates leave state unchanged", async () => {
+    const { accounts, commits, state, wallet } = createHarness();
+    const first = await wallet.createFromMnemonic({
+      password: "password",
+      mnemonic: PRIMARY_MNEMONIC,
+      name: "Wallet 1",
+      namespace: EIP155_NAMESPACE,
+    });
+    assert(first.status === "initialized");
+    const commitCount = commits.length;
+    const input = { privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE };
+    const [imported, duplicate] = await Promise.all([wallet.importPrivateKey(input), wallet.importPrivateKey(input)]);
+    assert(imported.status === "added");
+    expect(duplicate).toMatchObject({ status: "duplicate", account: { accountId: imported.accountId } });
+    expect(commits).toHaveLength(commitCount + 1);
+    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
+    expect(state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(imported.accountId);
+
+    await accounts.select(first.accountId);
+    const privateDuplicateCommitCount = commits.length;
+    await expect(wallet.importPrivateKey({ ...input, privateKey: `0x${PRIVATE_KEY}` })).resolves.toMatchObject({
+      status: "duplicate",
+      account: { accountId: imported.accountId },
+    });
+    expect(commits).toHaveLength(privateDuplicateCommitCount);
+    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
+
+    await wallet.setAccountHidden({ accountId: first.accountId, hidden: true });
+    const hdDuplicateCommitCount = commits.length;
+    await expect(wallet.importPrivateKey({ ...input, privateKey: FIRST_PRIVATE_KEY })).resolves.toMatchObject({
+      status: "duplicate",
+      account: { accountId: first.accountId, hidden: true },
+    });
+    expect(commits).toHaveLength(hdDuplicateCommitCount);
+    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
+  });
+
   it("removes a private-key source and its permission in the encrypted commit", async () => {
     const { accounts, commits, grantPermission, keyring, permissions, state, wallet } = createHarness();
     const first = await wallet.createFromMnemonic({
@@ -878,6 +918,7 @@ describe("WalletCoordinator", () => {
       privateKey: PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
+    assert(imported.status === "added");
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
     await grantPermission({ ...scope, accountIds: [imported.accountId] });
 
@@ -889,10 +930,12 @@ describe("WalletCoordinator", () => {
       "encryptedVault.put",
       "keySource.remove",
       "account.remove",
+      "accountSelection.put",
       "permission.remove",
     ]);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
     expect(accounts.getAccount(imported.accountId)).toBeNull();
+    expect(accounts.getAccount(first.accountId)).toMatchObject({ selected: true });
     expect(permissions.get(scope)).toBeNull();
     expect(await decryptStoredSources(state)).toEqual([
       expect.objectContaining({ keySourceId: first.keySourceId, type: "bip39" }),

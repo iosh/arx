@@ -60,17 +60,6 @@ export class HdKeyringNotFoundError extends ArxBaseError {
   }
 }
 
-export class KeyringDuplicateSourceError extends ArxBaseError {
-  static readonly code = "keyring.source_duplicate";
-
-  constructor(existingKeySourceId: string) {
-    super("A matching key source already exists.", {
-      code: KeyringDuplicateSourceError.code,
-      details: { existingKeySourceId },
-    });
-  }
-}
-
 export class KeySourceTypeMismatchError extends ArxBaseError {
   static readonly code = "keyring.key_source_type_mismatch";
 

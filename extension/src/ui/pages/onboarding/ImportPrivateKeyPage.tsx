@@ -1,14 +1,13 @@
 import type { WalletClient } from "@arx/wallet-api/client";
 import { Navigate, useBlocker } from "@tanstack/react-router";
-import { Eye, EyeOff } from "lucide-react";
 import { useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { PrivateKeyAddressPreview, PrivateKeyInput } from "@/ui/components/accounts/PrivateKeyImport";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { InputGroup } from "@/ui/components/ui/input-group";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
@@ -36,7 +35,6 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
   const chainRef = networkSelection?.selectedChainRef;
   const namespaceUi = networkSelection ? getNamespaceUi(networkSelection.selectedNamespace) : null;
   const id = useId();
-  const [visible, setVisible] = useState(false);
   const { mutateAsync: createWallet, reset: resetImport } = useCreatePrivateKeyWallet();
   const {
     register,
@@ -72,32 +70,13 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
         >
           <Field>
             <FieldLabel htmlFor={id}>{t("privateKey")}</FieldLabel>
-            <InputGroup className="h-24 items-start gap-2 p-2.5 pl-3">
-              <textarea
-                {...register("privateKey")}
-                id={id}
-                data-slot="input-group-control"
-                rows={3}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                disabled={pending}
-                aria-invalid={invalid}
-                aria-describedby={`${id}-description`}
-                className={`h-full min-w-0 flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed outline-none disabled:cursor-not-allowed ${visible ? "" : "[-webkit-text-security:disc]"}`}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6 shrink-0 text-muted-foreground disabled:opacity-100"
-                aria-label={t(visible ? "common:hidePassword" : "common:showPassword", { field: t("privateKey") })}
-                onClick={() => setVisible(!visible)}
-                disabled={pending}
-              >
-                {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-              </Button>
-            </InputGroup>
+            <PrivateKeyInput
+              {...register("privateKey")}
+              id={id}
+              disabled={pending}
+              aria-invalid={invalid}
+              aria-describedby={`${id}-description`}
+            />
             <FieldDescription id={`${id}-description`} aria-live="polite">
               {!namespaceUi ? (
                 networkPending && <Spinner aria-label={t("common:loadingNetwork")} />
@@ -108,24 +87,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
               )}
             </FieldDescription>
           </Field>
-          {account && (
-            <section aria-label={t("privateKeyAddress")} className="flex flex-col gap-3 rounded-lg bg-background p-4">
-              <h2 className="text-xs font-medium text-muted-foreground">{t("privateKeyAddress")}</h2>
-              {account.addresses.map((address) => {
-                const { Icon, labelKey, privateKeyImport } = getNamespaceUi(address.namespace);
-                const { GroupedAddress } = privateKeyImport;
-                return (
-                  <div key={address.address} className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <Icon />
-                      <span className="text-sm font-semibold">{t(labelKey)}</span>
-                    </div>
-                    <GroupedAddress address={address.address} />
-                  </div>
-                );
-              })}
-            </section>
-          )}
+          {account && <PrivateKeyAddressPreview addresses={account.addresses} />}
           <Button
             type="submit"
             size="lg"

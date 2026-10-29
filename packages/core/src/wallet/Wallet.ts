@@ -29,6 +29,10 @@ export type PrivateKeySourceAdded = Readonly<{
   accountId: AccountId;
 }>;
 
+export type ImportPrivateKeySourceResult =
+  | (PrivateKeySourceAdded & Readonly<{ status: "added" }>)
+  | Readonly<{ status: "duplicate"; account: Account }>;
+
 export type PrivateKeyWalletInitializationResult =
   | (PrivateKeySourceAdded & Readonly<{ status: "initialized" }>)
   | Readonly<{ status: "already-initialized" }>;

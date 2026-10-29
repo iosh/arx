@@ -1,5 +1,5 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { Download, ExternalLink, Plus, Wallet } from "lucide-react";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { ChevronRight, Download, ExternalLink, Key, Plus, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccountMoveSheet";
@@ -119,6 +119,26 @@ export function AddAccountPage() {
               </span>
               <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
             </a>
+          </Button>
+        </section>
+        <section className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
+          <Button
+            asChild
+            variant="ghost"
+            className="h-auto min-h-15 w-full justify-start gap-3 px-4 py-2 text-left whitespace-normal"
+          >
+            <Link to="/wallet/accounts/import-private-key">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
+                <Key aria-hidden="true" className="size-4" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-semibold">{t("onboarding:importPrivateKey")}</span>
+                <span className="text-xs font-medium text-muted-foreground wrap-anywhere">
+                  {t("privateKeyImportDescription")}
+                </span>
+              </span>
+              <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+            </Link>
           </Button>
         </section>
       </div>

@@ -6,12 +6,7 @@ import type { Account, AccountsChanged } from "../accounts/types.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { DappConnections } from "../dappConnections/DappConnections.js";
 import { importBip39KeySourceSecret } from "../keyring/bip39.js";
-import {
-  HdKeyringNotFoundError,
-  KeyringDuplicateSourceError,
-  KeySourceNotFoundError,
-  KeySourceTypeMismatchError,
-} from "../keyring/errors.js";
+import { HdKeyringNotFoundError, KeySourceNotFoundError, KeySourceTypeMismatchError } from "../keyring/errors.js";
 import type { Keyring, KeyringUpdate } from "../keyring/Keyring.js";
 import type { HdKeyringRecord } from "../keyring/persistence.js";
 import type { PrivateKeySourceSecret } from "../keyring/secrets.js";
@@ -38,8 +33,8 @@ import type {
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountCreationResult,
+  ImportPrivateKeySourceResult,
   MovePrivateKeyAccountInput,
-  PrivateKeySourceAdded,
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
@@ -265,7 +260,7 @@ export class WalletCoordinator {
     });
   }
 
-  async importPrivateKey(params: PrivateKeySourceInput): Promise<PrivateKeySourceAdded> {
+  async importPrivateKey(params: PrivateKeySourceInput): Promise<ImportPrivateKeySourceResult> {
     const keySourceId = crypto.randomUUID();
     const secret: PrivateKeySourceSecret = { keySourceId, type: "private-key", privateKey: params.privateKey };
     return this.#mutations.run(async (commit) => {
@@ -274,21 +269,20 @@ export class WalletCoordinator {
         namespace: params.namespace,
         privateKey: secret.privateKey,
       });
-      const existing = this.#accounts.getAccountRecord(accountId);
-      if (existing?.origin.type === "private-key") throw new KeyringDuplicateSourceError(existing.origin.keySourceId);
+      const existing = this.#accounts.getAccount(accountId);
+      if (existing) return { status: "duplicate", account: existing };
       const createdAt = this.#time.now();
-      const accountsUpdate = this.#accounts.prepareAddAccount({
-        accountId,
-        origin: { type: "private-key", keySourceId },
-        createdAt,
-      });
+      const accountsUpdate = this.#accounts.prepareAddAccount(
+        { accountId, origin: { type: "private-key", keySourceId }, createdAt },
+        { selectAsCurrent: true },
+      );
       const keyringUpdate = await this.#keyring.prepareAddPrivateKeySource({
         secret,
         namespace: params.namespace,
         createdAt,
       });
       await this.saveKeyringAndAccounts(commit, keyringUpdate, accountsUpdate);
-      return { keySourceId, accountId };
+      return { status: "added", keySourceId, accountId };
     });
   }
 

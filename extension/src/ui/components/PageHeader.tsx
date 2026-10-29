@@ -7,6 +7,7 @@ export function PageHeader({
   title,
   backTo,
   backLabel,
+  backDisabled = false,
   icon,
   subtitle,
   action,
@@ -14,13 +15,20 @@ export function PageHeader({
   title: string;
   backTo: NonNullable<LinkProps["to"]>;
   backLabel: string;
+  backDisabled?: boolean;
   icon?: ReactNode;
   subtitle?: string;
   action?: ReactNode;
 }>) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2.5 px-1.5">
-      <Button asChild variant="ghost" size="icon-sm" className="size-7.5 rounded-md text-muted-foreground">
+      <Button
+        asChild
+        variant="ghost"
+        size="icon-sm"
+        disabled={backDisabled}
+        className="size-7.5 rounded-md text-muted-foreground aria-disabled:opacity-45"
+      >
         <Link to={backTo} aria-label={backLabel}>
           <ArrowLeft aria-hidden="true" className="size-4.5" />
         </Link>

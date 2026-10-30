@@ -1,24 +1,54 @@
-import type { AccountId } from "@arx/core/accounts";
-import { Link } from "@tanstack/react-router";
+import { type AccountId, findAccountHideReplacement, LastVisibleAccountHiddenError } from "@arx/core/accounts";
+import { isWalletApiError } from "@arx/wallet-api/client";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { PageHeader } from "@/ui/components/PageHeader";
+import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
+import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
+import { useWalletError } from "@/ui/wallet/useWalletError";
+import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
+import { showAccountHiddenToast } from "./AccountHiddenToast";
 import { RenameSheet } from "./RenameSheet";
 
 export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
-  const { data: accounts, isPending } = useVisibleAccounts();
-  const account = accounts?.find((candidate) => candidate.accountId === accountId);
+  const navigate = useNavigate();
+  const reportError = useWalletError();
+  const hiding = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
+  const { data: accounts = [], isPending } = useVisibleAccounts();
+  const account = accounts.find((candidate) => candidate.accountId === accountId);
   const { data: source, isPending: sourcePending } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : t("accountDetails");
+  const canHide = account !== undefined && findAccountHideReplacement(account, accounts) !== null;
+
+  function hideAccount() {
+    toast.dismiss();
+    hiding.mutate(
+      { accountId, hidden: true },
+      {
+        onSuccess: (result) => {
+          showAccountHiddenToast(result, t);
+          void navigate({ to: "/wallet/accounts", replace: true });
+        },
+        onError: (error) => {
+          if (isWalletApiError(error, LastVisibleAccountHiddenError)) {
+            toast.error(t("lastVisibleAccount"), { duration: Infinity, closeButton: true });
+            return;
+          }
+          reportError(error);
+        },
+      },
+    );
+  }
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -27,6 +57,7 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
         title={name}
         backTo="/wallet/accounts"
         backLabel={t("backToAccounts")}
+        backDisabled={hiding.isPending}
         icon={account && <AccountIdenticon accountId={account.accountId} size={28} />}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
@@ -65,6 +96,30 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
                 </div>
               )}
             </div>
+            {account.origin.type === "hd" && (
+              <>
+                <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="lg"
+                    className="w-full justify-start px-4 aria-busy:opacity-70"
+                    disabled={!canHide || hiding.isPending}
+                    aria-busy={hiding.isPending}
+                    aria-describedby={!canHide ? "hide-account-help" : undefined}
+                    onClick={hideAccount}
+                  >
+                    {hiding.isPending && <Spinner aria-label={t("hideAccount")} />}
+                    {t("hideAccount")}
+                  </Button>
+                </div>
+                {!canHide && (
+                  <p id="hide-account-help" className="px-1.5 text-xs leading-relaxed text-muted-foreground">
+                    {t("lastVisibleAccount")}
+                  </p>
+                )}
+              </>
+            )}
           </>
         )}
       </div>

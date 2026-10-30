@@ -1,4 +1,5 @@
 import { ArxBaseError } from "../errors.js";
+import type { HdKeyringId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { AccountId } from "./accountId.js";
 
@@ -71,8 +72,8 @@ export class PrivateKeyAccountHiddenUnsupportedError extends ArxBaseError {
 export class LastVisibleAccountHiddenError extends ArxBaseError {
   static readonly code = "account.last_visible_hide_unsupported";
 
-  constructor(input: { accountId: AccountId; namespace: Namespace }) {
-    super(`The last visible account in namespace "${input.namespace}" cannot be hidden.`, {
+  constructor(input: { accountId: AccountId; hdKeyringId: HdKeyringId }) {
+    super(`The last visible account in HD keyring "${input.hdKeyringId}" cannot be hidden.`, {
       code: LastVisibleAccountHiddenError.code,
       details: input,
     });

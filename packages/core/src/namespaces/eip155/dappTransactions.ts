@@ -86,11 +86,12 @@ export const createEip155DappTransactionHandlers = (
         throw invalidDappParams("eth_sendTransaction", "chainId must match the active chain.");
       }
 
-      const account = getAuthorizedAccount(options, {
+      const authorization = {
         origin,
         chainRef,
         address: params.from,
-      });
+      };
+      const account = getAuthorizedAccount(options, authorization);
 
       let prepared: PreparedTransaction;
       try {
@@ -105,10 +106,12 @@ export const createEip155DappTransactionHandlers = (
         throw mapTransactionPreparationError(error);
       }
 
+      getAuthorizedAccount(options, authorization);
       const approval = options.approvals.request<"sendTransaction">({
         type: "sendTransaction",
         namespace: EIP155_NAMESPACE,
         origin,
+        accountId: account.accountId,
         request: prepared,
       });
       try {
@@ -123,6 +126,7 @@ export const createEip155DappTransactionHandlers = (
         });
       }
 
+      getAuthorizedAccount(options, authorization);
       let submission: TransactionSubmission;
       try {
         submission = await options.transactions.submit(prepared);

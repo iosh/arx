@@ -38,6 +38,7 @@ import type {
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
+  SetAccountHiddenResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
@@ -48,7 +49,7 @@ type WalletCoordinatorOptions = Readonly<{
   keyring: Keyring;
   accounts: Accounts;
   permissions: Pick<Permissions, "prepareRemoveAccountReferences" | "applyCommittedUpdate">;
-  approvals: Pick<Approvals, "cancelAll">;
+  approvals: Pick<Approvals, "cancelByAccount" | "cancelAll">;
   dappConnections: Pick<DappConnections, "refreshAccountsForOpenConnections">;
   autoLock: AutoLockController;
   publishStatusChanged(change: WalletStatusChanged): void;
@@ -473,10 +474,11 @@ export class WalletCoordinator {
     });
   }
 
-  async setAccountHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void> {
-    await this.#mutations.run(async (commit) => {
+  async setAccountHidden(params: { accountId: AccountId; hidden: boolean }): Promise<SetAccountHiddenResult> {
+    return this.#mutations.run(async (commit) => {
       const accountsUpdate = this.#accounts.prepareSetAccountHidden(params.accountId, params.hidden);
-      if (!accountsUpdate) return;
+      const result = { account: accountsUpdate.account, replacementAccount: accountsUpdate.replacementAccount };
+      if (accountsUpdate.persistenceChanges.length === 0) return result;
 
       const permissionsUpdate = params.hidden
         ? this.#permissions.prepareRemoveAccountReferences([params.accountId])
@@ -486,9 +488,11 @@ export class WalletCoordinator {
 
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      if (params.hidden) this.#approvals.cancelByAccount(params.accountId);
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
+      return result;
     });
   }
 

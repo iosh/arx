@@ -1,3 +1,4 @@
+import type { AccountId } from "../accounts/accountId.js";
 import type { CoreTime } from "../runtime/time.js";
 import { createDeferred } from "../utils/deferred.js";
 import {
@@ -102,6 +103,13 @@ export class Approvals implements ApprovalsReader {
 
   cancelAll(): void {
     this.cancel([...this.#pending.keys()]);
+  }
+
+  cancelByAccount(accountId: AccountId): void {
+    const approvalIds = this.list()
+      .filter((approval) => approval.accountId === accountId)
+      .map((approval) => approval.approvalId);
+    this.cancel(approvalIds);
   }
 
   #timeout(approvalId: ApprovalId): void {

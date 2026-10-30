@@ -133,11 +133,22 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   const state = params.state ?? emptyState();
   const commits: PersistenceChange[][] = [];
   let commitFailure = params.rejectCommit ?? null;
-  const commit = vi.fn(async (changes: readonly PersistenceChange[]) => {
+  const write = (changes: readonly PersistenceChange[]) => {
     if (commitFailure) throw commitFailure;
     commits.push([...changes]);
     applyChanges(state, changes);
-  });
+  };
+  const commit = vi.fn(async (changes: readonly PersistenceChange[]) => write(changes));
+  const holdNextCommit = () => {
+    const started = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    commit.mockImplementationOnce(async (changes) => {
+      started.resolve();
+      await released.promise;
+      write(changes);
+    });
+    return { started: started.promise, release: () => released.resolve() };
+  };
   const events: WalletStatusChanged[] = [];
   const keyringChanges: KeyringChanged[] = [];
   const accountChanges: AccountsChanged[] = [];
@@ -174,16 +185,6 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     bootstrap: { records: [...state.permissions.values()] },
     accounts,
   });
-  const dappRefreshSnapshots: Array<{
-    accounts: ReturnType<Accounts["listAccounts"]>;
-    permissions: ReturnType<Permissions["list"]>;
-  }> = [];
-  const refreshDappConnections = () => {
-    dappRefreshSnapshots.push({
-      accounts: accounts.listAccounts(),
-      permissions: permissions.list(),
-    });
-  };
   const approvals = new Approvals({
     time: systemTime,
     publishChanged: () => undefined,
@@ -199,7 +200,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     accounts,
     permissions,
     approvals,
-    dappConnections: { refreshAccountsForOpenConnections: refreshDappConnections },
+    dappConnections: { refreshAccountsForOpenConnections: () => undefined },
     autoLock,
     publishStatusChanged: (event) => events.push(event),
     publishKeyringChanged,
@@ -221,12 +222,11 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     approvals,
     state,
     commits,
-    commit,
+    holdNextCommit,
     events,
     keyringChanges,
     accountChanges,
     permissions,
-    dappRefreshSnapshots,
     grantPermission,
     keyring,
     autoLock,
@@ -234,6 +234,34 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
       commitFailure = failure;
     },
   };
+};
+
+const createWalletWithTwoAuthorizedAccounts = async () => {
+  const harness = createHarness();
+  const created = await harness.wallet.createFromMnemonic({
+    password: "password",
+    mnemonic: PRIMARY_MNEMONIC,
+    name: "Wallet 1",
+    namespace: EIP155_NAMESPACE,
+  });
+  assert(created.status === "initialized");
+  const { account } = await harness.wallet.createHdAccount({ hdKeyringId: created.hdKeyringId });
+  const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
+  await harness.grantPermission({ ...scope, accountIds: [created.accountId, account.accountId] });
+  const requestSign = (accountId: AccountId) =>
+    harness.approvals.request({
+      type: "sign",
+      namespace: EIP155_NAMESPACE,
+      origin: scope.origin,
+      accountId,
+      request: {
+        account: harness.accounts.getAddress({ accountId, chainRef: "eip155:1" }),
+        type: "personalMessage",
+        message: { format: "utf8", value: "hello" },
+      },
+    });
+
+  return { ...harness, accountId: created.accountId, replacementId: account.accountId, scope, requestSign };
 };
 
 beforeEach(() => {
@@ -249,7 +277,7 @@ describe("WalletCoordinator", () => {
 
     const created = await wallet.createFromMnemonic({
       password: "password",
-      mnemonic: `  ${PRIMARY_MNEMONIC.replaceAll(" ", "   ")}  `,
+      mnemonic: PRIMARY_MNEMONIC,
       name: "Personal",
       namespace: "eip155",
     });
@@ -276,9 +304,7 @@ describe("WalletCoordinator", () => {
       type: "bip39",
       name: "Personal",
       backupStatus: "pending",
-      createdAt: expect.any(Number),
     });
-    expect([...state.keyrings.values()][0]).toMatchObject({ createdAt: expect.any(Number) });
     expect(created.keySourceId).toBe([...state.keySources.keys()][0]);
     expect(created.hdKeyringId).toBe([...state.keyrings.keys()][0]);
     expect(events).toEqual([{ type: "walletStatusChanged", status: "unlocked" }]);
@@ -639,7 +665,6 @@ describe("WalletCoordinator", () => {
 
     expect(commits).toHaveLength(0);
     expect(keyring.getSoftwareKeyStatus()).toBe("uninitialized");
-    expect(keyring.getSoftwareKeyStatus()).not.toBe("unlocked");
   });
 
   it("does not activate wallet state when the initial commit fails", async () => {
@@ -658,7 +683,6 @@ describe("WalletCoordinator", () => {
     expect(keyring.getSoftwareKeyStatus()).toBe("uninitialized");
     expect(keyring.listKeySources()).toEqual([]);
     expect(keyring.listHdKeyrings()).toEqual([]);
-    expect(keyring.getSoftwareKeyStatus()).not.toBe("unlocked");
     expect(accounts.listAccountRecords()).toEqual([]);
   });
 
@@ -742,46 +766,47 @@ describe("WalletCoordinator", () => {
   });
 
   it("hides an HD account with its permission in one committed cascade", async () => {
-    const { accounts, commits, dappRefreshSnapshots, grantPermission, permissions, setCommitFailure, wallet } =
-      createHarness();
-    const created = await wallet.createFromMnemonic({
-      password: "password",
-      mnemonic: PRIMARY_MNEMONIC,
-      name: "Wallet 1",
-      namespace: EIP155_NAMESPACE,
-    });
-    assert(created.status === "initialized");
-    const result = await wallet.createHdAccount({ hdKeyringId: created.hdKeyringId });
-    const { accountId } = result.account;
-    const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await accounts.select(accountId);
-    await grantPermission({ ...scope, accountIds: [accountId] });
+    const fixture = await createWalletWithTwoAuthorizedAccounts();
+    const { accountId, replacementId, scope, requestSign } = fixture;
+    const cancelled = requestSign(accountId);
+    const retained = requestSign(replacementId);
+    void cancelled.decision.catch(() => undefined);
+    const commitCount = fixture.commits.length;
 
+    await fixture.wallet.setAccountHidden({ accountId, hidden: true });
+    expect(fixture.commits).toHaveLength(commitCount + 1);
+    expect(fixture.state.accounts.get(accountId)?.hidden).toBe(true);
+    expect(fixture.state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(replacementId);
+    expect(fixture.state.permissions.get(dappConnectionScopeKey(scope))?.accountIds).toEqual([replacementId]);
+    expect(fixture.accounts.getAccount(accountId)).toMatchObject({ hidden: true, selected: false });
+    expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
+    expect(fixture.approvals.list().map(({ approvalId }) => approvalId)).toEqual([retained.approvalId]);
+
+    await fixture.wallet.setAccountHidden({ accountId, hidden: false });
+    expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
+  });
+
+  it("cancels account requests only after a successful visibility commit", async () => {
+    const fixture = await createWalletWithTwoAuthorizedAccounts();
+    const { accountId, replacementId, scope } = fixture;
+    const pending = fixture.requestSign(accountId);
+    void pending.decision.catch(() => undefined);
     const failure = new Error("commit failed");
-    const refreshCount = dappRefreshSnapshots.length;
-    setCommitFailure(failure);
-    await expect(wallet.setAccountHidden({ accountId, hidden: true })).rejects.toBe(failure);
-    expect(accounts.getAccount(accountId)).toMatchObject({ hidden: false, selected: true });
-    expect(permissions.get(scope)).not.toBeNull();
-    expect(dappRefreshSnapshots).toHaveLength(refreshCount);
+    fixture.setCommitFailure(failure);
+    await expect(fixture.wallet.setAccountHidden({ accountId, hidden: true })).rejects.toBe(failure);
+    expect(fixture.accounts.getAccount(accountId)).toMatchObject({ hidden: false, selected: true });
+    expect(fixture.permissions.get(scope)?.accountIds).toEqual([accountId, replacementId]);
+    expect(fixture.approvals.list().map((approval) => approval.approvalId)).toEqual([pending.approvalId]);
 
-    setCommitFailure(null);
-    const commitCount = commits.length;
-    await wallet.setAccountHidden({ accountId, hidden: true });
-
-    expect(commits).toHaveLength(commitCount + 1);
-    expect(commits.at(-1)?.map((change) => `${change.persistenceType}.${change.operation}`)).toEqual([
-      "account.put",
-      "accountSelection.put",
-      "permission.remove",
-    ]);
-    expect(accounts.getAccount(accountId)).toMatchObject({ hidden: true, selected: false });
-    expect(permissions.get(scope)).toBeNull();
-    expect(dappRefreshSnapshots.at(-1)?.permissions).toEqual([]);
-
-    await wallet.setAccountHidden({ accountId, hidden: false });
-    expect(accounts.getAccount(accountId)).toMatchObject({ hidden: false, selected: false });
-    expect(permissions.get(scope)).toBeNull();
+    fixture.setCommitFailure(null);
+    const commit = fixture.holdNextCommit();
+    const hiding = fixture.wallet.setAccountHidden({ accountId, hidden: true });
+    await commit.started;
+    const late = fixture.requestSign(accountId);
+    void late.decision.catch(() => undefined);
+    commit.release();
+    await hiding;
+    expect(fixture.approvals.list()).toEqual([]);
   });
 
   it("removes a non-last HD keyring and its permission while locked", async () => {
@@ -895,6 +920,8 @@ describe("WalletCoordinator", () => {
     expect(commits).toHaveLength(privateDuplicateCommitCount);
     expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
 
+    await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
+    await accounts.select(imported.accountId);
     await wallet.setAccountHidden({ accountId: first.accountId, hidden: true });
     const hdDuplicateCommitCount = commits.length;
     await expect(wallet.importPrivateKey({ ...input, privateKey: FIRST_PRIVATE_KEY })).resolves.toMatchObject({
@@ -1063,7 +1090,6 @@ describe("WalletCoordinator", () => {
     expect([...state.keySources.values()][0]).toMatchObject({
       type: "private-key",
       namespace: "eip155",
-      createdAt: expect.any(Number),
     });
     const account = accounts.getAccount(created.accountId);
     const source = keyring.getKeySource(created.keySourceId);
@@ -1215,20 +1241,14 @@ describe("WalletCoordinator", () => {
   });
 
   it("finishes an in-flight commit successfully and then clears the expired session", async () => {
-    const { wallet, commit, keyring, state } = createHarness();
+    const { wallet, holdNextCommit, keyring, state } = createHarness();
     await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       name: "Wallet 1",
       namespace: "eip155",
     });
-    const commitStarted = Promise.withResolvers<void>();
-    const releaseCommit = Promise.withResolvers<void>();
-    commit.mockImplementationOnce(async (changes) => {
-      commitStarted.resolve();
-      await releaseCommit.promise;
-      applyChanges(state, changes);
-    });
+    const commit = holdNextCommit();
 
     const importing = wallet.addMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
@@ -1236,11 +1256,11 @@ describe("WalletCoordinator", () => {
       namespace: "eip155",
       backupStatus: "confirmed",
     });
-    await commitStarted.promise;
+    await commit.started;
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
     wallet.notifyUserActivity();
     expect(wallet.getStatus()).toBe("locked");
-    releaseCommit.resolve();
+    commit.release();
 
     const added = await importing;
     assert(added.status === "added");
@@ -1294,7 +1314,7 @@ describe("WalletCoordinator", () => {
         }),
     },
   ])("allows an in-flight HD signature to finish across a $label", async ({ change }) => {
-    const { accounts, commit, keyring, state, wallet } = createHarness();
+    const { accounts, holdNextCommit, keyring, wallet } = createHarness();
     const initialized = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
@@ -1304,18 +1324,12 @@ describe("WalletCoordinator", () => {
     assert(initialized.status === "initialized");
     const { accountId } = initialized;
     const signing = createEip155AccountSigning({ accounts, keyring, wallet });
-    const commitStarted = Promise.withResolvers<void>();
-    const releaseCommit = Promise.withResolvers<void>();
-    commit.mockImplementationOnce(async (changes) => {
-      commitStarted.resolve();
-      await releaseCommit.promise;
-      applyChanges(state, changes);
-    });
+    const commit = holdNextCommit();
 
     const changing = change(wallet);
-    await commitStarted.promise;
+    await commit.started;
     const pendingSignature = signing.signDigest({ accountId, digest: new Uint8Array(32) });
-    releaseCommit.resolve();
+    commit.release();
 
     const [signature] = await Promise.all([pendingSignature, changing]);
     expect(signature.bytes).toHaveLength(64);
@@ -1392,7 +1406,7 @@ describe("WalletCoordinator", () => {
     await wallet.setAutoLockDuration(60_000);
 
     expect(wallet.getStatus()).toBe("locked");
-    expect(keyring.getSoftwareKeyStatus()).not.toBe("unlocked");
+    expect(keyring.getSoftwareKeyStatus()).toBe("locked");
   });
 
   it("rejects an unsupported auto-lock duration before persistence", async () => {

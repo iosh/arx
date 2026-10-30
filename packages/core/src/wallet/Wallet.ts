@@ -81,6 +81,13 @@ export type MovePrivateKeyAccountInput = Readonly<{
   hdKeyringId: HdKeyringId;
 }>;
 
+/** Account visibility and any selection replacement caused by the command. */
+export type SetAccountHiddenResult = Readonly<{
+  account: Account;
+  /** Null when this command did not change the selected account. */
+  replacementAccount: Account | null;
+}>;
+
 export type HdAccountCreationResult =
   | Readonly<{ status: "created"; account: Account }>
   | Readonly<{

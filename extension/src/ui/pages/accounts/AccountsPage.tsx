@@ -1,6 +1,6 @@
 import type { Account } from "@arx/core/accounts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, KeyRound, Plus } from "lucide-react";
+import { ChevronRight, EyeOff, KeyRound, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
 import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccountMoveSheet";
@@ -9,15 +9,15 @@ import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
+import { useAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
-import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
 import { useHdWallets } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useAccountCreation } from "./useAccountCreation";
 
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
-  const { data: accounts = [], isPending } = useVisibleAccounts();
+  const { data: accounts = [], isPending } = useAccounts();
   const { data: wallets = [], isPending: walletsPending } = useHdWallets();
   const { data: selectedAccount } = useSelectedAccount();
   const creation = useAccountCreation();
@@ -64,6 +64,8 @@ export function AccountsPage() {
             );
           }
           const { id, source, accounts, hdKeyrings } = section;
+          const visibleAccounts = accounts.filter((account) => !account.hidden);
+          const hiddenCount = accounts.length - visibleAccounts.length;
           const hdKeyring = hdKeyrings.find((keyring) => keyring.namespace === selectedAccount?.namespace);
           return (
             <section
@@ -83,7 +85,7 @@ export function AccountsPage() {
                   <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
                 </Link>
               </h2>
-              <AccountRows accounts={accounts} selectedAccountId={selectedAccount?.accountId} />
+              <AccountRows accounts={visibleAccounts} selectedAccountId={selectedAccount?.accountId} />
               <Button
                 type="button"
                 variant="ghost"
@@ -108,6 +110,18 @@ export function AccountsPage() {
                 </span>
                 {t("createAccount")}
               </Button>
+              {hiddenCount > 0 && (
+                <Link
+                  to="/wallet/wallets/$keySourceId/hidden-accounts"
+                  params={{ keySourceId: source.keySourceId }}
+                  className="flex h-11 items-center gap-2 border-t border-border px-4 text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <EyeOff aria-hidden="true" className="size-4 shrink-0" />
+                  <span className="truncate text-sm">{t("hiddenAccounts")}</span>
+                  <span className="shrink-0 text-xs">{t("hiddenAccountCount", { count: hiddenCount })}</span>
+                  <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
+                </Link>
+              )}
             </section>
           );
         })}

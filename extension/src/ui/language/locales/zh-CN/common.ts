@@ -3,6 +3,7 @@ import type { CommonMessages } from "../en/common";
 export const common = {
   language: "语言",
   close: "关闭",
+  undo: "撤销",
   notifications: "操作提示",
   evmNetworks: "EVM 网络",
   loadingNetwork: "正在读取网络",

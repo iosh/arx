@@ -1,8 +1,8 @@
 import type { WalletClient } from "@arx/wallet-api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { refreshAccountAddresses } from "../accounts/useAccountAddresses";
+import { refreshAccounts } from "../accounts/useAccounts";
 import { refreshSelectedAccount } from "../accounts/useSelectedAccount";
-import { refreshVisibleAccounts } from "../accounts/useVisibleAccounts";
 import { refreshMnemonicSources } from "../keyring/useMnemonicSources";
 import { refreshNetworkSelection } from "../networks/useNetworkSelection";
 import { useWalletEvents } from "./useWalletEvents";
@@ -14,7 +14,7 @@ export function useWalletQuerySync(wallet: WalletClient) {
   useWalletEvents(wallet, ["accountsChanged", "networkSelectionChanged", "keyringChanged"], (event) => {
     switch (event.type) {
       case "accountsChanged":
-        refreshVisibleAccounts(queryClient);
+        refreshAccounts(queryClient);
         refreshSelectedAccount(queryClient);
         refreshAccountAddresses(queryClient, event.accountIds);
         break;

@@ -18,8 +18,8 @@ import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
+import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useSelectAccount } from "@/ui/wallet/accounts/useSelectAccount";
-import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
 import { useHdWallets, useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
 
 export function AccountSwitcher({

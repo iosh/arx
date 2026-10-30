@@ -55,6 +55,7 @@ export const createEip155DappSigningHandlers = (
       type: "sign",
       namespace: EIP155_NAMESPACE,
       origin: input.origin,
+      accountId: account.accountId,
       request,
     });
 
@@ -64,6 +65,8 @@ export const createEip155DappSigningHandlers = (
       if (isApprovalDecisionError(error)) throw new RpcUserRejectedRequestError({ message: error.message });
       throw error;
     }
+
+    getAuthorizedAccount(options, input);
 
     try {
       const signature = await options.accountSigning.signDigest({

@@ -23,6 +23,7 @@ export type {
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
+  SetAccountHiddenResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";

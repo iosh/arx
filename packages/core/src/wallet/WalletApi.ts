@@ -40,6 +40,7 @@ import type {
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
+  SetAccountHiddenResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
@@ -97,7 +98,11 @@ export type WalletAccountsApi = Readonly<{
   create(input: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult>;
   move(input: MovePrivateKeyAccountInput): Promise<Account>;
   rename(input: { accountId: AccountId; alias?: string }): Promise<void>;
-  setHidden(input: { accountId: AccountId; hidden: boolean }): Promise<void>;
+  /**
+   * Keeps one visible account per HD keyring and cancels the hidden account's pending sign/transaction approvals.
+   * Restoring preserves selection and does not restore dapp grants.
+   */
+  setHidden(input: { accountId: AccountId; hidden: boolean }): Promise<SetAccountHiddenResult>;
   select(input: { accountId: AccountId }): Promise<void>;
 }>;
 

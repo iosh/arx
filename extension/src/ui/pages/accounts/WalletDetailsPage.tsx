@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getWalletAccounts } from "@/ui/wallet/accounts/groupAccountsBySource";
-import { useVisibleAccounts } from "@/ui/wallet/accounts/useVisibleAccounts";
+import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
 import { RenameSheet } from "./RenameSheet";

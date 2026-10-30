@@ -230,21 +230,28 @@ describe("Accounts", () => {
     expect(publishChanged).not.toHaveBeenCalled();
   });
 
-  it("hides a selected HD account and chooses the first remaining visible account", () => {
+  it("keeps HD visibility and replacement selection within the same wallet", () => {
     const first = hdAccount({ value: 1, createdAt: 1 });
     const second = hdAccount({ value: 2, createdAt: 2 });
+    const otherWallet = hdAccount({ value: 3, createdAt: 0, hdKeyringId: "hd-keyring-2" });
     const accounts = createAccounts({
-      records: [second, first],
+      records: [otherWallet, second, first],
       selections: [selection(first)],
     });
 
     const update = accounts.prepareSetAccountHidden(first.accountId, true);
-    if (!update) throw new Error("missing hidden update");
     expect(update.persistenceChanges.map((change) => change.persistenceType)).toEqual(["account", "accountSelection"]);
 
     accounts.applyCommittedUpdate(update);
     expect(accounts.getAccount(first.accountId)).toMatchObject({ hidden: true, selected: false });
     expect(accounts.getAccount(second.accountId)).toMatchObject({ hidden: false, selected: true });
+    expect(accounts.getSelectedAccountId("eip155")).toBe(second.accountId);
+
+    expect(() => accounts.prepareSetAccountHidden(second.accountId, true)).toThrow(LastVisibleAccountHiddenError);
+
+    const restore = accounts.prepareSetAccountHidden(first.accountId, false);
+    accounts.applyCommittedUpdate(restore);
+    expect(accounts.getAccount(first.accountId)).toMatchObject({ hidden: false, selected: false });
     expect(accounts.getSelectedAccountId("eip155")).toBe(second.accountId);
   });
 
@@ -276,16 +283,6 @@ describe("Accounts", () => {
     expect(() => accounts.prepareSetAccountHidden(account.accountId, true)).toThrow(
       PrivateKeyAccountHiddenUnsupportedError,
     );
-  });
-
-  it("rejects hiding the last visible account", () => {
-    const account = hdAccount({ value: 1, createdAt: 1 });
-    const accounts = createAccounts({
-      records: [account],
-      selections: [selection(account)],
-    });
-
-    expect(() => accounts.prepareSetAccountHidden(account.accountId, true)).toThrow(LastVisibleAccountHiddenError);
   });
 
   it("selects the first visible account remaining after removal", () => {

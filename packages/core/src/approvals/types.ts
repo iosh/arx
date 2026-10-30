@@ -12,6 +12,8 @@ export type ApprovalBase<TType extends string, TNamespace extends Namespace, TRe
   type: TType;
   namespace: TNamespace;
   origin: string;
+  /** The account this approval depends on; omitted when there is no single target account. */
+  accountId?: AccountId;
   createdAt: number;
   request: TRequest;
 }>;
@@ -24,13 +26,14 @@ export type AccountAccessApproval = ApprovalBase<
   }>
 >;
 
-export type Eip155SignApproval = ApprovalBase<"sign", "eip155", Eip155SignRequest>;
+export type Eip155SignApproval = ApprovalBase<"sign", "eip155", Eip155SignRequest> & Readonly<{ accountId: AccountId }>;
 
 export type SendTransactionApproval = ApprovalBase<
   "sendTransaction",
   PreparedTransaction["namespace"],
   PreparedTransaction
->;
+> &
+  Readonly<{ accountId: AccountId }>;
 
 export type SwitchNetworkApproval = ApprovalBase<
   "switchNetwork",

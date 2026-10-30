@@ -6,6 +6,7 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { uniqueSortedStrings } from "../utils/array.js";
 import { type AccountId, getAccountIdNamespace } from "./accountId.js";
+import { findAccountHideReplacement } from "./accountVisibility.js";
 import type { AccountsBootstrap } from "./bootstrap.js";
 import {
   AccountAlreadyExistsError,
@@ -36,6 +37,8 @@ export type AccountsUpdate = Readonly<{
 }>;
 
 export type AccountUpdate = AccountsUpdate & Readonly<{ account: Account }>;
+
+export type AccountHiddenUpdate = AccountUpdate & Readonly<{ replacementAccount: Account | null }>;
 
 export type AccountsRemovalUpdate = AccountsUpdate &
   Readonly<{
@@ -196,7 +199,10 @@ export class Accounts {
     if (this.#records.has(account.accountId)) throw new AccountAlreadyExistsError(account.accountId);
 
     const shouldSelectAccount = selectAsCurrent || !this.#selections.has(namespace);
-    return this.prepareAccountAndSelectionUpdate({ ...account, hidden: false }, shouldSelectAccount);
+    return this.prepareAccountUpdate(
+      { ...account, hidden: false },
+      shouldSelectAccount ? account.accountId : undefined,
+    );
   }
 
   prepareRenameAccount(accountId: AccountId, alias: string | undefined): AccountsUpdate | null {
@@ -224,10 +230,10 @@ export class Accounts {
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
   ): AccountUpdate {
     const current = this.requireAccountRecord(accountId);
-    return this.prepareAccountAndSelectionUpdate({ ...current, origin }, selectAsCurrent);
+    return this.prepareAccountUpdate({ ...current, origin }, selectAsCurrent ? accountId : undefined);
   }
 
-  private prepareAccountAndSelectionUpdate(record: AccountRecord, selectAsCurrent: boolean): AccountUpdate {
+  private prepareAccountUpdate(record: AccountRecord, selectedAccountId?: AccountId): AccountUpdate {
     const accountId = record.accountId;
     const namespace = getAccountIdNamespace(accountId);
     const nextRecords = new Map(this.#records);
@@ -237,9 +243,10 @@ export class Accounts {
     const persistenceChanges: PersistenceChange[] = [accountWrites.put(record)];
     const changedAccountIds = [accountId];
     const previousAccountId = this.#selections.get(namespace);
-    if (selectAsCurrent && previousAccountId !== accountId) {
-      nextSelections.set(namespace, accountId);
-      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, accountId)));
+    if (selectedAccountId !== undefined && previousAccountId !== selectedAccountId) {
+      nextSelections.set(namespace, selectedAccountId);
+      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, selectedAccountId)));
+      changedAccountIds.push(selectedAccountId);
       if (previousAccountId) changedAccountIds.push(previousAccountId);
     }
 
@@ -269,33 +276,32 @@ export class Accounts {
     );
   }
 
-  prepareSetAccountHidden(accountId: AccountId, hidden: boolean): AccountsUpdate | null {
+  prepareSetAccountHidden(accountId: AccountId, hidden: boolean): AccountHiddenUpdate {
     const current = this.requireAccountRecord(accountId);
-    if (current.hidden === hidden) return null;
-    if (hidden && current.origin.type !== "hd") throw new PrivateKeyAccountHiddenUnsupportedError(accountId);
-
-    const namespace = getAccountIdNamespace(accountId);
-    const persistenceChanges: PersistenceChange[] = [];
-    const nextRecords = new Map(this.#records);
-    const nextSelections = new Map(this.#selections);
-    const changedAccountIds: AccountId[] = [accountId];
-
-    if (hidden) {
-      const replacement = this.listVisibleRecords(namespace).find((record) => record.accountId !== accountId);
-      if (!replacement) throw new LastVisibleAccountHiddenError({ accountId, namespace });
-
-      if (this.#selections.get(namespace) === accountId) {
-        nextSelections.set(namespace, replacement.accountId);
-        persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, replacement.accountId)));
-        changedAccountIds.push(replacement.accountId);
-      }
+    if (current.hidden === hidden) {
+      return {
+        ...this.update(this.#records, this.#selections, [], [], []),
+        account: this.toAccount(current),
+        replacementAccount: null,
+      };
     }
 
-    const updated = { ...current, hidden };
-    nextRecords.set(accountId, updated);
-    persistenceChanges.unshift(accountWrites.put(updated));
+    const namespace = getAccountIdNamespace(accountId);
+    let replacement: AccountRecord | null = null;
 
-    return this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, [namespace]);
+    if (hidden) {
+      if (current.origin.type !== "hd") throw new PrivateKeyAccountHiddenUnsupportedError(accountId);
+      const candidate = findAccountHideReplacement(current, this.listAccountRecords());
+      if (!candidate) throw new LastVisibleAccountHiddenError({ accountId, hdKeyringId: current.origin.hdKeyringId });
+
+      if (this.#selections.get(namespace) === accountId) replacement = candidate;
+    }
+
+    const update = this.prepareAccountUpdate({ ...current, hidden }, replacement?.accountId);
+    return {
+      ...update,
+      replacementAccount: replacement ? this.toAccount(replacement, update.nextSelections) : null,
+    };
   }
 
   prepareRemoveHdAccounts(hdKeyringIds: readonly HdKeyringId[]): AccountsRemovalUpdate | null {
@@ -327,12 +333,6 @@ export class Accounts {
     const record = this.#records.get(accountId);
     if (!record) throw new AccountNotFoundError(accountId);
     return record;
-  }
-
-  private listVisibleRecords(namespace: Namespace): readonly AccountRecord[] {
-    return this.listAccountRecords().filter(
-      (record) => getAccountIdNamespace(record.accountId) === namespace && !record.hidden,
-    );
   }
 
   private prepareRemoveRecords(records: readonly AccountRecord[]): AccountsRemovalUpdate | null {

@@ -16,7 +16,9 @@ import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
 import { showAccountHiddenToast } from "./AccountHiddenToast";
+import { RemoveKeySourceSheet } from "./RemoveKeySourceSheet";
 import { RenameSheet } from "./RenameSheet";
+import { useKeySourceRemoval } from "./useKeySourceRemoval";
 
 export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const { client: wallet } = useWallet();
@@ -24,11 +26,13 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const navigate = useNavigate();
   const reportError = useWalletError();
   const hiding = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
+  const removal = useKeySourceRemoval();
   const { data: accounts = [], isPending } = useVisibleAccounts();
   const account = accounts.find((candidate) => candidate.accountId === accountId);
   const { data: source, isPending: sourcePending } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : t("accountDetails");
   const canHide = account !== undefined && findAccountHideReplacement(account, accounts) !== null;
+  const privateKeySourceId = account?.origin.type === "private-key" ? account.origin.keySourceId : undefined;
 
   function hideAccount() {
     toast.dismiss();
@@ -57,7 +61,7 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
         title={name}
         backTo="/wallet/accounts"
         backLabel={t("backToAccounts")}
-        backDisabled={hiding.isPending}
+        backDisabled={hiding.isPending || removal.isPending}
         icon={account && <AccountIdenticon accountId={account.accountId} size={28} />}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
@@ -96,6 +100,17 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
                 </div>
               )}
             </div>
+            {privateKeySourceId && (
+              <RemoveKeySourceSheet
+                label={t("removeAccount")}
+                title={t("removeAccountTitle", { accountName: name })}
+                description={t("removeAccountDescription")}
+                backupLabel={t("confirmPrivateKeyBackup")}
+                canRemove={accounts.some((candidate) => candidate.accountId !== accountId)}
+                isPending={removal.isPending}
+                onConfirm={() => removal.removeKeySource(privateKeySourceId, name)}
+              />
+            )}
             {account.origin.type === "hd" && (
               <>
                 <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">

@@ -1,5 +1,6 @@
 import type { WalletClient } from "@arx/wallet-api/client";
 import { Fragment, type ReactNode, use, useState } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import type { WalletConnectionResult } from "./connectWallet";
 import { useWalletActivity } from "./useWalletActivity";
@@ -45,9 +46,12 @@ export function WalletLockBoundary({ children }: { children: ReactNode }) {
   useWalletEvents(wallet, "walletStatusChanged", (event) => {
     // Locking discards page state; unlocking must preserve the pending password submission.
     if (event.status === "locked") {
-      // Sonner replays active notifications when its container remounts.
-      toast.dismiss();
-      setLockCount((current) => current + 1);
+      // Reset before a following channel response can run the old page's callbacks.
+      flushSync(() => {
+        // Sonner replays active notifications when its container remounts.
+        toast.dismiss();
+        setLockCount((current) => current + 1);
+      });
     }
   });
 

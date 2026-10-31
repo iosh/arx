@@ -312,6 +312,7 @@ export class WalletCoordinator {
       keyringUpdate.activate();
       if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      for (const accountId of accountsUpdate?.removedAccountIds ?? []) this.#approvals.cancelByAccount(accountId);
       this.lockIfExpired();
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishKeyringChanged({ type: "keyringChanged" });

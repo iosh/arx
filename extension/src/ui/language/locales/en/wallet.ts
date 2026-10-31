@@ -14,6 +14,24 @@ export const wallet = {
   backToAccounts: "Back to accounts",
   backToAdd: "Back to add",
   accountDetails: "Account details",
+  removeWallet: "Remove wallet",
+  removeWalletTitle: "Remove “{{walletName}}”?",
+  removeWalletDescription_one:
+    "This wallet's {{count}} account will be removed from ARX. Without a recovery phrase backup, you will lose access to its accounts and assets.",
+  removeWalletDescription_other:
+    "This wallet's {{count}} accounts will be removed from ARX. Without a recovery phrase backup, you will lose access to its accounts and assets.",
+  removeWalletWithHiddenDescription_one:
+    "This wallet's {{count}} account (including {{hiddenCount}} hidden) will be removed from ARX. Without a recovery phrase backup, you will lose access to its accounts and assets.",
+  removeWalletWithHiddenDescription_other:
+    "This wallet's {{count}} accounts (including {{hiddenCount}} hidden) will be removed from ARX. Without a recovery phrase backup, you will lose access to its accounts and assets.",
+  confirmPhraseBackup: "I have backed up this wallet's recovery phrase",
+  removeAccount: "Remove account",
+  removeAccountTitle: "Remove “{{accountName}}”?",
+  removeAccountDescription:
+    "This private key will be deleted from ARX. Without a backup, you will lose access to this account and its assets.",
+  confirmPrivateKeyBackup: "I have backed up this private key",
+  lastAccountRemoval: "ARX must keep at least one visible account.",
+  keySourceRemoved: "“{{name}}” removed",
   hideAccount: "Hide account",
   hiddenAccounts: "Hidden accounts",
   hiddenAccountCount_one: "· {{count}} account",

@@ -74,6 +74,7 @@ export type WalletKeySourcesApi = Readonly<{
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportPrivateKey(input: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string } | null>;
+  /** Removes the source and its accounts atomically, then cancels their pending sign/transaction approvals. */
   remove(input: { keySourceId: KeySourceId }): Promise<void>;
 }>;
 

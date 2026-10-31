@@ -66,6 +66,8 @@ export const wallet = {
   saveName: "保存",
   privateKey: "私钥",
   recoveryPhrase: "恢复短语",
+  viewRecoveryPhrase: "查看恢复短语",
+  backupRecoveryPhrase: "备份恢复短语",
   moreMenu: "更多选项",
   lockWallet: "锁定钱包",
   backupNotice: "「{{walletName}}」的恢复短语尚未备份",

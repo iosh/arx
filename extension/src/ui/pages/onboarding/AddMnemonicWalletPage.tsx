@@ -84,7 +84,7 @@ function NewMnemonicWallet(context: AddMnemonicWalletContext) {
   if (!generation.data) {
     return (
       <OnboardingStepLayout progress={{ current: 1, total: 2 }}>
-        <OnboardingCard title={t("backupTitle")} description={t("backupDescription")}>
+        <OnboardingCard title={t("backupTitle")}>
           {generation.isPending && <Spinner aria-label={t("createWallet")} />}
         </OnboardingCard>
       </OnboardingStepLayout>

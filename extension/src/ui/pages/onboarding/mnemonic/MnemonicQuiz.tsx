@@ -98,14 +98,7 @@ export function MnemonicQuiz({
             {pending && <Spinner aria-label={t("completeBackup")} />}
             {t("completeBackup")}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="font-normal text-muted-foreground"
-            onClick={onBack}
-            disabled={pending}
-          >
+          <Button type="button" variant="secondary" size="lg" className="w-full" onClick={onBack} disabled={pending}>
             {t("backToPhrase")}
           </Button>
         </div>

@@ -1,6 +1,9 @@
 import type { Account } from "@arx/core/accounts";
 import type { HdKeyring, KeySourceId } from "@arx/core/keyring";
+import { useRouter } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import browser from "webextension-polyfill";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getWalletAccounts } from "@/ui/wallet/accounts/groupAccountsBySource";
@@ -25,6 +28,7 @@ function getWalletRemovalInfo(accounts: readonly Account[], hdKeyrings: readonly
 }
 
 export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId }) {
+  const router = useRouter();
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const { data: accounts } = useAccounts();
@@ -60,6 +64,20 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
                 name={mnemonicWallet.source.name}
                 onRename={(name) => wallet.keySources.renameMnemonic({ keySourceId, name })}
               />
+              <a
+                href={`${browser.runtime.getURL("/onboarding.html")}#${
+                  router.buildLocation({
+                    to: "/onboarding/backup-mnemonic/$keySourceId",
+                    params: { keySourceId },
+                  }).href
+                }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                {t(mnemonicWallet.source.backupStatus === "confirmed" ? "viewRecoveryPhrase" : "backupRecoveryPhrase")}
+                <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+              </a>
             </div>
             <RemoveKeySourceSheet
               label={t("removeWallet")}

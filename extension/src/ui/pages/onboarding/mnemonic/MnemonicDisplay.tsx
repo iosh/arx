@@ -18,12 +18,14 @@ import { Spinner } from "@/ui/components/ui/spinner";
 import type { MnemonicWord } from "./mnemonic";
 
 export function MnemonicDisplay({
+  mode = "backup",
   words,
   walletName,
   pending,
   onContinue,
   onDefer,
 }: {
+  mode?: "backup" | "view";
   words: readonly MnemonicWord[];
   walletName?: string;
   pending: boolean;
@@ -34,9 +36,13 @@ export function MnemonicDisplay({
   const [visible, setVisible] = useState(false);
   const [hasRevealed, setHasRevealed] = useState(false);
   const hintId = useId();
+  const viewing = mode === "view";
 
   return (
-    <OnboardingCard title={t("backupTitle")} description={t("backupDescription")}>
+    <OnboardingCard
+      title={t(viewing ? "viewPhraseTitle" : "backupTitle")}
+      description={t(viewing ? "viewPhraseWordsDescription" : "backupDescription", { count: words.length })}
+    >
       {walletName && <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>}
       <div className="relative flex min-h-50 flex-col gap-2 rounded-xl bg-background px-4 py-3">
         <div className="flex h-7 items-center justify-between">
@@ -100,8 +106,14 @@ export function MnemonicDisplay({
         <p>{t("phraseWarning")}</p>
       </div>
       <div className="flex flex-col items-center gap-2.5">
-        <Button type="button" size="lg" className="w-full" disabled={!hasRevealed || pending} onClick={onContinue}>
-          {t("continue")}
+        <Button
+          type="button"
+          size="lg"
+          className="w-full"
+          disabled={pending || (!viewing && !hasRevealed)}
+          onClick={onContinue}
+        >
+          {t(viewing ? "complete" : "continue")}
         </Button>
         {onDefer && <DeferBackupDialog onConfirm={onDefer} onOpen={() => setVisible(false)} pending={pending} />}
       </div>

@@ -1,5 +1,7 @@
-import type { KeySourceId } from "@arx/core/keyring";
-import { Navigate, useNavigate } from "@tanstack/react-router";
+import { type BackupStatus, type KeySourceId, KeySourceNotFoundError } from "@arx/core/keyring";
+import { WalletLockedError } from "@arx/core/wallet";
+import { isWalletApiError } from "@arx/wallet-api/client";
+import { Navigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -13,20 +15,13 @@ import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useConfirmMnemonicBackup } from "@/ui/wallet/keyring/useConfirmMnemonicBackup";
 import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
 import { MnemonicBackup } from "./mnemonic/MnemonicBackup";
+import { MnemonicDisplay } from "./mnemonic/MnemonicDisplay";
 import type { MnemonicWord } from "./mnemonic/mnemonic";
 
 export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }) {
   const { status } = useWallet();
   const { t } = useTranslation(["onboarding", "wallet"]);
   const { data: mnemonicWallet, isPending: sourcePending } = useMnemonicWallet(keySourceId);
-  const navigate = useNavigate();
-  const [words, setWords] = useState<readonly MnemonicWord[] | null>(null);
-  const confirmBackup = useConfirmMnemonicBackup();
-
-  function complete() {
-    void navigate({ to: "/onboarding", replace: true });
-    window.close();
-  }
 
   if (status === "uninitialized") return <Navigate to="/onboarding" replace />;
 
@@ -44,13 +39,53 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
     );
   }
 
+  return (
+    <MnemonicWalletFlow
+      keySourceId={keySourceId}
+      walletName={mnemonicWallet.source.name}
+      backupStatus={mnemonicWallet.source.backupStatus}
+    />
+  );
+}
+
+function MnemonicWalletFlow({
+  keySourceId,
+  walletName,
+  backupStatus,
+}: {
+  keySourceId: KeySourceId;
+  walletName: string;
+  backupStatus: BackupStatus;
+}) {
+  const [words, setWords] = useState<readonly MnemonicWord[] | null>(null);
+  const confirmBackup = useConfirmMnemonicBackup();
+
+  function complete() {
+    setWords(null);
+    window.close();
+  }
+
   if (!words) {
     return (
       <OnboardingStepLayout>
         <RevealMnemonicForm
           keySourceId={keySourceId}
-          walletName={mnemonicWallet.source.name}
+          walletName={walletName}
           onReveal={(mnemonic) => setWords(mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })))}
+        />
+      </OnboardingStepLayout>
+    );
+  }
+
+  if (backupStatus === "confirmed") {
+    return (
+      <OnboardingStepLayout>
+        <MnemonicDisplay
+          mode="view"
+          words={words}
+          walletName={walletName}
+          pending={confirmBackup.isPending}
+          onContinue={complete}
         />
       </OnboardingStepLayout>
     );
@@ -59,7 +94,7 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
   return (
     <MnemonicBackup
       words={words}
-      walletName={mnemonicWallet.source.name}
+      walletName={walletName}
       totalSteps={2}
       pending={confirmBackup.isPending}
       onComplete={() => confirmBackup.mutate(keySourceId, { onSuccess: complete })}
@@ -89,19 +124,25 @@ function RevealMnemonicForm({
   const incorrect = errors.password?.type === "incorrectPassword";
 
   async function submit({ password }: { password: string }) {
-    const unlocked = await wallet.unlock({ password });
-    if (!unlocked) {
-      setError("password", { type: "incorrectPassword" });
-      return;
-    }
+    try {
+      const unlocked = await wallet.unlock({ password });
+      if (!unlocked) {
+        setError("password", { type: "incorrectPassword" });
+        return;
+      }
 
-    const result = await wallet.keySources.exportMnemonic({ keySourceId, password });
-    if (result === null) {
-      setError("password", { type: "incorrectPassword" });
-      return;
-    }
+      const result = await wallet.keySources.exportMnemonic({ keySourceId, password });
+      if (result === null) {
+        setError("password", { type: "incorrectPassword" });
+        return;
+      }
 
-    onReveal(result.mnemonic);
+      onReveal(result.mnemonic);
+    } catch (error) {
+      // The shared lock and source state determine the page after these refusals.
+      if (isWalletApiError(error, WalletLockedError) || isWalletApiError(error, KeySourceNotFoundError)) return;
+      throw error;
+    }
   }
 
   return (

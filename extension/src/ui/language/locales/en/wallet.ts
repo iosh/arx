@@ -67,6 +67,8 @@ export const wallet = {
   saveName: "Save",
   privateKey: "Private key",
   recoveryPhrase: "Recovery phrase",
+  viewRecoveryPhrase: "View recovery phrase",
+  backupRecoveryPhrase: "Back up recovery phrase",
   moreMenu: "More options",
   lockWallet: "Lock wallet",
   backupNotice: "“{{walletName}}” recovery phrase not backed up",

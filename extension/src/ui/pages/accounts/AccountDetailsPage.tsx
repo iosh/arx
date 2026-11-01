@@ -33,6 +33,17 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const name = account ? getAccountName(account, t) : t("accountDetails");
   const canHide = account !== undefined && findAccountHideReplacement(account, accounts) !== null;
   const privateKeySourceId = account?.origin.type === "private-key" ? account.origin.keySourceId : undefined;
+  const exportPrivateKeyLink = account && (
+    <Link
+      to="/wallet/accounts/$accountId/export-private-key"
+      params={{ accountId }}
+      disabled={hiding.isPending || removal.isPending}
+      className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-disabled:pointer-events-none aria-disabled:opacity-45"
+    >
+      {t("exportPrivateKey")}
+      <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+    </Link>
+  );
 
   function hideAccount() {
     toast.dismiss();
@@ -108,12 +119,14 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
                 backupLabel={t("confirmPrivateKeyBackup")}
                 canRemove={accounts.some((candidate) => candidate.accountId !== accountId)}
                 isPending={removal.isPending}
+                leadingAction={exportPrivateKeyLink}
                 onConfirm={() => removal.removeKeySource(privateKeySourceId, name)}
               />
             )}
             {account.origin.type === "hd" && (
               <>
                 <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+                  {exportPrivateKeyLink}
                   <Button
                     type="button"
                     variant="ghost"

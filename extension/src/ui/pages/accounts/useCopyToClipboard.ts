@@ -11,6 +11,7 @@ export function useCopyToClipboard() {
     reset,
   } = useMutation({
     mutationFn: (text: string) => navigator.clipboard.writeText(text),
+    gcTime: 0,
   });
 
   useEffect(() => () => clearTimeout(resetTimeout.current), []);

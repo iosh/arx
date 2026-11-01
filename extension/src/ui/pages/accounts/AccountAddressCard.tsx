@@ -7,7 +7,7 @@ import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 
-export function AccountAddressCard({ account }: { account: Account }) {
+export function AccountAddressCard({ account, copyable = true }: { account: Account; copyable?: boolean }) {
   const { t } = useTranslation("wallet");
   const {
     networkSelection: { isPending: networkPending },
@@ -21,7 +21,7 @@ export function AccountAddressCard({ account }: { account: Account }) {
       className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground shadow-[0_1px_3px_var(--shadow)]"
     >
       {addresses ? (
-        addresses.map((address) => <AddressRow key={address.address} address={address} />)
+        addresses.map((address) => <AddressRow key={address.address} address={address} copyable={copyable} />)
       ) : loading ? (
         <div className="flex min-h-15 items-center px-4 text-sm text-muted-foreground">
           <Spinner aria-label={t("loadingAddress")} />
@@ -31,7 +31,7 @@ export function AccountAddressCard({ account }: { account: Account }) {
   );
 }
 
-function AddressRow({ address }: { address: Address }) {
+function AddressRow({ address, copyable }: { address: Address; copyable: boolean }) {
   const { t } = useTranslation(["wallet", "common"]);
   const { Icon, labelKey } = getNamespaceUi(address.namespace);
   const { copy, isCopying, copied, copyFailed } = useCopyToClipboard();
@@ -46,23 +46,27 @@ function AddressRow({ address }: { address: Address }) {
             {address.address}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          className="rounded-[10px]"
-          aria-label={t("copyAddress")}
-          aria-busy={isCopying}
-          title={t(copied ? "addressCopied" : "copyAddress")}
-          disabled={isCopying}
-          onClick={() => copy(address.address)}
-        >
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-        </Button>
+        {copyable && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="rounded-[10px]"
+            aria-label={t("copyAddress")}
+            aria-busy={isCopying}
+            title={t(copied ? "addressCopied" : "copyAddress")}
+            disabled={isCopying}
+            onClick={() => copy(address.address)}
+          >
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          </Button>
+        )}
       </div>
-      <p role="status" className={copyFailed ? "px-4 pb-2 text-xs text-destructive-foreground" : "sr-only"}>
-        {copied ? t("addressCopied") : copyFailed ? t("copyAddressFailed") : ""}
-      </p>
+      {copyable && (
+        <p role="status" className={copyFailed ? "px-4 pb-2 text-xs text-destructive-foreground" : "sr-only"}>
+          {copied ? t("addressCopied") : copyFailed ? t("copyAddressFailed") : ""}
+        </p>
+      )}
     </div>
   );
 }

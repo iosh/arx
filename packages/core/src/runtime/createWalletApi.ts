@@ -68,7 +68,6 @@ export const createWalletApi = ({
     renameMnemonic: async (input) => keyring.renameMnemonicSource(input),
     confirmMnemonicBackup: async (input) => keyring.confirmMnemonicBackup(input),
     exportMnemonic: async (input) => coordinator.exportMnemonic(input),
-    exportPrivateKey: async (input) => coordinator.exportPrivateKey(input),
     remove: async (input) => coordinator.removeKeySource(input),
   },
 
@@ -108,6 +107,7 @@ export const createWalletApi = ({
     },
     create: async (input) => coordinator.createHdAccount(input),
     move: async (input) => coordinator.movePrivateKeyAccount(input),
+    exportPrivateKey: async (input) => coordinator.exportPrivateKey(input),
     rename: async (input) => accounts.rename(input),
     setHidden: async (input) => coordinator.setAccountHidden(input),
     select: async ({ accountId }) => accounts.select(accountId),

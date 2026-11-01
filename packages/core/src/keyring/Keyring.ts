@@ -1,4 +1,5 @@
 import type { AccountId } from "../accounts/accountId.js";
+import type { AccountOrigin } from "../accounts/persistence.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
@@ -194,6 +195,20 @@ export class Keyring {
       namespace: params.hdKeyring.namespace,
       source,
       derivationIndex: params.derivationIndex,
+    });
+  }
+  async getPrivateKey(origin: AccountOrigin): Promise<string> {
+    if (origin.type === "private-key") {
+      const source = this.requireKeySourceSecret(origin.keySourceId) as PrivateKeySourceSecret;
+      return source.privateKey;
+    }
+
+    const hdKeyring = this.requireHdKeyring(origin.hdKeyringId);
+    const source = this.requireKeySourceSecret(hdKeyring.keySourceId) as Bip39KeySourceSecret;
+    const seed = await deriveBip39Seed(source);
+    return getKeyringNamespaceAdapter(this.#namespaceAdapters, hdKeyring.namespace).deriveHdPrivateKey({
+      seed,
+      derivationIndex: origin.derivationIndex,
     });
   }
 

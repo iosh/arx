@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/ui/components/ui/button";
@@ -14,6 +14,7 @@ export function RemoveKeySourceSheet({
   backupLabel,
   canRemove,
   isPending,
+  leadingAction,
   onConfirm,
 }: {
   label: string;
@@ -22,6 +23,7 @@ export function RemoveKeySourceSheet({
   backupLabel: string;
   canRemove: boolean | undefined;
   isPending: boolean;
+  leadingAction?: ReactNode;
   onConfirm(): void;
 }) {
   const { t } = useTranslation(["wallet", "common"]);
@@ -41,6 +43,7 @@ export function RemoveKeySourceSheet({
         }}
       >
         <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+          {leadingAction}
           <SheetTrigger asChild>
             <Button
               type="button"

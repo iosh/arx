@@ -17,7 +17,7 @@ export type Eip155DigestSignature = Readonly<{
   bytes: Uint8Array;
 }>;
 
-const deriveHdPrivateKey = (params: { seed: Uint8Array; derivationIndex: number }): Uint8Array => {
+const deriveHdPrivateKeyBytes = (params: { seed: Uint8Array; derivationIndex: number }): Uint8Array => {
   const root = HDKey.fromMasterSeed(params.seed);
   const node = root.derive(`${DERIVATION_PREFIX}/${params.derivationIndex}`);
 
@@ -65,7 +65,11 @@ const signAccountDigest = (
 
 export const eip155KeyringAdapter: KeyringNamespaceAdapter<"eip155"> = {
   namespace: EIP155_NAMESPACE,
-  deriveHdAccountId: (params) => accountIdFromPrivateKeyBytes(deriveHdPrivateKey(params)),
+  deriveHdAccountId: (params) => accountIdFromPrivateKeyBytes(deriveHdPrivateKeyBytes(params)),
+  deriveHdPrivateKey: (params) => {
+    const privateKey = deriveHdPrivateKeyBytes(params);
+    return `0x${bytesToHex(privateKey)}`;
+  },
   accountIdFromPrivateKey: (privateKey) => accountIdFromPrivateKeyBytes(privateKeyBytes(privateKey)),
 };
 
@@ -74,7 +78,7 @@ export const signEip155HdDigest = (params: {
   seed: Uint8Array;
   derivationIndex: number;
   digest: Uint8Array;
-}): Eip155DigestSignature => signAccountDigest(deriveHdPrivateKey(params), params.accountId, params.digest);
+}): Eip155DigestSignature => signAccountDigest(deriveHdPrivateKeyBytes(params), params.accountId, params.digest);
 
 export const signEip155PrivateKeyDigest = (params: {
   accountId: AccountId;

@@ -14,6 +14,7 @@ export const wallet = {
   backToAccounts: "Back to accounts",
   backToAdd: "Back to add",
   accountDetails: "Account details",
+  backToAccountDetails: "Back to account details",
   removeWallet: "Remove wallet",
   removeWalletTitle: "Remove “{{walletName}}”?",
   removeWalletDescription_one:
@@ -66,6 +67,13 @@ export const wallet = {
   closeRename: "Close rename",
   saveName: "Save",
   privateKey: "Private key",
+  exportPrivateKey: "Export private key",
+  showPrivateKey: "Show private key",
+  privateKeyWarning:
+    "This private key controls all assets at this address. Do not share it with anyone or any website.",
+  copyPrivateKey: "Copy private key",
+  privateKeyCopied: "Private key copied",
+  copyPrivateKeyFailed: "Could not copy the private key.",
   recoveryPhrase: "Recovery phrase",
   viewRecoveryPhrase: "View recovery phrase",
   backupRecoveryPhrase: "Back up recovery phrase",

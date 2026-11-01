@@ -72,8 +72,6 @@ export type WalletKeySourcesApi = Readonly<{
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
-  /** Requires an unlocked wallet. Returns null if the password does not match. */
-  exportPrivateKey(input: { keySourceId: KeySourceId; password: string }): Promise<{ privateKey: string } | null>;
   /** Removes the source and its accounts atomically, then cancels their pending sign/transaction approvals. */
   remove(input: { keySourceId: KeySourceId }): Promise<void>;
 }>;
@@ -98,6 +96,8 @@ export type WalletAccountsApi = Readonly<{
   } | null>;
   create(input: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult>;
   move(input: MovePrivateKeyAccountInput): Promise<Account>;
+  /** Requires an unlocked wallet. Returns null for an incorrect password; derives or returns only this account's key. */
+  exportPrivateKey(input: { accountId: AccountId; password: string }): Promise<{ privateKey: string } | null>;
   rename(input: { accountId: AccountId; alias?: string }): Promise<void>;
   /**
    * Keeps one visible account per HD keyring and cancels the hidden account's pending sign/transaction approvals.

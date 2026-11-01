@@ -339,24 +339,17 @@ export class WalletCoordinator {
     });
   }
 
-  async exportPrivateKey(params: {
-    keySourceId: KeySourceId;
-    password: string;
-  }): Promise<{ privateKey: string } | null> {
-    return await this.#mutations.run(async () => {
+  async exportPrivateKey(params: { accountId: AccountId; password: string }): Promise<{ privateKey: string } | null> {
+    return this.#mutations.run(async () => {
       this.assertUnlocked();
-      const source = this.#keyring.requireKeySourceSecret(params.keySourceId);
-      if (source.type !== "private-key") {
-        throw new KeySourceTypeMismatchError({
-          keySourceId: params.keySourceId,
-          expectedType: "private-key",
-          actualType: source.type,
-        });
-      }
+      const account = this.#accounts.getAccountRecord(params.accountId);
+      if (!account) throw new AccountNotFoundError(params.accountId);
 
       if (!(await this.verifyCurrentPassword(params.password))) return null;
 
-      return { privateKey: source.privateKey };
+      const privateKey = await this.#keyring.getPrivateKey(account.origin);
+      this.assertUnlocked();
+      return { privateKey };
     });
   }
 

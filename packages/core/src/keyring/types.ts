@@ -24,8 +24,6 @@ export type HdKeyring = Readonly<{
   hdKeyringId: HdKeyringId;
   keySourceId: KeySourceId;
   namespace: Namespace;
-  /** Monotonic index reserved for the next HD derivation. */
-  nextDerivationIndex: number;
   createdAt: number;
 }>;
 

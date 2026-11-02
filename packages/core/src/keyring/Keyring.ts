@@ -14,14 +14,11 @@ import { type EncryptedVaultRecord, encryptedVaultWrites } from "../vault/persis
 import { deriveBip39Seed } from "./bip39.js";
 import type { KeyringBootstrap } from "./bootstrap.js";
 import {
-  HdKeyringAlreadyExistsError,
   HdKeyringNotFoundError,
-  HdKeyringRequiresBip39SourceError,
   KeyringLockedError,
   KeyringNotInitializedError,
   KeySourceBackupUnsupportedError,
   KeySourceNotFoundError,
-  KeySourceRequiresHdKeyringError,
   KeySourceTypeMismatchError,
 } from "./errors.js";
 import { getKeyringNamespaceAdapter, type KeyringNamespaceAdapters } from "./namespaceAdapter.js";
@@ -57,13 +54,13 @@ export type KeyringUpdate = Readonly<{
 }>;
 
 /**
- * Includes an initial HD keyring with nextDerivationIndex 1.
- * The same wallet command commits its account at derivation index 0.
+ * Includes the namespace keyrings for a recovery source.
+ * The wallet command creates their account members in the same commit.
  */
 export type Bip39SourceAddition = KeyringUpdate &
   Readonly<{
     keySourceId: KeySourceId;
-    hdKeyringId: HdKeyringId;
+    hdKeyrings: readonly HdKeyringRecord[];
   }>;
 
 type SoftwareKeyState =
@@ -84,7 +81,7 @@ type Bip39SourceInput = Readonly<{
   secret: Bip39KeySourceSecret;
   name: string;
   backupStatus: BackupStatus;
-  namespace: Namespace;
+  namespaces: readonly Namespace[];
   createdAt: number;
 }>;
 
@@ -100,9 +97,6 @@ type KeyringOptions = Readonly<{
   mutations: CoreMutationQueue;
   publishChanged(change: KeyringChanged): void;
 }>;
-
-const sharesDerivationSequence = (left: HdKeyringRecord, right: HdKeyringRecord): boolean =>
-  left.keySourceId === right.keySourceId && left.namespace === right.namespace;
 
 /** Owns source/HD records and all software key material for the current runtime. */
 export class Keyring {
@@ -197,6 +191,7 @@ export class Keyring {
       derivationIndex: params.derivationIndex,
     });
   }
+
   async getPrivateKey(origin: AccountOrigin): Promise<string> {
     if (origin.type === "private-key") {
       const source = this.requireKeySourceSecret(origin.keySourceId) as PrivateKeySourceSecret;
@@ -206,10 +201,14 @@ export class Keyring {
     const hdKeyring = this.requireHdKeyring(origin.hdKeyringId);
     const source = this.requireKeySourceSecret(hdKeyring.keySourceId) as Bip39KeySourceSecret;
     const seed = await deriveBip39Seed(source);
-    return getKeyringNamespaceAdapter(this.#namespaceAdapters, hdKeyring.namespace).deriveHdPrivateKey({
-      seed,
-      derivationIndex: origin.derivationIndex,
-    });
+    try {
+      return getKeyringNamespaceAdapter(this.#namespaceAdapters, hdKeyring.namespace).deriveHdPrivateKey({
+        seed,
+        derivationIndex: origin.derivationIndex,
+      });
+    } finally {
+      seed.fill(0);
+    }
   }
 
   accountIdFromPrivateKey(params: { namespace: Namespace; privateKey: string }): AccountId {
@@ -254,7 +253,7 @@ export class Keyring {
   async prepareChangePassword(params: { currentPassword: string; newPassword: string }): Promise<KeyringUpdate> {
     const state = this.requireUnlocked();
     const vault = await changeVaultPassword({ unlocked: state.vault, ...params });
-    return this.encryptedUpdate({ persistenceChanges: [] }, vault, state.secrets);
+    return this.createEncryptedUpdate({ persistenceChanges: [] }, vault, state.secrets);
   }
 
   /** Runs inside the shared mutation queue after vault operations settle. */
@@ -267,9 +266,9 @@ export class Keyring {
   async prepareInitializeBip39Source(
     params: Bip39SourceInput & Readonly<{ password: string }>,
   ): Promise<Bip39SourceAddition> {
-    const { keySourceId, hdKeyringId, records } = this.prepareBip39Records(params);
+    const { keySourceId, hdKeyrings, records } = this.prepareBip39Records(params);
     const update = await this.prepareInitialVault(records, createKeyringSecrets([params.secret]), params.password);
-    return { keySourceId, hdKeyringId, ...update };
+    return { keySourceId, hdKeyrings, ...update };
   }
 
   async prepareInitializePrivateKeySource(
@@ -290,13 +289,13 @@ export class Keyring {
       }>,
   ): Promise<Bip39SourceAddition> {
     const secrets = this.requireUnlocked().secrets;
-    const { keySourceId, hdKeyringId, records } = this.prepareBip39Records(params);
+    const { keySourceId, hdKeyrings, records } = this.prepareBip39Records(params);
     const remaining =
       params.removePrivateKeySourceId === undefined
         ? secrets.keySources
         : secrets.keySources.filter((source) => source.keySourceId !== params.removePrivateKeySourceId);
     const update = await this.prepareSecretsReplacement(records, createKeyringSecrets([...remaining, params.secret]));
-    return { keySourceId, hdKeyringId, ...update };
+    return { keySourceId, hdKeyrings, ...update };
   }
 
   async prepareAddPrivateKeySource(params: PrivateKeySourceInput): Promise<KeyringUpdate> {
@@ -346,43 +345,10 @@ export class Keyring {
     });
   }
 
-  prepareAddHdKeyring(hdKeyring: HdKeyringRecord): KeyringUpdate {
-    this.assertBip39Source(hdKeyring.keySourceId);
-    const existing = [...this.#hdKeyrings.values()].find((candidate) => sharesDerivationSequence(candidate, hdKeyring));
-    if (existing) {
-      throw new HdKeyringAlreadyExistsError({
-        existingHdKeyringId: existing.hdKeyringId,
-        keySourceId: hdKeyring.keySourceId,
-        namespace: hdKeyring.namespace,
-      });
-    }
-    const nextHdKeyrings = new Map(this.#hdKeyrings);
-    nextHdKeyrings.set(hdKeyring.hdKeyringId, hdKeyring);
-    return this.recordUpdate({ nextHdKeyrings, persistenceChanges: [hdKeyringWrites.put(hdKeyring)] });
-  }
-
-  prepareAdvanceHdKeyring(current: HdKeyringRecord): KeyringUpdate {
-    const advanced = { ...current, nextDerivationIndex: current.nextDerivationIndex + 1 };
-    const nextHdKeyrings = new Map(this.#hdKeyrings);
-    nextHdKeyrings.set(current.hdKeyringId, advanced);
-    return this.recordUpdate({ nextHdKeyrings, persistenceChanges: [hdKeyringWrites.put(advanced)] });
-  }
-
-  prepareRemoveHdKeyring(hdKeyringId: HdKeyringId): KeyringUpdate {
-    const current = this.requireHdKeyring(hdKeyringId);
-    if (this.listHdKeyringsByKeySourceIds([current.keySourceId]).length === 1) {
-      throw new KeySourceRequiresHdKeyringError(current.keySourceId);
-    }
-    const nextHdKeyrings = new Map(this.#hdKeyrings);
-    nextHdKeyrings.delete(hdKeyringId);
-    return this.recordUpdate({ nextHdKeyrings, persistenceChanges: [hdKeyringWrites.remove(hdKeyringId)] });
-  }
-
   private prepareBip39Records(
     params: Bip39SourceInput & Readonly<{ removePrivateKeySourceId?: KeySourceId }>,
-  ): Readonly<{ keySourceId: KeySourceId; hdKeyringId: HdKeyringId; records: RecordUpdate }> {
+  ): Readonly<{ keySourceId: KeySourceId; hdKeyrings: readonly HdKeyringRecord[]; records: RecordUpdate }> {
     const keySourceId = params.secret.keySourceId;
-    const hdKeyringId = crypto.randomUUID();
     const source: Bip39KeySourceRecord = {
       keySourceId,
       type: "bip39",
@@ -390,23 +356,27 @@ export class Keyring {
       backupStatus: params.backupStatus,
       createdAt: params.createdAt,
     };
-    const hdKeyring: HdKeyringRecord = {
-      hdKeyringId,
-      keySourceId,
-      namespace: params.namespace,
-      nextDerivationIndex: 1,
-      createdAt: params.createdAt,
-    };
+    const hdKeyrings = params.namespaces.map(
+      (namespace): HdKeyringRecord => ({
+        hdKeyringId: crypto.randomUUID(),
+        keySourceId,
+        namespace,
+        createdAt: params.createdAt,
+      }),
+    );
     const nextKeySources = new Map(this.#keySources);
     nextKeySources.set(keySourceId, source);
     const nextHdKeyrings = new Map(this.#hdKeyrings);
-    nextHdKeyrings.set(hdKeyringId, hdKeyring);
-    const persistenceChanges: PersistenceChange[] = [keySourceWrites.put(source), hdKeyringWrites.put(hdKeyring)];
+    for (const hdKeyring of hdKeyrings) nextHdKeyrings.set(hdKeyring.hdKeyringId, hdKeyring);
+    const persistenceChanges: PersistenceChange[] = [
+      keySourceWrites.put(source),
+      ...hdKeyrings.map(hdKeyringWrites.put),
+    ];
     if (params.removePrivateKeySourceId !== undefined) {
       nextKeySources.delete(params.removePrivateKeySourceId);
       persistenceChanges.push(keySourceWrites.remove(params.removePrivateKeySourceId));
     }
-    return { keySourceId, hdKeyringId, records: { nextKeySources, nextHdKeyrings, persistenceChanges } };
+    return { keySourceId, hdKeyrings, records: { nextKeySources, nextHdKeyrings, persistenceChanges } };
   }
 
   private preparePrivateKeyRecords(params: PrivateKeySourceInput): RecordUpdate {
@@ -421,7 +391,7 @@ export class Keyring {
     return { nextKeySources, persistenceChanges: [keySourceWrites.put(source)] };
   }
 
-  private recordUpdate(records: RecordUpdate): KeyringUpdate {
+  private createRecordUpdate(records: RecordUpdate): KeyringUpdate {
     return { persistenceChanges: records.persistenceChanges, activate: () => this.applyRecords(records) };
   }
 
@@ -437,7 +407,7 @@ export class Keyring {
     } finally {
       plaintext.fill(0);
     }
-    return this.encryptedUpdate(records, vault, secrets);
+    return this.createEncryptedUpdate(records, vault, secrets);
   }
 
   private async prepareSecretsReplacement(records: RecordUpdate, secrets: KeyringSecrets): Promise<KeyringUpdate> {
@@ -448,10 +418,10 @@ export class Keyring {
     } finally {
       plaintext.fill(0);
     }
-    return this.encryptedUpdate(records, vault, secrets);
+    return this.createEncryptedUpdate(records, vault, secrets);
   }
 
-  private encryptedUpdate(records: RecordUpdate, vault: UnlockedVault, secrets: KeyringSecrets): KeyringUpdate {
+  private createEncryptedUpdate(records: RecordUpdate, vault: UnlockedVault, secrets: KeyringSecrets): KeyringUpdate {
     return {
       persistenceChanges: [encryptedVaultWrites.put(vault.record), ...records.persistenceChanges],
       activate: () => {
@@ -477,7 +447,10 @@ export class Keyring {
       if (!nextSource) return;
       const nextKeySources = new Map(this.#keySources);
       nextKeySources.set(keySourceId, nextSource);
-      const prepared = this.recordUpdate({ nextKeySources, persistenceChanges: [keySourceWrites.put(nextSource)] });
+      const prepared = this.createRecordUpdate({
+        nextKeySources,
+        persistenceChanges: [keySourceWrites.put(nextSource)],
+      });
       await commit(prepared.persistenceChanges);
       prepared.activate();
       this.#publishChanged({ type: "keyringChanged" });
@@ -498,11 +471,5 @@ export class Keyring {
     const record = this.#hdKeyrings.get(hdKeyringId);
     if (!record) throw new HdKeyringNotFoundError(hdKeyringId);
     return record;
-  }
-
-  private assertBip39Source(keySourceId: KeySourceId): void {
-    const source = this.#keySources.get(keySourceId);
-    if (!source) throw new KeySourceNotFoundError(keySourceId);
-    if (source.type !== "bip39") throw new HdKeyringRequiresBip39SourceError(keySourceId);
   }
 }

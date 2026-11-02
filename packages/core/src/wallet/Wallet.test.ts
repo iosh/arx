@@ -1,16 +1,11 @@
-import { bytesToHex } from "@noble/hashes/utils.js";
-import { HDKey } from "@scure/bip32";
-import { mnemonicToSeedSync } from "@scure/bip39";
+import { Secp256k1 } from "ox";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { AccountRecord, AccountSelectionRecord } from "../accounts/persistence.js";
 import type { AccountsChanged } from "../accounts/types.js";
 import { Approvals } from "../approvals/Approvals.js";
-import { dappConnectionScopeKey } from "../dappConnections/scope.js";
 import { KeyringInvalidMnemonicError, KeyringLockedError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
-import type { HdKeyringRecord, KeySourceRecord } from "../keyring/persistence.js";
 import { decodeKeyringSecrets } from "../keyring/secrets.js";
 import type { KeyringChanged } from "../keyring/types.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
@@ -22,7 +17,7 @@ import type { PermissionRecord } from "../permissions/persistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { systemTime } from "../runtime/time.js";
-import { AUTO_LOCK_SETTING_KEY, type AutoLockSetting } from "../settings/persistence.js";
+import { AUTO_LOCK_SETTING_KEY } from "../settings/persistence.js";
 import { unlockVaultRecord } from "../vault/crypto.js";
 import type { EncryptedVaultRecord } from "../vault/persistence.js";
 import { AutoLockController, DEFAULT_AUTO_LOCK_DURATION_MS } from "./AutoLockController.js";
@@ -34,81 +29,22 @@ const PRIMARY_MNEMONIC =
 const SECONDARY_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const TERTIARY_MNEMONIC = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 const PRIVATE_KEY = "11".repeat(32);
-const FIRST_PRIVATE_KEY = bytesToHex(
-  HDKey.fromMasterSeed(mnemonicToSeedSync(PRIMARY_MNEMONIC)).derive("m/44'/60'/0'/0/0").privateKey as Uint8Array,
-);
-const NEXT_PRIVATE_KEY = bytesToHex(
-  HDKey.fromMasterSeed(mnemonicToSeedSync(PRIMARY_MNEMONIC)).derive("m/44'/60'/0'/0/1").privateKey as Uint8Array,
-);
+// Public BIP39 test material at m/44'/60'/0'/0/0 and m/44'/60'/0'/0/1.
+const FIRST_PRIVATE_KEY = "1ab42cc412b618bdea3a599e3c9bae199ebf030895b039e9db1e30dafb12b727";
+const NEXT_PRIVATE_KEY = "9a983cb3d832fbde5ab49d692b7a8bf5b5d232479c99333d0fc8e1d21f1b55b6";
 
-type State = {
-  encryptedVault: EncryptedVaultRecord | null;
-  keySources: Map<string, KeySourceRecord>;
-  keyrings: Map<string, HdKeyringRecord>;
-  accounts: Map<AccountId, AccountRecord>;
-  selections: Map<string, AccountSelectionRecord>;
-  permissions: Map<string, PermissionRecord>;
-  autoLock: AutoLockSetting | null;
-};
-
-const emptyState = (): State => ({
-  encryptedVault: null,
-  keySources: new Map(),
-  keyrings: new Map(),
-  accounts: new Map(),
-  selections: new Map(),
-  permissions: new Map(),
-  autoLock: null,
-});
-
-const decryptStoredSources = async (state: State) => {
-  assert(state.encryptedVault !== null);
-  const decrypted = await unlockVaultRecord(state.encryptedVault, "password");
-  assert(decrypted !== null);
-  return decodeKeyringSecrets(decrypted.plaintext).keySources;
-};
-
-const applyChanges = (state: State, changes: readonly PersistenceChange[]): void => {
-  for (const change of changes) {
-    switch (change.persistenceType) {
-      case "encryptedVault":
-        state.encryptedVault = change.operation === "put" ? change.value : null;
-        break;
-      case "setting":
-        state.autoLock = change.operation === "put" ? change.value : null;
-        break;
-      case "keySource":
-        if (change.operation === "put") state.keySources.set(change.value.keySourceId, change.value);
-        else state.keySources.delete(change.key);
-        break;
-      case "hdKeyring":
-        if (change.operation === "put") state.keyrings.set(change.value.hdKeyringId, change.value);
-        else state.keyrings.delete(change.key);
-        break;
-      case "account":
-        if (change.operation === "put") state.accounts.set(change.value.accountId, change.value);
-        else state.accounts.delete(change.key);
-        break;
-      case "accountSelection":
-        if (change.operation === "put") state.selections.set(change.value.namespace, change.value);
-        else state.selections.delete(change.key);
-        break;
-      case "permission":
-        if (change.operation === "put") state.permissions.set(dappConnectionScopeKey(change.value), change.value);
-        else state.permissions.delete(dappConnectionScopeKey(change.key));
-        break;
-    }
-  }
-};
-
-const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => {
-  const state = params.state ?? emptyState();
+const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: number } = {}) => {
+  let committedVault: EncryptedVaultRecord | null = null;
   const commits: PersistenceChange[][] = [];
   let commitFailure = params.rejectCommit ?? null;
   const write = (changes: readonly PersistenceChange[]) => {
     if (commitFailure) throw commitFailure;
     commits.push([...changes]);
-    applyChanges(state, changes);
+    for (const change of changes) {
+      if (change.persistenceType === "encryptedVault") {
+        committedVault = change.operation === "put" ? change.value : null;
+      }
+    }
   };
   const commit = vi.fn(async (changes: readonly PersistenceChange[]) => write(changes));
   const holdNextCommit = () => {
@@ -129,11 +65,7 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     keyringChanges.push(change);
   };
   const keyring = new Keyring({
-    bootstrap: {
-      encryptedVault: state.encryptedVault,
-      keySources: [...state.keySources.values()],
-      hdKeyrings: [...state.keyrings.values()],
-    },
+    bootstrap: { encryptedVault: null, keySources: [], hdKeyrings: [] },
     namespaceAdapters: {
       [EIP155_NAMESPACE]: eip155KeyringAdapter,
     },
@@ -145,15 +77,11 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   };
   const accounts = new Accounts({
     adapters: { [EIP155_NAMESPACE]: eip155AccountsAdapter },
-    bootstrap: {
-      records: [...state.accounts.values()],
-      selections: [...state.selections.values()],
-    },
     mutations,
     publishChanged: publishAccountsChanged,
   });
   const permissions = new Permissions({
-    bootstrap: { records: [...state.permissions.values()] },
+    bootstrap: { records: [] },
     accounts,
   });
   const approvals = new Approvals({
@@ -161,11 +89,12 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     publishChanged: () => undefined,
   });
   const autoLock = new AutoLockController({
-    durationMs: state.autoLock?.durationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
+    durationMs: params.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
     time: systemTime,
   });
   const wallet = new WalletCoordinator({
     mutations,
+    namespaces: [EIP155_NAMESPACE],
     time: systemTime,
     keyring,
     accounts,
@@ -191,7 +120,18 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
     wallet,
     accounts,
     approvals,
-    state,
+    getCommittedVault: () => committedVault,
+    readCommittedSources: async () => {
+      assert(committedVault !== null);
+      const decrypted = await unlockVaultRecord(committedVault, "password");
+      assert(decrypted !== null);
+      try {
+        return decodeKeyringSecrets(decrypted.plaintext).keySources;
+      } finally {
+        decrypted.plaintext.fill(0);
+        decrypted.unlocked.encryptionKey.fill(0);
+      }
+    },
     commits,
     holdNextCommit,
     events,
@@ -207,12 +147,27 @@ const createHarness = (params: { state?: State; rejectCommit?: Error } = {}) => 
   };
 };
 
+const memberId = (accounts: Accounts, accountGroupId: string): AccountId => {
+  const group = accounts.getGroup(accountGroupId);
+  assert(group !== null);
+  return group.members[0].accountId;
+};
+const hdKeyringId = (accounts: Accounts, accountGroupId: string): string => {
+  const group = accounts.getGroup(accountGroupId);
+  assert(group !== null && group.members[0].origin.type === "hd");
+  return group.members[0].origin.hdKeyringId;
+};
+const groupIdForMember = (accounts: Accounts, accountId: AccountId): string => {
+  const member = accounts.getMemberRecord(accountId);
+  assert(member !== null);
+  return member.accountGroupId;
+};
+
 const initializeWallet = async (wallet: WalletCoordinator) => {
   const source = await wallet.createFromMnemonic({
     password: "password",
     mnemonic: PRIMARY_MNEMONIC,
     name: "Wallet 1",
-    namespace: EIP155_NAMESPACE,
   });
   assert(source.status === "initialized");
   return source;
@@ -237,13 +192,17 @@ const requestAccountSign = (harness: ReturnType<typeof createHarness>, accountId
 const createWalletWithTwoAuthorizedAccounts = async () => {
   const harness = createHarness();
   const created = await initializeWallet(harness.wallet);
-  const { account } = await harness.wallet.createHdAccount({ hdKeyringId: created.hdKeyringId });
+  const accounts = harness.accounts;
+  const { account: group } = await harness.wallet.createHdAccountGroup({ keySourceId: created.keySourceId });
   const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-  await harness.grantPermission({ ...scope, accountIds: [created.accountId, account.accountId] });
+  await harness.grantPermission({
+    ...scope,
+    accountIds: [memberId(accounts, created.accountGroupId), group.members[0].accountId],
+  });
   return {
     ...harness,
-    accountId: created.accountId,
-    replacementId: account.accountId,
+    accountId: memberId(accounts, created.accountGroupId),
+    replacementId: group.members[0].accountId,
     scope,
     requestSign: (accountId: AccountId) => requestAccountSign(harness, accountId),
   };
@@ -259,70 +218,60 @@ afterEach(() => {
 });
 
 describe("WalletCoordinator", () => {
-  it("creates a mnemonic wallet with one five-record commit", async () => {
-    const { wallet, accounts, accountChanges, autoLock, commits, events, keyring, keyringChanges, state } =
-      createHarness();
+  it("creates a mnemonic wallet with one complete identity commit", async () => {
+    const { wallet, accounts, accountChanges, autoLock, commits, events, keyring, keyringChanges } = createHarness();
 
     const created = await wallet.createFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       name: "Personal",
-      namespace: "eip155",
     });
     assert(created.status === "initialized");
 
     expect(commits).toHaveLength(1);
-    expect(commits[0]?.map((change) => `${change.persistenceType}.${change.operation}`)).toEqual([
-      "encryptedVault.put",
-      "keySource.put",
-      "hdKeyring.put",
-      "account.put",
-      "accountSelection.put",
-    ]);
+    expect(accounts.getGroup(created.accountGroupId)).toMatchObject({
+      source: { type: "bip39", keySourceId: created.keySourceId, accountIndex: 0 },
+      selected: true,
+    });
     expect(keyring.getSoftwareKeyStatus()).toBe("unlocked");
     expect(autoLock.getDuration()).toBe(DEFAULT_AUTO_LOCK_DURATION_MS);
-    expect(state.autoLock).toBeNull();
-    expect(state.accounts.has(created.accountId)).toBe(true);
-    expect(accounts.getAccountRecord(created.accountId)).not.toBeNull();
     expect(keyring.requireKeySourceSecret(created.keySourceId)).toMatchObject({
       type: "bip39",
       mnemonic: PRIMARY_MNEMONIC,
     });
-    expect([...state.keySources.values()][0]).toMatchObject({
+    expect(keyring.getKeySource(created.keySourceId)).toMatchObject({
       type: "bip39",
       name: "Personal",
       backupStatus: "pending",
     });
-    expect(created.keySourceId).toBe([...state.keySources.keys()][0]);
-    expect(created.hdKeyringId).toBe([...state.keyrings.keys()][0]);
     expect(events).toEqual([{ type: "walletStatusChanged", status: "unlocked" }]);
     expect(keyringChanges).toEqual([{ type: "keyringChanged" }]);
     expect(accountChanges).toEqual([
       {
         type: "accountsChanged",
-        accountIds: [created.accountId],
+        accountGroupIds: [created.accountGroupId],
+        accountIds: [memberId(accounts, created.accountGroupId)],
         namespaces: ["eip155"],
       },
     ]);
   });
 
   it("restores a mnemonic with confirmed backup status", async () => {
-    const { wallet, state } = createHarness();
+    const { accounts, keyring, wallet } = createHarness();
 
     const created = await wallet.restoreFromMnemonic({
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       name: "Recovered",
-      namespace: "eip155",
     });
     assert(created.status === "initialized");
 
-    expect(state.keySources.get(created.keySourceId)).toMatchObject({
+    expect(keyring.getKeySource(created.keySourceId)).toMatchObject({
       type: "bip39",
       name: "Recovered",
       backupStatus: "confirmed",
     });
-    expect(state.keyrings.get(created.hdKeyringId)?.keySourceId).toBe(created.keySourceId);
+    expect(keyring.getHdKeyring(hdKeyringId(accounts, created.accountGroupId))?.keySourceId).toBe(created.keySourceId);
   });
 
   it("commits only one wallet when initialization commands compete", async () => {
@@ -331,14 +280,12 @@ describe("WalletCoordinator", () => {
       password: "password",
       mnemonic: PRIMARY_MNEMONIC,
       name: "Wallet 1",
-      namespace: "eip155",
     });
 
     const second = wallet.restoreFromMnemonic({
       password: "password",
       mnemonic: SECONDARY_MNEMONIC,
       name: "Wallet 1",
-      namespace: "eip155",
     });
     const third = wallet.createFromPrivateKey({
       password: "password",
@@ -354,7 +301,6 @@ describe("WalletCoordinator", () => {
         password: "password",
         mnemonic: SECONDARY_MNEMONIC,
         name: "Wallet 2",
-        namespace: "eip155",
       }),
     ).resolves.toEqual({ status: "already-initialized" });
     expect(commits).toHaveLength(1);
@@ -369,13 +315,12 @@ describe("WalletCoordinator", () => {
     const { wallet, commits, keyring, accounts } = createHarness();
     await initializeWallet(wallet);
     const commitCount = commits.length;
-    const selectedAccount = accounts.getSelectedAccountId("eip155");
+    const selectedAccount = accounts.getSelectedGroupId();
 
     await expect(
       wallet.addMnemonic({
         mnemonic: "not a bip39 mnemonic",
         name: "Wallet 2",
-        namespace: "eip155",
         backupStatus: "confirmed",
       }),
     ).rejects.toThrow(KeyringInvalidMnemonicError);
@@ -384,30 +329,27 @@ describe("WalletCoordinator", () => {
       wallet.addMnemonic({
         mnemonic: `  ${PRIMARY_MNEMONIC.replaceAll(" ", "   ")}  `,
         name: "Wallet 2",
-        namespace: "eip155",
         backupStatus: "confirmed",
       }),
     ).resolves.toEqual({ status: "duplicate", walletName: "Wallet 1" });
 
     expect(commits).toHaveLength(commitCount);
     expect(keyring.listKeySources()).toHaveLength(1);
-    expect(accounts.getSelectedAccountId("eip155")).toBe(selectedAccount);
+    expect(accounts.getSelectedGroupId()).toBe(selectedAccount);
   });
 
   it("adds mnemonic sources with their backup state and selects each first account", async () => {
-    const { accounts, keyring, state, wallet } = createHarness();
+    const { accounts, keyring, wallet } = createHarness();
     await initializeWallet(wallet);
 
     const added = await wallet.addMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
       name: "Savings",
-      namespace: EIP155_NAMESPACE,
       backupStatus: "pending",
     });
     const imported = await wallet.addMnemonic({
       mnemonic: TERTIARY_MNEMONIC,
       name: "Recovered",
-      namespace: EIP155_NAMESPACE,
       backupStatus: "confirmed",
     });
     assert(added.status === "added");
@@ -423,35 +365,32 @@ describe("WalletCoordinator", () => {
       name: "Recovered",
       backupStatus: "confirmed",
     });
-    expect(keyring.getHdKeyring(added.hdKeyringId)).toMatchObject({
+    expect(keyring.getHdKeyring(hdKeyringId(accounts, added.accountGroupId))).toMatchObject({
       keySourceId: added.keySourceId,
       namespace: EIP155_NAMESPACE,
     });
-    expect(keyring.getHdKeyring(imported.hdKeyringId)).toMatchObject({
+    expect(keyring.getHdKeyring(hdKeyringId(accounts, imported.accountGroupId))).toMatchObject({
       keySourceId: imported.keySourceId,
       namespace: EIP155_NAMESPACE,
     });
-    expect(accounts.getAccount(added.accountId)?.origin).toEqual({
+    expect(accounts.getMember(memberId(accounts, added.accountGroupId))?.origin).toEqual({
       type: "hd",
-      hdKeyringId: added.hdKeyringId,
+      hdKeyringId: hdKeyringId(accounts, added.accountGroupId),
       derivationIndex: 0,
     });
-    expect(accounts.getAccount(imported.accountId)?.origin).toEqual({
+    expect(accounts.getMember(memberId(accounts, imported.accountGroupId))?.origin).toEqual({
       type: "hd",
-      hdKeyringId: imported.hdKeyringId,
+      hdKeyringId: hdKeyringId(accounts, imported.accountGroupId),
       derivationIndex: 0,
     });
     expect(keyring.listKeySources()).toHaveLength(3);
     expect(keyring.listHdKeyrings()).toHaveLength(3);
-    expect(accounts.listAccounts()).toHaveLength(3);
-    expect(state.keySources.has(added.keySourceId)).toBe(true);
-    expect(state.keySources.has(imported.keySourceId)).toBe(true);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
-    expect(state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(imported.accountId);
+    expect(accounts.listGroups()).toHaveLength(3);
+    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
   });
 
   it("confirms the first account's move once, retaining its identity and later selection", async () => {
-    const { accounts, commits, grantPermission, keyring, permissions, state, wallet } = createHarness();
+    const { accounts, commits, grantPermission, keyring, permissions, readCommittedSources, wallet } = createHarness();
     const imported = await wallet.createFromPrivateKey({
       password: "password",
       privateKey: FIRST_PRIVATE_KEY,
@@ -460,55 +399,64 @@ describe("WalletCoordinator", () => {
     assert(imported.status === "initialized");
     const other = await wallet.importPrivateKey({ privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE });
     assert(other.status === "added");
-    await accounts.rename({ accountId: imported.accountId, alias: "Daily" });
-    await accounts.select(other.accountId);
+    await accounts.rename({ accountGroupId: imported.accountGroupId, alias: "Daily" });
+    await accounts.select(other.accountGroupId);
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await grantPermission({ ...scope, accountIds: [imported.accountId] });
-    const before = accounts.getAccount(imported.accountId);
+    await grantPermission({ ...scope, accountIds: [memberId(accounts, imported.accountGroupId)] });
+    const before = accounts.getGroup(imported.accountGroupId);
     const commitCount = commits.length;
     const input = {
       mnemonic: PRIMARY_MNEMONIC,
       name: "Recovered",
-      namespace: EIP155_NAMESPACE,
       backupStatus: "confirmed",
     } as const;
 
     expect(await wallet.addMnemonic(input)).toEqual({ status: "move-available", account: before });
     expect(commits).toHaveLength(commitCount);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(other.accountId);
+    expect(accounts.getSelectedGroupId()).toBe(other.accountGroupId);
 
-    const confirmed = { ...input, accountId: imported.accountId };
+    const confirmed = { ...input, accountId: memberId(accounts, imported.accountGroupId) };
     const added = await wallet.addMnemonicAndMoveAccount(confirmed);
     expect(commits).toHaveLength(commitCount + 1);
-    expect(accounts.getAccount(added.accountId)).toEqual({
+    assert(before !== null);
+    expect(accounts.getGroup(added.accountGroupId)).toEqual({
       ...before,
-      origin: { type: "hd", hdKeyringId: added.hdKeyringId, derivationIndex: 0 },
+      source: { type: "bip39", keySourceId: added.keySourceId, accountIndex: 0 },
+      members: [
+        {
+          ...before.members[0],
+          origin: {
+            type: "hd",
+            hdKeyringId: keyring.listHdKeyringsByKeySourceIds([added.keySourceId])[0]?.hdKeyringId,
+            derivationIndex: 0,
+          },
+        },
+      ],
       selected: true,
     });
-    expect(state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(imported.accountId);
-    expect(permissions.get(scope)?.accountIds).toEqual([imported.accountId]);
+    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, imported.accountGroupId)]);
     const expectedSourceIds = new Set([other.keySourceId, added.keySourceId]);
-    expect(new Set(state.keySources.keys())).toEqual(expectedSourceIds);
-    expect(keyring.getHdKeyring(added.hdKeyringId)?.nextDerivationIndex).toBe(1);
+    expect(new Set(keyring.listKeySources().map(({ keySourceId }) => keySourceId))).toEqual(expectedSourceIds);
+    expect(accounts.nextAccountIndex(added.keySourceId)).toBe(1);
 
-    await accounts.select(other.accountId);
+    await accounts.select(other.accountGroupId);
     const repeatedCommitCount = commits.length;
     expect(await wallet.addMnemonicAndMoveAccount(confirmed)).toEqual(added);
     expect(commits).toHaveLength(repeatedCommitCount);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(other.accountId);
-    expect(new Set((await decryptStoredSources(state)).map((source) => source.keySourceId))).toEqual(expectedSourceIds);
+    expect(accounts.getSelectedGroupId()).toBe(other.accountGroupId);
+    expect(new Set((await readCommittedSources()).map((source) => source.keySourceId))).toEqual(expectedSourceIds);
   });
 
   it("exports the requested secrets only after current-password verification", async () => {
     const { accounts, wallet } = createHarness();
     const source = await initializeWallet(wallet);
-    const derived = await wallet.createHdAccount({ hdKeyringId: source.hdKeyringId });
+    const derived = await wallet.createHdAccountGroup({ keySourceId: source.keySourceId });
     assert(derived.status === "created");
     const imported = await wallet.importPrivateKey({ privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE });
     assert(imported.status === "added");
     const keys = [
-      { accountId: derived.account.accountId, privateKey: `0x${NEXT_PRIVATE_KEY}` },
-      { accountId: imported.accountId, privateKey: PRIVATE_KEY },
+      { accountId: derived.account.members[0].accountId, privateKey: `0x${NEXT_PRIVATE_KEY}` },
+      { accountId: memberId(accounts, imported.accountGroupId), privateKey: PRIVATE_KEY },
     ];
 
     await expect(wallet.exportMnemonic({ keySourceId: source.keySourceId, password: "password" })).resolves.toEqual({
@@ -521,7 +469,7 @@ describe("WalletCoordinator", () => {
       });
       await expect(wallet.exportPrivateKey({ accountId: key.accountId, password: "incorrect" })).resolves.toBeNull();
     }
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
+    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
 
     await wallet.lock();
     await expect(
@@ -534,21 +482,24 @@ describe("WalletCoordinator", () => {
         code: "wallet.locked",
       });
     }
-  });
+  }, 15_000);
 
   it("does not return an account key when the session expires during HD derivation", async () => {
-    const { wallet } = createHarness();
+    const { accounts, wallet } = createHarness();
     const created = await initializeWallet(wallet);
     const derive = eip155KeyringAdapter.deriveHdPrivateKey;
+    let seed: Uint8Array | undefined;
     vi.spyOn(eip155KeyringAdapter, "deriveHdPrivateKey").mockImplementation((params) => {
+      seed = params.seed;
       vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
       return derive(params);
     });
-    await expect(wallet.exportPrivateKey({ accountId: created.accountId, password: "password" })).rejects.toMatchObject(
-      {
-        code: "wallet.locked",
-      },
-    );
+    await expect(
+      wallet.exportPrivateKey({ accountId: memberId(accounts, created.accountGroupId), password: "password" }),
+    ).rejects.toMatchObject({
+      code: "wallet.locked",
+    });
+    expect(seed).toEqual(new Uint8Array(64));
   });
 
   it("does not activate wallet state when the initial commit fails", async () => {
@@ -560,117 +511,103 @@ describe("WalletCoordinator", () => {
         password: "password",
         mnemonic: PRIMARY_MNEMONIC,
         name: "Wallet 1",
-        namespace: "eip155",
       }),
     ).rejects.toBe(failure);
 
     expect(keyring.getSoftwareKeyStatus()).toBe("uninitialized");
     expect(keyring.listKeySources()).toEqual([]);
     expect(keyring.listHdKeyrings()).toEqual([]);
-    expect(accounts.listAccountRecords()).toEqual([]);
-  });
-
-  it("commits a derived account and the advanced cursor together", async () => {
-    const { wallet, accounts, commits, state } = createHarness();
-    const first = await initializeWallet(wallet);
-    const result = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
-
-    expect(result).toMatchObject({
-      status: "created",
-      account: {
-        accountId: eip155KeyringAdapter.accountIdFromPrivateKey(NEXT_PRIVATE_KEY),
-        origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 1 },
-        selected: false,
-        hidden: false,
-      },
-    });
-    expect(result.account).toEqual(accounts.getAccount(result.account.accountId));
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
-    expect(commits).toHaveLength(2);
-    expect(commits[1]).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ persistenceType: "account", operation: "put" }),
-        expect.objectContaining({ persistenceType: "hdKeyring", operation: "put" }),
-      ]),
-    );
-    expect(state.accounts.get(result.account.accountId)?.origin).toEqual(result.account.origin);
-    expect(state.keyrings.get(first.hdKeyringId)?.nextDerivationIndex).toBe(2);
-    expect(accounts.listAccountRecords()).toHaveLength(2);
+    expect(accounts.listMemberRecords()).toEqual([]);
   });
 
   it("moves an imported private-key account into an HD wallet and creates the next account", async () => {
-    const { wallet, accounts, keyring, state } = createHarness();
+    const { wallet, accounts, keyring, readCommittedSources } = createHarness();
     const first = await initializeWallet(wallet);
     const imported = await wallet.importPrivateKey({
       privateKey: NEXT_PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
     assert(imported.status === "added");
-    await accounts.select(imported.accountId);
+    await accounts.select(imported.accountGroupId);
 
-    const candidate = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
+    const candidate = await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
     expect(candidate).toEqual({
       status: "move-available",
-      account: accounts.getAccount(imported.accountId),
+      account: accounts.getGroup(imported.accountGroupId),
     });
 
     const moved = await wallet.movePrivateKeyAccount({
-      accountId: candidate.account.accountId,
-      hdKeyringId: first.hdKeyringId,
+      accountId: candidate.account.members[0].accountId,
+      keySourceId: first.keySourceId,
     });
     expect(moved).toEqual({
       ...candidate.account,
-      origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 1 },
+      source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 1 },
+      members: [
+        {
+          ...candidate.account.members[0],
+          origin: { type: "hd", hdKeyringId: hdKeyringId(accounts, first.accountGroupId), derivationIndex: 1 },
+        },
+      ],
     });
-    expect(accounts.getAccount(imported.accountId)).toEqual(moved);
+    expect(accounts.getGroup(imported.accountGroupId)).toEqual(moved);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
-    expect((await decryptStoredSources(state)).map((source) => source.keySourceId)).toEqual([first.keySourceId]);
+    expect((await readCommittedSources()).map((source) => source.keySourceId)).toEqual([first.keySourceId]);
 
-    const next = await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
+    const next = await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
     expect(next).toMatchObject({
       status: "created",
       account: {
-        origin: { type: "hd", hdKeyringId: first.hdKeyringId, derivationIndex: 2 },
+        source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 2 },
+        members: [
+          { origin: { type: "hd", hdKeyringId: hdKeyringId(accounts, first.accountGroupId), derivationIndex: 2 } },
+        ],
       },
     });
-    expect(next.account.accountId).not.toBe(imported.accountId);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
+    expect(next.account.members[0].accountId).not.toBe(memberId(accounts, imported.accountGroupId));
+    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
   });
 
   it("hides an HD account with its permission in one committed cascade", async () => {
     const fixture = await createWalletWithTwoAuthorizedAccounts();
-    const { accountId, replacementId, scope, requestSign } = fixture;
+    const { accountId, replacementId, scope, requestSign, accounts } = fixture;
     requestSign(accountId);
     const retained = requestSign(replacementId);
     const commitCount = fixture.commits.length;
 
-    await fixture.wallet.setAccountHidden({ accountId, hidden: true });
+    await fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForMember(accounts, accountId), hidden: true });
     expect(fixture.commits).toHaveLength(commitCount + 1);
-    expect(fixture.state.accounts.get(accountId)?.hidden).toBe(true);
-    expect(fixture.state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(replacementId);
-    expect(fixture.state.permissions.get(dappConnectionScopeKey(scope))?.accountIds).toEqual([replacementId]);
-    expect(fixture.accounts.getAccount(accountId)).toMatchObject({ hidden: true, selected: false });
+    expect(fixture.accounts.getGroupForMember(accountId)).toMatchObject({ hidden: true, selected: false });
+    expect(fixture.accounts.getSelectedGroupId()).toBe(groupIdForMember(accounts, replacementId));
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
     expect(fixture.approvals.list().map(({ approvalId }) => approvalId)).toEqual([retained.approvalId]);
 
-    await fixture.wallet.setAccountHidden({ accountId, hidden: false });
+    await fixture.wallet.setAccountGroupHidden({
+      accountGroupId: groupIdForMember(accounts, accountId),
+      hidden: false,
+    });
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
   });
 
   it("cancels account requests only after a successful visibility commit", async () => {
     const fixture = await createWalletWithTwoAuthorizedAccounts();
-    const { accountId, replacementId, scope } = fixture;
+    const { accountId, replacementId, scope, accounts } = fixture;
     const pending = fixture.requestSign(accountId);
     const failure = new Error("commit failed");
     fixture.setCommitFailure(failure);
-    await expect(fixture.wallet.setAccountHidden({ accountId, hidden: true })).rejects.toBe(failure);
-    expect(fixture.accounts.getAccount(accountId)).toMatchObject({ hidden: false, selected: true });
+    await expect(
+      fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForMember(accounts, accountId), hidden: true }),
+    ).rejects.toBe(failure);
+    expect(fixture.accounts.getGroupForMember(accountId)).toMatchObject({ hidden: false, selected: true });
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([accountId, replacementId]);
     expect(fixture.approvals.list().map((approval) => approval.approvalId)).toEqual([pending.approvalId]);
 
     fixture.setCommitFailure(null);
     const commit = fixture.holdNextCommit();
-    const hiding = fixture.wallet.setAccountHidden({ accountId, hidden: true });
+    const hiding = fixture.wallet.setAccountGroupHidden({
+      accountGroupId: groupIdForMember(accounts, accountId),
+      hidden: true,
+    });
     await commit.started;
     fixture.requestSign(accountId);
     commit.release();
@@ -680,7 +617,7 @@ describe("WalletCoordinator", () => {
 
   it("removes a BIP39 source cascade and rejects removal of the last source", async () => {
     const harness = createHarness();
-    const { accounts, approvals, commits, grantPermission, keyring, permissions, state, wallet } = harness;
+    const { accounts, approvals, commits, grantPermission, keyring, permissions, wallet } = harness;
     const first = await initializeWallet(wallet);
     const commitCount = commits.length;
     await expect(wallet.removeKeySource({ keySourceId: first.keySourceId })).rejects.toMatchObject({
@@ -691,66 +628,82 @@ describe("WalletCoordinator", () => {
     const second = await wallet.addMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
       name: "Wallet 2",
-      namespace: EIP155_NAMESPACE,
       backupStatus: "confirmed",
     });
     assert(second.status === "added");
-    const another = await wallet.createHdAccount({ hdKeyringId: second.hdKeyringId });
-    const hidden = await wallet.createHdAccount({ hdKeyringId: second.hdKeyringId });
-    await wallet.setAccountHidden({ accountId: hidden.account.accountId, hidden: true });
+    const another = await wallet.createHdAccountGroup({ keySourceId: second.keySourceId });
+    const hidden = await wallet.createHdAccountGroup({ keySourceId: second.keySourceId });
+    await wallet.setAccountGroupHidden({
+      accountGroupId: groupIdForMember(accounts, hidden.account.members[0].accountId),
+      hidden: true,
+    });
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await grantPermission({ ...scope, accountIds: [first.accountId, second.accountId, another.account.accountId] });
-    for (const accountId of [first.accountId, second.accountId, another.account.accountId]) {
+    await grantPermission({
+      ...scope,
+      accountIds: [
+        memberId(accounts, first.accountGroupId),
+        memberId(accounts, second.accountGroupId),
+        another.account.members[0].accountId,
+      ],
+    });
+    for (const accountId of [
+      memberId(accounts, first.accountGroupId),
+      memberId(accounts, second.accountGroupId),
+      another.account.members[0].accountId,
+    ]) {
       requestAccountSign(harness, accountId);
     }
 
     const removalCommitCount = commits.length;
+    const removedKeyringId = hdKeyringId(accounts, second.accountGroupId);
     await wallet.removeKeySource({ keySourceId: second.keySourceId });
 
     expect(commits).toHaveLength(removalCommitCount + 1);
     expect(keyring.getKeySource(second.keySourceId)).toBeNull();
-    expect(keyring.getHdKeyring(second.hdKeyringId)).toBeNull();
-    expect([...state.keySources.keys()]).toEqual([first.keySourceId]);
-    expect([...state.keyrings.keys()]).toEqual([first.hdKeyringId]);
-    expect([...state.accounts.keys()]).toEqual([first.accountId]);
-    expect(accounts.listAccounts().map((account) => account.accountId)).toEqual([first.accountId]);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
-    expect(permissions.get(scope)?.accountIds).toEqual([first.accountId]);
-    expect(approvals.list().map((approval) => approval.accountId)).toEqual([first.accountId]);
+    expect(keyring.getHdKeyring(removedKeyringId)).toBeNull();
+    expect(keyring.listKeySources().map(({ keySourceId }) => keySourceId)).toEqual([first.keySourceId]);
+    expect(keyring.listHdKeyrings().map(({ hdKeyringId }) => hdKeyringId)).toEqual([
+      hdKeyringId(accounts, first.accountGroupId),
+    ]);
+    expect(accounts.listGroups().map((group) => group.members[0].accountId)).toEqual([
+      memberId(accounts, first.accountGroupId),
+    ]);
+    expect(accounts.getSelectedGroupId()).toBe(first.accountGroupId);
+    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, first.accountGroupId)]);
+    expect(approvals.list().map((approval) => approval.accountId)).toEqual([memberId(accounts, first.accountGroupId)]);
     approvals.cancelAll();
   });
 
   it("imports and selects once while private-key and hidden HD duplicates leave state unchanged", async () => {
-    const { accounts, commits, state, wallet } = createHarness();
+    const { accounts, commits, wallet } = createHarness();
     const first = await initializeWallet(wallet);
     const commitCount = commits.length;
     const input = { privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE };
     const [imported, duplicate] = await Promise.all([wallet.importPrivateKey(input), wallet.importPrivateKey(input)]);
     assert(imported.status === "added");
-    expect(duplicate).toMatchObject({ status: "duplicate", account: { accountId: imported.accountId } });
+    expect(duplicate).toMatchObject({ status: "duplicate", account: { accountGroupId: imported.accountGroupId } });
     expect(commits).toHaveLength(commitCount + 1);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
-    expect(state.selections.get(EIP155_NAMESPACE)?.accountId).toBe(imported.accountId);
+    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
 
-    await accounts.select(first.accountId);
+    await accounts.select(first.accountGroupId);
     const privateDuplicateCommitCount = commits.length;
     await expect(wallet.importPrivateKey({ ...input, privateKey: `0x${PRIVATE_KEY}` })).resolves.toMatchObject({
       status: "duplicate",
-      account: { accountId: imported.accountId },
+      account: { accountGroupId: imported.accountGroupId },
     });
     expect(commits).toHaveLength(privateDuplicateCommitCount);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(first.accountId);
+    expect(accounts.getSelectedGroupId()).toBe(first.accountGroupId);
 
-    await wallet.createHdAccount({ hdKeyringId: first.hdKeyringId });
-    await accounts.select(imported.accountId);
-    await wallet.setAccountHidden({ accountId: first.accountId, hidden: true });
+    await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
+    await accounts.select(imported.accountGroupId);
+    await wallet.setAccountGroupHidden({ accountGroupId: first.accountGroupId, hidden: true });
     const hdDuplicateCommitCount = commits.length;
     await expect(wallet.importPrivateKey({ ...input, privateKey: FIRST_PRIVATE_KEY })).resolves.toMatchObject({
       status: "duplicate",
-      account: { accountId: first.accountId, hidden: true },
+      account: { accountGroupId: first.accountGroupId, hidden: true },
     });
     expect(commits).toHaveLength(hdDuplicateCommitCount);
-    expect(accounts.getSelectedAccountId(EIP155_NAMESPACE)).toBe(imported.accountId);
+    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
   });
 
   it("removes a private-key source and cancels its requests only after the encrypted commit", async () => {
@@ -764,7 +717,7 @@ describe("WalletCoordinator", () => {
       keyring,
       permissions,
       setCommitFailure,
-      state,
+      readCommittedSources,
       wallet,
     } = harness;
     const first = await initializeWallet(wallet);
@@ -774,14 +727,14 @@ describe("WalletCoordinator", () => {
     });
     assert(imported.status === "added");
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await grantPermission({ ...scope, accountIds: [imported.accountId] });
-    const pending = requestAccountSign(harness, imported.accountId);
+    await grantPermission({ ...scope, accountIds: [memberId(accounts, imported.accountGroupId)] });
+    const pending = requestAccountSign(harness, memberId(accounts, imported.accountGroupId));
     const failure = new Error("commit failed");
     setCommitFailure(failure);
     await expect(wallet.removeKeySource({ keySourceId: imported.keySourceId })).rejects.toBe(failure);
     expect(keyring.getKeySource(imported.keySourceId)).not.toBeNull();
-    expect(accounts.getAccount(imported.accountId)).toMatchObject({ selected: true });
-    expect(permissions.get(scope)?.accountIds).toEqual([imported.accountId]);
+    expect(accounts.getGroup(imported.accountGroupId)).toMatchObject({ selected: true });
+    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, imported.accountGroupId)]);
     expect(approvals.list().map((approval) => approval.approvalId)).toEqual([pending.approvalId]);
 
     setCommitFailure(null);
@@ -789,28 +742,28 @@ describe("WalletCoordinator", () => {
     const commit = holdNextCommit();
     const removing = wallet.removeKeySource({ keySourceId: imported.keySourceId });
     await commit.started;
-    requestAccountSign(harness, imported.accountId);
+    requestAccountSign(harness, memberId(accounts, imported.accountGroupId));
     commit.release();
     await removing;
 
     expect(commits).toHaveLength(commitCount + 1);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
-    expect(accounts.getAccount(imported.accountId)).toBeNull();
-    expect(accounts.getAccount(first.accountId)).toMatchObject({ selected: true });
+    expect(accounts.getGroup(imported.accountGroupId)).toBeNull();
+    expect(accounts.getGroup(first.accountGroupId)).toMatchObject({ selected: true });
     expect(permissions.get(scope)).toBeNull();
     expect(approvals.list()).toEqual([]);
-    expect(await decryptStoredSources(state)).toEqual([
+    expect(await readCommittedSources()).toEqual([
       expect.objectContaining({ keySourceId: first.keySourceId, type: "bip39" }),
     ]);
   });
 
-  it("persists a source rename without changing its accounts or encrypted vault", async () => {
-    const { wallet, accounts, commits, keyring, keyringChanges, state } = createHarness();
+  it("renames a source once while retaining its accounts and encrypted vault", async () => {
+    const { wallet, accounts, commits, getCommittedVault, keyring, keyringChanges } = createHarness();
     const initialized = await initializeWallet(wallet);
     const { keySourceId } = initialized;
     const previousSource = keyring.getKeySource(keySourceId);
-    const previousAccounts = accounts.listAccounts();
-    const encryptedVault = state.encryptedVault;
+    const previousAccounts = accounts.listGroups();
+    const encryptedVault = getCommittedVault();
     const commitCount = commits.length;
     const eventCount = keyringChanges.length;
 
@@ -818,9 +771,8 @@ describe("WalletCoordinator", () => {
 
     const renamedSource = { ...previousSource, name: "Savings" };
     expect(keyring.getKeySource(keySourceId)).toEqual(renamedSource);
-    expect(state.keySources.get(keySourceId)).toEqual(renamedSource);
-    expect(accounts.listAccounts()).toEqual(previousAccounts);
-    expect(state.encryptedVault).toBe(encryptedVault);
+    expect(accounts.listGroups()).toEqual(previousAccounts);
+    expect(getCommittedVault()).toBe(encryptedVault);
     expect(commits).toHaveLength(commitCount + 1);
     expect(keyringChanges).toHaveLength(eventCount + 1);
     expect(keyringChanges.at(-1)).toEqual({ type: "keyringChanged" });
@@ -829,11 +781,10 @@ describe("WalletCoordinator", () => {
 
     expect(commits).toHaveLength(commitCount + 1);
     expect(keyringChanges).toHaveLength(eventCount + 1);
-    expect(createHarness({ state }).keyring.getKeySource(keySourceId)).toEqual(renamedSource);
   });
 
   it("keeps the previous source name when persistence rejects a rename", async () => {
-    const { wallet, keyring, keyringChanges, state, setCommitFailure } = createHarness();
+    const { wallet, keyring, keyringChanges, setCommitFailure } = createHarness();
     const initialized = await initializeWallet(wallet);
     const { keySourceId } = initialized;
     const previousSource = keyring.getKeySource(keySourceId);
@@ -844,28 +795,7 @@ describe("WalletCoordinator", () => {
     await expect(keyring.renameMnemonicSource({ keySourceId, name: "Savings" })).rejects.toBe(failure);
 
     expect(keyring.getKeySource(keySourceId)).toEqual(previousSource);
-    expect(state.keySources.get(keySourceId)).toEqual(previousSource);
     expect(keyringChanges).toHaveLength(eventCount);
-  });
-
-  it("preserves a source rename when an account is derived concurrently", async () => {
-    const { wallet, accounts, keyring, state } = createHarness();
-    const initialized = await initializeWallet(wallet);
-    const { keySourceId, hdKeyringId } = initialized;
-
-    const [, derived] = await Promise.all([
-      keyring.renameMnemonicSource({ keySourceId, name: "Savings" }),
-      wallet.createHdAccount({ hdKeyringId }),
-    ]);
-    const derivedAccountId = derived.account.accountId;
-
-    expect(keyring.getKeySource(keySourceId)).toMatchObject({ name: "Savings" });
-    expect(keyring.getHdKeyring(hdKeyringId)?.nextDerivationIndex).toBe(2);
-    expect(accounts.getAccount(derivedAccountId)?.origin).toEqual({ type: "hd", hdKeyringId, derivationIndex: 1 });
-    const restarted = createHarness({ state });
-    expect(restarted.keyring.getKeySource(keySourceId)).toEqual(keyring.getKeySource(keySourceId));
-    expect(restarted.keyring.getHdKeyring(hdKeyringId)).toEqual(keyring.getHdKeyring(hdKeyringId));
-    expect(restarted.accounts.getAccount(derivedAccountId)).toEqual(accounts.getAccount(derivedAccountId));
   });
 
   it("confirms mnemonic backup while locked without reading the secret", async () => {
@@ -891,7 +821,7 @@ describe("WalletCoordinator", () => {
   });
 
   it("restores the private-key account and source after locking and unlocking", async () => {
-    const { wallet, state, accounts, keyring } = createHarness();
+    const { wallet, accounts, keyring } = createHarness();
     const created = await wallet.createFromPrivateKey({
       password: "password",
       privateKey: PRIVATE_KEY,
@@ -899,15 +829,15 @@ describe("WalletCoordinator", () => {
     });
     assert(created.status === "initialized");
 
-    expect([...state.keySources.values()][0]).toMatchObject({
+    expect(keyring.getKeySource(created.keySourceId)).toMatchObject({
       type: "private-key",
       namespace: "eip155",
     });
-    const account = accounts.getAccount(created.accountId);
+    const group = accounts.getGroup(created.accountGroupId);
     const source = keyring.getKeySource(created.keySourceId);
     await wallet.lock();
     await expect(wallet.unlock("password")).resolves.toBe(true);
-    expect(accounts.getAccount(created.accountId)).toEqual(account);
+    expect(accounts.getGroup(created.accountGroupId)).toEqual(group);
     expect(keyring.getKeySource(created.keySourceId)).toEqual(source);
     expect(keyring.requireKeySourceSecret(created.keySourceId)).toEqual({
       keySourceId: created.keySourceId,
@@ -919,7 +849,9 @@ describe("WalletCoordinator", () => {
   it("locks by clearing decoded secrets and cancelling a pending approval without committing persistence", async () => {
     const { accounts, approvals, wallet, commits, events, keyring } = createHarness();
     const created = await initializeWallet(wallet);
-    const selectableAccounts = [accounts.getAddress({ accountId: created.accountId, chainRef: "eip155:1" })] as const;
+    const selectableAccounts = [
+      accounts.getAddress({ accountId: memberId(accounts, created.accountGroupId), chainRef: "eip155:1" }),
+    ] as const;
     const pendingApproval = approvals.request({
       type: "accountAccess",
       namespace: EIP155_NAMESPACE,
@@ -993,37 +925,46 @@ describe("WalletCoordinator", () => {
   });
 
   it("does not return a secret when the session expires during password verification", async () => {
-    const { wallet } = createHarness();
+    const { keyring, wallet } = createHarness();
     const initialized = await initializeWallet(wallet);
     const { keySourceId } = initialized;
-    const exporting = wallet.exportMnemonic({ keySourceId, password: "password" });
-    await Promise.resolve();
+    const verify = keyring.verifyPassword.bind(keyring);
+    vi.spyOn(keyring, "verifyPassword").mockImplementation(async (password) => {
+      const matches = await verify(password);
+      vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+      return matches;
+    });
 
-    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
-    await expect(exporting).rejects.toMatchObject({ code: "wallet.locked" });
+    await expect(wallet.exportMnemonic({ keySourceId, password: "password" })).rejects.toMatchObject({
+      code: "wallet.locked",
+    });
   });
 
   it("does not commit a password change that finishes preparation after expiry", async () => {
-    const { wallet, commits } = createHarness();
+    const { wallet, commits, keyring } = createHarness();
     await initializeWallet(wallet);
-    const changing = wallet.changePassword({ currentPassword: "password", newPassword: "new-password" });
-    await Promise.resolve();
+    const prepare = keyring.prepareChangePassword.bind(keyring);
+    vi.spyOn(keyring, "prepareChangePassword").mockImplementation(async (input) => {
+      const update = await prepare(input);
+      vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+      return update;
+    });
 
-    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
-    await expect(changing).rejects.toMatchObject({ code: "wallet.locked" });
+    await expect(
+      wallet.changePassword({ currentPassword: "password", newPassword: "new-password" }),
+    ).rejects.toMatchObject({ code: "wallet.locked" });
     expect(commits).toHaveLength(1);
     await expect(wallet.unlock("password")).resolves.toBe(true);
   });
 
   it("finishes an in-flight commit successfully and then clears the expired session", async () => {
-    const { wallet, holdNextCommit, keyring, state } = createHarness();
+    const { wallet, holdNextCommit, keyring } = createHarness();
     await initializeWallet(wallet);
     const commit = holdNextCommit();
 
     const importing = wallet.addMnemonic({
       mnemonic: SECONDARY_MNEMONIC,
       name: "Wallet 2",
-      namespace: "eip155",
       backupStatus: "confirmed",
     });
     await commit.started;
@@ -1034,7 +975,7 @@ describe("WalletCoordinator", () => {
 
     const added = await importing;
     assert(added.status === "added");
-    expect(state.keySources.has(added.keySourceId)).toBe(true);
+    expect(keyring.getKeySource(added.keySourceId)).toMatchObject({ type: "bip39", name: "Wallet 2" });
     expect(keyring.getSoftwareKeyStatus()).toBe("locked");
     await expect(wallet.unlock("password")).resolves.toBe(true);
     expect(keyring.requireKeySourceSecret(added.keySourceId)).toMatchObject({ mnemonic: SECONDARY_MNEMONIC });
@@ -1066,7 +1007,6 @@ describe("WalletCoordinator", () => {
         wallet.addMnemonic({
           mnemonic: SECONDARY_MNEMONIC,
           name: "Wallet 2",
-          namespace: EIP155_NAMESPACE,
           backupStatus: "confirmed",
         }),
     },
@@ -1081,44 +1021,46 @@ describe("WalletCoordinator", () => {
   ])("allows an in-flight HD signature to finish across a $label", async ({ change }) => {
     const { accounts, holdNextCommit, keyring, wallet } = createHarness();
     const initialized = await initializeWallet(wallet);
-    const { accountId } = initialized;
+    const accountId = memberId(accounts, initialized.accountGroupId);
     const signing = createEip155AccountSigning({ accounts, keyring, wallet });
     const commit = holdNextCommit();
+    const digest = new Uint8Array(32);
 
     const changing = change(wallet);
     await commit.started;
-    const pendingSignature = signing.signDigest({ accountId, digest: new Uint8Array(32) });
+    const pendingSignature = signing.signDigest({ accountId, digest });
     commit.release();
 
     const [signature] = await Promise.all([pendingSignature, changing]);
-    expect(signature.bytes).toHaveLength(64);
+    expect(Secp256k1.recoverAddress({ payload: digest, signature }).toLowerCase()).toBe(
+      "0x9858effd232b4033e47d90003d41ec34ecaeda94",
+    );
     expect(wallet.getStatus()).toBe("unlocked");
   });
 
   it("keeps the private-key account intact when its mnemonic addition fails to commit", async () => {
-    const { wallet, state, accounts, keyring, keyringChanges, setCommitFailure } = createHarness();
+    const { wallet, getCommittedVault, accounts, keyring, keyringChanges, setCommitFailure } = createHarness();
     const imported = await wallet.createFromPrivateKey({
       password: "password",
       privateKey: FIRST_PRIVATE_KEY,
       namespace: EIP155_NAMESPACE,
     });
     assert(imported.status === "initialized");
-    const committedRecord = state.encryptedVault;
-    const originalAccount = accounts.getAccount(imported.accountId);
+    const committedRecord = getCommittedVault();
+    const originalAccount = accounts.getGroup(imported.accountGroupId);
     const eventCount = keyringChanges.length;
     const input = {
       mnemonic: PRIMARY_MNEMONIC,
       name: "Recovered",
-      namespace: EIP155_NAMESPACE,
       backupStatus: "confirmed",
-      accountId: imported.accountId,
+      accountId: memberId(accounts, imported.accountGroupId),
     } as const;
     const failure = new Error("commit failed");
     setCommitFailure(failure);
 
     await expect(wallet.addMnemonicAndMoveAccount(input)).rejects.toBe(failure);
-    expect(state.encryptedVault).toBe(committedRecord);
-    expect(accounts.getAccount(imported.accountId)).toEqual(originalAccount);
+    expect(getCommittedVault()).toBe(committedRecord);
+    expect(accounts.getGroup(imported.accountGroupId)).toEqual(originalAccount);
     expect(keyring.listKeySources().map((source) => source.keySourceId)).toEqual([imported.keySourceId]);
     expect(keyring.listHdKeyrings()).toEqual([]);
     expect(keyring.requireKeySourceSecret(imported.keySourceId)).toMatchObject({ privateKey: FIRST_PRIVATE_KEY });
@@ -1127,8 +1069,7 @@ describe("WalletCoordinator", () => {
     setCommitFailure(null);
     await expect(wallet.addMnemonicAndMoveAccount(input)).resolves.toMatchObject({
       keySourceId: expect.any(String),
-      hdKeyringId: expect.any(String),
-      accountId: imported.accountId,
+      accountGroupId: imported.accountGroupId,
     });
   });
 
@@ -1159,7 +1100,7 @@ describe("WalletCoordinator", () => {
   });
 
   it("persists only a non-default auto-lock duration", async () => {
-    const { autoLock, wallet, commits, state } = createHarness();
+    const { autoLock, wallet, commits } = createHarness();
 
     await wallet.setAutoLockDuration(120_000);
 
@@ -1170,7 +1111,6 @@ describe("WalletCoordinator", () => {
         value: { key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 },
       },
     ]);
-    expect(state.autoLock).toEqual({ key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 });
     expect(autoLock.getDuration()).toBe(120_000);
 
     const commitCount = commits.length;
@@ -1179,14 +1119,11 @@ describe("WalletCoordinator", () => {
 
     await wallet.setAutoLockDuration(DEFAULT_AUTO_LOCK_DURATION_MS);
     expect(commits.at(-1)).toEqual([{ persistenceType: "setting", operation: "remove", key: AUTO_LOCK_SETTING_KEY }]);
-    expect(state.autoLock).toBeNull();
     expect(autoLock.getDuration()).toBe(DEFAULT_AUTO_LOCK_DURATION_MS);
   });
 
   it("locks through the mutation queue when the auto-lock timer expires", async () => {
-    const state = emptyState();
-    state.autoLock = { key: AUTO_LOCK_SETTING_KEY, durationMs: 60_000 };
-    const { wallet, events, keyring } = createHarness({ state });
+    const { wallet, events, keyring } = createHarness({ autoLockDurationMs: 60_000 });
     await initializeWallet(wallet);
 
     await vi.advanceTimersByTimeAsync(60_000);

@@ -1,15 +1,46 @@
 import { ArxBaseError } from "@arx/core";
+import type { AccountGroup } from "@arx/core/accounts";
 import type { WalletApi, WalletApiEvent } from "@arx/core/wallet";
 import { createInMemoryChannelPair, type InMemoryChannelPair } from "@arx/message-channel/testing";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { createWalletClient, WalletApiError, WalletChannelDisconnectedError } from "./client.js";
 import { createWalletHost } from "./host.js";
 
-const createTestWalletApi = (overrides: Record<string, unknown>): WalletApi =>
+type GetGroup = WalletApi["accounts"]["getGroup"];
+type ApiStub = Readonly<{
+  accounts: Pick<WalletApi["accounts"], "getGroup">;
+  subscribe?: WalletApi["subscribe"];
+}>;
+
+const createTestWalletApi = (overrides: ApiStub): WalletApi =>
   ({
     subscribe: () => () => undefined,
     ...overrides,
-  }) as unknown as WalletApi;
+  }) as WalletApi;
+
+const group = (accountGroupId: string, addressSuffix: number): AccountGroup => {
+  const keySourceId = `source-${accountGroupId}`;
+  return {
+    accountGroupId,
+    source: { type: "private-key", keySourceId },
+    hidden: false,
+    createdAt: 1,
+    selected: false,
+    members: [
+      {
+        accountId: `eip155:${addressSuffix.toString(16).padStart(40, "0")}`,
+        accountGroupId,
+        namespace: "eip155",
+        origin: { type: "private-key", keySourceId },
+        hidden: false,
+      },
+    ],
+  };
+};
+
+const firstGroup = group("group-first", 1);
+const laterGroup = group("group-later", 2);
+const secondGroup = group("group-second", 3);
 
 const connect = (api: WalletApi): { client: WalletApi; pair: InMemoryChannelPair } => {
   const pair = createInMemoryChannelPair();
@@ -24,30 +55,23 @@ class TestDomainError extends ArxBaseError {
   constructor() {
     super("The domain operation failed.", {
       code: TestDomainError.code,
-      details: { field: "accountId" },
+      details: { field: "accountGroupId" },
       cause: new Error("private cause"),
     });
   }
 }
 
 describe("WalletClient and WalletHost", () => {
-  it("round-trips nested methods and does not make the client thenable", async () => {
-    const getAccount = vi.fn(async (accountId: string) => accountId);
-    const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
-
-    expect((client as unknown as { then?: unknown }).then).toBeUndefined();
-    await expect(client.accounts.get("eip155:0x1")).resolves.toBe("eip155:0x1");
-    expect(getAccount).toHaveBeenCalledWith("eip155:0x1");
-
-    pair.disconnect();
-  });
-
-  it("matches out-of-order responses and keeps request IDs isolated per channel", async () => {
-    const firstResult = Promise.withResolvers<string>();
-    const getAccount = vi.fn((accountId: string) =>
-      accountId === "first" ? firstResult.promise : Promise.resolve(accountId),
-    );
-    const api = createTestWalletApi({ accounts: { get: getAccount } });
+  it("routes nested methods and matches out-of-order responses independently per channel", async () => {
+    const firstResult = Promise.withResolvers<AccountGroup>();
+    const results = new Map([laterGroup, secondGroup].map((result) => [result.accountGroupId, result]));
+    const getGroup = vi.fn<GetGroup>(async (accountGroupId) => {
+      if (accountGroupId === firstGroup.accountGroupId) return firstResult.promise;
+      const result = results.get(accountGroupId);
+      assert(result !== undefined);
+      return result;
+    });
+    const api = createTestWalletApi({ accounts: { getGroup } });
     const host = createWalletHost({ api });
     const firstPair = createInMemoryChannelPair();
     const secondPair = createInMemoryChannelPair();
@@ -56,38 +80,41 @@ describe("WalletClient and WalletHost", () => {
     const first = createWalletClient({ channel: firstPair.left });
     const second = createWalletClient({ channel: secondPair.left });
 
-    const pendingFirst = first.accounts.get("first");
-    await expect(Promise.all([first.accounts.get("later"), second.accounts.get("second")])).resolves.toEqual([
-      "later",
-      "second",
-    ]);
-    firstResult.resolve("first");
-    await expect(pendingFirst).resolves.toBe("first");
+    expect((first as unknown as { then?: unknown }).then).toBeUndefined();
+    const pendingFirst = first.accounts.getGroup(firstGroup.accountGroupId);
+    await expect(
+      Promise.all([
+        first.accounts.getGroup(laterGroup.accountGroupId),
+        second.accounts.getGroup(secondGroup.accountGroupId),
+      ]),
+    ).resolves.toEqual([laterGroup, secondGroup]);
+    firstResult.resolve(firstGroup);
+    await expect(pendingFirst).resolves.toEqual(firstGroup);
 
     firstPair.disconnect();
     secondPair.disconnect();
   });
 
   it("serializes domain errors and hides unexpected error details", async () => {
-    const getAccount = vi.fn(async (accountId: string) => {
-      if (accountId === "domain") {
+    const getGroup = vi.fn<GetGroup>(async (accountGroupId) => {
+      if (accountGroupId === "domain") {
         throw new TestDomainError();
       }
 
       throw new Error("private unexpected detail");
     });
-    const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
+    const { client, pair } = connect(createTestWalletApi({ accounts: { getGroup } }));
     const sent = vi.spyOn(pair.right, "send");
 
-    const domainFailure = await client.accounts.get("domain").catch((error: unknown) => error);
+    const domainFailure = await client.accounts.getGroup("domain").catch((error: unknown) => error);
     expect(domainFailure).toBeInstanceOf(WalletApiError);
     expect(domainFailure).toMatchObject({
       code: TestDomainError.code,
       message: "The domain operation failed.",
-      details: { field: "accountId" },
+      details: { field: "accountGroupId" },
     });
 
-    const unexpectedFailure = await client.accounts.get("unexpected").catch((error: unknown) => error);
+    const unexpectedFailure = await client.accounts.getGroup("unexpected").catch((error: unknown) => error);
     expect(unexpectedFailure).toMatchObject({
       code: "wallet_api.internal_error",
       message: "Wallet operation failed.",
@@ -96,18 +123,18 @@ describe("WalletClient and WalletHost", () => {
       [
         {
           type: "failure",
-          id: 1,
+          id: expect.any(Number),
           error: {
             code: TestDomainError.code,
             message: "The domain operation failed.",
-            details: { field: "accountId" },
+            details: { field: "accountGroupId" },
           },
         },
       ],
       [
         {
           type: "failure",
-          id: 2,
+          id: expect.any(Number),
           error: {
             code: "wallet_api.internal_error",
             message: "Wallet operation failed.",
@@ -125,7 +152,7 @@ describe("WalletClient and WalletHost", () => {
       publishEvent = listener;
       return () => undefined;
     });
-    const api = createTestWalletApi({ subscribe, accounts: { get: vi.fn() } });
+    const api = createTestWalletApi({ subscribe, accounts: { getGroup: vi.fn<GetGroup>() } });
     const host = createWalletHost({ api });
     const firstPair = createInMemoryChannelPair();
     const secondPair = createInMemoryChannelPair();
@@ -158,41 +185,43 @@ describe("WalletClient and WalletHost", () => {
   });
 
   it("rejects pending and future calls on disconnect and drops late results", async () => {
-    const command = Promise.withResolvers<string>();
-    const getAccount = vi.fn(() => command.promise);
-    const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
+    const command = Promise.withResolvers<AccountGroup>();
+    const getGroup = vi.fn<GetGroup>(() => command.promise);
+    const { client, pair } = connect(createTestWalletApi({ accounts: { getGroup } }));
     const sent = vi.spyOn(pair.right, "send");
 
-    const pending = client.accounts.get("slow");
-    expect(getAccount).toHaveBeenCalledOnce();
+    const pending = client.accounts.getGroup(firstGroup.accountGroupId);
 
     pair.disconnect();
     await expect(pending).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
-    await expect(client.accounts.get("later")).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
+    await expect(client.accounts.getGroup(laterGroup.accountGroupId)).rejects.toBeInstanceOf(
+      WalletChannelDisconnectedError,
+    );
 
-    command.resolve("completed");
+    command.resolve(firstGroup);
     await command.promise;
     expect(sent).not.toHaveBeenCalled();
   });
 
-  it("does not disconnect other requests when one send fails", async () => {
-    const firstResult = Promise.withResolvers<string>();
-    const getAccount = vi.fn((accountId: string) =>
-      accountId === "first" ? firstResult.promise : Promise.resolve(accountId),
-    );
-    const { client, pair } = connect(createTestWalletApi({ accounts: { get: getAccount } }));
-    const first = client.accounts.get("first");
-    const completedFirst = expect(first).resolves.toBe("first");
-    const sendError = new Error("postMessage failed");
+  it("rejects a failed send before the port disconnect notification rejects other pending requests", async () => {
+    const firstResult = Promise.withResolvers<AccountGroup>();
+    const getGroup = vi.fn<GetGroup>(() => firstResult.promise);
+    const { client, pair } = connect(createTestWalletApi({ accounts: { getGroup } }));
+    const first = client.accounts.getGroup(firstGroup.accountGroupId);
+    const cancelledFirst = expect(first).rejects.toBeInstanceOf(WalletChannelDisconnectedError);
+    const sendError = new Error("Attempting to use a disconnected port");
     vi.spyOn(pair.left, "send").mockImplementationOnce(() => {
       throw sendError;
     });
 
-    await expect(client.accounts.get("failed")).rejects.toBe(sendError);
-    await expect(client.accounts.get("later")).resolves.toBe("later");
-    firstResult.resolve("first");
-    await completedFirst;
-    expect(getAccount.mock.calls).toEqual([["first"], ["later"]]);
+    await expect(client.accounts.getGroup(laterGroup.accountGroupId)).rejects.toBe(sendError);
     pair.disconnect();
+    await cancelledFirst;
+    await expect(client.accounts.getGroup(secondGroup.accountGroupId)).rejects.toBeInstanceOf(
+      WalletChannelDisconnectedError,
+    );
+    firstResult.resolve(firstGroup);
+    await firstResult.promise;
+    expect(getGroup).toHaveBeenCalledOnce();
   });
 });

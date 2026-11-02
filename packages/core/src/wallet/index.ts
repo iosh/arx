@@ -8,7 +8,6 @@ export type { WalletBootstrap } from "./bootstrap.js";
 export { loadWalletBootstrap } from "./bootstrap.js";
 export * from "./errors.js";
 export type {
-  AddHdKeyringInput,
   AddMnemonicAndMoveAccountInput,
   AddMnemonicSourceInput,
   AddMnemonicSourceResult,
@@ -16,14 +15,14 @@ export type {
   Bip39WalletInitializationResult,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
-  HdAccountCreationResult,
+  HdAccountGroupCreationResult,
   ImportPrivateKeySourceResult,
   MovePrivateKeyAccountInput,
   PrivateKeySourceAdded,
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
-  SetAccountHiddenResult,
+  SetAccountGroupHiddenResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
@@ -34,7 +33,6 @@ export type {
   WalletApprovalsApi,
   WalletChainRpcApi,
   WalletChainRpcRequest,
-  WalletHdKeyringsApi,
   WalletKeySourcesApi,
   WalletNetworksApi,
   WalletPermissionsApi,

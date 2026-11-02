@@ -1,16 +1,15 @@
+import type { AccountGroupId } from "../accounts/accountGroupId.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { Account, AccountsChanged, Address } from "../accounts/types.js";
+import type { AccountGroup, AccountsChanged, Address } from "../accounts/types.js";
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
 import type { JsonRpcParams } from "../chainJsonRpc/types.js";
-import type { HdKeyring, HdKeyringId, KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
+import type { KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type {
   CustomNetworkInput,
   Network,
   NetworkRpcConfiguration,
-  NetworkSelection,
-  NetworkSelectionChanged,
   NetworksChanged,
   NonEmptyRpcEndpoints,
 } from "../networks/types.js";
@@ -26,7 +25,6 @@ import type {
   TransactionReplacementType,
 } from "../transactions/types.js";
 import type {
-  AddHdKeyringInput,
   AddMnemonicAndMoveAccountInput,
   AddMnemonicSourceInput,
   AddMnemonicSourceResult,
@@ -34,13 +32,13 @@ import type {
   Bip39WalletInitializationResult,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
-  HdAccountCreationResult,
+  HdAccountGroupCreationResult,
   ImportPrivateKeySourceResult,
   MovePrivateKeyAccountInput,
   PrivateKeySourceInput,
   PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
-  SetAccountHiddenResult,
+  SetAccountGroupHiddenResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
@@ -50,7 +48,6 @@ export type WalletApiEvent =
   | KeyringChanged
   | AccountsChanged
   | NetworksChanged
-  | NetworkSelectionChanged
   | PermissionsChanged
   | ApprovalsChanged
   | TransactionsChanged;
@@ -76,50 +73,42 @@ export type WalletKeySourcesApi = Readonly<{
   remove(input: { keySourceId: KeySourceId }): Promise<void>;
 }>;
 
-export type WalletHdKeyringsApi = Readonly<{
-  get(hdKeyringId: HdKeyringId): Promise<HdKeyring>;
-  list(): Promise<readonly HdKeyring[]>;
-  add(input: AddHdKeyringInput): Promise<{ hdKeyringId: HdKeyringId; accountId: AccountId }>;
-  remove(input: { hdKeyringId: HdKeyringId }): Promise<void>;
-}>;
-
 export type WalletAccountsApi = Readonly<{
-  get(accountId: AccountId): Promise<Account>;
-  getSelected(): Promise<Account>;
-  list(): Promise<readonly Account[]>;
-  getAddresses(input: { accountId: AccountId; chainRef: ChainRef }): Promise<readonly Address[]>;
-  /** Returns null if the private key is invalid for the chain's namespace. */
-  fromPrivateKey(input: { privateKey: string; chainRef: ChainRef }): Promise<{
+  getGroup(accountGroupId: AccountGroupId): Promise<AccountGroup>;
+  getSelectedGroup(): Promise<AccountGroup>;
+  listGroups(): Promise<readonly AccountGroup[]>;
+  getGroupAddresses(input: { accountGroupId: AccountGroupId }): Promise<readonly Address[]>;
+  /** Projects a public member identity; current EVM addresses do not require a saved group. */
+  getMemberAddresses(input: { accountId: AccountId }): Promise<readonly Address[]>;
+  /** Returns null if the private key is invalid for the requested namespace. */
+  fromPrivateKey(input: { privateKey: string; namespace: Namespace }): Promise<{
     accountId: AccountId;
     namespace: Namespace;
     addresses: readonly Address[];
   } | null>;
-  create(input: { hdKeyringId: HdKeyringId }): Promise<HdAccountCreationResult>;
-  move(input: MovePrivateKeyAccountInput): Promise<Account>;
+  create(input: { keySourceId: KeySourceId }): Promise<HdAccountGroupCreationResult>;
+  move(input: MovePrivateKeyAccountInput): Promise<AccountGroup>;
   /** Requires an unlocked wallet. Returns null for an incorrect password; derives or returns only this account's key. */
   exportPrivateKey(input: { accountId: AccountId; password: string }): Promise<{ privateKey: string } | null>;
-  rename(input: { accountId: AccountId; alias?: string }): Promise<void>;
+  rename(input: { accountGroupId: AccountGroupId; alias?: string }): Promise<void>;
   /**
-   * Keeps one visible account per HD keyring and cancels the hidden account's pending sign/transaction approvals.
+   * Keeps one visible group per recovery source and cancels all hidden members' pending sign/transaction approvals.
    * Restoring preserves selection and does not restore dapp grants.
    */
-  setHidden(input: { accountId: AccountId; hidden: boolean }): Promise<SetAccountHiddenResult>;
-  select(input: { accountId: AccountId }): Promise<void>;
+  setHidden(input: { accountGroupId: AccountGroupId; hidden: boolean }): Promise<SetAccountGroupHiddenResult>;
+  select(input: { accountGroupId: AccountGroupId }): Promise<void>;
 }>;
 
 export type WalletNetworksApi = Readonly<{
   get(chainRef: ChainRef): Promise<Network | null>;
   list(): Promise<readonly Network[]>;
   listByNamespace(namespace: Namespace): Promise<readonly Network[]>;
-  getSelection(): Promise<NetworkSelection>;
   getRpcConfiguration(chainRef: ChainRef): Promise<NetworkRpcConfiguration>;
   addCustom(input: CustomNetworkInput): Promise<void>;
   updateCustom(input: CustomNetworkInput): Promise<void>;
   removeCustom(chainRef: ChainRef): Promise<void>;
   setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void>;
   clearRpcOverride(chainRef: ChainRef): Promise<void>;
-  selectNetwork(chainRef: ChainRef): Promise<void>;
-  selectNamespace(namespace: Namespace): Promise<void>;
 }>;
 
 export type WalletChainRpcRequest = Readonly<{
@@ -179,7 +168,6 @@ export type WalletApi = Readonly<{
   notifyUserActivity(): Promise<void>;
 
   keySources: WalletKeySourcesApi;
-  hdKeyrings: WalletHdKeyringsApi;
   accounts: WalletAccountsApi;
   networks: WalletNetworksApi;
   chainRpc: WalletChainRpcApi;

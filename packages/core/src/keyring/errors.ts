@@ -75,43 +75,6 @@ export class KeySourceTypeMismatchError extends ArxBaseError {
   }
 }
 
-export class HdKeyringAlreadyExistsError extends ArxBaseError {
-  static readonly code = "keyring.hd_keyring_already_exists";
-
-  constructor(params: {
-    existingHdKeyringId: string;
-    keySourceId: string;
-    namespace: string;
-  }) {
-    super("An HD keyring already exists for this source and namespace.", {
-      code: HdKeyringAlreadyExistsError.code,
-      details: params,
-    });
-  }
-}
-
-export class HdKeyringRequiresBip39SourceError extends ArxBaseError {
-  static readonly code = "keyring.hd_keyring_requires_bip39_source";
-
-  constructor(keySourceId: string) {
-    super("An HD keyring requires a BIP39 key source.", {
-      code: HdKeyringRequiresBip39SourceError.code,
-      details: { keySourceId },
-    });
-  }
-}
-
-export class KeySourceRequiresHdKeyringError extends ArxBaseError {
-  static readonly code = "keyring.key_source_requires_hd_keyring";
-
-  constructor(keySourceId: string) {
-    super("A BIP39 key source must retain at least one HD keyring.", {
-      code: KeySourceRequiresHdKeyringError.code,
-      details: { keySourceId },
-    });
-  }
-}
-
 export class KeySourceBackupUnsupportedError extends ArxBaseError {
   static readonly code = "keyring.key_source_backup_unsupported";
 

@@ -79,7 +79,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   });
   const networks = new Networks({
     adapters: networkAdapters,
-    defaultNamespace: EIP155_NAMESPACE,
     bootstrap: bootstrap.networks,
     mutations,
     publishChanged: publishWalletEvent,
@@ -92,6 +91,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     bootstrap: bootstrap.dappConnections,
     accounts,
     networks,
+    initialChainRefs: Object.fromEntries(
+      networkAdapters.map((adapter) => [adapter.namespace, adapter.defaultChainRef]),
+    ),
     permissions,
     wallet: walletStatusReader,
     mutations,
@@ -137,6 +139,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
 
   const walletCoordinator = new WalletCoordinator({
     mutations,
+    namespaces: Object.keys(accountAdapters),
     time: systemTime,
     keyring,
     accounts,
@@ -159,7 +162,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     wallet: walletStatusReader,
     accounts,
-    networks,
     permissions,
     dappConnections,
     approvals,

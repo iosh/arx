@@ -1,11 +1,10 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
-import { AccountNotFoundError } from "../accounts/errors.js";
+import { AccountGroupNotFoundError } from "../accounts/errors.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
-import { HdKeyringNotFoundError, KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
+import { KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
-import { parseChainRef } from "../networks/chainRef.js";
 import type { Networks } from "../networks/Networks.js";
 import type { CustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import type { DappAuthorization } from "../permissions/createDappAuthorization.js";
@@ -71,31 +70,17 @@ export const createWalletApi = ({
     remove: async (input) => coordinator.removeKeySource(input),
   },
 
-  hdKeyrings: {
-    get: async (hdKeyringId) => {
-      const hdKeyring = keyring.getHdKeyring(hdKeyringId);
-      if (!hdKeyring) throw new HdKeyringNotFoundError(hdKeyringId);
-      return hdKeyring;
-    },
-    list: async () => keyring.listHdKeyrings(),
-    add: async (input) => coordinator.addHdKeyring(input),
-    remove: async (input) => coordinator.removeHdKeyring(input),
-  },
-
   accounts: {
-    get: async (accountId) => {
-      const account = accounts.getAccount(accountId);
-      if (!account) throw new AccountNotFoundError(accountId);
-      return account;
+    getGroup: async (accountGroupId) => {
+      const group = accounts.getGroup(accountGroupId);
+      if (!group) throw new AccountGroupNotFoundError(accountGroupId);
+      return group;
     },
-    getSelected: async () => {
-      const { selectedNamespace } = networks.getSelection();
-      return accounts.getSelectedAccount(selectedNamespace);
-    },
-    list: async () => accounts.listAccounts(),
-    getAddresses: async (input) => accounts.getAddresses(input),
-    fromPrivateKey: async ({ privateKey, chainRef }) => {
-      const { namespace } = parseChainRef(chainRef);
+    getSelectedGroup: async () => accounts.getSelectedGroup(),
+    listGroups: async () => accounts.listGroups(),
+    getGroupAddresses: async (input) => accounts.getGroupAddresses(input),
+    getMemberAddresses: async (input) => accounts.getMemberAddresses(input),
+    fromPrivateKey: async ({ privateKey, namespace }) => {
       let accountId: AccountId;
       try {
         accountId = keyring.accountIdFromPrivateKey({ privateKey, namespace });
@@ -103,29 +88,26 @@ export const createWalletApi = ({
         if (error instanceof KeyringInvalidPrivateKeyError) return null;
         throw error;
       }
-      return { accountId, namespace, addresses: accounts.getAddresses({ accountId, chainRef }) };
+      return { accountId, namespace, addresses: accounts.getMemberAddresses({ accountId }) };
     },
-    create: async (input) => coordinator.createHdAccount(input),
+    create: async (input) => coordinator.createHdAccountGroup(input),
     move: async (input) => coordinator.movePrivateKeyAccount(input),
     exportPrivateKey: async (input) => coordinator.exportPrivateKey(input),
     rename: async (input) => accounts.rename(input),
-    setHidden: async (input) => coordinator.setAccountHidden(input),
-    select: async ({ accountId }) => accounts.select(accountId),
+    setHidden: async (input) => coordinator.setAccountGroupHidden(input),
+    select: async ({ accountGroupId }) => accounts.select(accountGroupId),
   },
 
   networks: {
     get: async (chainRef) => networks.get(chainRef),
     list: async () => networks.list(),
     listByNamespace: async (namespace) => networks.listByNamespace(namespace),
-    getSelection: async () => networks.getSelection(),
     getRpcConfiguration: async (chainRef) => networks.getRpcConfiguration(chainRef),
     addCustom: async (input) => networks.addCustom(input),
     updateCustom: async (input) => networks.updateCustom(input),
     removeCustom: async (chainRef) => customNetworkRemoval.removeCustom(chainRef),
     setRpcOverride: async (input) => networks.setRpcOverride(input),
     clearRpcOverride: async (chainRef) => networks.clearRpcOverride(chainRef),
-    selectNetwork: async (chainRef) => networks.selectNetwork(chainRef),
-    selectNamespace: async (namespace) => networks.selectNamespace(namespace),
   },
 
   chainRpc,

@@ -1,15 +1,20 @@
 import type { CorePersistenceReaders } from "../persistence/corePersistence.js";
-import type { AccountRecord, AccountSelectionRecord } from "./persistence.js";
+import type { AccountGroupRecord, AccountMemberRecord, AccountSelectionRecord } from "./persistence.js";
 
 export type AccountsBootstrap = Readonly<{
-  records: readonly AccountRecord[];
-  selections: readonly AccountSelectionRecord[];
+  groups: readonly AccountGroupRecord[];
+  records: readonly AccountMemberRecord[];
+  selection: AccountSelectionRecord | null;
 }>;
 
 export const loadAccountsBootstrap = async (
   readers: Pick<CorePersistenceReaders, "accounts">,
 ): Promise<AccountsBootstrap> => {
-  const [records, selections] = await Promise.all([readers.accounts.listRecords(), readers.accounts.listSelections()]);
+  const [groups, records, selection] = await Promise.all([
+    readers.accounts.listGroups(),
+    readers.accounts.listRecords(),
+    readers.accounts.getSelection(),
+  ]);
 
-  return { records, selections };
+  return { groups, records, selection };
 };

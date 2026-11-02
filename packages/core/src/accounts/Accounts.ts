@@ -1,18 +1,17 @@
-import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
-import type { Namespace } from "../namespaces/types.js";
-import type { ChainRef } from "../networks/chainRef.js";
-import { parseChainRef } from "../networks/chainRef.js";
+import type { KeySourceId } from "../keyring/types.js";
+import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { uniqueSortedStrings } from "../utils/array.js";
+import type { AccountGroupId } from "./accountGroupId.js";
 import { type AccountId, getAccountIdNamespace } from "./accountId.js";
 import { findAccountHideReplacement } from "./accountVisibility.js";
 import type { AccountsBootstrap } from "./bootstrap.js";
 import {
   AccountAlreadyExistsError,
+  AccountGroupNotFoundError,
   AccountHiddenSelectionError,
   AccountNamespaceMismatchError,
-  AccountNotFoundError,
   AccountRemovalSelectionUnavailableError,
   AccountSelectionMissingError,
   LastVisibleAccountHiddenError,
@@ -20,40 +19,34 @@ import {
 } from "./errors.js";
 import { type AccountsNamespaceAdapters, getAccountsNamespaceAdapter } from "./namespaceAdapter.js";
 import {
-  type AccountRecord,
-  type AccountSelectionRecord,
+  type AccountGroupRecord,
+  type AccountMemberRecord,
+  accountGroupWrites,
   accountSelectionWrites,
   accountWrites,
-  type HdAccountOrigin,
 } from "./persistence.js";
-import type { Account, AccountAddress, AccountsChanged, Address } from "./types.js";
+import type { AccountAddress, AccountGroup, AccountMember, AccountsChanged, Address } from "./types.js";
 
 export type AccountsUpdate = Readonly<{
-  nextRecords: ReadonlyMap<AccountId, AccountRecord>;
-  nextSelections: ReadonlyMap<Namespace, AccountId>;
+  nextGroups: ReadonlyMap<AccountGroupId, AccountGroupRecord>;
+  nextRecords: ReadonlyMap<AccountId, AccountMemberRecord>;
+  nextSelection: AccountGroupId | null;
   persistenceChanges: readonly PersistenceChange[];
+  changedAccountGroupIds: readonly AccountGroupId[];
   changedAccountIds: readonly AccountId[];
-  changedNamespaces: readonly Namespace[];
 }>;
 
-export type AccountUpdate = AccountsUpdate & Readonly<{ account: Account }>;
+export type AccountGroupUpdate = AccountsUpdate & Readonly<{ account: AccountGroup }>;
+export type AccountHiddenUpdate = AccountGroupUpdate & Readonly<{ replacementAccount: AccountGroup | null }>;
+export type AccountsRemovalUpdate = AccountsUpdate & Readonly<{ removedAccountIds: readonly AccountId[] }>;
 
-export type AccountHiddenUpdate = AccountUpdate & Readonly<{ replacementAccount: Account | null }>;
+type NewMember = Omit<AccountMemberRecord, "accountGroupId">;
 
-export type AccountsRemovalUpdate = AccountsUpdate &
-  Readonly<{
-    removedAccountIds: readonly AccountId[];
-  }>;
-
-const EMPTY_BOOTSTRAP: AccountsBootstrap = { records: [], selections: [] };
-
-const sortRecords = (records: readonly AccountRecord[]): AccountRecord[] =>
-  [...records].sort((left, right) => left.createdAt - right.createdAt || left.accountId.localeCompare(right.accountId));
-
-const accountSelectionRecord = (namespace: Namespace, accountId: AccountId): AccountSelectionRecord => ({
-  namespace,
-  accountId,
-});
+const EMPTY_BOOTSTRAP: AccountsBootstrap = { groups: [], records: [], selection: null };
+const sortGroups = (groups: readonly AccountGroupRecord[]): AccountGroupRecord[] =>
+  [...groups].sort(
+    (left, right) => left.createdAt - right.createdAt || left.accountGroupId.localeCompare(right.accountGroupId),
+  );
 
 type AccountsOptions = Readonly<{
   adapters: AccountsNamespaceAdapters;
@@ -62,73 +55,79 @@ type AccountsOptions = Readonly<{
   publishChanged(change: AccountsChanged): void;
 }>;
 
-/** Owns account records, namespace selection, address projections, and standalone account mutations. */
+/** Owns user account groups, their namespace members, and the wallet's sole account selection. */
 export class Accounts {
   readonly #adapters: AccountsNamespaceAdapters;
   readonly #mutations: CoreMutationQueue;
   readonly #publishChanged: AccountsOptions["publishChanged"];
-  #records: ReadonlyMap<AccountId, AccountRecord>;
-  #selections: ReadonlyMap<Namespace, AccountId>;
+  #groups: ReadonlyMap<AccountGroupId, AccountGroupRecord>;
+  #records: ReadonlyMap<AccountId, AccountMemberRecord>;
+  #selection: AccountGroupId | null;
 
   constructor(options: AccountsOptions) {
     const bootstrap = options.bootstrap ?? EMPTY_BOOTSTRAP;
-
     this.#adapters = options.adapters;
     this.#mutations = options.mutations;
     this.#publishChanged = options.publishChanged;
+    this.#groups = new Map(bootstrap.groups.map((group) => [group.accountGroupId, group]));
     this.#records = new Map(bootstrap.records.map((record) => [record.accountId, record]));
-    this.#selections = new Map(bootstrap.selections.map((selection) => [selection.namespace, selection.accountId]));
+    this.#selection = bootstrap.selection?.accountGroupId ?? null;
   }
 
-  getAccountRecord(accountId: AccountId): AccountRecord | null {
+  getGroupRecord(accountGroupId: AccountGroupId): AccountGroupRecord | null {
+    return this.#groups.get(accountGroupId) ?? null;
+  }
+
+  listGroupRecords(): readonly AccountGroupRecord[] {
+    return sortGroups([...this.#groups.values()]);
+  }
+
+  getMemberRecord(accountId: AccountId): AccountMemberRecord | null {
     return this.#records.get(accountId) ?? null;
   }
 
-  listAccountRecords(): readonly AccountRecord[] {
-    return sortRecords([...this.#records.values()]);
+  listMemberRecords(accountGroupId?: AccountGroupId): readonly AccountMemberRecord[] {
+    return [...this.#records.values()]
+      .filter((record) => accountGroupId === undefined || record.accountGroupId === accountGroupId)
+      .sort((left, right) => left.accountId.localeCompare(right.accountId));
   }
 
-  listHdAccountRecords(hdKeyringIds: readonly HdKeyringId[]): readonly AccountRecord[] {
-    const selected = new Set(hdKeyringIds);
-    return this.listAccountRecords().filter(
-      (record) => record.origin.type === "hd" && selected.has(record.origin.hdKeyringId),
-    );
+  getMember(accountId: AccountId): AccountMember | null {
+    const record = this.getMemberRecord(accountId);
+    return record ? this.toMember(record) : null;
   }
 
-  listPrivateKeyAccountRecords(keySourceIds: readonly KeySourceId[]): readonly AccountRecord[] {
-    const selected = new Set(keySourceIds);
-    return this.listAccountRecords().filter(
-      (record) => record.origin.type === "private-key" && selected.has(record.origin.keySourceId),
-    );
+  getGroup(accountGroupId: AccountGroupId): AccountGroup | null {
+    const group = this.getGroupRecord(accountGroupId);
+    return group ? this.toGroup(group) : null;
   }
 
-  listAccountIds(): readonly AccountId[] {
-    return this.listAccountRecords().map((record) => record.accountId);
+  getGroupForMember(accountId: AccountId): AccountGroup | null {
+    const member = this.getMemberRecord(accountId);
+    return member ? this.getGroup(member.accountGroupId) : null;
   }
 
-  getAccount(accountId: AccountId): Account | null {
-    const record = this.#records.get(accountId);
-    return record ? this.toAccount(record) : null;
+  listGroups(): readonly AccountGroup[] {
+    return this.listGroupRecords().map((group) => this.toGroup(group));
   }
 
-  listAccounts(): readonly Account[] {
-    return this.listAccountRecords().map((record) => this.toAccount(record));
+  getSelectedGroupId(): AccountGroupId | null {
+    return this.#selection;
   }
 
-  listSelectableAccounts(namespace: Namespace): readonly Account[] {
-    getAccountsNamespaceAdapter(this.#adapters, namespace);
-    return this.listAccounts().filter((account) => account.namespace === namespace && !account.hidden);
+  getSelectedGroup(): AccountGroup {
+    if (this.#selection === null) throw new AccountSelectionMissingError();
+    return this.toGroup(this.requireGroupRecord(this.#selection));
   }
 
-  getSelectedAccountId(namespace: Namespace): AccountId | null {
-    getAccountsNamespaceAdapter(this.#adapters, namespace);
-    return this.#selections.get(namespace) ?? null;
-  }
-
-  getSelectedAccount(namespace: Namespace): Account {
-    const accountId = this.getSelectedAccountId(namespace);
-    if (!accountId) throw new AccountSelectionMissingError(namespace);
-    return this.toAccount(this.requireAccountRecord(accountId));
+  nextAccountIndex(keySourceId: KeySourceId): number {
+    let lastIndex = -1;
+    for (const group of this.#groups.values()) {
+      if (group.source.type === "bip39" && group.source.keySourceId === keySourceId) {
+        lastIndex = Math.max(lastIndex, group.source.accountIndex);
+      }
+    }
+    return lastIndex + 1;
   }
 
   accountIdFromAddress(input: { chainRef: ChainRef; address: string }): AccountId {
@@ -146,263 +145,244 @@ export class Accounts {
         expectedNamespace: chainNamespace,
       });
     }
-
     const address = getAccountsNamespaceAdapter(this.#adapters, accountNamespace).addressForAccountId(input);
     return { accountId: input.accountId, chainRef: input.chainRef, ...address };
   }
 
-  getAddresses(input: { accountId: AccountId; chainRef: ChainRef }): readonly Address[] {
-    const { displayAddress } = this.getAddress(input);
-    return [{ address: displayAddress, namespace: getAccountIdNamespace(input.accountId), chainRef: input.chainRef }];
+  getMemberAddresses(input: { accountId: AccountId }): readonly Address[] {
+    const namespace = getAccountIdNamespace(input.accountId);
+    const { displayAddress } = getAccountsNamespaceAdapter(this.#adapters, namespace).addressForAccountId(input);
+    return [{ accountId: input.accountId, address: displayAddress, namespace }];
   }
 
-  listAddresses(chainRef: ChainRef): readonly AccountAddress[] {
-    const { namespace } = parseChainRef(chainRef);
-    getAccountsNamespaceAdapter(this.#adapters, namespace);
-
-    return this.listAccountRecords()
-      .filter((record) => getAccountIdNamespace(record.accountId) === namespace)
-      .map((record) => this.getAddress({ chainRef, accountId: record.accountId }));
+  getGroupAddresses(input: { accountGroupId: AccountGroupId }): readonly Address[] {
+    this.requireGroupRecord(input.accountGroupId);
+    return this.listMemberRecords(input.accountGroupId).flatMap((record) => this.getMemberAddresses(record));
   }
 
   listSelectableAddresses(chainRef: ChainRef): readonly AccountAddress[] {
     const { namespace } = parseChainRef(chainRef);
-    return this.listSelectableAccounts(namespace).map((account) =>
-      this.getAddress({ chainRef, accountId: account.accountId }),
-    );
-  }
-
-  getSelectedAddress(chainRef: ChainRef): AccountAddress {
-    const { namespace } = parseChainRef(chainRef);
     getAccountsNamespaceAdapter(this.#adapters, namespace);
-
-    const accountId = this.#selections.get(namespace);
-    if (!accountId) throw new AccountSelectionMissingError(namespace);
-
-    return this.getAddress({ chainRef, accountId });
+    return this.listGroupRecords()
+      .filter((group) => !group.hidden)
+      .flatMap((group) => this.listMemberRecords(group.accountGroupId))
+      .filter((member) => getAccountIdNamespace(member.accountId) === namespace)
+      .map((member) => this.getAddress({ chainRef, accountId: member.accountId }));
   }
 
-  rename(input: { accountId: AccountId; alias?: string }): Promise<void> {
-    return this.commitUpdate(() => this.prepareRenameAccount(input.accountId, input.alias));
+  rename(input: { accountGroupId: AccountGroupId; alias?: string }): Promise<void> {
+    return this.commitUpdate(() => this.prepareRenameGroup(input.accountGroupId, input.alias));
   }
 
-  select(accountId: AccountId): Promise<void> {
-    return this.commitUpdate(() => this.prepareSelectAccount(accountId));
+  select(accountGroupId: AccountGroupId): Promise<void> {
+    return this.commitUpdate(() => this.prepareSelectGroup(accountGroupId));
   }
 
-  prepareAddAccount(
-    account: Omit<AccountRecord, "hidden">,
+  prepareAddGroup(
+    group: Omit<AccountGroupRecord, "hidden">,
+    members: readonly NewMember[],
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
-  ): AccountUpdate {
-    const namespace = getAccountIdNamespace(account.accountId);
-    getAccountsNamespaceAdapter(this.#adapters, namespace);
-    if (this.#records.has(account.accountId)) throw new AccountAlreadyExistsError(account.accountId);
-
-    const shouldSelectAccount = selectAsCurrent || !this.#selections.has(namespace);
-    return this.prepareAccountUpdate(
-      { ...account, hidden: false },
-      shouldSelectAccount ? account.accountId : undefined,
-    );
-  }
-
-  prepareRenameAccount(accountId: AccountId, alias: string | undefined): AccountsUpdate | null {
-    const current = this.requireAccountRecord(accountId);
-    if (current.alias === alias) return null;
-
-    const { alias: _currentAlias, ...recordWithoutAlias } = current;
-    const renamed = alias === undefined ? recordWithoutAlias : { ...recordWithoutAlias, alias };
-    const nextRecords = new Map(this.#records);
-    nextRecords.set(accountId, renamed);
-
-    return this.update(
-      nextRecords,
-      this.#selections,
-      [accountWrites.put(renamed)],
-      [accountId],
-      [getAccountIdNamespace(accountId)],
-    );
-  }
-
-  /** The wallet command must check that both sources control the same account. */
-  prepareAssignHdOrigin(
-    accountId: AccountId,
-    origin: HdAccountOrigin,
-    { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
-  ): AccountUpdate {
-    const current = this.requireAccountRecord(accountId);
-    return this.prepareAccountUpdate({ ...current, origin }, selectAsCurrent ? accountId : undefined);
-  }
-
-  private prepareAccountUpdate(record: AccountRecord, selectedAccountId?: AccountId): AccountUpdate {
-    const accountId = record.accountId;
-    const namespace = getAccountIdNamespace(accountId);
-    const nextRecords = new Map(this.#records);
-    nextRecords.set(accountId, record);
-
-    const nextSelections = new Map(this.#selections);
-    const persistenceChanges: PersistenceChange[] = [accountWrites.put(record)];
-    const changedAccountIds = [accountId];
-    const previousAccountId = this.#selections.get(namespace);
-    if (selectedAccountId !== undefined && previousAccountId !== selectedAccountId) {
-      nextSelections.set(namespace, selectedAccountId);
-      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, selectedAccountId)));
-      changedAccountIds.push(selectedAccountId);
-      if (previousAccountId) changedAccountIds.push(previousAccountId);
+  ): AccountGroupUpdate {
+    for (const member of members) {
+      getAccountsNamespaceAdapter(this.#adapters, getAccountIdNamespace(member.accountId));
+      if (this.#records.has(member.accountId)) throw new AccountAlreadyExistsError(member.accountId);
     }
-
-    return {
-      ...this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, [namespace]),
-      account: this.toAccount(record, nextSelections),
-    };
+    return this.prepareGroupUpdate({ ...group, hidden: false }, members, selectAsCurrent || this.#selection === null);
   }
 
-  prepareSelectAccount(accountId: AccountId): AccountsUpdate | null {
-    const account = this.requireAccountRecord(accountId);
-    if (account.hidden) throw new AccountHiddenSelectionError(accountId);
+  /** The complete wallet command verifies that the new source controls every retained member. */
+  prepareMoveGroup(
+    accountGroupId: AccountGroupId,
+    source: AccountGroupRecord["source"],
+    members: readonly NewMember[],
+    { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
+  ): AccountGroupUpdate {
+    return this.prepareGroupUpdate({ ...this.requireGroupRecord(accountGroupId), source }, members, selectAsCurrent);
+  }
 
-    const namespace = getAccountIdNamespace(accountId);
-    const previousAccountId = this.#selections.get(namespace);
-    if (previousAccountId === accountId) return null;
+  private prepareRenameGroup(accountGroupId: AccountGroupId, alias: string | undefined): AccountsUpdate | null {
+    const current = this.requireGroupRecord(accountGroupId);
+    if (current.alias === alias) return null;
+    const { alias: _alias, ...withoutAlias } = current;
+    return this.prepareGroupUpdate(alias === undefined ? withoutAlias : { ...withoutAlias, alias });
+  }
 
-    const nextSelections = new Map(this.#selections);
-    nextSelections.set(namespace, accountId);
-
+  private prepareSelectGroup(accountGroupId: AccountGroupId): AccountsUpdate | null {
+    const group = this.requireGroupRecord(accountGroupId);
+    if (group.hidden) throw new AccountHiddenSelectionError({ accountGroupId });
+    if (this.#selection === accountGroupId) return null;
+    const changed = [accountGroupId, ...(this.#selection === null ? [] : [this.#selection])];
     return this.update(
+      this.#groups,
       this.#records,
-      nextSelections,
-      [accountSelectionWrites.put(accountSelectionRecord(namespace, accountId))],
-      previousAccountId ? [previousAccountId, accountId] : [accountId],
-      [namespace],
+      accountGroupId,
+      [accountSelectionWrites.put({ accountGroupId })],
+      changed,
     );
   }
 
-  prepareSetAccountHidden(accountId: AccountId, hidden: boolean): AccountHiddenUpdate {
-    const current = this.requireAccountRecord(accountId);
+  prepareSetGroupHidden(accountGroupId: AccountGroupId, hidden: boolean): AccountHiddenUpdate {
+    const current = this.requireGroupRecord(accountGroupId);
     if (current.hidden === hidden) {
       return {
-        ...this.update(this.#records, this.#selections, [], [], []),
-        account: this.toAccount(current),
+        ...this.update(this.#groups, this.#records, this.#selection, [], []),
+        account: this.toGroup(current),
         replacementAccount: null,
       };
     }
-
-    const namespace = getAccountIdNamespace(accountId);
-    let replacement: AccountRecord | null = null;
-
+    let replacement: AccountGroupRecord | null = null;
     if (hidden) {
-      if (current.origin.type !== "hd") throw new PrivateKeyAccountHiddenUnsupportedError(accountId);
-      const candidate = findAccountHideReplacement(current, this.listAccountRecords());
-      if (!candidate) throw new LastVisibleAccountHiddenError({ accountId, hdKeyringId: current.origin.hdKeyringId });
-
-      if (this.#selections.get(namespace) === accountId) replacement = candidate;
+      if (current.source.type !== "bip39") throw new PrivateKeyAccountHiddenUnsupportedError(accountGroupId);
+      const candidate = findAccountHideReplacement(current, this.listGroupRecords());
+      if (!candidate)
+        throw new LastVisibleAccountHiddenError({ accountGroupId, keySourceId: current.source.keySourceId });
+      if (this.#selection === accountGroupId) replacement = candidate;
     }
-
-    const update = this.prepareAccountUpdate({ ...current, hidden }, replacement?.accountId);
+    const update = this.prepareGroupUpdate({ ...current, hidden }, [], false, replacement?.accountGroupId);
     return {
       ...update,
-      replacementAccount: replacement ? this.toAccount(replacement, update.nextSelections) : null,
+      replacementAccount: replacement ? this.toGroup(replacement, update.nextRecords, update.nextSelection) : null,
     };
   }
 
-  prepareRemoveHdAccounts(hdKeyringIds: readonly HdKeyringId[]): AccountsRemovalUpdate | null {
-    return this.prepareRemoveRecords(this.listHdAccountRecords(hdKeyringIds));
-  }
-
-  prepareRemovePrivateKeyAccounts(keySourceIds: readonly KeySourceId[]): AccountsRemovalUpdate | null {
-    return this.prepareRemoveRecords(this.listPrivateKeyAccountRecords(keySourceIds));
+  prepareRemoveSourceGroups(keySourceId: KeySourceId): AccountsRemovalUpdate | null {
+    const removed = this.listGroupRecords().filter((group) => group.source.keySourceId === keySourceId);
+    if (removed.length === 0) return null;
+    const removedGroupIds = new Set(removed.map((group) => group.accountGroupId));
+    const members = this.listMemberRecords().filter((member) => removedGroupIds.has(member.accountGroupId));
+    const nextGroups = new Map(this.#groups);
+    for (const group of removed) nextGroups.delete(group.accountGroupId);
+    const nextRecords = new Map(this.#records);
+    for (const member of members) nextRecords.delete(member.accountId);
+    const persistenceChanges: PersistenceChange[] = [
+      ...removed.map((group) => accountGroupWrites.remove(group.accountGroupId)),
+      ...members.map((member) => accountWrites.remove(member.accountId)),
+    ];
+    let nextSelection = this.#selection;
+    const changedGroupIds = [...removedGroupIds];
+    if (nextSelection !== null && removedGroupIds.has(nextSelection)) {
+      const replacement = sortGroups([...nextGroups.values()]).find((group) => !group.hidden);
+      if (!replacement && nextGroups.size > 0) throw new AccountRemovalSelectionUnavailableError();
+      nextSelection = replacement?.accountGroupId ?? null;
+      persistenceChanges.push(
+        nextSelection === null
+          ? accountSelectionWrites.remove()
+          : accountSelectionWrites.put({ accountGroupId: nextSelection }),
+      );
+      if (nextSelection !== null) changedGroupIds.push(nextSelection);
+    }
+    return {
+      ...this.update(
+        nextGroups,
+        nextRecords,
+        nextSelection,
+        persistenceChanges,
+        changedGroupIds,
+        members.map((member) => member.accountId),
+      ),
+      removedAccountIds: members.map((member) => member.accountId),
+    };
   }
 
   applyCommittedUpdate(update: AccountsUpdate): void {
+    this.#groups = update.nextGroups;
     this.#records = update.nextRecords;
-    this.#selections = update.nextSelections;
+    this.#selection = update.nextSelection;
+  }
+
+  private prepareGroupUpdate(
+    group: AccountGroupRecord,
+    members: readonly NewMember[] = [],
+    selectAsCurrent = false,
+    replacementSelection?: AccountGroupId,
+  ): AccountGroupUpdate {
+    const nextGroups = new Map(this.#groups);
+    nextGroups.set(group.accountGroupId, group);
+    const nextRecords = new Map(this.#records);
+    const changes: PersistenceChange[] = [accountGroupWrites.put(group)];
+    for (const member of members) {
+      const current = nextRecords.get(member.accountId);
+      if (current && current.accountGroupId !== group.accountGroupId)
+        throw new AccountAlreadyExistsError(member.accountId);
+      const record = { ...member, accountGroupId: group.accountGroupId };
+      nextRecords.set(member.accountId, record);
+      changes.push(accountWrites.put(record));
+    }
+    const nextSelection = replacementSelection ?? (selectAsCurrent ? group.accountGroupId : this.#selection);
+    const changedGroupIds = [group.accountGroupId];
+    if (nextSelection !== this.#selection && nextSelection !== null) {
+      changes.push(accountSelectionWrites.put({ accountGroupId: nextSelection }));
+      if (this.#selection !== null) changedGroupIds.push(this.#selection);
+      changedGroupIds.push(nextSelection);
+    }
+    return {
+      ...this.update(nextGroups, nextRecords, nextSelection, changes, changedGroupIds),
+      account: this.toGroup(group, nextRecords, nextSelection),
+    };
+  }
+
+  private update(
+    nextGroups: ReadonlyMap<AccountGroupId, AccountGroupRecord>,
+    nextRecords: ReadonlyMap<AccountId, AccountMemberRecord>,
+    nextSelection: AccountGroupId | null,
+    persistenceChanges: readonly PersistenceChange[],
+    groupIds: readonly AccountGroupId[],
+    removedAccountIds: readonly AccountId[] = [],
+  ): AccountsUpdate {
+    const changedAccountGroupIds = uniqueSortedStrings(groupIds);
+    const changed = new Set(changedAccountGroupIds);
+    return {
+      nextGroups,
+      nextRecords,
+      nextSelection,
+      persistenceChanges,
+      changedAccountGroupIds,
+      changedAccountIds: uniqueSortedStrings([
+        ...removedAccountIds,
+        ...[...nextRecords.values()]
+          .filter((record) => changed.has(record.accountGroupId))
+          .map((record) => record.accountId),
+      ]),
+    };
+  }
+
+  private requireGroupRecord(accountGroupId: AccountGroupId): AccountGroupRecord {
+    const group = this.#groups.get(accountGroupId);
+    if (!group) throw new AccountGroupNotFoundError(accountGroupId);
+    return group;
+  }
+
+  private toMember(record: AccountMemberRecord, group = this.requireGroupRecord(record.accountGroupId)): AccountMember {
+    return { ...record, namespace: getAccountIdNamespace(record.accountId), hidden: group.hidden };
+  }
+
+  private toGroup(group: AccountGroupRecord, records = this.#records, selection = this.#selection): AccountGroup {
+    const members = [...records.values()]
+      .filter((record) => record.accountGroupId === group.accountGroupId)
+      .sort((left, right) => left.accountId.localeCompare(right.accountId))
+      .map((record) => this.toMember(record, group));
+    // Complete wallet commands keep every group linked to at least one member.
+    return {
+      ...group,
+      members: members as [AccountMember, ...AccountMember[]],
+      selected: selection === group.accountGroupId,
+    };
   }
 
   private async commitUpdate(prepare: () => AccountsUpdate | null): Promise<void> {
     await this.#mutations.run(async (commit) => {
       const update = prepare();
       if (!update) return;
-
       await commit(update.persistenceChanges);
-
       this.applyCommittedUpdate(update);
       this.#publishChanged(accountsChangedFromUpdate(update));
     });
-  }
-
-  private requireAccountRecord(accountId: AccountId): AccountRecord {
-    const record = this.#records.get(accountId);
-    if (!record) throw new AccountNotFoundError(accountId);
-    return record;
-  }
-
-  private prepareRemoveRecords(records: readonly AccountRecord[]): AccountsRemovalUpdate | null {
-    if (records.length === 0) return null;
-
-    const removedAccountIds = new Set(records.map((record) => record.accountId));
-    const nextRecords = new Map(this.#records);
-    for (const record of records) nextRecords.delete(record.accountId);
-
-    const changedAccountIds = records.map((record) => record.accountId);
-    const changedNamespaces = uniqueSortedStrings(records.map((record) => getAccountIdNamespace(record.accountId)));
-    const nextSelections = new Map(this.#selections);
-    const persistenceChanges: PersistenceChange[] = records.map((record) => accountWrites.remove(record.accountId));
-
-    for (const namespace of changedNamespaces) {
-      const remaining = sortRecords(
-        [...nextRecords.values()].filter((record) => getAccountIdNamespace(record.accountId) === namespace),
-      );
-
-      if (remaining.length === 0) {
-        nextSelections.delete(namespace);
-        persistenceChanges.push(accountSelectionWrites.remove(namespace));
-        continue;
-      }
-
-      const selectedAccountId = this.#selections.get(namespace);
-      if (selectedAccountId && !removedAccountIds.has(selectedAccountId)) continue;
-
-      const replacement = remaining.find((record) => !record.hidden);
-      if (!replacement) throw new AccountRemovalSelectionUnavailableError(namespace);
-
-      nextSelections.set(namespace, replacement.accountId);
-      changedAccountIds.push(replacement.accountId);
-      persistenceChanges.push(accountSelectionWrites.put(accountSelectionRecord(namespace, replacement.accountId)));
-    }
-
-    return {
-      ...this.update(nextRecords, nextSelections, persistenceChanges, changedAccountIds, changedNamespaces),
-      removedAccountIds: uniqueSortedStrings([...removedAccountIds]),
-    };
-  }
-
-  private toAccount(record: AccountRecord, selections = this.#selections): Account {
-    const namespace = getAccountIdNamespace(record.accountId);
-    return {
-      ...record,
-      namespace,
-      selected: selections.get(namespace) === record.accountId,
-    };
-  }
-
-  private update(
-    nextRecords: ReadonlyMap<AccountId, AccountRecord>,
-    nextSelections: ReadonlyMap<Namespace, AccountId>,
-    persistenceChanges: readonly PersistenceChange[],
-    changedAccountIds: readonly AccountId[],
-    changedNamespaces: readonly Namespace[],
-  ): AccountsUpdate {
-    return {
-      nextRecords,
-      nextSelections,
-      persistenceChanges,
-      changedAccountIds: uniqueSortedStrings(changedAccountIds),
-      changedNamespaces: uniqueSortedStrings(changedNamespaces),
-    };
   }
 }
 
 export const accountsChangedFromUpdate = (update: AccountsUpdate): AccountsChanged => ({
   type: "accountsChanged",
+  accountGroupIds: update.changedAccountGroupIds,
   accountIds: update.changedAccountIds,
-  namespaces: update.changedNamespaces,
+  namespaces: uniqueSortedStrings(update.changedAccountIds.map(getAccountIdNamespace)),
 });

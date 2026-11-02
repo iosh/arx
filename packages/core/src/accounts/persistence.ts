@@ -1,6 +1,11 @@
 import type { HdKeyringId, KeySourceId } from "../keyring/persistence.js";
-import type { Namespace } from "../namespaces/types.js";
-import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
+import {
+  defineKeyedPersistenceType,
+  defineSingletonPersistenceType,
+  type KeyedPersistenceType,
+  type SingletonPersistenceType,
+} from "../persistence/definition.js";
+import type { AccountGroupId } from "./accountGroupId.js";
 import type { AccountId } from "./accountId.js";
 
 export type HdAccountOrigin = Readonly<{
@@ -16,29 +21,39 @@ export type PrivateKeyAccountOrigin = Readonly<{
 
 export type AccountOrigin = HdAccountOrigin | PrivateKeyAccountOrigin;
 
-export type AccountRecord = Readonly<{
-  accountId: AccountId;
-  origin: AccountOrigin;
+export type AccountGroupSource =
+  | Readonly<{ type: "bip39"; keySourceId: KeySourceId; accountIndex: number }>
+  | Readonly<{ type: "private-key"; keySourceId: KeySourceId }>;
+
+export type AccountGroupRecord = Readonly<{
+  accountGroupId: AccountGroupId;
+  source: AccountGroupSource;
   alias?: string;
   hidden: boolean;
   createdAt: number;
 }>;
 
-export type AccountSelectionRecord = Readonly<{
-  namespace: Namespace;
+export type AccountMemberRecord = Readonly<{
   accountId: AccountId;
+  accountGroupId: AccountGroupId;
+  origin: AccountOrigin;
+}>;
+
+export type AccountSelectionRecord = Readonly<{
+  accountGroupId: AccountGroupId;
 }>;
 
 export interface AccountsReader {
-  listRecords(): Promise<AccountRecord[]>;
-  listSelections(): Promise<AccountSelectionRecord[]>;
+  listGroups(): Promise<AccountGroupRecord[]>;
+  listRecords(): Promise<AccountMemberRecord[]>;
+  getSelection(): Promise<AccountSelectionRecord | null>;
 }
 
-export const accountWrites: KeyedPersistenceType<"account", AccountRecord, AccountId> = defineKeyedPersistenceType<
-  "account",
-  AccountRecord,
-  AccountId
->("account");
+export const accountGroupWrites: KeyedPersistenceType<"accountGroup", AccountGroupRecord, AccountGroupId> =
+  defineKeyedPersistenceType<"accountGroup", AccountGroupRecord, AccountGroupId>("accountGroup");
 
-export const accountSelectionWrites: KeyedPersistenceType<"accountSelection", AccountSelectionRecord, string> =
-  defineKeyedPersistenceType<"accountSelection", AccountSelectionRecord, string>("accountSelection");
+export const accountWrites: KeyedPersistenceType<"account", AccountMemberRecord, AccountId> =
+  defineKeyedPersistenceType<"account", AccountMemberRecord, AccountId>("account");
+
+export const accountSelectionWrites: SingletonPersistenceType<"accountSelection", AccountSelectionRecord> =
+  defineSingletonPersistenceType<"accountSelection", AccountSelectionRecord>("accountSelection");

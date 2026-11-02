@@ -6,7 +6,7 @@ import { AccountNamespaceUnsupportedError } from "./errors.js";
 export type AccountsNamespaceAdapter = Readonly<{
   namespace: Namespace;
   accountIdFromAddress(input: { chainRef: ChainRef; address: string }): AccountId;
-  addressForAccountId(input: { chainRef: ChainRef; accountId: AccountId }): Readonly<{
+  addressForAccountId(input: { accountId: AccountId }): Readonly<{
     canonicalAddress: string;
     displayAddress: string;
   }>;

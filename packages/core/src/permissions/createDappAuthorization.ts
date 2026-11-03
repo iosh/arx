@@ -1,11 +1,9 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { Approval } from "../approvals/types.js";
-import type { DappConnections } from "../dappConnections/DappConnections.js";
+import type { DappConnectionState, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionScope } from "../dappConnections/persistence.js";
 import type { ChainRef } from "../networks/chainRef.js";
-import { NetworkNamespaceUnsupportedError } from "../networks/errors.js";
-import type { NetworksReader } from "../networks/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import { WalletLockedError } from "../wallet/errors.js";
 import type { WalletStatusReader } from "../wallet/Wallet.js";
@@ -36,7 +34,6 @@ export type CreateDappAuthorizationOptions = Readonly<{
   mutations: CoreMutationQueue;
   wallet: WalletStatusReader;
   accounts: Pick<Accounts, "listSelectableAddresses">;
-  networks: Pick<NetworksReader, "getSelection">;
   permissions: Pick<
     Permissions,
     | "get"
@@ -51,11 +48,11 @@ export type CreateDappAuthorizationOptions = Readonly<{
     DappConnections,
     | "getNetworkSelection"
     | "prepareSelectNetwork"
-    | "prepareRemoveOriginSelections"
     | "refreshAccountsForOpenConnections"
     | "isConnectionOpen"
     | "closeConnection"
   >;
+  getConnectionState(scope: DappConnectionScope): DappConnectionState;
   approvals: Pick<Approvals, "list" | "request" | "cancel">;
   publishPermissionsChanged(change: PermissionsChanged): void;
 }>;
@@ -75,12 +72,6 @@ const approvalIdsForScope = (
     .map((approval) => approval.approvalId);
 
 export const createDappAuthorization = (options: CreateDappAuthorizationOptions): DappAuthorization => {
-  const walletChainRefFor = (scope: PermissionScope) => {
-    const chainRef = options.networks.getSelection().selectedChainRefByNamespace[scope.namespace];
-    if (!chainRef) throw new NetworkNamespaceUnsupportedError(scope.namespace);
-    return chainRef;
-  };
-
   const cancelScopeApprovals = (scope: PermissionScope, matches: (approval: Approval) => boolean) => {
     options.approvals.cancel(approvalIdsForScope(options.approvals.list(), scope, matches));
   };
@@ -96,7 +87,7 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
         ? null
         : options.dappConnections.prepareSelectNetwork({
             ...scope,
-            chainRef: walletChainRefFor(scope),
+            chainRef: options.getConnectionState(scope).chainRef,
           });
       if (!permissionUpdate && !selectionUpdate) return;
 
@@ -156,15 +147,10 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
   const disconnectOrigin = async ({ origin }: Readonly<{ origin: string }>): Promise<void> => {
     await options.mutations.run(async (commit) => {
       const permissionUpdate = options.permissions.prepareRevokeOrigin(origin);
-      const selectionUpdate = options.dappConnections.prepareRemoveOriginSelections(origin);
-      if (permissionUpdate || selectionUpdate) {
-        await commit([...(permissionUpdate?.persistenceChanges ?? []), ...(selectionUpdate?.persistenceChanges ?? [])]);
-
-        if (permissionUpdate) options.permissions.applyCommittedUpdate(permissionUpdate);
-        if (selectionUpdate) selectionUpdate.activate();
-        if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
-
-        if (selectionUpdate) selectionUpdate.publish();
+      if (permissionUpdate) {
+        await commit(permissionUpdate.persistenceChanges);
+        options.permissions.applyCommittedUpdate(permissionUpdate);
+        options.dappConnections.refreshAccountsForOpenConnections();
       }
 
       options.approvals.cancel(

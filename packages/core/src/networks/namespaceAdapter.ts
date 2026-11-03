@@ -5,7 +5,6 @@ import type { BuiltinNetworkSeed, RpcEndpoint } from "./types.js";
 export type NetworksNamespaceAdapter = Readonly<{
   namespace: Namespace;
   builtinNetworks: readonly [BuiltinNetworkSeed, ...BuiltinNetworkSeed[]];
-  defaultChainRef: ChainRef;
   queryChainRef(endpoint: RpcEndpoint): Promise<ChainRef>;
 }>;
 

@@ -24,7 +24,7 @@ export {
 } from "./errors.js";
 export { Networks } from "./Networks.js";
 export type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
-export type { CustomNetworkRecord, NetworkRpcOverrideRecord, NetworkSelectionRecord } from "./persistence.js";
+export type { CustomNetworkRecord, NetworkRpcOverrideRecord } from "./persistence.js";
 export type {
   BlockExplorer,
   BuiltinNetworkSeed,
@@ -34,8 +34,6 @@ export type {
   Network,
   NetworkRpcConfiguration,
   NetworkRpcEndpointsReader,
-  NetworkSelection,
-  NetworkSelectionChanged,
   NetworksChanged,
   NetworksReader,
   NonEmptyRpcEndpoints,

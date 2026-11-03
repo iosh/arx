@@ -2,6 +2,7 @@ import type { DappConnectionState, DappConnectionStateChanged } from "./DappConn
 import type { DappConnectionScope } from "./persistence.js";
 
 export type DappConnectionsApi = Readonly<{
+  /** Opens or reuses the namespace's connection state without granting account access. */
   openConnection(scope: DappConnectionScope): DappConnectionState;
   getConnectionState(scope: DappConnectionScope): DappConnectionState;
   closeConnection(scope: DappConnectionScope): void;

@@ -11,6 +11,7 @@ import {
   RpcJsonRpcResponseError,
   RpcUnsupportedMethodError,
 } from "../rpc/errors.js";
+import type { DappConnectionState, DappConnectionsUpdate } from "./DappConnections.js";
 
 export type DappRequest = Readonly<{
   origin: string;
@@ -28,12 +29,23 @@ export type NodeReadRequest = Readonly<{
 }>;
 
 export type DappNamespace = Readonly<{
+  openConnection(origin: string): DappConnectionState;
+  getConnectionState(origin: string): DappConnectionState;
+  prepareRemoveNetworkReferences(chainRef: ChainRef): DappConnectionsUpdate;
   namespaceMethods: ReadonlyMap<string, DappRequestMethod>;
   nodeReadMethods: ReadonlySet<string>;
   forwardNodeRead(input: NodeReadRequest): Promise<unknown>;
 }>;
 
-export type DappNamespaces = Readonly<Record<Namespace, DappNamespace | undefined>>;
+export type DappNamespaces = ReadonlyMap<Namespace, DappNamespace>;
+
+export const getDappNamespace = (namespace: Namespace, namespaces: DappNamespaces): DappNamespace => {
+  const owner = namespaces.get(namespace);
+  if (!owner) {
+    throw new RpcUnsupportedMethodError({ message: `Namespace "${namespace}" has no dapp implementation.` });
+  }
+  return owner;
+};
 
 export const invalidDappParams = (method: string, reason: string): RpcInvalidParamsError =>
   new RpcInvalidParamsError({ message: `${method}: ${reason}` });
@@ -122,7 +134,7 @@ export const routeDappRequest = async (
   namespaces: DappNamespaces,
   input: DappRequest,
 ): Promise<unknown> => {
-  const namespaceRequests = namespaces[namespace];
+  const namespaceRequests = namespaces.get(namespace);
   if (!namespaceRequests) throw unsupportedMethod(namespace, input.method);
 
   const namespaceMethod = namespaceRequests.namespaceMethods.get(input.method);
@@ -135,7 +147,7 @@ export const routeDappRequest = async (
 
 export const routeChainRpcRequest = async (namespaces: DappNamespaces, input: NodeReadRequest): Promise<unknown> => {
   const { namespace } = parseChainRef(input.chainRef);
-  const namespaceRequests = namespaces[namespace];
+  const namespaceRequests = namespaces.get(namespace);
   if (!namespaceRequests?.nodeReadMethods.has(input.method)) throw unsupportedMethod(namespace, input.method);
 
   return forwardNodeRead(namespaceRequests, input);

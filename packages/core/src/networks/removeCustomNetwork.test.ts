@@ -1,52 +1,45 @@
 import { describe, expect, it } from "vitest";
-import type { Accounts } from "../accounts/Accounts.js";
-import { DappConnections } from "../dappConnections/DappConnections.js";
+import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappNetworkSelectionRecord } from "../dappConnections/persistence.js";
-import type { PermissionsReader } from "../permissions/Permissions.js";
+import { ACCOUNT_ID, ADDRESS, createAccounts } from "../namespaces/eip155/__tests__/fixtures.js";
+import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
+import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { PendingTransactionRecord } from "../transactions/persistence.js";
-import type { WalletStatusReader } from "../wallet/Wallet.js";
 import { NetworkHasPendingTransactionsError } from "./errors.js";
 import { Networks } from "./Networks.js";
-import type { NetworksNamespaceAdapters } from "./namespaceAdapter.js";
-import type { CustomNetworkRecord, NetworkRpcOverrideRecord, NetworkSelectionRecord } from "./persistence.js";
+import type { CustomNetworkRecord } from "./persistence.js";
 import { createCustomNetworkRemoval } from "./removeCustomNetwork.js";
-import type { NetworkSelectionChanged, NetworksChanged } from "./types.js";
+import type { NetworksChanged } from "./types.js";
 
-const CUSTOM_CHAIN_REF = "eip155:10";
-const DEFAULT_CHAIN_REF = "eip155:1";
-const accountId = "eip155:0000000000000000000000000000000000000001";
-const persistedScope = { origin: "https://selected.example", namespace: "eip155" } as const;
-const transientScope = { origin: "https://transient.example", namespace: "eip155" } as const;
+const CUSTOM_CHAIN_REF = "eip155:8453";
+const ETHEREUM_CHAIN_REF = "eip155:1";
+const selectedScope = { origin: "https://selected.example", namespace: "eip155" } as const;
+const closedScope = { origin: "https://closed.example", namespace: "eip155" } as const;
+const otherScope = { origin: "https://other.example", namespace: "eip155" } as const;
 
 const customNetwork: CustomNetworkRecord = {
   definition: {
     chainRef: CUSTOM_CHAIN_REF,
-    name: "Optimism",
+    name: "Base",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
-  defaultRpcEndpoints: ["https://optimism.example"],
+  defaultRpcEndpoints: ["https://base.example"],
 };
 
-const selection: NetworkSelectionRecord = {
-  selectedNamespace: "eip155",
-  selectedChainRefByNamespace: { eip155: CUSTOM_CHAIN_REF },
-};
+const dappSelection: DappNetworkSelectionRecord = { ...selectedScope, chainRef: CUSTOM_CHAIN_REF };
+const closedSelection: DappNetworkSelectionRecord = { ...closedScope, chainRef: CUSTOM_CHAIN_REF };
+const otherSelection: DappNetworkSelectionRecord = { ...otherScope, chainRef: "eip155:10" };
 
-const dappSelection: DappNetworkSelectionRecord = {
-  ...persistedScope,
-  chainRef: CUSTOM_CHAIN_REF,
-};
-
-const pendingTransaction = (): PendingTransactionRecord => ({
+const pendingTransaction = (chainRef = CUSTOM_CHAIN_REF): PendingTransactionRecord => ({
   transactionId: "pending-transaction",
   namespace: "eip155",
-  chainRef: CUSTOM_CHAIN_REF,
-  accountId,
+  chainRef,
+  accountId: ACCOUNT_ID,
   initiator: { type: "wallet" },
   transaction: {
-    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    from: ADDRESS,
     to: null,
     value: "0x0",
     data: "0x",
@@ -61,32 +54,15 @@ const pendingTransaction = (): PendingTransactionRecord => ({
   updatedAt: 1,
 });
 
-const createAdapters = (): NetworksNamespaceAdapters => [
-  {
-    namespace: "eip155",
-    builtinNetworks: [
-      {
-        definition: {
-          chainRef: DEFAULT_CHAIN_REF,
-          name: "Ethereum",
-          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        },
-        defaultRpcEndpoints: ["https://ethereum.example"],
-      },
-    ],
-    defaultChainRef: DEFAULT_CHAIN_REF,
-    queryChainRef: async () => DEFAULT_CHAIN_REF,
-  },
-];
-
-type FixtureOptions = Readonly<{
-  pendingTransactions?: readonly PendingTransactionRecord[];
-  commitFailure?: Error;
-}>;
-
-const createFixture = (input: FixtureOptions = {}) => {
+const createFixture = (
+  input: Readonly<{
+    pendingTransactions?: readonly PendingTransactionRecord[];
+    commitFailure?: Error;
+  }> = {},
+) => {
   const commits: PersistenceChange[][] = [];
-  const changes: Array<NetworksChanged | NetworkSelectionChanged> = [];
+  const changes: NetworksChanged[] = [];
+  const connectionChanges: DappConnectionStateChanged[] = [];
   const mutations = createCoreMutationQueue({
     commit: async (persistenceChanges) => {
       if (input.commitFailure) throw input.commitFailure;
@@ -94,98 +70,99 @@ const createFixture = (input: FixtureOptions = {}) => {
     },
   });
   const networks = new Networks({
-    adapters: createAdapters(),
-    defaultNamespace: "eip155",
+    adapters: [
+      createEip155NetworksAdapter({
+        transport: {
+          request: async () => {
+            throw new Error("Unexpected RPC request during network removal.");
+          },
+        },
+      }),
+    ],
     bootstrap: {
       customNetworks: [customNetwork],
-      networkRpcOverrides: [
-        {
-          chainRef: CUSTOM_CHAIN_REF,
-          endpoints: ["https://optimism-override.example"],
-        } satisfies NetworkRpcOverrideRecord,
-      ],
-      selection,
+      networkRpcOverrides: [{ chainRef: CUSTOM_CHAIN_REF, endpoints: ["https://base-override.example"] }],
     },
     mutations,
     publishChanged: (change) => changes.push(change),
   });
-  const permissions = {
-    get: () => null,
-    list: () => [],
-    listByOrigin: () => [],
-  } satisfies PermissionsReader;
+  const accounts = createAccounts();
+  const permissions = new Permissions({
+    bootstrap: {
+      records: [
+        { ...selectedScope, accountIds: [ACCOUNT_ID] },
+        { ...otherScope, accountIds: ["eip155:7e5f4552091a69125d5dfcb7b8c2659029395bdf"] },
+      ],
+    },
+    accounts,
+  });
   const dappConnections = new DappConnections({
-    bootstrap: { networkSelections: [dappSelection] },
-    accounts: {
-      getAddress: ({ accountId: currentAccountId, chainRef }) => ({
-        accountId: currentAccountId,
-        chainRef,
-        canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      }),
-    } satisfies Pick<Accounts, "getAddress">,
+    bootstrap: { networkSelections: [dappSelection, closedSelection, otherSelection] },
+    accounts,
     networks,
     permissions,
-    wallet: { getStatus: () => "unlocked" } satisfies WalletStatusReader,
+    wallet: { getStatus: () => "unlocked" },
     mutations,
-    publishStateChanged: () => undefined,
+    publishStateChanged: (change) => connectionChanges.push(change),
   });
   const removal = createCustomNetworkRemoval({
     mutations,
     networks,
-    transactions: {
-      listPending: async () => input.pendingTransactions ?? [],
-    },
-    dappConnections,
+    transactions: { listPending: async () => input.pendingTransactions ?? [] },
+    prepareDappNetworkRemoval: (chainRef) =>
+      dappConnections.prepareRemoveNetworkReferences(chainRef, ETHEREUM_CHAIN_REF),
   });
 
-  return {
-    removal,
-    networks,
-    dappConnections,
-    commits,
-    changes,
-  };
+  return { removal, networks, dappConnections, commits, changes, connectionChanges };
 };
 
 describe("custom network removal", () => {
-  it("removes the network and every live selection after one successful commit", async () => {
-    const fixture = createFixture();
-    fixture.dappConnections.openConnection(persistedScope);
-    fixture.dappConnections.openConnection(transientScope);
+  it("clears open and closed site references while preserving accounts and other sites' chains", async () => {
+    const fixture = createFixture({ pendingTransactions: [pendingTransaction("eip155:1")] });
+    fixture.dappConnections.openConnection(otherScope, ETHEREUM_CHAIN_REF);
+    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
 
     await fixture.removal.removeCustom(CUSTOM_CHAIN_REF);
 
     expect(fixture.commits).toHaveLength(1);
-    expect(fixture.commits[0]?.map((change) => `${change.persistenceType}.${change.operation}`)).toEqual([
-      "customNetwork.remove",
-      "networkRpcOverride.remove",
-      "networkSelection.put",
-      "dappNetworkSelection.remove",
-    ]);
+    expect(fixture.commits[0]).toHaveLength(4);
+    expect(fixture.commits[0]).toEqual(
+      expect.arrayContaining([
+        { persistenceType: "customNetwork", operation: "remove", key: CUSTOM_CHAIN_REF },
+        { persistenceType: "networkRpcOverride", operation: "remove", key: CUSTOM_CHAIN_REF },
+        { persistenceType: "dappNetworkSelection", operation: "remove", key: expect.objectContaining(selectedScope) },
+        { persistenceType: "dappNetworkSelection", operation: "remove", key: expect.objectContaining(closedScope) },
+      ]),
+    );
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toBeNull();
-    expect(fixture.networks.getSelection()).toEqual({
-      selectedNamespace: "eip155",
-      selectedChainRef: DEFAULT_CHAIN_REF,
-      selectedChainRefByNamespace: { eip155: DEFAULT_CHAIN_REF },
+    expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toBeNull();
+    expect(fixture.dappConnections.getNetworkSelection(closedScope)).toBeNull();
+    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
+      chainRef: ETHEREUM_CHAIN_REF,
+      accounts: [ADDRESS],
     });
-    expect(fixture.dappConnections.getNetworkSelection(persistedScope)).toBeNull();
-    expect(fixture.dappConnections.getConnectionState(persistedScope)).toEqual({
-      chainRef: DEFAULT_CHAIN_REF,
+    expect(fixture.dappConnections.getNetworkSelection(otherScope)).toEqual(otherSelection);
+    expect(fixture.dappConnections.getConnectionState(otherScope, ETHEREUM_CHAIN_REF)).toEqual({
+      chainRef: "eip155:10",
+      accounts: ["0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"],
+    });
+    expect(fixture.dappConnections.openConnection(closedScope, ETHEREUM_CHAIN_REF)).toEqual({
+      chainRef: ETHEREUM_CHAIN_REF,
       accounts: [],
     });
-    expect(fixture.dappConnections.getConnectionState(transientScope)).toEqual({
-      chainRef: DEFAULT_CHAIN_REF,
-      accounts: [],
-    });
-    expect(fixture.changes).toEqual([
-      { type: "networksChanged", chainRefs: [CUSTOM_CHAIN_REF] },
-      { type: "networkSelectionChanged", namespaces: ["eip155"] },
+    expect(fixture.changes).toEqual([{ type: "networksChanged", chainRefs: [CUSTOM_CHAIN_REF] }]);
+    expect(fixture.connectionChanges).toEqual([
+      {
+        scope: selectedScope,
+        state: { chainRef: ETHEREUM_CHAIN_REF, accounts: [ADDRESS] },
+        changedFields: { chainRef: true, accounts: false },
+      },
     ]);
   });
 
-  it("does not change owner state when a pending transaction blocks removal", async () => {
+  it("keeps the network and site state when a pending transaction blocks removal", async () => {
     const fixture = createFixture({ pendingTransactions: [pendingTransaction()] });
+    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
 
     await expect(fixture.removal.removeCustom(CUSTOM_CHAIN_REF)).rejects.toBeInstanceOf(
       NetworkHasPendingTransactionsError,
@@ -193,26 +170,30 @@ describe("custom network removal", () => {
 
     expect(fixture.commits).toEqual([]);
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toMatchObject({ source: "custom" });
-    expect(fixture.networks.getSelection().selectedChainRef).toBe(CUSTOM_CHAIN_REF);
-    expect(fixture.dappConnections.getNetworkSelection(persistedScope)).toEqual(dappSelection);
+    expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toEqual(dappSelection);
+    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
+      chainRef: CUSTOM_CHAIN_REF,
+      accounts: [ADDRESS],
+    });
     expect(fixture.changes).toEqual([]);
+    expect(fixture.connectionChanges).toEqual([]);
   });
 
   it("does not activate removal when persistence fails", async () => {
     const failure = new Error("commit failed");
     const fixture = createFixture({ commitFailure: failure });
-    fixture.dappConnections.openConnection(persistedScope);
+    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
 
     await expect(fixture.removal.removeCustom(CUSTOM_CHAIN_REF)).rejects.toBe(failure);
 
     expect(fixture.commits).toEqual([]);
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toMatchObject({ source: "custom" });
-    expect(fixture.networks.getSelection().selectedChainRef).toBe(CUSTOM_CHAIN_REF);
-    expect(fixture.dappConnections.getNetworkSelection(persistedScope)).toEqual(dappSelection);
-    expect(fixture.dappConnections.getConnectionState(persistedScope)).toEqual({
+    expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toEqual(dappSelection);
+    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
       chainRef: CUSTOM_CHAIN_REF,
-      accounts: [],
+      accounts: [ADDRESS],
     });
     expect(fixture.changes).toEqual([]);
+    expect(fixture.connectionChanges).toEqual([]);
   });
 });

@@ -5,7 +5,12 @@ import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
-import { type DappNamespaces, routeChainRpcRequest, routeDappRequest } from "../dappConnections/routeDappRequest.js";
+import {
+  type DappNamespaces,
+  getDappNamespace,
+  routeChainRpcRequest,
+  routeDappRequest,
+} from "../dappConnections/routeDappRequest.js";
 import { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
@@ -14,6 +19,7 @@ import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
+import { parseChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { createCustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
@@ -91,9 +97,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     bootstrap: bootstrap.dappConnections,
     accounts,
     networks,
-    initialChainRefs: Object.fromEntries(
-      networkAdapters.map((adapter) => [adapter.namespace, adapter.defaultChainRef]),
-    ),
     permissions,
     wallet: walletStatusReader,
     mutations,
@@ -152,35 +155,43 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     publishAccountsChanged: publishWalletEvent,
     publishPermissionsChanged: publishWalletEvent,
   });
-  const customNetworkRemoval = createCustomNetworkRemoval({
-    mutations,
-    networks,
-    transactions: input.persistence.readers.transactions,
-    dappConnections,
-  });
+  const getConnectionState: DappConnectionsApi["getConnectionState"] = (scope) =>
+    getDappNamespace(scope.namespace, dappNamespaces).getConnectionState(scope.origin);
+
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet: walletStatusReader,
     accounts,
     permissions,
     dappConnections,
+    getConnectionState,
     approvals,
     publishPermissionsChanged: publishWalletEvent,
   });
 
-  const dappNamespaces = {
-    [EIP155_NAMESPACE]: createEip155DappNamespace({
-      chainJsonRpc,
-      dappConnections,
-      dappAuthorization,
-      accounts,
-      permissions,
-      approvals,
-      accountSigning: eip155AccountSigning,
-      networks,
-      transactions,
-    }),
-  } as const satisfies DappNamespaces;
+  const dappNamespaces: DappNamespaces = new Map([
+    [
+      EIP155_NAMESPACE,
+      createEip155DappNamespace({
+        chainJsonRpc,
+        dappConnections,
+        dappAuthorization,
+        accounts,
+        permissions,
+        approvals,
+        accountSigning: eip155AccountSigning,
+        networks,
+        transactions,
+      }),
+    ],
+  ]);
+  const customNetworkRemoval = createCustomNetworkRemoval({
+    mutations,
+    networks,
+    transactions: input.persistence.readers.transactions,
+    prepareDappNetworkRemoval: (chainRef) =>
+      getDappNamespace(parseChainRef(chainRef).namespace, dappNamespaces).prepareRemoveNetworkReferences(chainRef),
+  });
   const walletChainRpc: WalletChainRpcApi = {
     async request<TResult = unknown>(request: WalletChainRpcRequest): Promise<TResult> {
       return (await routeChainRpcRequest(dappNamespaces, request)) as TResult;
@@ -206,11 +217,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     transactions,
   });
   const dappConnectionsApi: DappConnectionsApi = {
-    openConnection: (scope) => dappConnections.openConnection(scope),
-    getConnectionState: (scope) => dappConnections.getConnectionState(scope),
+    openConnection: (scope) => getDappNamespace(scope.namespace, dappNamespaces).openConnection(scope.origin),
+    getConnectionState,
     closeConnection: (scope) => dappAuthorization.closeConnection(scope),
     request: async ({ scope, method, params }) => {
-      const { chainRef } = dappConnections.getConnectionState(scope);
+      const { chainRef } = getConnectionState(scope);
       return routeDappRequest(scope.namespace, dappNamespaces, {
         origin: scope.origin,
         chainRef,

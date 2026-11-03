@@ -1,7 +1,6 @@
 import type { Namespace } from "../namespaces/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
-import { uniqueSortedStrings } from "../utils/array.js";
 import type { NetworksBootstrap } from "./bootstrap.js";
 import type { ChainRef } from "./chainRef.js";
 import { parseChainRef } from "./chainRef.js";
@@ -17,19 +16,12 @@ import {
   NetworkRpcEndpointVerificationError,
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
-import {
-  customNetworkWrites,
-  type NetworkSelectionRecord,
-  networkRpcOverrideWrites,
-  networkSelectionWrites,
-} from "./persistence.js";
+import { customNetworkWrites, networkRpcOverrideWrites } from "./persistence.js";
 import type {
   CustomNetworkInput,
   Network,
   NetworkRpcConfiguration,
   NetworkRpcEndpointsReader,
-  NetworkSelection,
-  NetworkSelectionChanged,
   NetworksChanged,
   NetworksReader,
   NonEmptyRpcEndpoints,
@@ -40,20 +32,11 @@ type InstalledNetwork = Readonly<{
   defaultRpcEndpoints: NonEmptyRpcEndpoints;
 }>;
 
-type NetworksChange = NetworksChanged | NetworkSelectionChanged;
-
-type StoredNetworkSelection = Readonly<{
-  selectedNamespace: Namespace;
-  /** First-run defaults and complete network commands keep a selected chain for every installed namespace. */
-  selectedChainRefByNamespace: Readonly<Record<Namespace, ChainRef>>;
-}>;
-
 type NetworksUpdate = Readonly<{
   nextNetworks: ReadonlyMap<ChainRef, InstalledNetwork>;
   nextRpcOverrides: ReadonlyMap<ChainRef, NonEmptyRpcEndpoints>;
-  nextSelection: StoredNetworkSelection;
   persistenceChanges: readonly PersistenceChange[];
-  changes: readonly NetworksChange[];
+  change: NetworksChanged;
 }>;
 
 export type CustomNetworkRemovalPlan = Readonly<{
@@ -64,11 +47,10 @@ export type CustomNetworkRemovalPlan = Readonly<{
 
 type NetworksOptions = Readonly<{
   adapters: NetworksNamespaceAdapters;
-  defaultNamespace: Namespace;
   bootstrap: NetworksBootstrap;
   mutations: CoreMutationQueue;
   /** Publishes committed network changes and must not throw. */
-  publishChanged(change: NetworksChange): void;
+  publishChanged(change: NetworksChanged): void;
 }>;
 
 const isSameRpcEndpoints = (left: NonEmptyRpcEndpoints, right: NonEmptyRpcEndpoints): boolean =>
@@ -83,19 +65,13 @@ const createInstalledCustomNetwork = (input: CustomNetworkInput, namespace: Name
   defaultRpcEndpoints: input.defaultRpcEndpoints,
 });
 
-const selectionRecord = (selection: StoredNetworkSelection): NetworkSelectionRecord => ({
-  selectedNamespace: selection.selectedNamespace,
-  selectedChainRefByNamespace: selection.selectedChainRefByNamespace,
-});
-
-/** Owns installed network state, wallet selection, RPC configuration, and standalone network mutations. */
+/** Owns installed network state, RPC configuration, and standalone network mutations. */
 export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
   readonly #adapters: ReadonlyMap<Namespace, NetworksNamespaceAdapter>;
   readonly #mutations: CoreMutationQueue;
   readonly #publishChanged: NetworksOptions["publishChanged"];
   #networks: ReadonlyMap<ChainRef, InstalledNetwork>;
   #rpcOverrides: ReadonlyMap<ChainRef, NonEmptyRpcEndpoints>;
-  #selection: StoredNetworkSelection;
 
   constructor(options: NetworksOptions) {
     const adapters = new Map(options.adapters.map((adapter) => [adapter.namespace, adapter]));
@@ -125,21 +101,11 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       rpcOverrides.set(record.chainRef, record.endpoints);
     }
 
-    const storedSelection =
-      options.bootstrap.selection ??
-      ({
-        selectedNamespace: options.defaultNamespace,
-        selectedChainRefByNamespace: Object.fromEntries(
-          options.adapters.map((adapter) => [adapter.namespace, adapter.defaultChainRef]),
-        ),
-      } satisfies NetworkSelectionRecord);
-
     this.#adapters = adapters;
     this.#mutations = options.mutations;
     this.#publishChanged = options.publishChanged;
     this.#networks = networks;
     this.#rpcOverrides = rpcOverrides;
-    this.#selection = storedSelection;
   }
 
   get(chainRef: ChainRef): Network | null {
@@ -159,13 +125,6 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
   listByNamespace(namespace: Namespace): readonly Network[] {
     this.requireAdapter(namespace);
     return this.list().filter((network) => network.namespace === namespace);
-  }
-
-  getSelection(): NetworkSelection {
-    return {
-      ...this.#selection,
-      selectedChainRef: this.#selection.selectedChainRefByNamespace[this.#selection.selectedNamespace] as ChainRef,
-    };
   }
 
   getRpcConfiguration(chainRef: ChainRef): NetworkRpcConfiguration {
@@ -225,15 +184,6 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     return this.commitUpdate(() => this.prepareClearRpcOverride(chainRef));
   }
 
-  selectNetwork(chainRef: ChainRef): Promise<void> {
-    return this.commitUpdate(() => this.prepareSelectNetwork(chainRef));
-  }
-
-  selectNamespace(namespace: Namespace): Promise<void> {
-    this.requireAdapter(namespace);
-    return this.commitUpdate(() => this.prepareSelectNamespace(namespace));
-  }
-
   private prepareAddCustom(input: CustomNetworkInput, namespace: Namespace): NetworksUpdate {
     const chainRef = input.definition.chainRef;
     this.assertCustomNetworkCanBeAdded(chainRef);
@@ -244,9 +194,8 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     return {
       nextNetworks,
       nextRpcOverrides: this.#rpcOverrides,
-      nextSelection: this.#selection,
       persistenceChanges: [customNetworkWrites.put(input)],
-      changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
+      change: { type: "networksChanged", chainRefs: [chainRef] },
     };
   }
 
@@ -266,9 +215,8 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     return {
       nextNetworks,
       nextRpcOverrides: this.#rpcOverrides,
-      nextSelection: this.#selection,
       persistenceChanges: [customNetworkWrites.put(input)],
-      changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
+      change: { type: "networksChanged", chainRefs: [chainRef] },
     };
   }
 
@@ -283,14 +231,13 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     return {
       nextNetworks: this.#networks,
       nextRpcOverrides,
-      nextSelection: this.#selection,
       persistenceChanges: [
         networkRpcOverrideWrites.put({
           chainRef: input.chainRef,
           endpoints: input.endpoints,
         }),
       ],
-      changes: [{ type: "networksChanged", chainRefs: [input.chainRef] }],
+      change: { type: "networksChanged", chainRefs: [input.chainRef] },
     };
   }
 
@@ -304,72 +251,13 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     return {
       nextNetworks: this.#networks,
       nextRpcOverrides,
-      nextSelection: this.#selection,
       persistenceChanges: [networkRpcOverrideWrites.remove(chainRef)],
-      changes: [{ type: "networksChanged", chainRefs: [chainRef] }],
-    };
-  }
-
-  private prepareSelectNetwork(chainRef: ChainRef): NetworksUpdate | null {
-    const installed = this.requireInstalledNetwork(chainRef);
-    const namespace = installed.network.namespace;
-    const currentChainRef = this.#selection.selectedChainRefByNamespace[namespace];
-    if (this.#selection.selectedNamespace === namespace && currentChainRef === chainRef) return null;
-
-    const selectedChainRefByNamespace =
-      currentChainRef === chainRef
-        ? this.#selection.selectedChainRefByNamespace
-        : { ...this.#selection.selectedChainRefByNamespace, [namespace]: chainRef };
-    const nextSelection: StoredNetworkSelection = {
-      selectedNamespace: namespace,
-      selectedChainRefByNamespace,
-    };
-
-    return {
-      nextNetworks: this.#networks,
-      nextRpcOverrides: this.#rpcOverrides,
-      nextSelection,
-      persistenceChanges: [networkSelectionWrites.put(selectionRecord(nextSelection))],
-      changes: [
-        {
-          type: "networkSelectionChanged",
-          namespaces: uniqueSortedStrings([this.#selection.selectedNamespace, namespace]),
-        },
-      ],
-    };
-  }
-
-  private prepareSelectNamespace(namespace: Namespace): NetworksUpdate | null {
-    if (this.#selection.selectedNamespace === namespace) return null;
-
-    const nextSelection: StoredNetworkSelection = {
-      selectedNamespace: namespace,
-      selectedChainRefByNamespace: this.#selection.selectedChainRefByNamespace,
-    };
-
-    return {
-      nextNetworks: this.#networks,
-      nextRpcOverrides: this.#rpcOverrides,
-      nextSelection,
-      persistenceChanges: [networkSelectionWrites.put(selectionRecord(nextSelection))],
-      changes: [
-        {
-          type: "networkSelectionChanged",
-          namespaces: uniqueSortedStrings([this.#selection.selectedNamespace, namespace]),
-        },
-      ],
+      change: { type: "networksChanged", chainRefs: [chainRef] },
     };
   }
 
   prepareRemoveCustom(chainRef: ChainRef): CustomNetworkRemovalPlan {
-    const current = this.requireCustomNetwork(chainRef);
-    const namespace = current.network.namespace;
-    const currentNamespaceSelection = this.#selection.selectedChainRefByNamespace[namespace] as ChainRef;
-    const replacementChainRef =
-      currentNamespaceSelection === chainRef
-        ? this.requireAdapter(namespace).defaultChainRef
-        : currentNamespaceSelection;
-    const selectionChanged = currentNamespaceSelection === chainRef;
+    this.requireCustomNetwork(chainRef);
 
     const nextNetworks = new Map(this.#networks);
     nextNetworks.delete(chainRef);
@@ -377,31 +265,13 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     const nextRpcOverrides = new Map(this.#rpcOverrides);
     const hadRpcOverride = nextRpcOverrides.delete(chainRef);
 
-    const selectedChainRefByNamespace: Readonly<Record<Namespace, ChainRef>> = selectionChanged
-      ? { ...this.#selection.selectedChainRefByNamespace, [namespace]: replacementChainRef }
-      : this.#selection.selectedChainRefByNamespace;
-    const nextSelection: StoredNetworkSelection = selectionChanged
-      ? {
-          selectedNamespace: this.#selection.selectedNamespace,
-          selectedChainRefByNamespace,
-        }
-      : this.#selection;
-
     const persistenceChanges: PersistenceChange[] = [customNetworkWrites.remove(chainRef)];
     if (hadRpcOverride) persistenceChanges.push(networkRpcOverrideWrites.remove(chainRef));
-    if (selectionChanged) {
-      persistenceChanges.push(networkSelectionWrites.put(selectionRecord(nextSelection)));
-    }
-
-    const changes: NetworksChange[] = [{ type: "networksChanged", chainRefs: [chainRef] }];
-    if (selectionChanged) changes.push({ type: "networkSelectionChanged", namespaces: [namespace] });
-
     const update: NetworksUpdate = {
       nextNetworks,
       nextRpcOverrides,
-      nextSelection,
       persistenceChanges,
-      changes,
+      change: { type: "networksChanged", chainRefs: [chainRef] },
     };
 
     return {
@@ -414,11 +284,10 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
   #applyCommittedUpdate(update: NetworksUpdate): void {
     this.#networks = update.nextNetworks;
     this.#rpcOverrides = update.nextRpcOverrides;
-    this.#selection = update.nextSelection;
   }
 
   #publishCommittedUpdate(update: NetworksUpdate): void {
-    for (const change of update.changes) this.#publishChanged(change);
+    this.#publishChanged(update.change);
   }
 
   private async admitRpcEndpoints(

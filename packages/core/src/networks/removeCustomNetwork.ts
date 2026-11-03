@@ -1,4 +1,4 @@
-import type { DappConnections } from "../dappConnections/DappConnections.js";
+import type { DappConnectionsUpdate } from "../dappConnections/DappConnections.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { TransactionsReader } from "../transactions/persistence.js";
 import type { ChainRef } from "./chainRef.js";
@@ -13,7 +13,7 @@ type CustomNetworkRemovalOptions = Readonly<{
   mutations: CoreMutationQueue;
   networks: Pick<Networks, "prepareRemoveCustom">;
   transactions: Pick<TransactionsReader, "listPending">;
-  dappConnections: Pick<DappConnections, "prepareRemoveNetworkReferences">;
+  prepareDappNetworkRemoval(chainRef: ChainRef): DappConnectionsUpdate;
 }>;
 
 export const createCustomNetworkRemoval = (options: CustomNetworkRemovalOptions): CustomNetworkRemoval => ({
@@ -25,7 +25,7 @@ export const createCustomNetworkRemoval = (options: CustomNetworkRemovalOptions)
         throw new NetworkHasPendingTransactionsError(chainRef);
       }
 
-      const dappConnectionsUpdate = options.dappConnections.prepareRemoveNetworkReferences(chainRef);
+      const dappConnectionsUpdate = options.prepareDappNetworkRemoval(chainRef);
 
       await commit([...networkRemoval.persistenceChanges, ...dappConnectionsUpdate.persistenceChanges]);
 

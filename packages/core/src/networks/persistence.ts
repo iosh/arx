@@ -1,10 +1,4 @@
-import type { Namespace } from "../namespaces/types.js";
-import {
-  defineKeyedPersistenceType,
-  defineSingletonPersistenceType,
-  type KeyedPersistenceType,
-  type SingletonPersistenceType,
-} from "../persistence/definition.js";
+import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
 import type { ChainRef } from "./chainRef.js";
 import type { ChainDefinition, NonEmptyRpcEndpoints } from "./types.js";
 
@@ -31,15 +25,3 @@ export interface NetworkRpcOverridesReader {
 
 export const networkRpcOverrideWrites: KeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef> =
   defineKeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef>("networkRpcOverride");
-
-export type NetworkSelectionRecord = Readonly<{
-  selectedNamespace: Namespace;
-  selectedChainRefByNamespace: Readonly<Record<Namespace, ChainRef>>;
-}>;
-
-export interface NetworkSelectionReader {
-  get(): Promise<NetworkSelectionRecord | null>;
-}
-
-export const networkSelectionWrites: SingletonPersistenceType<"networkSelection", NetworkSelectionRecord> =
-  defineSingletonPersistenceType<"networkSelection", NetworkSelectionRecord>("networkSelection");

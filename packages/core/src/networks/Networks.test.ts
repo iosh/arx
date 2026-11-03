@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { ChainJsonRpcHttpTransportError, type JsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
+import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
+import type { PersistenceWriter } from "../persistence/corePersistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
-import type { PersistenceChange } from "../persistence/persistenceTypes.js";
-import type { NetworksBootstrap } from "./bootstrap.js";
 import {
   BuiltinNetworkConflictError,
   BuiltinNetworkImmutableError,
@@ -11,166 +12,71 @@ import {
   NetworkRpcEndpointVerificationError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
-import type { NetworksNamespaceAdapters } from "./namespaceAdapter.js";
-import type { CustomNetworkRecord, NetworkRpcOverrideRecord, NetworkSelectionRecord } from "./persistence.js";
-import type { BuiltinNetworkSeed, NetworkSelectionChanged, NetworksChanged, NonEmptyRpcEndpoints } from "./types.js";
+import type { CustomNetworkRecord } from "./persistence.js";
+import type { NetworksChanged, NonEmptyRpcEndpoints } from "./types.js";
 
-const networkSeed = (chainRef: string, name: string, endpoint: string): BuiltinNetworkSeed => ({
-  definition: {
-    chainRef,
-    name,
-    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  },
-  defaultRpcEndpoints: [endpoint],
-});
-
-const ethereum = networkSeed("eip155:1", "Ethereum", "https://ethereum.example");
-const solana = networkSeed("solana:mainnet", "Solana", "https://solana.example");
 const custom: CustomNetworkRecord = {
   definition: {
-    chainRef: "eip155:10",
-    name: "Optimism",
+    chainRef: "eip155:8453",
+    name: "Base",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
-  defaultRpcEndpoints: ["https://optimism.example", "https://optimism-backup.example"],
-};
-const override: NetworkRpcOverrideRecord = {
-  chainRef: "eip155:1",
-  endpoints: ["https://ethereum-override.example"],
+  defaultRpcEndpoints: ["https://base.example", "https://base-backup.example"],
 };
 
-const queryEip155ChainRef = async (endpoint: string): Promise<string> => {
-  if (endpoint.includes("optimism")) return "eip155:10";
-  return "eip155:1";
-};
-
-const createAdapters = (queryChainRef: (endpoint: string) => Promise<string>): NetworksNamespaceAdapters => [
-  {
-    namespace: "eip155",
-    builtinNetworks: [ethereum],
-    defaultChainRef: "eip155:1",
-    queryChainRef,
-  },
-  {
-    namespace: "solana",
-    builtinNetworks: [solana],
-    defaultChainRef: "solana:mainnet",
-    queryChainRef: async () => "solana:mainnet",
-  },
-];
-
-const bootstrap = (selection: NetworkSelectionRecord | null = null): NetworksBootstrap => ({
-  customNetworks: [custom],
-  networkRpcOverrides: [override],
-  selection,
-});
-
-const emptyBootstrap: NetworksBootstrap = {
-  customNetworks: [],
-  networkRpcOverrides: [],
-  selection: null,
-};
-
-type NetworksChange = NetworksChanged | NetworkSelectionChanged;
-
-const createNetworks = (
-  options: {
-    bootstrap?: NetworksBootstrap;
-    queryChainRef?: (endpoint: string) => Promise<string>;
-    commit?(changes: readonly PersistenceChange[]): Promise<void>;
-  } = {},
-) => {
-  const commits: PersistenceChange[][] = [];
-  const changes: NetworksChange[] = [];
-  const queryChainRef = vi.fn(options.queryChainRef ?? queryEip155ChainRef);
-  const commit =
-    options.commit ??
-    (async (persistenceChanges: readonly PersistenceChange[]) => {
-      commits.push([...persistenceChanges]);
-    });
+const createFixture = () => {
+  const request = vi.fn<JsonRpcHttpTransport["request"]>().mockResolvedValue("0x2105");
+  const commit = vi.fn<PersistenceWriter["commit"]>().mockResolvedValue(undefined);
+  const changes: NetworksChanged[] = [];
   const networks = new Networks({
-    adapters: createAdapters(queryChainRef),
-    defaultNamespace: "eip155",
-    bootstrap: options.bootstrap ?? bootstrap(),
+    adapters: [createEip155NetworksAdapter({ transport: { request: request as JsonRpcHttpTransport["request"] } })],
+    bootstrap: { customNetworks: [], networkRpcOverrides: [] },
     mutations: createCoreMutationQueue({ commit }),
     publishChanged: (change) => changes.push(change),
   });
 
-  return { networks, commits, changes, queryChainRef };
+  return { networks, commit, changes, request };
 };
 
 describe("Networks", () => {
-  it("serves installed state and uses explicit defaults only on first run", () => {
-    const { networks } = createNetworks();
-
-    expect(networks.get("eip155:1")).toEqual({
-      chainRef: "eip155:1",
-      namespace: "eip155",
-      source: "builtin",
-      name: "Ethereum",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    });
-    expect(networks.listByNamespace("eip155").map((network) => network.chainRef)).toEqual(["eip155:1", "eip155:10"]);
-    expect(networks.getRpcConfiguration("eip155:1")).toEqual({
-      source: "override",
-      endpoints: ["https://ethereum-override.example"],
-      defaultEndpoints: ["https://ethereum.example"],
-    });
-    expect(networks.getSelection()).toEqual({
-      selectedNamespace: "eip155",
-      selectedChainRef: "eip155:1",
-      selectedChainRefByNamespace: { eip155: "eip155:1", solana: "solana:mainnet" },
-    });
-
-    const stored = createNetworks({
-      bootstrap: bootstrap({
-        selectedNamespace: "solana",
-        selectedChainRefByNamespace: { eip155: "eip155:10", solana: "solana:mainnet" },
-      }),
-    }).networks;
-    expect(stored.getSelection()).toMatchObject({
-      selectedNamespace: "solana",
-      selectedChainRef: "solana:mainnet",
-    });
-  });
-
-  it("adds and fully replaces custom networks while preserving no-op semantics", async () => {
-    const { networks, commits, changes, queryChainRef } = createNetworks({ bootstrap: emptyBootstrap });
+  it("adds and updates custom networks without writing or publishing unchanged configuration", async () => {
+    const { networks, commit, changes, request } = createFixture();
 
     await networks.addCustom(custom);
-    expect(networks.get("eip155:10")).toMatchObject({ name: "Optimism", source: "custom" });
-    expect(commits[0]).toEqual([{ persistenceType: "customNetwork", operation: "put", value: custom }]);
-    expect(changes).toEqual([{ type: "networksChanged", chainRefs: ["eip155:10"] }]);
-    expect(networks.getSelection().selectedChainRef).toBe("eip155:1");
-    expect(queryChainRef).toHaveBeenCalledTimes(2);
+    expect(networks.get("eip155:8453")).toMatchObject({ name: "Base", source: "custom" });
+    expect(commit).toHaveBeenCalledWith([{ persistenceType: "customNetwork", operation: "put", value: custom }]);
+    expect(changes).toEqual([{ type: "networksChanged", chainRefs: ["eip155:8453"] }]);
+    expect(request).toHaveBeenCalledTimes(2);
 
     await expect(networks.addCustom(custom)).rejects.toThrow(CustomNetworkAlreadyExistsError);
     await expect(
-      networks.addCustom({ definition: ethereum.definition, defaultRpcEndpoints: ethereum.defaultRpcEndpoints }),
+      networks.addCustom({ ...custom, definition: { ...custom.definition, chainRef: "eip155:1" } }),
     ).rejects.toThrow(BuiltinNetworkConflictError);
     await networks.updateCustom(custom);
-    expect(commits).toHaveLength(1);
+    expect(commit).toHaveBeenCalledTimes(1);
     expect(changes).toHaveLength(1);
-    expect(queryChainRef).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(2);
 
     const updated = {
-      definition: { ...custom.definition, name: "OP Mainnet" },
-      defaultRpcEndpoints: ["https://optimism-v2.example"],
+      definition: { ...custom.definition, name: "Base Mainnet" },
+      defaultRpcEndpoints: ["https://base-v2.example"],
     } as const;
     await networks.updateCustom(updated);
-    expect(networks.get("eip155:10")).toMatchObject({ name: "OP Mainnet" });
-    expect(networks.getRpcEndpoints("eip155:10")).toEqual(updated.defaultRpcEndpoints);
-    expect(commits).toHaveLength(2);
+    expect(networks.get("eip155:8453")).toMatchObject({ name: "Base Mainnet" });
+    expect(networks.getRpcEndpoints("eip155:8453")).toEqual(updated.defaultRpcEndpoints);
+    expect(commit).toHaveBeenCalledTimes(2);
     expect(changes).toHaveLength(2);
-    expect(queryChainRef).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledTimes(3);
 
     await expect(
-      networks.updateCustom({ definition: ethereum.definition, defaultRpcEndpoints: ethereum.defaultRpcEndpoints }),
+      networks.updateCustom({ ...custom, definition: { ...custom.definition, chainRef: "eip155:1" } }),
     ).rejects.toThrow(BuiltinNetworkImmutableError);
   });
 
   it("sets and clears RPC overrides only when configuration changes", async () => {
-    const { networks, commits, changes, queryChainRef } = createNetworks({ bootstrap: emptyBootstrap });
+    const { networks, commit, changes, request } = createFixture();
+    request.mockResolvedValue("0x1");
+    const defaultEndpoints = networks.getRpcEndpoints("eip155:1");
     const endpoints: NonEmptyRpcEndpoints = ["https://ethereum-override.example"];
 
     await networks.setRpcOverride({ chainRef: "eip155:1", endpoints });
@@ -178,91 +84,55 @@ describe("Networks", () => {
     expect(networks.getRpcConfiguration("eip155:1")).toEqual({
       source: "override",
       endpoints,
-      defaultEndpoints: ["https://ethereum.example"],
+      defaultEndpoints,
     });
-    expect(commits).toHaveLength(1);
+    expect(commit).toHaveBeenCalledTimes(1);
     expect(changes).toEqual([{ type: "networksChanged", chainRefs: ["eip155:1"] }]);
-    expect(queryChainRef).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(1);
 
     await networks.clearRpcOverride("eip155:1");
     await networks.clearRpcOverride("eip155:1");
     expect(networks.getRpcConfiguration("eip155:1")).toEqual({
       source: "default",
-      endpoints: ["https://ethereum.example"],
+      endpoints: defaultEndpoints,
     });
-    expect(commits).toHaveLength(2);
-    expect(commits[1]).toEqual([{ persistenceType: "networkRpcOverride", operation: "remove", key: "eip155:1" }]);
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit).toHaveBeenLastCalledWith([
+      { persistenceType: "networkRpcOverride", operation: "remove", key: "eip155:1" },
+    ]);
     expect(changes).toHaveLength(2);
   });
 
-  it("persists complete wallet selection and reports affected namespaces", async () => {
-    const { networks, commits, changes } = createNetworks();
+  it("keeps a network inactive when an endpoint is invalid, a backup has the wrong chain, or saving fails", async () => {
+    const invalid = createFixture();
+    await expect(invalid.networks.addCustom({ ...custom, defaultRpcEndpoints: ["ws://base.example"] })).rejects.toThrow(
+      NetworkRpcEndpointInvalidError,
+    );
+    expect(invalid.request).not.toHaveBeenCalled();
+    expect(invalid.commit).not.toHaveBeenCalled();
 
-    await networks.selectNetwork("eip155:10");
-    await networks.selectNetwork("eip155:10");
-    expect(networks.getSelection()).toEqual({
-      selectedNamespace: "eip155",
-      selectedChainRef: "eip155:10",
-      selectedChainRefByNamespace: { eip155: "eip155:10", solana: "solana:mainnet" },
-    });
-    expect(commits).toHaveLength(1);
-    expect(commits[0]?.[0]).toMatchObject({
-      persistenceType: "networkSelection",
-      operation: "put",
-      value: {
-        selectedNamespace: "eip155",
-        selectedChainRefByNamespace: { eip155: "eip155:10", solana: "solana:mainnet" },
-      },
-    });
-    expect(changes).toEqual([{ type: "networkSelectionChanged", namespaces: ["eip155"] }]);
-
-    await networks.selectNamespace("solana");
-    await networks.selectNamespace("solana");
-    expect(networks.getSelection()).toMatchObject({
-      selectedNamespace: "solana",
-      selectedChainRef: "solana:mainnet",
-    });
-    expect(commits).toHaveLength(2);
-    expect(changes[1]).toEqual({
-      type: "networkSelectionChanged",
-      namespaces: ["eip155", "solana"],
-    });
-  });
-
-  it("rejects endpoint admission failures and does not activate failed commits", async () => {
-    const invalid = createNetworks({ bootstrap: emptyBootstrap });
-    await expect(
-      invalid.networks.addCustom({ ...custom, defaultRpcEndpoints: ["ws://optimism.example"] }),
-    ).rejects.toThrow(NetworkRpcEndpointInvalidError);
-    expect(invalid.queryChainRef).not.toHaveBeenCalled();
-
-    const mismatch = createNetworks({
-      bootstrap: emptyBootstrap,
-      queryChainRef: async () => "eip155:1",
-    });
+    const mismatch = createFixture();
+    mismatch.request.mockResolvedValueOnce("0x2105").mockResolvedValue("0x1");
     await expect(mismatch.networks.addCustom(custom)).rejects.toThrow(NetworkRpcEndpointMismatchError);
+    expect(mismatch.networks.get("eip155:8453")).toBeNull();
+    expect(mismatch.commit).not.toHaveBeenCalled();
+    expect(mismatch.changes).toEqual([]);
 
-    const transportFailure = new Error("offline");
-    const unavailable = createNetworks({
-      bootstrap: emptyBootstrap,
-      queryChainRef: async () => {
-        throw transportFailure;
-      },
-    });
+    const transportFailure = new ChainJsonRpcHttpTransportError("RPC request failed.");
+    const unavailable = createFixture();
+    unavailable.request.mockRejectedValue(transportFailure);
     await expect(unavailable.networks.addCustom(custom)).rejects.toMatchObject({
       code: NetworkRpcEndpointVerificationError.code,
       cause: transportFailure,
     });
+    expect(unavailable.networks.get("eip155:8453")).toBeNull();
+    expect(unavailable.commit).not.toHaveBeenCalled();
 
     const commitFailure = new Error("commit failed");
-    const failedCommit = createNetworks({
-      bootstrap: emptyBootstrap,
-      commit: async () => {
-        throw commitFailure;
-      },
-    });
+    const failedCommit = createFixture();
+    failedCommit.commit.mockRejectedValue(commitFailure);
     await expect(failedCommit.networks.addCustom(custom)).rejects.toBe(commitFailure);
-    expect(failedCommit.networks.get("eip155:10")).toBeNull();
+    expect(failedCommit.networks.get("eip155:8453")).toBeNull();
     expect(failedCommit.changes).toEqual([]);
   });
 });

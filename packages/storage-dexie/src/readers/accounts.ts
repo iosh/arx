@@ -1,7 +1,14 @@
 import type { AccountsReader } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "../database.js";
+import { ACCOUNT_SELECTION_ROW_KEY } from "../rows.js";
 
 export const createAccountsReader = (context: DexiePersistenceContext): AccountsReader => ({
+  listGroups() {
+    return context.read(async () => {
+      await context.ready;
+      return await context.db.accountGroups.toArray();
+    });
+  },
   listRecords() {
     return context.read(async () => {
       await context.ready;
@@ -9,10 +16,11 @@ export const createAccountsReader = (context: DexiePersistenceContext): Accounts
     });
   },
 
-  listSelections() {
+  getSelection() {
     return context.read(async () => {
       await context.ready;
-      return await context.db.accountSelections.toArray();
+      const row = await context.db.accountSelection.get(ACCOUNT_SELECTION_ROW_KEY);
+      return row ? { accountGroupId: row.accountGroupId } : null;
     });
   },
 });

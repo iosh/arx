@@ -3,11 +3,7 @@ import { createDexiePersistenceContext } from "./database.js";
 import { createAccountsReader } from "./readers/accounts.js";
 import { createDappNetworkSelectionsReader } from "./readers/dappConnections.js";
 import { createHdKeyringsReader, createKeySourcesReader } from "./readers/keyrings.js";
-import {
-  createCustomNetworksReader,
-  createNetworkRpcOverridesReader,
-  createNetworkSelectionReader,
-} from "./readers/network.js";
+import { createCustomNetworksReader, createNetworkRpcOverridesReader } from "./readers/network.js";
 import { createPermissionsReader } from "./readers/permissions.js";
 import { createSettingsReader } from "./readers/settings.js";
 import { createTransactionsReader } from "./readers/transactions.js";
@@ -35,7 +31,6 @@ export const createDexiePersistence = (options: CreateDexiePersistenceOptions): 
       permissions: createPermissionsReader(context),
       customNetworks: createCustomNetworksReader(context),
       networkRpcOverrides: createNetworkRpcOverridesReader(context),
-      networkSelection: createNetworkSelectionReader(context),
       dappNetworkSelections: createDappNetworkSelectionsReader(context),
       transactions: createTransactionsReader(context),
     },

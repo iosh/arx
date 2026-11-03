@@ -1,11 +1,7 @@
 import type { AccountsReader } from "../accounts/persistence.js";
 import type { DappNetworkSelectionsReader } from "../dappConnections/persistence.js";
 import type { HdKeyringsReader, KeySourcesReader } from "../keyring/persistence.js";
-import type {
-  CustomNetworksReader,
-  NetworkRpcOverridesReader,
-  NetworkSelectionReader,
-} from "../networks/persistence.js";
+import type { CustomNetworksReader, NetworkRpcOverridesReader } from "../networks/persistence.js";
 import type { PermissionRecordsReader } from "../permissions/persistence.js";
 import type { SettingsReader } from "../settings/persistence.js";
 import type { TransactionsReader } from "../transactions/persistence.js";
@@ -26,7 +22,6 @@ export interface CorePersistenceReaders {
   permissions: PermissionRecordsReader;
   customNetworks: CustomNetworksReader;
   networkRpcOverrides: NetworkRpcOverridesReader;
-  networkSelection: NetworkSelectionReader;
   dappNetworkSelections: DappNetworkSelectionsReader;
   transactions: TransactionsReader;
 }

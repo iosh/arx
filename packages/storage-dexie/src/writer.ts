@@ -1,7 +1,7 @@
 import type { PersistenceChange, PersistenceWriter } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "./database.js";
-import { encryptedVaultToRow, networkSelectionToRow } from "./mappers/singletons.js";
-import { ENCRYPTED_VAULT_ROW_KEY, NETWORK_SELECTION_ROW_KEY } from "./rows.js";
+import { encryptedVaultToRow } from "./mappers/singletons.js";
+import { ACCOUNT_SELECTION_ROW_KEY, ENCRYPTED_VAULT_ROW_KEY } from "./rows.js";
 
 const applyChange = async (context: DexiePersistenceContext, change: PersistenceChange): Promise<void> => {
   switch (change.persistenceType) {
@@ -45,11 +45,19 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
       }
       return;
 
+    case "accountGroup":
+      if (change.operation === "put") {
+        await context.db.accountGroups.put(change.value);
+      } else {
+        await context.db.accountGroups.delete(change.key);
+      }
+      return;
+
     case "accountSelection":
       if (change.operation === "put") {
-        await context.db.accountSelections.put(change.value);
+        await context.db.accountSelection.put({ ...change.value, key: ACCOUNT_SELECTION_ROW_KEY });
       } else {
-        await context.db.accountSelections.delete(change.key);
+        await context.db.accountSelection.delete(ACCOUNT_SELECTION_ROW_KEY);
       }
       return;
 
@@ -74,14 +82,6 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
         await context.db.networkRpcOverrides.put(change.value);
       } else {
         await context.db.networkRpcOverrides.delete(change.key);
-      }
-      return;
-
-    case "networkSelection":
-      if (change.operation === "put") {
-        await context.db.networkSelection.put(networkSelectionToRow(change.value));
-      } else {
-        await context.db.networkSelection.delete(NETWORK_SELECTION_ROW_KEY);
       }
       return;
 
@@ -117,11 +117,11 @@ export const createPersistenceWriter = (context: DexiePersistenceContext): Persi
           context.db.keySources,
           context.db.hdKeyrings,
           context.db.accounts,
-          context.db.accountSelections,
+          context.db.accountGroups,
+          context.db.accountSelection,
           context.db.permissions,
           context.db.customNetworks,
           context.db.networkRpcOverrides,
-          context.db.networkSelection,
           context.db.dappNetworkSelections,
           context.db.transactions,
         ],

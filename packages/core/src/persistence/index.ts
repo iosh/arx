@@ -1,6 +1,8 @@
 export type {
+  AccountGroupRecord,
+  AccountGroupSource,
+  AccountMemberRecord,
   AccountOrigin,
-  AccountRecord,
   AccountSelectionRecord,
   AccountsReader,
   HdAccountOrigin,
@@ -27,8 +29,6 @@ export type {
   CustomNetworksReader,
   NetworkRpcOverrideRecord,
   NetworkRpcOverridesReader,
-  NetworkSelectionReader,
-  NetworkSelectionRecord,
 } from "../networks/persistence.js";
 export type { PermissionRecord, PermissionRecordsReader, PermissionScope } from "../permissions/persistence.js";
 export type {

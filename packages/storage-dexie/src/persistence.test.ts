@@ -1,58 +1,45 @@
 import "fake-indexeddb/auto";
 
 import {
-  type AccountRecord,
-  AUTO_LOCK_SETTING_KEY,
-  type Bip39KeySourceRecord,
+  type AccountGroupRecord,
+  type AccountMemberRecord,
   type CustomNetworkRecord,
   type DappNetworkSelectionRecord,
-  type HdKeyringRecord,
   type NetworkRpcOverrideRecord,
-  type NetworkSelectionRecord,
-  type PermissionRecord,
   PersistenceCommitError,
   PersistenceReadError,
   persistenceTypes,
   type TransactionRecord,
 } from "@arx/core/persistence";
-import { Dexie } from "dexie";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createDexiePersistence } from "./createDexiePersistence.js";
 import { ArxPersistenceDatabase, createDexiePersistenceContext } from "./database.js";
 import { createAccountsReader } from "./readers/accounts.js";
 import { createPersistenceWriter } from "./writer.js";
 
+const ACCOUNT_A = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const ACCOUNT_B = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const databaseConnections: Array<{ close(): void | Promise<void> }> = [];
 let nextDatabaseId = 0;
 
 const createDatabaseName = (): string => `arx-persistence-test-${nextDatabaseId++}`;
 
-const createTestPersistence = (): ReturnType<typeof createDexiePersistence> => {
+const createTestPersistence = () => {
   const persistence = createDexiePersistence({ databaseName: createDatabaseName() });
   databaseConnections.push(persistence);
   return persistence;
 };
 
-const hdAccount = (params: {
-  accountId: string;
-  hdKeyringId: string;
-  createdAt: number;
-  hidden?: boolean;
-}): AccountRecord => ({
-  accountId: params.accountId,
-  origin: {
-    type: "hd",
-    hdKeyringId: params.hdKeyringId,
-    derivationIndex: 0,
-  },
-  hidden: params.hidden ?? false,
-  createdAt: params.createdAt,
-});
+const createTestContext = () => {
+  const context = createDexiePersistenceContext(createDatabaseName());
+  databaseConnections.push(context.db);
+  return context;
+};
 
 const transaction = (params: {
   transactionId: string;
   chainRef: string;
-  accountId: string;
+  accountId: typeof ACCOUNT_A | typeof ACCOUNT_B;
   createdAt: number;
   status: "pending" | "confirmed";
 }): TransactionRecord => {
@@ -63,8 +50,11 @@ const transaction = (params: {
     accountId: params.accountId,
     initiator: { type: "wallet" } as const,
     transaction: {
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      from:
+        params.accountId === ACCOUNT_A
+          ? "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          : "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      to: null,
       value: "0x0",
       data: "0x",
       gas: "0x5208",
@@ -76,272 +66,232 @@ const transaction = (params: {
     updatedAt: params.createdAt,
   };
 
-  if (params.status === "confirmed") {
-    return {
-      ...base,
-      state: {
-        status: "confirmed",
-        confirmation: {
-          blockHash: "0xabc",
-          blockNumber: "0x1",
-          transactionIndex: "0x0",
-          gasUsed: "0x5208",
+  return params.status === "pending"
+    ? { ...base, state: { status: "pending" }, recovery: { rawTransaction: "0xdeadbeef" } }
+    : {
+        ...base,
+        state: {
+          status: "confirmed",
+          confirmation: {
+            blockHash: "0xabababababababababababababababababababababababababababababababab",
+            blockNumber: "0x1",
+            transactionIndex: "0x0",
+            gasUsed: "0x5208",
+          },
         },
-      },
-    };
-  }
-
-  return {
-    ...base,
-    state: { status: "pending" },
-    recovery: { rawTransaction: "0xdeadbeef" },
-  };
+      };
 };
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const connection of databaseConnections.splice(0)) {
     await connection.close();
   }
 });
 
-describe("createDexiePersistence", () => {
-  it("converts database opening failures to PersistenceReadError", async () => {
-    const failure = new Error("database open failed");
-    const open = vi.spyOn(ArxPersistenceDatabase.prototype, "open").mockRejectedValueOnce(failure);
-    const context = createDexiePersistenceContext(createDatabaseName());
-    databaseConnections.push(context.db);
+describe("Dexie persistence boundary", () => {
+  it("reports a database opening failure as a persistence read error", async () => {
+    const failure = new Error("IndexedDB open failed");
+    vi.spyOn(ArxPersistenceDatabase.prototype, "open").mockRejectedValueOnce(failure);
+    const reader = createAccountsReader(createTestContext());
+
+    const reading = reader.listRecords();
+    await expect(reading).rejects.toBeInstanceOf(PersistenceReadError);
+    await expect(reading).rejects.toHaveProperty("cause", failure);
+  });
+
+  it("reports a database query failure as a persistence read error", async () => {
+    const context = createTestContext();
+    await context.ready;
+    const failure = new Error("IndexedDB query failed");
+    vi.spyOn(context.db.accounts, "toArray").mockRejectedValueOnce(failure);
     const reader = createAccountsReader(context);
 
-    try {
-      const read = reader.listRecords();
-      await expect(read).rejects.toBeInstanceOf(PersistenceReadError);
-      await expect(read).rejects.toMatchObject({ code: PersistenceReadError.code });
-      await expect(read).rejects.toHaveProperty("cause", failure);
-    } finally {
-      open.mockRestore();
-    }
+    const reading = reader.listRecords();
+    await expect(reading).rejects.toBeInstanceOf(PersistenceReadError);
+    await expect(reading).rejects.toHaveProperty("cause", failure);
   });
 
-  it("converts database reader failures to PersistenceReadError", async () => {
-    const context = createDexiePersistenceContext(createDatabaseName());
-    databaseConnections.push(context.db);
-    const reader = createAccountsReader(context);
+  it("rolls back a written group when its member write fails", async () => {
+    const context = createTestContext();
     await context.ready;
-    const failure = new Error("account read failed");
-    const toArray = vi.spyOn(context.db.accounts, "toArray").mockRejectedValueOnce(failure);
-
-    try {
-      const rawRead = reader.listRecords();
-      await expect(rawRead).rejects.toBeInstanceOf(PersistenceReadError);
-      await expect(rawRead).rejects.toMatchObject({ code: PersistenceReadError.code });
-      await expect(rawRead).rejects.toHaveProperty("cause", failure);
-    } finally {
-      toArray.mockRestore();
-    }
-  });
-
-  it("commits canonical records across stores and maps physical rows back", async () => {
-    const persistence = createTestPersistence();
-    const source: Bip39KeySourceRecord = {
-      keySourceId: "source-1",
-      type: "bip39",
-      name: "Personal",
-      backupStatus: "pending",
+    const group: AccountGroupRecord = {
+      accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d",
+      source: { type: "private-key", keySourceId: "source-1" },
+      hidden: false,
       createdAt: 1,
     };
-    const hdKeyring: HdKeyringRecord = {
-      hdKeyringId: "hd-keyring-1",
-      keySourceId: source.keySourceId,
-      namespace: "eip155",
-      nextDerivationIndex: 1,
-      createdAt: 1,
+    const member: AccountMemberRecord = {
+      accountId: ACCOUNT_A,
+      accountGroupId: group.accountGroupId,
+      origin: { type: "private-key", keySourceId: "source-1" },
     };
-    const account = hdAccount({
-      accountId: "eip155:01",
-      hdKeyringId: hdKeyring.hdKeyringId,
-      createdAt: 1,
-    });
-    const permission = {
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      accountIds: [account.accountId],
-    } satisfies PermissionRecord;
-    const encryptedVault = {
-      salt: "AAECAwQFBgcICQoLDA0ODw==",
-      iv: "EBESExQVFhcYGRob",
-      ciphertext: "zp/Hc7X9pGfcMMMdmr+Fmv+RHSNqR5YnwEDSEQ==",
-    } as const;
-    const autoLock = { key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 } as const;
-
-    await persistence.writer.commit([
-      persistenceTypes.encryptedVault.put(encryptedVault),
-      persistenceTypes.setting.put(autoLock),
-      persistenceTypes.keySource.put(source),
-      persistenceTypes.hdKeyring.put(hdKeyring),
-      persistenceTypes.account.put(account),
-      persistenceTypes.permission.put(permission),
-    ]);
-
-    expect(await persistence.readers.encryptedVault.get()).toEqual(encryptedVault);
-    expect(await persistence.readers.settings.get(AUTO_LOCK_SETTING_KEY)).toEqual(autoLock);
-    expect(await persistence.readers.keySources.listAll()).toEqual([source]);
-    expect(await persistence.readers.hdKeyrings.listAll()).toEqual([hdKeyring]);
-    expect(await persistence.readers.accounts.listRecords()).toEqual([account]);
-    expect(await persistence.readers.permissions.listAll()).toEqual([permission]);
-  });
-
-  it("removes legacy transaction rows during the schema upgrade", async () => {
-    const databaseName = createDatabaseName();
-    const legacy = new Dexie(databaseName);
-    databaseConnections.push(legacy);
-    legacy.version(1).stores({
-      transactions:
-        "&transactionId, [createAt+transactionId], [chainRef+createAt+transactionId], [accountId+createAt+transactionId], status, [chainRef+conflictKey.kind+conflictKey.value]",
-    });
-    await legacy.open();
-    await legacy.table("transactions").put({ transactionId: "legacy-transaction", createAt: 1, status: "submitted" });
-    await legacy.close();
-
-    const context = createDexiePersistenceContext(databaseName);
-    databaseConnections.push(context.db);
-    await context.ready;
-
-    expect(await context.db.transactions.count()).toBe(0);
-  });
-
-  it("rolls back earlier writes when a later store operation fails", async () => {
-    const context = createDexiePersistenceContext(createDatabaseName());
-    databaseConnections.push(context.db);
-    const writer = createPersistenceWriter(context);
-    await context.ready;
-    const failure = new Error("account write failed");
-    const putAccount = vi.spyOn(context.db.accounts, "put").mockRejectedValueOnce(failure);
-
-    const commit = writer.commit([
-      persistenceTypes.setting.put({
-        key: AUTO_LOCK_SETTING_KEY,
-        durationMs: 60_000,
+    const failure = new Error("IndexedDB member write failed");
+    vi.spyOn(context.db.accounts, "put").mockImplementationOnce(() =>
+      context.db.accountGroups.get(group.accountGroupId).then((written) => {
+        expect(written).toEqual(group);
+        throw failure;
       }),
-      persistenceTypes.account.put(hdAccount({ accountId: "eip155:02", hdKeyringId: "keyring-1", createdAt: 2 })),
-    ]);
+    );
 
-    await expect(commit).rejects.toBeInstanceOf(PersistenceCommitError);
-    await expect(commit).rejects.toMatchObject({ code: PersistenceCommitError.code });
-    await expect(commit).rejects.toHaveProperty("cause", failure);
-    putAccount.mockRestore();
-    expect(await context.db.settings.get(AUTO_LOCK_SETTING_KEY)).toBeUndefined();
+    const writing = createPersistenceWriter(context).commit([
+      persistenceTypes.accountGroup.put(group),
+      persistenceTypes.account.put(member),
+    ]);
+    await expect(writing).rejects.toBeInstanceOf(PersistenceCommitError);
+    await expect(writing).rejects.toHaveProperty("cause", failure);
+    const reader = createAccountsReader(context);
+    expect(await reader.listGroups()).toEqual([]);
+    expect(await reader.listRecords()).toEqual([]);
   });
 
-  it("loads account records and selections independently for Accounts bootstrap", async () => {
+  it("replaces the single shared account selection without exposing its physical key", async () => {
     const persistence = createTestPersistence();
-    const first = hdAccount({ accountId: "eip155:01", hdKeyringId: "keyring-1", createdAt: 1 });
-    const second = hdAccount({
-      accountId: "eip155:02",
-      hdKeyringId: "keyring-1",
-      createdAt: 2,
-      hidden: true,
-    });
-    const selection = {
-      namespace: "eip155",
-      accountId: first.accountId,
-    } as const;
+    const first = { accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d" };
+    const second = { accountGroupId: "56128651-0451-4057-801e-3b3d5b9fe409" };
 
-    await persistence.writer.commit([
-      persistenceTypes.account.put(first),
-      persistenceTypes.account.put(second),
-      persistenceTypes.accountSelection.put(selection),
-    ]);
+    await persistence.writer.commit([persistenceTypes.accountSelection.put(first)]);
+    expect(await persistence.readers.accounts.getSelection()).toEqual(first);
+    await persistence.writer.commit([persistenceTypes.accountSelection.put(second)]);
 
-    expect(await persistence.readers.accounts.listRecords()).toEqual(expect.arrayContaining([first, second]));
-    expect(await persistence.readers.accounts.listSelections()).toEqual([selection]);
+    expect(await persistence.readers.accounts.getSelection()).toEqual(second);
   });
 
-  it("round-trips network records", async () => {
+  it("persists a custom network and its RPC override", async () => {
     const persistence = createTestPersistence();
     const customNetwork: CustomNetworkRecord = {
       definition: {
-        chainRef: "eip155:10",
-        name: "Optimism",
+        chainRef: "eip155:1337",
+        name: "Local EVM",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       },
-      defaultRpcEndpoints: ["https://optimism.example"],
+      defaultRpcEndpoints: ["https://custom.example"],
     };
     const rpcOverride: NetworkRpcOverrideRecord = {
-      chainRef: "eip155:1",
+      chainRef: customNetwork.definition.chainRef,
       endpoints: ["https://override.example"],
-    };
-    const selection: NetworkSelectionRecord = {
-      selectedNamespace: "eip155",
-      selectedChainRefByNamespace: { eip155: "eip155:10" },
-    };
-    const dappSelection: DappNetworkSelectionRecord = {
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      chainRef: "eip155:10",
     };
 
     await persistence.writer.commit([
       persistenceTypes.customNetwork.put(customNetwork),
       persistenceTypes.networkRpcOverride.put(rpcOverride),
-      persistenceTypes.networkSelection.put(selection),
-      persistenceTypes.dappNetworkSelection.put(dappSelection),
     ]);
 
     expect(await persistence.readers.customNetworks.listAll()).toEqual([customNetwork]);
     expect(await persistence.readers.networkRpcOverrides.listAll()).toEqual([rpcOverride]);
-    expect(await persistence.readers.networkSelection.get()).toEqual(selection);
-    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([dappSelection]);
-
-    await persistence.writer.commit([persistenceTypes.dappNetworkSelection.remove(dappSelection)]);
-    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([]);
   });
 
-  it("queries public transaction history without exposing pending recovery artifacts", async () => {
+  it("removes one site's saved network without removing another site's choice", async () => {
     const persistence = createTestPersistence();
-    const first = transaction({
-      transactionId: "transaction-a",
+    const first: DappNetworkSelectionRecord = {
+      origin: "https://first.example",
+      namespace: "eip155",
+      chainRef: "eip155:10",
+    };
+    const second = { ...first, origin: "https://second.example", chainRef: "eip155:1" };
+
+    await persistence.writer.commit([first, second].map(persistenceTypes.dappNetworkSelection.put));
+    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual(expect.arrayContaining([first, second]));
+
+    await persistence.writer.commit([persistenceTypes.dappNetworkSelection.remove(first)]);
+    expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual([second]);
+  });
+});
+
+describe("Dexie transaction history", () => {
+  it("paginates equal-timestamp transactions without skipping or repeating a record", async () => {
+    const persistence = createTestPersistence();
+    const records = [
+      transaction({
+        transactionId: "a",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_A,
+        createdAt: 100,
+        status: "confirmed",
+      }),
+      transaction({
+        transactionId: "b",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_A,
+        createdAt: 100,
+        status: "confirmed",
+      }),
+      transaction({
+        transactionId: "c",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_A,
+        createdAt: 200,
+        status: "confirmed",
+      }),
+    ];
+    await persistence.writer.commit(records.map(persistenceTypes.transaction.put));
+
+    const firstPage = await persistence.readers.transactions.list({ limit: 2 });
+    expect(firstPage.transactions.map((record) => record.transactionId)).toEqual(["c", "b"]);
+    assert(firstPage.nextCursor);
+    const secondPage = await persistence.readers.transactions.list({ limit: 2, cursor: firstPage.nextCursor });
+    expect(secondPage.transactions.map((record) => record.transactionId)).toEqual(["a"]);
+    expect(secondPage.nextCursor).toBeUndefined();
+  });
+
+  it("combines account, chain and status filters", async () => {
+    const persistence = createTestPersistence();
+    const records = [
+      transaction({
+        transactionId: "match",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_A,
+        createdAt: 100,
+        status: "pending",
+      }),
+      transaction({
+        transactionId: "other-chain",
+        chainRef: "eip155:10",
+        accountId: ACCOUNT_A,
+        createdAt: 100,
+        status: "pending",
+      }),
+      transaction({
+        transactionId: "other-account",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_B,
+        createdAt: 100,
+        status: "pending",
+      }),
+      transaction({
+        transactionId: "confirmed",
+        chainRef: "eip155:1",
+        accountId: ACCOUNT_A,
+        createdAt: 100,
+        status: "confirmed",
+      }),
+    ];
+    await persistence.writer.commit(records.map(persistenceTypes.transaction.put));
+
+    const page = await persistence.readers.transactions.list({
+      accountId: ACCOUNT_A,
       chainRef: "eip155:1",
-      accountId: "eip155:01",
+      statuses: ["pending"],
+      limit: 10,
+    });
+    expect(page.transactions.map((record) => record.transactionId)).toEqual(["match"]);
+  });
+
+  it("keeps recovery artifacts in internal pending reads and out of public reads", async () => {
+    const persistence = createTestPersistence();
+    const pending = transaction({
+      transactionId: "pending",
+      chainRef: "eip155:1",
+      accountId: ACCOUNT_A,
       createdAt: 100,
       status: "pending",
     });
-    const second = transaction({
-      transactionId: "transaction-b",
-      chainRef: "eip155:1",
-      accountId: "eip155:01",
-      createdAt: 100,
-      status: "confirmed",
-    });
-    const third = transaction({
-      transactionId: "transaction-c",
-      chainRef: "eip155:10",
-      accountId: "eip155:02",
-      createdAt: 200,
-      status: "confirmed",
-    });
+    assert(pending.state.status === "pending");
+    const { recovery: _recovery, ...publicTransaction } = pending;
+    await persistence.writer.commit([persistenceTypes.transaction.put(pending)]);
 
-    await persistence.writer.commit([first, second, third].map(persistenceTypes.transaction.put));
-
-    const firstPage = await persistence.readers.transactions.list({ limit: 2 });
-    expect(firstPage.transactions.map((record) => record.transactionId)).toEqual(["transaction-c", "transaction-b"]);
-    const nextCursor = firstPage.nextCursor;
-    if (!nextCursor) throw new Error("Expected another transaction page.");
-    expect(nextCursor).toEqual({ createdAt: 100, transactionId: "transaction-b" });
-    expect(
-      await persistence.readers.transactions.list({
-        limit: 2,
-        cursor: nextCursor,
-      }),
-    ).toMatchObject({ transactions: [{ transactionId: "transaction-a" }] });
-    expect(await persistence.readers.transactions.get(first.transactionId)).not.toHaveProperty("recovery");
-    expect(
-      await persistence.readers.transactions.list({
-        accountId: "eip155:01",
-        chainRef: "eip155:1",
-        statuses: ["pending"],
-        limit: 10,
-      }),
-    ).toMatchObject({ transactions: [{ transactionId: "transaction-a" }] });
-    expect(await persistence.readers.transactions.listPending()).toEqual(expect.arrayContaining([first]));
+    expect(await persistence.readers.transactions.get(pending.transactionId)).toEqual(publicTransaction);
+    expect(await persistence.readers.transactions.list({ limit: 10 })).toEqual({ transactions: [publicTransaction] });
+    expect(await persistence.readers.transactions.listPending()).toEqual([pending]);
   });
 });

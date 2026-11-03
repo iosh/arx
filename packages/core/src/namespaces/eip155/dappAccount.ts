@@ -6,7 +6,7 @@ import { RpcUnauthorizedError } from "../../rpc/errors.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
 type AuthorizedAccountDependencies = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getAccount" | "getAddress">;
+  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
 }>;
 
@@ -22,7 +22,7 @@ export const getAuthorizedAccount = (
     origin: input.origin,
     namespace: EIP155_NAMESPACE,
   });
-  const account = dependencies.accounts.getAccount(accountId);
+  const account = dependencies.accounts.getMember(accountId);
 
   if (!permission?.accountIds.includes(accountId) || !account || account.hidden) {
     throw new RpcUnauthorizedError();

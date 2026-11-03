@@ -25,12 +25,12 @@ export const createEip155AccountSigning = ({
   wallet,
 }: {
   keyring: Pick<Keyring, "getHdKeyring" | "requireKeySourceSecret">;
-  accounts: Pick<Accounts, "getAccountRecord">;
+  accounts: Pick<Accounts, "getMemberRecord">;
   wallet: WalletStatusReader;
 }): Eip155AccountSigning => ({
   signDigest: async ({ accountId, digest }) => {
     if (wallet.getStatus() !== "unlocked") throw new WalletLockedError();
-    const account = accounts.getAccountRecord(accountId);
+    const account = accounts.getMemberRecord(accountId);
     if (!account) throw new AccountNotFoundError(accountId);
 
     if (account.origin.type === "hd") {

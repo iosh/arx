@@ -31,7 +31,7 @@ export type PermissionsUpdate = Readonly<{
 
 type PermissionsOptions = Readonly<{
   bootstrap: PermissionsBootstrap;
-  accounts: Pick<Accounts, "getAccount">;
+  accounts: Pick<Accounts, "getMember">;
 }>;
 
 const comparePermissions = (left: Permission, right: Permission): number =>
@@ -47,7 +47,7 @@ const accountIdsEqual = (left: readonly AccountId[], right: readonly AccountId[]
 
 /** Owns persistent origin and namespace account authorization state. */
 export class Permissions implements PermissionsReader {
-  readonly #accounts: Pick<Accounts, "getAccount">;
+  readonly #accounts: Pick<Accounts, "getMember">;
   #records: ReadonlyMap<string, PermissionRecord>;
 
   constructor(options: PermissionsOptions) {
@@ -153,7 +153,7 @@ export class Permissions implements PermissionsReader {
 
   #requireVisibleAccounts(permission: Permission): void {
     for (const accountId of permission.accountIds) {
-      const account = this.#accounts.getAccount(accountId);
+      const account = this.#accounts.getMember(accountId);
       if (!account) throw new AccountNotFoundError(accountId);
 
       if (account.namespace !== permission.namespace) {
@@ -164,7 +164,7 @@ export class Permissions implements PermissionsReader {
         });
       }
 
-      if (account.hidden) throw new AccountHiddenSelectionError(accountId);
+      if (account.hidden) throw new AccountHiddenSelectionError({ accountId });
     }
   }
 }

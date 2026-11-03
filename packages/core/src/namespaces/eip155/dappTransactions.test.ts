@@ -1,16 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { Approvals } from "../../approvals/Approvals.js";
 import type { SendTransactionApproval } from "../../approvals/types.js";
-import type * as Eip155 from "../../transactions/eip155/types.js";
-import type { TransactionSubmission } from "../../transactions/types.js";
+import { Permissions } from "../../permissions/Permissions.js";
+import type { Transactions } from "../../transactions/Transactions.js";
+import { ACCOUNT_ID, ADDRESS, createAccounts } from "./__tests__/fixtures.js";
 import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
 import { decodeSendTransactionParams } from "./transactionRequest.js";
 
 const ORIGIN = "https://dapp.example";
 const CHAIN_REF = "eip155:1";
-const ADDRESS = "0xfcad0b19bb29d4674531d6f115237e16afce377c";
 const RECIPIENT = "0x0000000000000000000000000000000000000001";
-const ACCOUNT_ID = `eip155:${ADDRESS.slice(2)}`;
 const TRANSACTION_HASH: `0x${string}` = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const PREPARED = {
@@ -30,15 +29,12 @@ const PREPARED = {
   },
 } as const;
 
-const transactionWithState = (state: Eip155.TransactionState): Eip155.Transaction => ({
-  ...PREPARED,
-  transactionId: "transaction-1",
-  state,
-  createdAt: 1,
-  updatedAt: 1,
-});
-
-const createHarness = (submission?: TransactionSubmission) => {
+const createHarness = () => {
+  const accounts = createAccounts();
+  const permissions = new Permissions({
+    accounts,
+    bootstrap: { records: [{ origin: ORIGIN, namespace: "eip155", accountIds: [ACCOUNT_ID] }] },
+  });
   const approvals = new Approvals({
     time: {
       now: () => 1,
@@ -46,39 +42,21 @@ const createHarness = (submission?: TransactionSubmission) => {
     },
     publishChanged: () => {},
   });
-  const prepare = vi.fn(async () => PREPARED);
-  const submit = vi.fn(
-    async (): Promise<TransactionSubmission> =>
-      submission ?? {
-        status: "pending",
-        transaction: transactionWithState({ status: "pending" }),
-        transactionHash: TRANSACTION_HASH,
-      },
-  );
+  const prepare = vi.fn<Transactions["prepare"]>(async () => PREPARED);
+  const submit = vi.fn<Transactions["submit"]>(async () => ({
+    status: "pending",
+    transaction: {
+      ...PREPARED,
+      transactionId: "transaction-1",
+      state: { status: "pending" },
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    transactionHash: TRANSACTION_HASH,
+  }));
   const { sendTransaction } = createEip155DappTransactionHandlers({
-    accounts: {
-      accountIdFromAddress: ({ address }) => `eip155:${address.replace(/^0x/, "").toLowerCase()}`,
-      getAccount: (accountId) =>
-        accountId === ACCOUNT_ID
-          ? {
-              accountId,
-              namespace: "eip155",
-              origin: { type: "private-key", keySourceId: "source" },
-              hidden: false,
-              selected: true,
-              createdAt: 1,
-            }
-          : null,
-      getAddress: ({ accountId, chainRef }) => ({
-        accountId,
-        chainRef,
-        canonicalAddress: ADDRESS,
-        displayAddress: ADDRESS,
-      }),
-    },
-    permissions: {
-      get: () => ({ origin: ORIGIN, namespace: "eip155", accountIds: [ACCOUNT_ID] }),
-    },
+    accounts,
+    permissions,
     approvals,
     transactions: { prepare, submit },
   });

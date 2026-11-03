@@ -1,29 +1,21 @@
-import { Hex, PersonalMessage, Signature, TypedData } from "ox";
+import { Hex, PersonalMessage, TypedData } from "ox";
 import { describe, expect, it } from "vitest";
 import { Approvals } from "../../approvals/Approvals.js";
 import type { Eip155SignApproval } from "../../approvals/types.js";
-import type { Permission } from "../../permissions/Permissions.js";
+import { Permissions } from "../../permissions/Permissions.js";
+import { ACCOUNT_ID, ADDRESS, createAccounts, PRIVATE_KEY } from "./__tests__/fixtures.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
-import type { Eip155DigestSignature } from "./keyring.js";
+import { signEip155PrivateKeyDigest } from "./keyring.js";
 
 const ORIGIN = "https://dapp.example";
 const CHAIN_REF = "eip155:1";
-const ADDRESS = "0xfcad0b19bb29d4674531d6f115237e16afce377c";
-const ACCOUNT_ID = `eip155:${ADDRESS.slice(2)}`;
-const SIGNATURE: Eip155DigestSignature = {
-  r: 1n,
-  s: 2n,
-  yParity: 1,
-  bytes: new Uint8Array(64),
-};
-
 const createHarness = (chainRef = CHAIN_REF) => {
-  const permission: Permission = {
-    origin: ORIGIN,
-    namespace: "eip155",
-    accountIds: [ACCOUNT_ID],
-  };
+  const accounts = createAccounts();
+  const permissions = new Permissions({
+    accounts,
+    bootstrap: { records: [{ origin: ORIGIN, namespace: "eip155", accountIds: [ACCOUNT_ID] }] },
+  });
   const signed: Parameters<Eip155AccountSigning["signDigest"]>[0][] = [];
   const approvals = new Approvals({
     time: {
@@ -34,32 +26,13 @@ const createHarness = (chainRef = CHAIN_REF) => {
   });
 
   const handlers = createEip155DappSigningHandlers({
-    accounts: {
-      accountIdFromAddress: ({ address }) => `eip155:${address.replace(/^0x/, "").toLowerCase()}`,
-      getAccount: (accountId) =>
-        accountId === ACCOUNT_ID
-          ? {
-              accountId,
-              namespace: "eip155",
-              origin: { type: "private-key", keySourceId: "source" },
-              hidden: false,
-              selected: true,
-              createdAt: 1,
-            }
-          : null,
-      getAddress: ({ accountId, chainRef }) => ({
-        accountId,
-        chainRef,
-        canonicalAddress: ADDRESS,
-        displayAddress: ADDRESS,
-      }),
-    },
-    permissions: { get: () => permission },
+    accounts,
+    permissions,
     approvals,
     accountSigning: {
       signDigest: async (input) => {
         signed.push(input);
-        return SIGNATURE;
+        return signEip155PrivateKeyDigest({ ...input, privateKey: PRIVATE_KEY });
       },
     },
   });
@@ -84,13 +57,21 @@ describe("EIP-155 dapp signing", () => {
   it("preserves personal_sign compatibility while signing the decoded message bytes", async () => {
     const harness = createHarness();
 
-    const standard = harness.request("personal_sign", ["6869", ADDRESS, "ignored"]);
+    const standard = harness.request("personal_sign", ["6869", ADDRESS.slice(2), "ignored"]);
     expect(harness.approve().request).toMatchObject({
+      account: {
+        accountId: ACCOUNT_ID,
+        canonicalAddress: ADDRESS,
+        displayAddress: "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c",
+      },
       type: "personalMessage",
       message: { format: "hex", value: "0x6869" },
     });
-    await expect(standard).resolves.toBe(Signature.toHex(SIGNATURE));
-    expect(harness.signed[0]?.digest).toEqual(Hex.toBytes(PersonalMessage.getSignPayload("0x6869")));
+    await standard;
+    expect(harness.signed[0]).toEqual({
+      accountId: ACCOUNT_ID,
+      digest: Hex.toBytes(PersonalMessage.getSignPayload("0x6869")),
+    });
 
     const legacyOrder = harness.request("personal_sign", [ADDRESS, "0x"]);
     expect(harness.approve().request).toMatchObject({
@@ -99,6 +80,14 @@ describe("EIP-155 dapp signing", () => {
     });
     await legacyOrder;
     expect(harness.signed[1]?.digest).toEqual(Hex.toBytes(PersonalMessage.getSignPayload(Hex.fromString("0x"))));
+  });
+
+  it("rejects an RPC address with surrounding whitespace before approval", async () => {
+    const harness = createHarness();
+    const pending = harness.request("personal_sign", ["0x6869", ` ${ADDRESS} `]);
+
+    expect(harness.approvals.list()).toEqual([]);
+    await expect(pending).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
   });
 
   it("filters typed data for approval and binds domain.chainId to the request chain", async () => {

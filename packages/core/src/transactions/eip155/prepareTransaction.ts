@@ -1,7 +1,7 @@
 import type { AccessList } from "ox/AccessList";
 import type { Hex } from "ox/Hex";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
-import { createEip155AddressFormat } from "../../namespaces/eip155/address.js";
+import * as EvmAddress from "../../namespaces/eip155/address.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import * as HexNumber from "../../utils/hex.js";
 import { Eip155FeeModelUnsupportedError, Eip155PriorityFeeExceedsMaxFeeError } from "./errors.js";
@@ -78,8 +78,6 @@ const gasEstimateRequest = (transaction: PreparedWithoutGas): GasEstimateRequest
 };
 
 export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJsonRpc }): Eip155TransactionPreparer => {
-  const addressFormat = createEip155AddressFormat();
-
   const getLatestBlockBaseFee = async (chainRef: ChainRef): Promise<Hex | undefined> => {
     const block = await params.chainJsonRpc.request<LatestBlock>({
       chainRef,
@@ -149,10 +147,7 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
     const request = input.transaction;
     const common = {
       from: input.from,
-      to:
-        request.to === undefined || request.to === null
-          ? null
-          : addressFormat.canonicalize({ chainRef: input.chainRef, value: request.to }).canonical,
+      to: request.to === undefined || request.to === null ? null : EvmAddress.parse(request.to),
       value: request.value ?? ("0x0" as Hex),
       data: request.data ?? ("0x" as Hex),
     };

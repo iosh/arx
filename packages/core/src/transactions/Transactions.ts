@@ -45,7 +45,7 @@ type TransactionsOptions = Readonly<{
   readers: Readonly<{
     transactions: Pick<TransactionsReader, "get" | "list" | "listPending">;
   }>;
-  accounts: Pick<Accounts, "getAccount" | "getAddress">;
+  accounts: Pick<Accounts, "getMember" | "getAddress">;
   networks: Pick<NetworksReader, "get">;
   mutations: CoreMutationQueue;
   time: Pick<CoreTime, "now">;
@@ -57,7 +57,7 @@ type TransactionsOptions = Readonly<{
 export const createTransactions = (params: TransactionsOptions): Transactions => ({
   async prepare(input) {
     const adapter = getTransactionsNamespaceAdapter(params.adapters, input.namespace);
-    if (!params.accounts.getAccount(input.accountId)) throw new AccountNotFoundError(input.accountId);
+    if (!params.accounts.getMember(input.accountId)) throw new AccountNotFoundError(input.accountId);
     if (!params.networks.get(input.chainRef)) throw new NetworkNotFoundError(input.chainRef);
 
     const { canonicalAddress } = params.accounts.getAddress({
@@ -71,7 +71,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
     const target = await readReplaceableTransaction(params.readers.transactions, input.transactionId);
 
     const adapter = getTransactionsNamespaceAdapter(params.adapters, target.namespace);
-    if (!params.accounts.getAccount(target.accountId)) throw new AccountNotFoundError(target.accountId);
+    if (!params.accounts.getMember(target.accountId)) throw new AccountNotFoundError(target.accountId);
     if (!params.networks.get(target.chainRef)) throw new NetworkNotFoundError(target.chainRef);
 
     const { canonicalAddress } = params.accounts.getAddress({
@@ -95,7 +95,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
     const adapter = getTransactionsNamespaceAdapter(params.adapters, prepared.namespace);
 
     // Recheck before and after RPC-backed preparation because these prerequisites may change while it awaits.
-    if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+    if (!params.accounts.getMember(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
     if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
     if (prepared.replacesTransactionId !== undefined) {
       await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
@@ -103,7 +103,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
 
     const { pending, signed } = await adapter.withSigningInput(prepared, (signingInput) =>
       params.mutations.run(async (commit) => {
-        if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+        if (!params.accounts.getMember(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
         if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
         if (prepared.replacesTransactionId !== undefined) {
           await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);

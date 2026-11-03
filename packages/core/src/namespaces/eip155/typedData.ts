@@ -2,7 +2,7 @@ import { Hex, Solidity, TypedData } from "ox";
 import { z } from "zod";
 import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
 import { RpcInvalidParamsError } from "../../rpc/errors.js";
-import { isEip155Address } from "./address.js";
+import * as EvmAddress from "./address.js";
 import type { Eip155TypedData, Eip155TypedDataField, Eip155TypedDataValue } from "./signingRequest.js";
 
 const TYPED_DATA_FIELD_SCHEMA = z.strictObject({
@@ -23,7 +23,7 @@ export const decodeSignTypedDataV4Params = (params: unknown, method: string) => 
   }
 
   const address = params[0];
-  if (typeof address !== "string" || !isEip155Address(address)) {
+  if (typeof address !== "string" || !EvmAddress.isValid(address)) {
     throw invalidDappParams(method, "expected a valid EIP-155 account address.");
   }
 

@@ -1,44 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Accounts } from "../accounts/Accounts.js";
-import type { Account, AccountAddress } from "../accounts/types.js";
-import type { ChainRef } from "../networks/chainRef.js";
-import type { Network, NetworksReader } from "../networks/types.js";
+import { assert, describe, expect, it, vi } from "vitest";
+import type { ChainJsonRpc, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
+import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
+import {
+  ACCOUNT_ID,
+  ADDRESS,
+  createAccounts,
+  createNetworks,
+  KEY_SOURCE_ID,
+  PRIVATE_KEY,
+} from "../namespaces/eip155/__tests__/fixtures.js";
+import type { Eip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
+import { signEip155PrivateKeyDigest } from "../namespaces/eip155/keyring.js";
+import type { PersistenceWriter } from "../persistence/corePersistence.js";
+import { PersistenceCommitError } from "../persistence/errors.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
-import type { CoreTime } from "../runtime/time.js";
-import type { TransactionsNamespaceAdapter } from "./namespaceAdapter.js";
-import type { PendingTransactionRecord } from "./persistence.js";
+import { WalletLockedError } from "../wallet/errors.js";
+import { createEip155TransactionsAdapter } from "./eip155/adapter.js";
+import type { PendingTransactionRecord, TransactionsReader } from "./persistence.js";
 import type { PreparedTransaction } from "./preparedTransaction.js";
-import { createTransactions } from "./Transactions.js";
-import type { Transaction, TransactionBroadcastOutcome, TransactionId, TransactionSigningInput } from "./types.js";
+import { createTransactions, type TransactionsChanged } from "./Transactions.js";
+import type { Transaction, TransactionId } from "./types.js";
 
-const ACCOUNT_ID = "eip155:0000000000000000000000000000000000000001";
-const CHAIN_REF: ChainRef = "eip155:1";
-const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
-
-const account: Account = {
-  accountId: ACCOUNT_ID,
-  namespace: "eip155",
-  origin: { type: "private-key", keySourceId: "key-source-1" },
-  hidden: false,
-  selected: true,
-  createdAt: 1,
-};
-
-const address: AccountAddress = {
-  accountId: ACCOUNT_ID,
-  chainRef: CHAIN_REF,
-  canonicalAddress: FROM,
-  displayAddress: FROM,
-};
-
-const network: Network = {
-  chainRef: CHAIN_REF,
-  namespace: "eip155",
-  source: "builtin",
-  name: "Ethereum",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-};
+const CHAIN_REF = "eip155:1";
+const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId): PreparedTransaction => ({
   namespace: "eip155",
@@ -47,7 +31,7 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
   initiator: { type: "wallet" },
   ...(replacesTransactionId === undefined ? {} : { replacesTransactionId }),
   transaction: {
-    from: FROM,
+    from: ADDRESS,
     to: null,
     value: "0x0",
     data: "0x",
@@ -59,15 +43,9 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
 });
 
 const replacementTarget: Transaction = {
+  ...prepared("0x1"),
   transactionId: "transaction-target",
-  namespace: "eip155",
-  chainRef: CHAIN_REF,
-  accountId: ACCOUNT_ID,
-  initiator: { type: "wallet" },
-  transaction: {
-    ...prepared("0x1").transaction,
-    nonce: "0x1",
-  },
+  transaction: { ...prepared("0x1").transaction, nonce: "0x1" },
   state: { status: "pending" },
   createdAt: 1,
   updatedAt: 1,
@@ -81,172 +59,112 @@ const pendingReplacement: PendingTransactionRecord = {
   recovery: { rawTransaction: "0xcafebabe" },
 };
 
-type FixtureOptions = Readonly<{
-  broadcast?: TransactionBroadcastOutcome;
-  pauseBeforeSigningInput?: () => Promise<void>;
-  replacementTarget?: Transaction | null;
-  signingError?: Error;
-}>;
-
-const createFixture = (input: FixtureOptions = {}) => {
-  let currentAccount: Account | null = account;
-  const currentReplacementTarget = input.replacementTarget ?? null;
-  let currentPendingTransactions: readonly PendingTransactionRecord[] = [];
-  const order: string[] = [];
-  const accounts = {
-    getAccount: vi.fn(() => currentAccount),
-    getAddress: vi.fn(() => address),
-  } satisfies Pick<Accounts, "getAccount" | "getAddress">;
-  const networks = {
-    get: vi.fn(() => network),
-  } satisfies Pick<NetworksReader, "get">;
-  type SignedTransaction = Awaited<ReturnType<TransactionsNamespaceAdapter["sign"]>>;
-  const createSigningInput = vi.fn(async (params: PreparedTransaction): Promise<TransactionSigningInput> => {
-    await input.pauseBeforeSigningInput?.();
-
-    return {
-      chainRef: params.chainRef,
-      accountId: params.accountId,
-      transaction: { ...params.transaction, nonce: params.transaction.nonce ?? "0x1" },
-    };
+const createFixture = (target: Transaction | null = null) => {
+  const accounts = createAccounts();
+  const request = vi.fn(async ({ method }: ChainJsonRpcRequest): Promise<unknown> => {
+    if (method === "eth_getTransactionCount") return "0x1";
+    if (method === "eth_sendRawTransaction") return TRANSACTION_HASH;
+    throw new Error(`Unexpected RPC method: ${method}`);
   });
-  const withSigningInput = async <T>(
-    params: PreparedTransaction,
-    use: (signingInput: TransactionSigningInput) => Promise<T>,
-  ): Promise<T> => use(await createSigningInput(params));
-  const sign = vi.fn(async (signingInput: TransactionSigningInput): Promise<SignedTransaction> => {
-    if (input.signingError) throw input.signingError;
-
-    return {
-      chainRef: signingInput.chainRef,
-      transaction: signingInput.transaction,
-      recovery: { rawTransaction: "0xdeadbeef" },
-    };
-  });
-  const broadcast = vi.fn(async (): Promise<TransactionBroadcastOutcome> => {
-    order.push("broadcast");
-    return input.broadcast ?? { status: "accepted", transactionHash: TRANSACTION_HASH };
-  });
-  const createSubmission = vi.fn(
-    ({
-      transaction,
-      broadcast: submissionBroadcast,
-    }: Parameters<TransactionsNamespaceAdapter["createSubmission"]>[0]) =>
-      submissionBroadcast.status === "rejected"
-        ? { status: "failed" as const, transaction, failure: submissionBroadcast.failure }
-        : { status: "pending" as const, transaction, transactionHash: submissionBroadcast.transactionHash },
-  );
-  const adapter = {
-    namespace: "eip155",
-    prepare: async () => {
-      throw new Error("Unexpected transaction preparation.");
-    },
-    prepareReplacement: async () => {
-      throw new Error("Unexpected replacement preparation.");
-    },
-    withSigningInput,
-    sign,
-    broadcast,
-    createSubmission,
-    inspectPending: async () => ({ status: "checked" as const, terminalChanges: [] }),
-    recoverPending: async () => ({ status: "checked" as const, terminalChanges: [] }),
-  } satisfies TransactionsNamespaceAdapter;
-  const commit = vi.fn(async () => {
-    order.push("commit");
-  });
-  const mutations = createCoreMutationQueue({ commit });
-  const time = {
-    now: vi.fn(() => 100),
-    schedule: () => () => {},
-  } satisfies CoreTime;
-  const publishChanged = vi.fn(() => {
-    order.push("publish");
-  });
-  const monitor = {
-    track: vi.fn(() => {
-      order.push("track");
-    }),
-    stop: vi.fn(() => {
-      order.push("stop");
-    }),
+  const chainJsonRpc: ChainJsonRpc = {
+    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
   };
+  const listPending = vi.fn<TransactionsReader["listPending"]>(async () => []);
+  const reader: TransactionsReader = {
+    get: async () => target,
+    list: async () => ({ transactions: [] }),
+    listPending,
+  };
+  const signDigest = vi.fn<Eip155AccountSigning["signDigest"]>(async (input) =>
+    signEip155PrivateKeyDigest({ ...input, privateKey: PRIVATE_KEY }),
+  );
+  const adapter = createEip155TransactionsAdapter({
+    chainJsonRpc,
+    pendingTransactionsReader: reader,
+    signing: { signDigest },
+  });
+  const commit = vi.fn<PersistenceWriter["commit"]>(async () => {});
+  const publishChanged = vi.fn<(change: TransactionsChanged) => void>();
+  const monitor = { track: vi.fn(), stop: vi.fn() };
   const transactions = createTransactions({
-    readers: {
-      transactions: {
-        get: vi.fn(async () => currentReplacementTarget),
-        list: vi.fn(async () => ({ transactions: [] })),
-        listPending: vi.fn(async () => currentPendingTransactions),
-      },
-    },
+    readers: { transactions: reader },
     accounts,
-    networks,
-    mutations,
-    time,
+    networks: createNetworks(),
+    mutations: createCoreMutationQueue({ commit }),
+    time: { now: () => 100 },
     adapters: { eip155: adapter },
     monitor,
     publishChanged,
   });
 
-  return {
-    transactions,
-    commit,
-    createSigningInput,
-    sign,
-    broadcast,
-    monitor,
-    publishChanged,
-    order,
-    setAccount: (value: Account | null) => {
-      currentAccount = value;
-    },
-    setPendingTransactions: (value: readonly PendingTransactionRecord[]) => {
-      currentPendingTransactions = value;
-    },
-  };
+  return { transactions, accounts, commit, request, signDigest, listPending, monitor, publishChanged };
 };
 
-const committedRecord = (commit: ReturnType<typeof vi.fn>, call = 0): PendingTransactionRecord =>
-  commit.mock.calls[call]?.[0]?.[0]?.value as PendingTransactionRecord;
+const committedRecord = (commit: ReturnType<typeof createFixture>["commit"], call = 0) => {
+  const change = commit.mock.calls[call]?.[0][0];
+  assert(change?.persistenceType === "transaction" && change.operation === "put");
+  return change.value;
+};
 
 describe("Transactions.submit", () => {
-  it("commits the recovery artifact before the first broadcast", async () => {
+  it("waits for the recovery artifact commit before broadcasting those exact bytes", async () => {
     const fixture = createFixture();
+    const persistence = Promise.withResolvers<void>();
+    fixture.commit.mockReturnValueOnce(persistence.promise);
 
-    const submission = await fixture.transactions.submit(prepared("0x1"));
+    const pending = fixture.transactions.submit(prepared("0x1"));
+    try {
+      await vi.waitFor(() => expect(fixture.commit).toHaveBeenCalledOnce());
+      expect(fixture.request).not.toHaveBeenCalled();
+      expect(fixture.publishChanged).not.toHaveBeenCalled();
+    } finally {
+      persistence.resolve();
+    }
+    const submission = await pending;
 
     expect(submission).toMatchObject({
       status: "pending",
       transactionHash: TRANSACTION_HASH,
-      transaction: {
-        chainRef: CHAIN_REF,
-        accountId: ACCOUNT_ID,
-        state: { status: "pending" },
-      },
+      transaction: { chainRef: CHAIN_REF, accountId: ACCOUNT_ID, state: { status: "pending" } },
     });
     expect(submission.transaction).not.toHaveProperty("recovery");
-    expect(committedRecord(fixture.commit)).toMatchObject({
-      state: { status: "pending" },
-      recovery: { rawTransaction: "0xdeadbeef" },
+    const record = committedRecord(fixture.commit);
+    assert(record.recovery);
+    expect(fixture.request).toHaveBeenCalledWith({
+      chainRef: CHAIN_REF,
+      method: "eth_sendRawTransaction",
+      params: [record.recovery.rawTransaction],
+      replay: "forbidden",
     });
-    expect(fixture.order).toEqual(["commit", "publish", "broadcast", "track"]);
+    expect(fixture.monitor.track).toHaveBeenCalledWith(record);
     expect(fixture.publishChanged).toHaveBeenCalledWith({
       type: "transactionsChanged",
       transactionIds: [submission.transaction.transactionId],
     });
   });
 
-  it("persists an explicit broadcast rejection as failed", async () => {
-    const fixture = createFixture({
-      broadcast: {
-        status: "rejected",
-        failure: {
-          type: "broadcast",
-          code: -32_000,
-          message: "insufficient funds",
-          data: { available: "0x0" },
-        },
-      },
-    });
+  it("does not broadcast or publish when the recovery commit fails", async () => {
+    const fixture = createFixture();
+    const failure = new PersistenceCommitError(new Error("IndexedDB transaction aborted"));
+    fixture.commit.mockRejectedValueOnce(failure);
+
+    await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toBe(failure);
+    expect(fixture.request).not.toHaveBeenCalled();
+    expect(fixture.publishChanged).not.toHaveBeenCalled();
+    expect(fixture.monitor.track).not.toHaveBeenCalled();
+  });
+
+  it("persists an explicit broadcast rejection as failed and removes recovery material", async () => {
+    const fixture = createFixture();
+    fixture.request.mockRejectedValueOnce(
+      new ChainJsonRpcResponseError({
+        chainRef: CHAIN_REF,
+        method: "eth_sendRawTransaction",
+        rpcCode: -32_000,
+        message: "insufficient funds",
+        data: { available: "0x0" },
+      }),
+    );
 
     const submission = await fixture.transactions.submit(prepared("0x1"));
 
@@ -255,109 +173,85 @@ describe("Transactions.submit", () => {
       transaction: {
         state: {
           status: "failed",
-          failure: {
-            type: "broadcast",
-            code: -32_000,
-            message: "insufficient funds",
-            data: { available: "0x0" },
-          },
+          failure: { type: "broadcast", code: -32_000, message: "insufficient funds", data: { available: "0x0" } },
         },
       },
     });
     expect(fixture.commit).toHaveBeenCalledTimes(2);
-    expect(committedRecord(fixture.commit, 1)).not.toHaveProperty("recovery");
-    expect(fixture.order).toEqual(["commit", "publish", "broadcast", "commit", "stop", "publish"]);
+    expect(committedRecord(fixture.commit, 1)).toEqual(submission.transaction);
+    expect(fixture.monitor.stop).toHaveBeenCalledWith(submission.transaction.transactionId);
+    expect(fixture.monitor.track).not.toHaveBeenCalled();
   });
 
-  it("keeps the record pending when the broadcast outcome is unknown", async () => {
-    const fixture = createFixture({
-      broadcast: { status: "unknown", transactionHash: TRANSACTION_HASH },
-    });
+  it("retains the pending recovery artifact and monitoring when the broadcast outcome is unknown", async () => {
+    const fixture = createFixture();
+    fixture.request.mockRejectedValueOnce(
+      new ChainJsonRpcOutcomeUnknownError({ chainRef: CHAIN_REF, method: "eth_sendRawTransaction" }),
+    );
 
     const submission = await fixture.transactions.submit(prepared("0x1"));
 
-    expect(submission).toMatchObject({ status: "pending", transactionHash: TRANSACTION_HASH });
+    expect(submission).toMatchObject({ status: "pending", transaction: { state: { status: "pending" } } });
     expect(fixture.commit).toHaveBeenCalledOnce();
-    expect(fixture.publishChanged).toHaveBeenCalledOnce();
+    expect(fixture.monitor.track).toHaveBeenCalledWith(committedRecord(fixture.commit));
+    expect(fixture.monitor.stop).not.toHaveBeenCalled();
   });
 
-  it("rechecks the account after nonce lookup and before signing", async () => {
-    let releaseSigningInput!: () => void;
-    const signingInputPaused = new Promise<void>((resolve) => {
-      releaseSigningInput = resolve;
-    });
-    let notifySigningInputStarted!: () => void;
-    const signingInputStarted = new Promise<void>((resolve) => {
-      notifySigningInputStarted = resolve;
-    });
-    const fixture = createFixture({
-      pauseBeforeSigningInput: async () => {
-        notifySigningInputStarted();
-        await signingInputPaused;
-      },
-    });
+  it("rechecks the member after nonce RPC completes and before signing", async () => {
+    const fixture = createFixture();
+    const nonce = Promise.withResolvers<string>();
+    fixture.request.mockReturnValueOnce(nonce.promise);
 
     const submission = fixture.transactions.submit(prepared());
-    await signingInputStarted;
-    fixture.setAccount(null);
-    releaseSigningInput();
+    await vi.waitFor(() => expect(fixture.request).toHaveBeenCalled());
+    const removal = fixture.accounts.prepareRemoveSourceGroups(KEY_SOURCE_ID);
+    assert(removal);
+    fixture.accounts.applyCommittedUpdate(removal);
+    nonce.resolve("0x1");
 
     await expect(submission).rejects.toMatchObject({ code: "account.not_found" });
+    expect(fixture.signDigest).not.toHaveBeenCalled();
     expect(fixture.commit).not.toHaveBeenCalled();
-    expect(fixture.sign).not.toHaveBeenCalled();
-    expect(fixture.broadcast).not.toHaveBeenCalled();
+    expect(fixture.request).not.toHaveBeenCalledWith(expect.objectContaining({ method: "eth_sendRawTransaction" }));
   });
 
-  it("does not create a record when signing fails", async () => {
-    const fixture = createFixture({ signingError: new Error("Signing failed.") });
+  it("does not create or broadcast a record when the wallet locks before signing", async () => {
+    const fixture = createFixture();
+    fixture.signDigest.mockRejectedValueOnce(new WalletLockedError());
 
-    await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toThrow("Signing failed.");
+    await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toMatchObject({
+      code: "eip155.transaction.signing_unavailable",
+    });
     expect(fixture.commit).not.toHaveBeenCalled();
-    expect(fixture.broadcast).not.toHaveBeenCalled();
+    expect(fixture.request).not.toHaveBeenCalled();
   });
 
-  it("rejects a replacement whose target no longer exists", async () => {
+  it("rejects a replacement whose target was removed", async () => {
     const fixture = createFixture();
 
     await expect(fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId))).rejects.toMatchObject({
       code: "transaction.not_found",
     });
-    expect(fixture.createSigningInput).not.toHaveBeenCalled();
+    expect(fixture.signDigest).not.toHaveBeenCalled();
     expect(fixture.commit).not.toHaveBeenCalled();
   });
 
-  it("rejects a stale replacement after another pending replacement is committed", async () => {
-    let releaseSigningInput!: () => void;
-    const signingInputPaused = new Promise<void>((resolve) => {
-      releaseSigningInput = resolve;
-    });
-    let notifySigningInputStarted!: () => void;
-    const signingInputStarted = new Promise<void>((resolve) => {
-      notifySigningInputStarted = resolve;
-    });
-    const fixture = createFixture({
-      replacementTarget,
-      pauseBeforeSigningInput: async () => {
-        notifySigningInputStarted();
-        await signingInputPaused;
-      },
-    });
+  it("rechecks pending replacements after a persistence read yields a stale snapshot", async () => {
+    const fixture = createFixture(replacementTarget);
+    const pendingRead = Promise.withResolvers<readonly PendingTransactionRecord[]>();
+    fixture.listPending.mockReturnValueOnce(pendingRead.promise);
 
     const submission = fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId));
-    await signingInputStarted;
-    fixture.setPendingTransactions([pendingReplacement]);
-    releaseSigningInput();
+    await vi.waitFor(() => expect(fixture.listPending).toHaveBeenCalled());
+    fixture.listPending.mockResolvedValue([pendingReplacement]);
+    pendingRead.resolve([]);
 
     await expect(submission).rejects.toMatchObject({
       code: "transaction.replacement_unavailable",
-      details: {
-        transactionId: replacementTarget.transactionId,
-        status: "pending",
-        reason: "has_pending_replacement",
-      },
+      details: { transactionId: replacementTarget.transactionId, status: "pending", reason: "has_pending_replacement" },
     });
-    expect(fixture.sign).not.toHaveBeenCalled();
+    expect(fixture.signDigest).not.toHaveBeenCalled();
     expect(fixture.commit).not.toHaveBeenCalled();
-    expect(fixture.broadcast).not.toHaveBeenCalled();
+    expect(fixture.request).not.toHaveBeenCalled();
   });
 });

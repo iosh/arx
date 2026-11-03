@@ -31,12 +31,15 @@ import { createEip155SendRawTransactionMethod } from "./eth_sendRawTransaction.j
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;
-  dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
+  dappConnections: Pick<
+    DappConnections,
+    "openConnection" | "getConnectionState" | "selectNetwork" | "prepareRemoveNetworkReferences"
+  >;
   dappAuthorization: Readonly<{
     requestAccountAccess: DappAuthorization["requestAccountAccess"];
     permissions: Pick<DappAuthorization["permissions"], "revoke">;
   }>;
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getAccount" | "getAddress">;
+  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
   approvals: Pick<Approvals, "request">;
   accountSigning: Eip155AccountSigning;
@@ -87,6 +90,8 @@ const eip155ConnectionScope = (origin: string): DappConnectionScope => ({
   namespace: EIP155_NAMESPACE,
 });
 
+const ETHEREUM_CHAIN_REF = "eip155:1" satisfies ChainRef;
+
 const isAccountAccessUnavailable = (error: unknown): boolean =>
   error instanceof PermissionAccountAccessUnavailableError ||
   error instanceof WalletLockedError ||
@@ -95,13 +100,15 @@ const isAccountAccessUnavailable = (error: unknown): boolean =>
   error instanceof AccountHiddenSelectionError;
 
 export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOptions): DappNamespace => {
-  const getAccounts = (scope: DappConnectionScope): readonly string[] =>
-    options.dappConnections.getConnectionState(scope).accounts;
+  const getConnectionState = (origin: string) =>
+    options.dappConnections.getConnectionState(eip155ConnectionScope(origin), ETHEREUM_CHAIN_REF);
 
-  const getPermissions = (scope: DappConnectionScope) =>
+  const getAccounts = (origin: string): readonly string[] => getConnectionState(origin).accounts;
+
+  const getPermissions = (origin: string) =>
     buildEip2255Permissions({
-      origin: scope.origin,
-      accountAddresses: getAccounts(scope),
+      origin,
+      accountAddresses: getAccounts(origin),
     });
 
   const requestAccountAccess = async (scope: DappConnectionScope, chainRef: ChainRef): Promise<void> => {
@@ -134,6 +141,11 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
   });
 
   return {
+    openConnection: (origin) =>
+      options.dappConnections.openConnection(eip155ConnectionScope(origin), ETHEREUM_CHAIN_REF),
+    getConnectionState,
+    prepareRemoveNetworkReferences: (chainRef) =>
+      options.dappConnections.prepareRemoveNetworkReferences(chainRef, ETHEREUM_CHAIN_REF),
     namespaceMethods: new Map([
       [
         "eth_chainId",
@@ -146,7 +158,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
         "eth_accounts",
         defineDappMethod({
           decode: decodeNoParams,
-          execute: async ({ origin }) => getAccounts(eip155ConnectionScope(origin)),
+          execute: async ({ origin }) => getAccounts(origin),
         }),
       ],
       [
@@ -155,11 +167,11 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
           decode: decodeNoParams,
           execute: async ({ origin }) => {
             const scope = eip155ConnectionScope(origin);
-            const state = options.dappConnections.getConnectionState(scope);
+            const state = getConnectionState(origin);
             if (state.accounts.length > 0) return state.accounts;
 
             await requestAccountAccess(scope, state.chainRef);
-            return getAccounts(scope);
+            return getAccounts(origin);
           },
         }),
       ],
@@ -167,7 +179,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
         "wallet_getPermissions",
         defineDappMethod({
           decode: decodeNoParams,
-          execute: async ({ origin }) => getPermissions(eip155ConnectionScope(origin)),
+          execute: async ({ origin }) => getPermissions(origin),
         }),
       ],
       [
@@ -176,10 +188,10 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
           decode: decodeAccountPermissionRequest,
           execute: async ({ origin }) => {
             const scope = eip155ConnectionScope(origin);
-            const { chainRef } = options.dappConnections.getConnectionState(scope);
+            const { chainRef } = getConnectionState(origin);
 
             await requestAccountAccess(scope, chainRef);
-            return getPermissions(scope);
+            return getPermissions(origin);
           },
         }),
       ],

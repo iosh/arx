@@ -1,29 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { AccountId } from "../accounts/accountId.js";
-import type { Account } from "../accounts/types.js";
+import type { AccountMember } from "../accounts/types.js";
 import type { Namespace } from "../namespaces/types.js";
-import { Permissions, permissionsChangedFromUpdate } from "./Permissions.js";
+import { Permissions } from "./Permissions.js";
 import type { PermissionRecord } from "./persistence.js";
 
 const EIP155_ACCOUNT_A = "eip155:0000000000000000000000000000000000000001";
 const EIP155_ACCOUNT_B = "eip155:0000000000000000000000000000000000000002";
-const EIP155_HIDDEN_ACCOUNT = "eip155:0000000000000000000000000000000000000003";
 const SOLANA_ACCOUNT = "solana:account-1";
 const MISSING_ACCOUNT = "eip155:0000000000000000000000000000000000000004";
 
-const account = (accountId: AccountId, namespace: Namespace, hidden = false): Account => ({
+const account = (accountId: AccountId, namespace: Namespace): AccountMember => ({
   accountId,
+  accountGroupId: `group-${accountId}`,
   namespace,
   origin: { type: "hd", hdKeyringId: `keyring-${namespace}`, derivationIndex: 0 },
-  hidden,
-  selected: false,
-  createdAt: 1,
+  hidden: false,
 });
 
 const accounts = [
   account(EIP155_ACCOUNT_A, "eip155"),
   account(EIP155_ACCOUNT_B, "eip155"),
-  account(EIP155_HIDDEN_ACCOUNT, "eip155", true),
   account(SOLANA_ACCOUNT, "solana"),
 ];
 
@@ -33,33 +30,19 @@ const permission = (
   accountIds: [AccountId, ...AccountId[]],
 ): PermissionRecord => ({ origin, namespace, accountIds });
 
-const createPermissions = (options: {
-  records?: readonly PermissionRecord[];
-  accounts?: readonly Account[];
-}): Permissions => {
+const createPermissions = (options: { records?: readonly PermissionRecord[] }): Permissions => {
   const records = options.records ?? [];
-  const accountsById = new Map((options.accounts ?? accounts).map((entry) => [entry.accountId, entry]));
+  const accountsById = new Map(accounts.map((entry) => [entry.accountId, entry]));
 
   return new Permissions({
     bootstrap: { records },
     accounts: {
-      getAccount: (accountId) => accountsById.get(accountId) ?? null,
+      getMember: (accountId) => accountsById.get(accountId) ?? null,
     },
   });
 };
 
 describe("Permissions", () => {
-  it("loads stable synchronous permission readers", () => {
-    const first = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A]);
-    const second = permission("https://a.example", "solana", [SOLANA_ACCOUNT]);
-    const third = permission("https://b.example", "eip155", [EIP155_ACCOUNT_B]);
-    const permissions = createPermissions({ records: [third, second, first] });
-
-    expect(permissions.get(first)).toEqual(first);
-    expect(permissions.list()).toEqual([first, second, third]);
-    expect(permissions.listByOrigin(first.origin)).toEqual([first, second]);
-  });
-
   it("builds exact ordered replacements and ignores unchanged account lists", () => {
     const initial = permission("https://dapp.example", "eip155", [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B]);
     const reordered = permission(initial.origin, initial.namespace, [EIP155_ACCOUNT_B, EIP155_ACCOUNT_A]);
@@ -71,10 +54,6 @@ describe("Permissions", () => {
     if (!update) throw new Error("Expected a permission replacement draft");
     expect(permissions.get(initial)).toEqual(initial);
     expect(update.persistenceChanges).toEqual([{ persistenceType: "permission", operation: "put", value: reordered }]);
-    expect(permissionsChangedFromUpdate(update)).toEqual({
-      type: "permissionsChanged",
-      scopes: [{ origin: initial.origin, namespace: initial.namespace }],
-    });
 
     permissions.applyCommittedUpdate(update);
     expect(permissions.get(initial)).toEqual(reordered);

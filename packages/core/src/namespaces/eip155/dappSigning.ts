@@ -30,7 +30,7 @@ type Eip155SignPayload =
     }>;
 
 type CreateEip155DappSigningHandlersOptions = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getAccount" | "getAddress">;
+  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
   approvals: Pick<Approvals, "request">;
   accountSigning: Eip155AccountSigning;

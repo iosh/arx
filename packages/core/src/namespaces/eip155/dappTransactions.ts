@@ -28,7 +28,7 @@ import { getAuthorizedAccount } from "./dappAccount.js";
 import { decodeSendTransactionParams } from "./transactionRequest.js";
 
 type CreateEip155DappTransactionHandlersOptions = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getAccount" | "getAddress">;
+  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
   approvals: Pick<Approvals, "request">;
   transactions: Pick<Transactions, "prepare" | "submit">;

@@ -1,56 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { createEip155AddressFormat } from "./address.js";
+import { ChainInvalidAddressError } from "../../chains/errors.js";
+import * as EvmAddress from "./address.js";
 
-const module = createEip155AddressFormat();
-const chainRef = "eip155:1";
+const ADDRESS = "0xfcad0b19bb29d4674531d6f115237e16afce377c";
 
-describe("eip155 address module", () => {
-  it("normalizes mixed-case input to lowercase canonical", () => {
-    const result = module.canonicalize({
-      chainRef,
-      value: "0xAaBbCcDdEeFf00112233445566778899AaBbCcDd",
-    });
-    expect(result.canonical).toBe("0xaabbccddeeff00112233445566778899aabbccdd");
-  });
-
-  it("normalizes value without 0x prefix", () => {
-    const result = module.canonicalize({
-      chainRef,
-      value: "aabbccddeeff00112233445566778899aabbccdd",
-    });
-    expect(result.canonical).toBe("0xaabbccddeeff00112233445566778899aabbccdd");
-  });
-
-  it("throws on invalid input", () => {
-    try {
-      module.canonicalize({ chainRef, value: "0x123" });
-      throw new Error("Expected normalize to throw");
-    } catch (error) {
-      expect(error).toMatchObject({ code: "eip155.address.invalid" });
+describe("EVM address input", () => {
+  it("parses the supported input forms to the same address", () => {
+    for (const value of [
+      ADDRESS,
+      "0xFCAD0B19BB29D4674531D6F115237E16AFCE377C",
+      "FCad0b19bB29D4674531d6F115237e16afCe377c",
+      `  ${ADDRESS}  `,
+    ]) {
+      expect(EvmAddress.parse(value)).toBe(ADDRESS);
     }
   });
 
-  it("formats canonical address to EIP-55 checksum", () => {
-    const display = module.format({
-      chainRef,
-      canonical: "0xde709f2102306220921060314715629080e2fb77",
-    });
-    expect(display).toBe("0xde709f2102306220921060314715629080e2fb77");
-  });
-
-  it("validate throws for non-checksum canonical", () => {
-    expect(() =>
-      module.validate?.({
-        chainRef,
-        canonical: "0x0000000000000000000000000000000000000000",
-      }),
-    ).not.toThrow();
-
-    try {
-      module.validate?.({ chainRef, canonical: "0xzz00000000000000000000000000000000000000" });
-      throw new Error("Expected validate to throw");
-    } catch (error) {
-      expect(error).toMatchObject({ code: "eip155.address.invalid" });
+  it("rejects malformed address input", () => {
+    for (const value of ["", "  ", "0x123", `${ADDRESS}ff`, `${ADDRESS.slice(0, -1)}g`, `0X${ADDRESS.slice(2)}`]) {
+      expect(() => EvmAddress.parse(value)).toThrow(ChainInvalidAddressError);
     }
   });
 });

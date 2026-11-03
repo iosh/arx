@@ -1,6 +1,6 @@
 import { Hex, PersonalMessage } from "ox";
 import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
-import { isEip155Address } from "./address.js";
+import * as EvmAddress from "./address.js";
 import type { Eip155PersonalMessage } from "./signingRequest.js";
 
 const decodePersonalMessage = (value: string): Eip155PersonalMessage => {
@@ -26,10 +26,10 @@ export const decodePersonalSignParams = (params: unknown, method: string) => {
     throw invalidDappParams(method, "message and address must be strings.");
   }
 
-  const legacyOrder = isEip155Address(first) && !isEip155Address(second);
+  const legacyOrder = EvmAddress.isValid(first) && !EvmAddress.isValid(second);
   const address = legacyOrder ? first : second;
   const message = legacyOrder ? second : first;
-  if (!isEip155Address(address)) {
+  if (!EvmAddress.isValid(address)) {
     throw invalidDappParams(method, "expected a valid EIP-155 account address.");
   }
 

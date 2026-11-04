@@ -15,10 +15,5 @@ export function useWalletStatus(wallet: WalletClient) {
   return useQuery({
     queryKey: walletStatusQueryKey,
     queryFn: () => wallet.getStatus(),
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
   });
 }

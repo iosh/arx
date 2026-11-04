@@ -1,19 +1,12 @@
-import type { Account } from "@arx/core/accounts";
-import type { HdKeyring, KeySource, KeySourceId } from "@arx/core/keyring";
+import type { AccountGroup } from "@arx/core/accounts";
+import type { KeySource, KeySourceId } from "@arx/core/keyring";
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 const mnemonicSourcesKey = ["mnemonicSources"] as const;
-
 type MnemonicSource = Extract<KeySource, { type: "bip39" }>;
 
-type MnemonicSources = Readonly<{
-  sources: readonly MnemonicSource[];
-  hdKeyrings: readonly HdKeyring[];
-}>;
-
 export function refreshMnemonicSources(queryClient: QueryClient) {
-  // Ignore an older response if the keyring changes while this query is in flight.
   void queryClient.cancelQueries({ queryKey: mnemonicSourcesKey, exact: true });
   void queryClient.invalidateQueries({ queryKey: mnemonicSourcesKey, exact: true });
 }
@@ -22,47 +15,33 @@ function useMnemonicSourcesOptions() {
   const { client: wallet } = useWallet();
   return queryOptions({
     queryKey: mnemonicSourcesKey,
-    queryFn: async () => {
-      // HD accounts reference a keyring, which links them to their mnemonic source.
-      const [keySources, hdKeyrings] = await Promise.all([wallet.keySources.list(), wallet.hdKeyrings.list()]);
-      return {
-        sources: keySources.filter((source) => source.type === "bip39"),
-        hdKeyrings,
-      };
-    },
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
+    queryFn: async () => (await wallet.keySources.list()).filter((source) => source.type === "bip39"),
   });
 }
 
-function findAccountSource({ sources, hdKeyrings }: MnemonicSources, account: Account | undefined) {
-  if (account?.origin.type !== "hd") return null;
-  const hdKeyringId = account.origin.hdKeyringId;
-  const keySourceId = hdKeyrings.find((keyring) => keyring.hdKeyringId === hdKeyringId)?.keySourceId;
-  return sources.find((source) => source.keySourceId === keySourceId) ?? null;
+function findAccountSource(sources: readonly MnemonicSource[], account: AccountGroup | undefined) {
+  if (account?.source.type !== "bip39") return null;
+  return sources.find((source) => source.keySourceId === account.source.keySourceId) ?? null;
 }
 
 export function useMnemonicSources() {
   return useQuery(useMnemonicSourcesOptions());
 }
 
-export function useMnemonicSource(account: Account | undefined) {
+export function useMnemonicSource(account: AccountGroup | undefined) {
   return useQuery({
     ...useMnemonicSourcesOptions(),
-    enabled: account?.origin.type === "hd",
-    select: (data) => findAccountSource(data, account),
+    enabled: account?.source.type === "bip39",
+    select: (sources) => findAccountSource(sources, account),
   });
 }
 
-export function usePendingMnemonicSource(account: Account | undefined) {
+export function usePendingMnemonicSource(account: AccountGroup | undefined) {
   return useQuery({
     ...useMnemonicSourcesOptions(),
-    select: (data) => {
-      const currentSource = findAccountSource(data, account);
-      const pending = data.sources.filter((source) => source.backupStatus === "pending");
+    select: (sources) => {
+      const currentSource = findAccountSource(sources, account);
+      const pending = sources.filter((source) => source.backupStatus === "pending");
       return pending.find((source) => source.keySourceId === currentSource?.keySourceId) ?? pending[0] ?? null;
     },
   });
@@ -71,24 +50,6 @@ export function usePendingMnemonicSource(account: Account | undefined) {
 export function useMnemonicWallet(keySourceId: KeySourceId) {
   return useQuery({
     ...useMnemonicSourcesOptions(),
-    select: ({ sources, hdKeyrings }) => {
-      const source = sources.find((source) => source.keySourceId === keySourceId);
-      if (!source) return null;
-      return {
-        source,
-        hdKeyrings: hdKeyrings.filter((keyring) => keyring.keySourceId === keySourceId),
-      };
-    },
-  });
-}
-
-export function useHdWallets() {
-  return useQuery({
-    ...useMnemonicSourcesOptions(),
-    select: ({ sources, hdKeyrings }) =>
-      sources.flatMap((source) => {
-        const sourceKeyrings = hdKeyrings.filter((candidate) => candidate.keySourceId === source.keySourceId);
-        return sourceKeyrings.length > 0 ? [{ source, hdKeyrings: sourceKeyrings }] : [];
-      }),
+    select: (sources) => sources.find((source) => source.keySourceId === keySourceId) ?? null,
   });
 }

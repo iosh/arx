@@ -6,8 +6,7 @@ import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccount
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
-import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
-import { useHdWallets } from "@/ui/wallet/keyring/useMnemonicSources";
+import { useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useAccountCreation } from "./useAccountCreation";
 
 export function AddAccountPage() {
@@ -16,17 +15,7 @@ export function AddAccountPage() {
   const router = useRouter();
   const createPath = router.buildLocation({ to: "/onboarding/add-wallet/create" }).href;
   const importPath = router.buildLocation({ to: "/onboarding/add-wallet/import" }).href;
-  const { data: wallets = [], isPending, isSuccess } = useHdWallets();
-  const {
-    data: selectedAccount,
-    isPending: selectedAccountPending,
-    isSuccess: selectedAccountLoaded,
-  } = useSelectedAccount();
-  const targets = wallets.flatMap(({ source, hdKeyrings }) =>
-    hdKeyrings
-      .filter((keyring) => keyring.namespace === selectedAccount?.namespace)
-      .map((hdKeyring) => ({ source, hdKeyring })),
-  );
+  const { data: targets = [], isPending, isSuccess } = useMnemonicSources();
   const creation = useAccountCreation(() => {
     void navigate({ to: "/wallet/accounts", replace: true });
   });
@@ -37,29 +26,29 @@ export function AddAccountPage() {
       <title>{`${t("add")} · ARX`}</title>
       <PageHeader title={t("add")} backTo="/wallet/accounts" backLabel={t("backToAccounts")} />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
-        {(isPending || selectedAccountPending) && (
+        {isPending && (
           <div className="flex min-h-14 items-center px-4 text-muted-foreground">
             <Spinner aria-label={t("loadingWallet")} />
           </div>
         )}
-        {isSuccess && selectedAccountLoaded && targets.length === 0 && (
+        {isSuccess && targets.length === 0 && (
           <p className="px-4 py-4 text-sm text-muted-foreground">{t("noHdWallet")}</p>
         )}
         {targets.length > 0 && (
           <section className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
-            {targets.map(({ source, hdKeyring }) => (
+            {targets.map((source) => (
               <Button
-                key={hdKeyring.hdKeyringId}
+                key={source.keySourceId}
                 type="button"
                 variant="ghost"
                 disabled={creation.isPending}
                 className="h-auto min-h-15 w-full justify-start gap-3 px-4 py-2 text-left whitespace-normal"
                 onClick={(event) =>
-                  creation.create({ hdKeyringId: hdKeyring.hdKeyringId, walletName: source.name }, event.currentTarget)
+                  creation.create({ keySourceId: source.keySourceId, walletName: source.name }, event.currentTarget)
                 }
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                  {creation.creatingKeyringId === hdKeyring.hdKeyringId ? (
+                  {creation.creatingSourceId === source.keySourceId ? (
                     <Spinner aria-label={t("creatingAccount")} />
                   ) : (
                     <Plus aria-hidden="true" className="size-4" />
@@ -145,6 +134,7 @@ export function AddAccountPage() {
       {candidate && (
         <ConfirmAccountMoveSheet
           account={candidate.account}
+          accountId={candidate.accountId}
           walletName={candidate.target.walletName}
           isPending={creation.isPending}
           onCancel={creation.cancel}

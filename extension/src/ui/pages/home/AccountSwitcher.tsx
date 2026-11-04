@@ -1,4 +1,4 @@
-import type { Account, AccountId } from "@arx/core/accounts";
+import type { AccountGroup, AccountGroupId } from "@arx/core/accounts";
 import { Group as DropdownMenuGroup, Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Settings2 } from "lucide-react";
@@ -20,32 +20,29 @@ import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySourc
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useSelectAccount } from "@/ui/wallet/accounts/useSelectAccount";
-import { useHdWallets, useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
+import { useMnemonicSource, useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 
 export function AccountSwitcher({
   selectedAccount,
   selectedAccountPending,
 }: Readonly<{
-  selectedAccount: Account | undefined;
+  selectedAccount: AccountGroup | undefined;
   selectedAccountPending: boolean;
 }>) {
   const { t } = useTranslation("wallet");
   const [open, setOpen] = useState(false);
   const { mutate: selectAccount, isPending: isSelectingAccount } = useSelectAccount();
-  const { data: visibleAccounts, isPending: accountsPending } = useVisibleAccounts();
-  const { data: wallets = [], isPending: walletsPending } = useHdWallets();
-  const accounts = selectedAccount
-    ? visibleAccounts?.filter((account) => account.namespace === selectedAccount.namespace)
-    : undefined;
+  const { data: accounts, isPending: accountsPending } = useVisibleAccounts();
+  const { data: wallets = [], isPending: walletsPending } = useMnemonicSources();
   const groups = groupAccountsBySource(accounts ?? [], wallets);
   const menuPending = accountsPending || selectedAccountPending || walletsPending;
 
-  function select(accountId: AccountId) {
-    if (accountId === selectedAccount?.accountId) {
+  function select(accountGroupId: AccountGroupId) {
+    if (accountGroupId === selectedAccount?.accountGroupId) {
       setOpen(false);
       return;
     }
-    selectAccount(accountId, { onSuccess: () => setOpen(false) });
+    selectAccount(accountGroupId, { onSuccess: () => setOpen(false) });
   }
 
   return (
@@ -69,7 +66,7 @@ export function AccountSwitcher({
           </div>
         )}
         {accounts && (
-          <DropdownMenuRadioGroup value={selectedAccount?.accountId} className="min-h-0 overflow-y-auto">
+          <DropdownMenuRadioGroup value={selectedAccount?.accountGroupId} className="min-h-0 overflow-y-auto">
             {groups.map((group) => (
               <AccountSwitchGroup key={group.id} group={group} disabled={isSelectingAccount} onSelect={select} />
             ))}
@@ -91,11 +88,11 @@ export function AccountSwitcher({
   );
 }
 
-function AccountSwitchTrigger({ account, pending }: { account: Account | undefined; pending: boolean }) {
+function AccountSwitchTrigger({ account, pending }: { account: AccountGroup | undefined; pending: boolean }) {
   const { t } = useTranslation("wallet");
   const { data: source } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : null;
-  const sourceName = account?.origin.type === "private-key" ? t("privateKeyImport") : source?.name;
+  const sourceName = account?.source.type === "private-key" ? t("privateKeyImport") : source?.name;
 
   return (
     <h1 className="min-w-0 flex-1 text-base font-semibold">
@@ -104,7 +101,7 @@ function AccountSwitchTrigger({ account, pending }: { account: Account | undefin
           type="button"
           className="group flex h-11 w-full items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {account && <AccountIdenticon accountId={account.accountId} />}
+          {account && <AccountIdenticon seed={account.accountGroupId} />}
           <span className="flex h-11 min-w-0 flex-1 flex-col justify-center px-1">
             <span className="truncate text-xs leading-4 font-medium text-muted-foreground">{sourceName}</span>
             <span className="flex h-6 min-w-0 items-center gap-1">
@@ -130,7 +127,7 @@ function AccountSwitchGroup({
 }: {
   group: ReturnType<typeof groupAccountsBySource>[number];
   disabled: boolean;
-  onSelect(accountId: AccountId): void;
+  onSelect(accountGroupId: AccountGroupId): void;
 }) {
   if (group.type === "private-key") {
     return <AccountSwitchItem account={group.account} disabled={disabled} onSelect={onSelect} />;
@@ -142,7 +139,7 @@ function AccountSwitchGroup({
         <span className="truncate">{group.source.name}</span>
       </div>
       {group.accounts.map((account) => (
-        <AccountSwitchItem key={account.accountId} account={account} disabled={disabled} onSelect={onSelect} />
+        <AccountSwitchItem key={account.accountGroupId} account={account} disabled={disabled} onSelect={onSelect} />
       ))}
     </DropdownMenuGroup>
   );
@@ -153,34 +150,30 @@ function AccountSwitchItem({
   disabled,
   onSelect,
 }: {
-  account: Account;
+  account: AccountGroup;
   disabled: boolean;
-  onSelect(accountId: AccountId): void;
+  onSelect(accountGroupId: AccountGroupId): void;
 }) {
   const { t } = useTranslation("wallet");
   const accountName = getAccountName(account, t);
-  const {
-    networkSelection: { isPending: networkPending },
-    addresses: { data: addresses, isLoading: addressesLoading },
-  } = useAccountAddresses(account);
-  const addressPending = networkPending || addressesLoading;
+  const { data: addresses, isLoading: addressPending } = useAccountAddresses(account);
 
   return (
     <DropdownMenuRadioItem
-      value={account.accountId}
+      value={account.accountGroupId}
       textValue={accountName}
       disabled={disabled}
       className="h-14 gap-3 rounded-none px-4 pr-11 text-sm font-semibold [&>span:first-child]:right-4 [&>span:first-child]:size-4"
       onSelect={(event) => {
         event.preventDefault();
-        onSelect(account.accountId);
+        onSelect(account.accountGroupId);
       }}
     >
-      <AccountIdenticon accountId={account.accountId} size={32} />
+      <AccountIdenticon seed={account.accountGroupId} size={32} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.75">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{accountName}</span>
-          {account.origin.type === "private-key" && (
+          {account.source.type === "private-key" && (
             <span className="shrink-0 rounded bg-secondary px-1.5 py-px text-xs font-medium text-muted-foreground">
               {t("privateKey")}
             </span>

@@ -188,7 +188,7 @@ describe("CoreRuntime commands", () => {
     assert(imported.status === "added");
     const offered = await wallet.accounts.create({ keySourceId: created.keySourceId });
     assert(offered.status === "move-available");
-    const accountId = offered.account.members[0].accountId;
+    const accountId = offered.accountId;
 
     await wallet.keySources.remove({ keySourceId: imported.keySourceId });
     const reimported = await wallet.keySources.importPrivateKey({ privateKey: NEXT_PRIVATE_KEY, namespace: "eip155" });

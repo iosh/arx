@@ -13,12 +13,7 @@ function useAccountsOptions() {
   const { client: wallet } = useWallet();
   return queryOptions({
     queryKey: accountsKey,
-    queryFn: () => wallet.accounts.list(),
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
+    queryFn: () => wallet.accounts.listGroups(),
   });
 }
 

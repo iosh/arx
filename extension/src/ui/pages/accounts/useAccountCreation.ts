@@ -1,5 +1,5 @@
-import type { Account } from "@arx/core/accounts";
-import type { HdKeyringId } from "@arx/core/keyring";
+import type { AccountGroup, AccountId } from "@arx/core/accounts";
+import type { KeySourceId } from "@arx/core/keyring";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -7,14 +7,14 @@ import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
-type CreationTarget = Readonly<{ hdKeyringId: HdKeyringId; walletName: string }>;
-type MoveCandidate = Readonly<{ account: Account; target: CreationTarget }>;
+type CreationTarget = Readonly<{ keySourceId: KeySourceId; walletName: string }>;
+type MoveCandidate = Readonly<{ account: AccountGroup; accountId: AccountId; target: CreationTarget }>;
 
 export function useAccountCreation(onComplete?: () => void) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const creation = useWalletMutation({
-    mutationFn: ({ hdKeyringId }: CreationTarget) => wallet.accounts.create({ hdKeyringId }),
+    mutationFn: ({ keySourceId }: CreationTarget) => wallet.accounts.create({ keySourceId }),
   });
   const moving = useWalletMutation({
     mutationFn: wallet.accounts.move,
@@ -23,7 +23,7 @@ export function useAccountCreation(onComplete?: () => void) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const candidate: MoveCandidate | null =
     creation.isSuccess && creation.data.status === "move-available"
-      ? { account: creation.data.account, target: creation.variables }
+      ? { account: creation.data.account, accountId: creation.data.accountId, target: creation.variables }
       : null;
 
   function complete() {
@@ -44,10 +44,10 @@ export function useAccountCreation(onComplete?: () => void) {
     });
   }
 
-  function move({ account, target }: MoveCandidate) {
+  function move({ accountId, target }: MoveCandidate) {
     toast.dismiss();
     moving.mutate(
-      { accountId: account.accountId, hdKeyringId: target.hdKeyringId },
+      { accountId, keySourceId: target.keySourceId },
       {
         onSuccess: (movedAccount) => {
           toast.success(
@@ -64,7 +64,7 @@ export function useAccountCreation(onComplete?: () => void) {
 
   return {
     isPending: creation.isPending || moving.isPending,
-    creatingKeyringId: creation.isPending ? creation.variables.hdKeyringId : null,
+    creatingSourceId: creation.isPending ? creation.variables.keySourceId : null,
     candidate,
     returnFocusRef,
     create,

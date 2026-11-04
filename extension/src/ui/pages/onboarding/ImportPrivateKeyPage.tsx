@@ -1,3 +1,4 @@
+import { EIP155_NAMESPACE } from "@arx/core/namespaces";
 import type { WalletClient } from "@arx/wallet-api/client";
 import { Navigate, useBlocker } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -12,7 +13,6 @@ import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
-import { useNetworkSelection } from "@/ui/wallet/networks/useNetworkSelection";
 import { useCreatePrivateKeyWallet } from "@/ui/wallet/useWalletMutations";
 import { CreatePasswordForm } from "./CreatePasswordForm";
 
@@ -31,9 +31,7 @@ type PrivateKeyAccount = NonNullable<Awaited<ReturnType<WalletClient["accounts"]
 function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => void }) {
   const { status } = useWallet();
   const { t } = useTranslation(["onboarding", "common"]);
-  const { data: networkSelection, isPending: networkPending } = useNetworkSelection();
-  const chainRef = networkSelection?.selectedChainRef;
-  const namespaceUi = networkSelection ? getNamespaceUi(networkSelection.selectedNamespace) : null;
+  const namespaceUi = getNamespaceUi(EIP155_NAMESPACE);
   const id = useId();
   const { mutateAsync: createWallet, reset: resetImport } = useCreatePrivateKeyWallet();
   const {
@@ -43,7 +41,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
     formState: { isSubmitting: pending },
   } = useForm({ defaultValues: { privateKey: "" } });
   const privateKey = useWatch({ control, name: "privateKey" }).trim();
-  const { account, invalid } = useAccountFromPrivateKey({ privateKey, chainRef });
+  const { account, invalid } = useAccountFromPrivateKey({ privateKey, namespace: EIP155_NAMESPACE });
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
@@ -61,7 +59,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
       <OnboardingCard
         asChild
         title={t("importPrivateKey")}
-        description={namespaceUi ? t(namespaceUi.privateKeyImport.descriptionKey) : undefined}
+        description={t(namespaceUi.privateKeyImport.descriptionKey)}
       >
         <form
           onSubmit={account ? handleSubmit(() => importWallet(account)) : undefined}
@@ -78,9 +76,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
               aria-describedby={`${id}-description`}
             />
             <FieldDescription id={`${id}-description`} aria-live="polite">
-              {!namespaceUi ? (
-                networkPending && <Spinner aria-label={t("common:loadingNetwork")} />
-              ) : invalid ? (
+              {invalid ? (
                 <span className="text-destructive-foreground">{t("privateKeyIncorrect")}</span>
               ) : (
                 t(namespaceUi.privateKeyImport.formatHintKey)

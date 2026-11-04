@@ -1,4 +1,4 @@
-import type { Account } from "@arx/core/accounts";
+import type { AccountGroup } from "@arx/core/accounts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, EyeOff, KeyRound, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -10,16 +10,14 @@ import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useAccounts } from "@/ui/wallet/accounts/useAccounts";
-import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
-import { useHdWallets } from "@/ui/wallet/keyring/useMnemonicSources";
+import { useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useAccountCreation } from "./useAccountCreation";
 
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
   const { data: accounts = [], isPending } = useAccounts();
-  const { data: wallets = [], isPending: walletsPending } = useHdWallets();
-  const { data: selectedAccount } = useSelectedAccount();
+  const { data: wallets = [], isPending: walletsPending } = useMnemonicSources();
   const creation = useAccountCreation();
   const { candidate } = creation;
 
@@ -59,14 +57,13 @@ export function AccountsPage() {
           if (section.type === "private-key") {
             return (
               <section key={section.id} className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
-                <AccountRows accounts={[section.account]} selectedAccountId={selectedAccount?.accountId} />
+                <AccountRows accounts={[section.account]} />
               </section>
             );
           }
-          const { id, source, accounts, hdKeyrings } = section;
+          const { id, source, accounts } = section;
           const visibleAccounts = accounts.filter((account) => !account.hidden);
           const hiddenCount = accounts.length - visibleAccounts.length;
-          const hdKeyring = hdKeyrings.find((keyring) => keyring.namespace === selectedAccount?.namespace);
           return (
             <section
               key={id}
@@ -85,24 +82,20 @@ export function AccountsPage() {
                   <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
                 </Link>
               </h2>
-              <AccountRows accounts={visibleAccounts} selectedAccountId={selectedAccount?.accountId} />
+              <AccountRows accounts={visibleAccounts} />
               <Button
                 type="button"
                 variant="ghost"
                 size="lg"
-                disabled={creation.isPending || !hdKeyring}
+                disabled={creation.isPending}
                 aria-label={`${t("createAccount")} · ${source.name}`}
                 className="w-full justify-start gap-3 px-4"
-                onClick={(event) => {
-                  if (hdKeyring)
-                    creation.create(
-                      { hdKeyringId: hdKeyring.hdKeyringId, walletName: source.name },
-                      event.currentTarget,
-                    );
-                }}
+                onClick={(event) =>
+                  creation.create({ keySourceId: source.keySourceId, walletName: source.name }, event.currentTarget)
+                }
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                  {hdKeyring && creation.creatingKeyringId === hdKeyring.hdKeyringId ? (
+                  {creation.creatingSourceId === source.keySourceId ? (
                     <Spinner aria-label={t("creatingAccount")} />
                   ) : (
                     <Plus aria-hidden="true" className="size-4" />
@@ -129,6 +122,7 @@ export function AccountsPage() {
       {candidate && (
         <ConfirmAccountMoveSheet
           account={candidate.account}
+          accountId={candidate.accountId}
           walletName={candidate.target.walletName}
           isPending={creation.isPending}
           onCancel={creation.cancel}
@@ -140,33 +134,27 @@ export function AccountsPage() {
   );
 }
 
-function AccountRows({
-  accounts,
-  selectedAccountId,
-}: {
-  accounts: readonly Account[];
-  selectedAccountId: Account["accountId"] | undefined;
-}) {
+function AccountRows({ accounts }: { accounts: readonly AccountGroup[] }) {
   const { t } = useTranslation("wallet");
 
   return (
     <ul>
       {accounts.map((account) => (
-        <li key={account.accountId}>
+        <li key={account.accountGroupId}>
           <Link
-            to="/wallet/accounts/$accountId"
-            params={{ accountId: account.accountId }}
+            to="/wallet/accounts/$accountGroupId"
+            params={{ accountGroupId: account.accountGroupId }}
             className="flex h-14 items-center gap-3 rounded-xl px-4 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
-            <AccountIdenticon accountId={account.accountId} size={32} />
+            <AccountIdenticon seed={account.accountGroupId} size={32} />
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="truncate text-sm font-semibold">{getAccountName(account, t)}</span>
-              {account.origin.type === "private-key" && (
+              {account.source.type === "private-key" && (
                 <span className="shrink-0 rounded bg-secondary px-1.5 py-px text-xs font-medium text-muted-foreground">
                   {t("privateKey")}
                 </span>
               )}
-              {account.accountId === selectedAccountId && (
+              {account.selected && (
                 <span className="shrink-0 rounded bg-brand-subtle px-1.5 py-px text-xs font-semibold text-brand">
                   {t("currentAccount")}
                 </span>

@@ -42,8 +42,8 @@ export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }
   return (
     <MnemonicWalletFlow
       keySourceId={keySourceId}
-      walletName={mnemonicWallet.source.name}
-      backupStatus={mnemonicWallet.source.backupStatus}
+      walletName={mnemonicWallet.name}
+      backupStatus={mnemonicWallet.backupStatus}
     />
   );
 }

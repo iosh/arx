@@ -1,5 +1,5 @@
-import type { Account } from "@arx/core/accounts";
-import type { HdKeyring, KeySourceId } from "@arx/core/keyring";
+import type { AccountGroup } from "@arx/core/accounts";
+import type { KeySourceId } from "@arx/core/keyring";
 import { useRouter } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -14,8 +14,8 @@ import { RemoveKeySourceSheet } from "./RemoveKeySourceSheet";
 import { RenameSheet } from "./RenameSheet";
 import { useKeySourceRemoval } from "./useKeySourceRemoval";
 
-function getWalletRemovalInfo(accounts: readonly Account[], hdKeyrings: readonly HdKeyring[]) {
-  const walletAccounts = getWalletAccounts(accounts, hdKeyrings);
+function getWalletRemovalInfo(accounts: readonly AccountGroup[], keySourceId: KeySourceId) {
+  const walletAccounts = getWalletAccounts(accounts, keySourceId);
   const visibleCount = walletAccounts.filter((account) => !account.hidden).length;
   const remainingVisibleCount = accounts.filter((account) => !account.hidden).length - visibleCount;
 
@@ -34,9 +34,8 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
   const { data: accounts } = useAccounts();
   const { data: mnemonicWallet, isPending: walletPending } = useMnemonicWallet(keySourceId);
   const removal = useKeySourceRemoval();
-  const name = mnemonicWallet?.source.name ?? t("walletDetails");
-  const removalInfo =
-    mnemonicWallet && accounts ? getWalletRemovalInfo(accounts, mnemonicWallet.hdKeyrings) : undefined;
+  const name = mnemonicWallet?.name ?? t("walletDetails");
+  const removalInfo = mnemonicWallet && accounts ? getWalletRemovalInfo(accounts, keySourceId) : undefined;
   const subtitle = removalInfo ? t("walletAccountCount", { count: removalInfo.visibleCount }) : t("recoveryPhrase");
   const removalDescription =
     removalInfo &&
@@ -61,7 +60,7 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
             <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
               <RenameSheet
                 label={t("walletNameLabel")}
-                name={mnemonicWallet.source.name}
+                name={mnemonicWallet.name}
                 onRename={(name) => wallet.keySources.renameMnemonic({ keySourceId, name })}
               />
               <a
@@ -75,7 +74,7 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
                 rel="noopener noreferrer"
                 className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
-                {t(mnemonicWallet.source.backupStatus === "confirmed" ? "viewRecoveryPhrase" : "backupRecoveryPhrase")}
+                {t(mnemonicWallet.backupStatus === "confirmed" ? "viewRecoveryPhrase" : "backupRecoveryPhrase")}
                 <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
               </a>
             </div>

@@ -1,3 +1,4 @@
+import { EIP155_NAMESPACE } from "@arx/core/namespaces";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { CircleAlert } from "lucide-react";
 import { useId } from "react";
@@ -12,7 +13,6 @@ import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
-import { useNetworkSelection } from "@/ui/wallet/networks/useNetworkSelection";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 export function ImportPrivateKeyPage() {
@@ -20,9 +20,7 @@ export function ImportPrivateKeyPage() {
   const { t } = useTranslation(["wallet", "onboarding", "common"]);
   const navigate = useNavigate();
   const id = useId();
-  const { data: networkSelection, isPending: networkPending } = useNetworkSelection();
-  const chainRef = networkSelection?.selectedChainRef;
-  const namespaceUi = networkSelection ? getNamespaceUi(networkSelection.selectedNamespace) : null;
+  const namespaceUi = getNamespaceUi(EIP155_NAMESPACE);
   const {
     register,
     control,
@@ -30,7 +28,7 @@ export function ImportPrivateKeyPage() {
     formState: { isSubmitting: pending },
   } = useForm({ defaultValues: { privateKey: "" } });
   const privateKey = useWatch({ control, name: "privateKey" }).trim();
-  const { account, invalid } = useAccountFromPrivateKey({ privateKey, chainRef });
+  const { account, invalid } = useAccountFromPrivateKey({ privateKey, namespace: EIP155_NAMESPACE });
   const {
     mutateAsync: importPrivateKey,
     data: importResult,
@@ -90,10 +88,8 @@ export function ImportPrivateKeyPage() {
                   <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
                   <span className="wrap-anywhere">{fieldError}</span>
                 </span>
-              ) : namespaceUi ? (
-                t(namespaceUi.privateKeyImport.formatHintKey)
               ) : (
-                networkPending && <Spinner aria-label={t("common:loadingNetwork")} />
+                t(namespaceUi.privateKeyImport.formatHintKey)
               )}
             </FieldDescription>
           </Field>

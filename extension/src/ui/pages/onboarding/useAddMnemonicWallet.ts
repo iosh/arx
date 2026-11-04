@@ -1,6 +1,5 @@
-import type { Account } from "@arx/core/accounts";
+import type { AccountGroup, AccountId } from "@arx/core/accounts";
 import type { KeySource } from "@arx/core/keyring";
-import type { Namespace } from "@arx/core/namespaces";
 import type { AddMnemonicSourceInput } from "@arx/core/wallet";
 import { useBlocker } from "@tanstack/react-router";
 import { useRef } from "react";
@@ -11,7 +10,6 @@ import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 export type AddMnemonicWalletInput = Pick<AddMnemonicSourceInput, "mnemonic" | "backupStatus">;
 export type AddMnemonicWalletContext = Readonly<{
   sources: readonly Extract<KeySource, { type: "bip39" }>[];
-  namespace: Namespace;
   onAdded(): void;
 }>;
 
@@ -21,9 +19,9 @@ type AdditionOptions = {
   returnFocusElement?: HTMLElement | null | undefined;
 };
 
-type MoveCandidate = Readonly<{ account: Account; input: AddMnemonicSourceInput }>;
+type MoveCandidate = Readonly<{ account: AccountGroup; accountId: AccountId; input: AddMnemonicSourceInput }>;
 
-export function useAddMnemonicWallet({ sources, namespace, onAdded }: AddMnemonicWalletContext) {
+export function useAddMnemonicWallet({ sources, onAdded }: AddMnemonicWalletContext) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const addition = useWalletMutation({
@@ -47,7 +45,7 @@ export function useAddMnemonicWallet({ sources, namespace, onAdded }: AddMnemoni
     while (sources.some((source) => source.name === name)) name = t("defaultWalletName", { number: ++number });
 
     return addition.mutateAsync(
-      { mnemonic, backupStatus, name, namespace },
+      { mnemonic, backupStatus, name },
       {
         onError: options.onError,
         onSuccess: (result) => {
@@ -63,12 +61,12 @@ export function useAddMnemonicWallet({ sources, namespace, onAdded }: AddMnemoni
 
   const candidate: MoveCandidate | null =
     addition.isSuccess && addition.data.status === "move-available"
-      ? { account: addition.data.account, input: addition.variables }
+      ? { account: addition.data.account, accountId: addition.data.accountId, input: addition.variables }
       : null;
 
-  function confirmMove({ account, input }: MoveCandidate) {
+  function confirmMove({ accountId, input }: MoveCandidate) {
     confirmation.mutate(
-      { ...input, accountId: account.accountId },
+      { ...input, accountId },
       {
         onSuccess: onAdded,
         onSettled: confirmation.reset,
@@ -84,6 +82,7 @@ export function useAddMnemonicWallet({ sources, namespace, onAdded }: AddMnemoni
   const move = candidate
     ? {
         account: candidate.account,
+        accountId: candidate.accountId,
         walletName: candidate.input.name,
         isPending: confirmation.isPending,
         confirm: () => confirmMove(candidate),

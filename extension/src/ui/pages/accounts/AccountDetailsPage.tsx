@@ -1,4 +1,4 @@
-import { type AccountId, findAccountHideReplacement, LastVisibleAccountHiddenError } from "@arx/core/accounts";
+import { type AccountGroupId, findAccountHideReplacement, LastVisibleAccountHiddenError } from "@arx/core/accounts";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
@@ -20,7 +20,7 @@ import { RemoveKeySourceSheet } from "./RemoveKeySourceSheet";
 import { RenameSheet } from "./RenameSheet";
 import { useKeySourceRemoval } from "./useKeySourceRemoval";
 
-export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
+export function AccountDetailsPage({ accountGroupId }: { accountGroupId: AccountGroupId }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const navigate = useNavigate();
@@ -28,27 +28,28 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
   const hiding = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
   const removal = useKeySourceRemoval();
   const { data: accounts = [], isPending } = useVisibleAccounts();
-  const account = accounts.find((candidate) => candidate.accountId === accountId);
+  const account = accounts.find((candidate) => candidate.accountGroupId === accountGroupId);
   const { data: source, isPending: sourcePending } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : t("accountDetails");
   const canHide = account !== undefined && findAccountHideReplacement(account, accounts) !== null;
-  const privateKeySourceId = account?.origin.type === "private-key" ? account.origin.keySourceId : undefined;
-  const exportPrivateKeyLink = account && (
+  const privateKeySourceId = account?.source.type === "private-key" ? account.source.keySourceId : undefined;
+  const exportPrivateKeyLink = account?.members.map((member) => (
     <Link
-      to="/wallet/accounts/$accountId/export-private-key"
-      params={{ accountId }}
+      key={member.accountId}
+      to="/wallet/accounts/$accountGroupId/export-private-key/$accountId"
+      params={{ accountGroupId, accountId: member.accountId }}
       disabled={hiding.isPending || removal.isPending}
       className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-disabled:pointer-events-none aria-disabled:opacity-45"
     >
       {t("exportPrivateKey")}
       <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
     </Link>
-  );
+  ));
 
   function hideAccount() {
     toast.dismiss();
     hiding.mutate(
-      { accountId, hidden: true },
+      { accountGroupId, hidden: true },
       {
         onSuccess: (result) => {
           showAccountHiddenToast(result, t);
@@ -73,7 +74,7 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
         backTo="/wallet/accounts"
         backLabel={t("backToAccounts")}
         backDisabled={hiding.isPending || removal.isPending}
-        icon={account && <AccountIdenticon accountId={account.accountId} size={28} />}
+        icon={account && <AccountIdenticon seed={account.accountGroupId} size={28} />}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
         {!account && (
@@ -88,9 +89,9 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
               <RenameSheet
                 label={t("accountNameLabel")}
                 name={name}
-                onRename={(alias) => wallet.accounts.rename({ accountId, alias })}
+                onRename={(alias) => wallet.accounts.rename({ accountGroupId, alias })}
               />
-              {account.origin.type === "private-key" ? (
+              {account.source.type === "private-key" ? (
                 <div className="flex h-12 items-center justify-between gap-2 px-4 text-sm">
                   <span className="font-medium">{t("accountSource")}</span>
                   <span className="text-muted-foreground">{t("privateKeyImport")}</span>
@@ -117,13 +118,13 @@ export function AccountDetailsPage({ accountId }: { accountId: AccountId }) {
                 title={t("removeAccountTitle", { accountName: name })}
                 description={t("removeAccountDescription")}
                 backupLabel={t("confirmPrivateKeyBackup")}
-                canRemove={accounts.some((candidate) => candidate.accountId !== accountId)}
+                canRemove={accounts.some((candidate) => candidate.accountGroupId !== accountGroupId)}
                 isPending={removal.isPending}
                 leadingAction={exportPrivateKeyLink}
                 onConfirm={() => removal.removeKeySource(privateKeySourceId, name)}
               />
             )}
-            {account.origin.type === "hd" && (
+            {account.source.type === "bip39" && (
               <>
                 <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
                   {exportPrivateKeyLink}

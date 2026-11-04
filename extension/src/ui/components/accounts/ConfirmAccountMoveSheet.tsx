@@ -1,4 +1,4 @@
-import type { Account } from "@arx/core/accounts";
+import type { AccountGroup, AccountId } from "@arx/core/accounts";
 import { KeyRound, X } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,10 +9,11 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@
 import { Toaster } from "@/ui/components/ui/sonner";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
-import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
+import { useMemberAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 
 export function ConfirmAccountMoveSheet({
   account,
+  accountId,
   walletName,
   description,
   className,
@@ -21,7 +22,8 @@ export function ConfirmAccountMoveSheet({
   onConfirm,
   returnFocusRef,
 }: {
-  account: Account;
+  account: AccountGroup;
+  accountId: AccountId;
   walletName: string;
   description?: string;
   className?: string;
@@ -32,12 +34,8 @@ export function ConfirmAccountMoveSheet({
 }) {
   const { t } = useTranslation(["wallet", "common"]);
   const accountName = getAccountName(account, t);
-  const { labelKey } = getNamespaceUi(account.namespace);
-  const {
-    networkSelection: { isPending: networkPending },
-    addresses: { data: addresses, isFetching: addressesFetching },
-  } = useAccountAddresses(account);
-  const loadingAddress = networkPending || addressesFetching;
+  const namespaceLabel = account.members.map((member) => t(getNamespaceUi(member.namespace).labelKey)).join(" · ");
+  const { data: addresses, isFetching: loadingAddress } = useMemberAddresses(accountId);
 
   return (
     <Sheet
@@ -73,10 +71,10 @@ export function ConfirmAccountMoveSheet({
         </SheetDescription>
         <div className="flex flex-col gap-2.5 rounded-xl bg-secondary p-3">
           <div className="flex items-center gap-2.5">
-            <AccountIdenticon accountId={account.accountId} size={32} />
+            <AccountIdenticon seed={account.accountGroupId} size={32} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-semibold wrap-anywhere">{accountName}</span>
-              <span className="text-xs font-medium text-muted-foreground">{`${t(labelKey)} · ${t("privateKeyImport")}`}</span>
+              <span className="text-xs font-medium text-muted-foreground">{`${namespaceLabel} · ${t("privateKeyImport")}`}</span>
             </div>
           </div>
           {addresses ? (

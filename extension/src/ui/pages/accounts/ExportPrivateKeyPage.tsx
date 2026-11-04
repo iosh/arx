@@ -1,4 +1,4 @@
-import { type Account, type AccountId, AccountNotFoundError } from "@arx/core/accounts";
+import { type AccountGroup, type AccountGroupId, type AccountId, AccountNotFoundError } from "@arx/core/accounts";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { Check, Copy, TriangleAlert } from "lucide-react";
@@ -18,12 +18,19 @@ import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 
-export function ExportPrivateKeyPage({ accountId }: { accountId: AccountId }) {
+export function ExportPrivateKeyPage({
+  accountGroupId,
+  accountId,
+}: {
+  accountGroupId: AccountGroupId;
+  accountId: AccountId;
+}) {
   const { t } = useTranslation("wallet");
   const { data: accounts, isPending } = useVisibleAccounts();
-  const account = accounts?.find((candidate) => candidate.accountId === accountId);
+  const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
 
-  if (account) return <ExportPrivateKeyFlow account={account} />;
+  if (account?.members.some((member) => member.accountId === accountId))
+    return <ExportPrivateKeyFlow account={account} accountId={accountId} />;
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -36,7 +43,7 @@ export function ExportPrivateKeyPage({ accountId }: { accountId: AccountId }) {
   );
 }
 
-function ExportPrivateKeyFlow({ account }: { account: Account }) {
+function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; accountId: AccountId }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation(["wallet", "onboarding"]);
   const navigate = useNavigate();
@@ -52,8 +59,7 @@ function ExportPrivateKeyFlow({ account }: { account: Account }) {
   } = useForm({ defaultValues: { password: "" }, mode: "onChange" });
   const incorrect = errors.password?.type === "incorrectPassword";
   const reveal = useWalletMutation({
-    mutationFn: ({ password }: { password: string }) =>
-      wallet.accounts.exportPrivateKey({ accountId: account.accountId, password }),
+    mutationFn: ({ password }: { password: string }) => wallet.accounts.exportPrivateKey({ accountId, password }),
     gcTime: 0,
   });
   const pending = reveal.isPending;
@@ -84,7 +90,11 @@ function ExportPrivateKeyFlow({ account }: { account: Account }) {
 
   function complete() {
     setPrivateKey(null);
-    void navigate({ to: "/wallet/accounts/$accountId", params: { accountId: account.accountId }, replace: true });
+    void navigate({
+      to: "/wallet/accounts/$accountGroupId",
+      params: { accountGroupId: account.accountGroupId },
+      replace: true,
+    });
   }
 
   return (
@@ -93,7 +103,7 @@ function ExportPrivateKeyFlow({ account }: { account: Account }) {
       <PageHeader
         title={t("exportPrivateKey")}
         subtitle={getAccountName(account, t)}
-        backTo="/wallet/accounts/$accountId"
+        backTo="/wallet/accounts/$accountGroupId"
         backLabel={t("backToAccountDetails")}
         backDisabled={pending}
       />
@@ -107,7 +117,7 @@ function ExportPrivateKeyFlow({ account }: { account: Account }) {
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <p>{t("privateKeyWarning")}</p>
           </div>
-          <AccountAddressCard account={account} copyable={false} />
+          <AccountAddressCard account={account} memberId={accountId} copyable={false} />
           {privateKey === null ? (
             <Field className="gap-2">
               <FieldLabel htmlFor={id} className="px-1 text-xs text-muted-foreground">

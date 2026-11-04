@@ -1,32 +1,29 @@
-import type { Account, AccountId } from "@arx/core/accounts";
-import { type QueryClient, skipToken, useQuery } from "@tanstack/react-query";
+import type { AccountGroup, AccountGroupId, AccountId } from "@arx/core/accounts";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
-import { useNetworkSelection } from "@/ui/wallet/networks/useNetworkSelection";
 
-const accountAddressesKey = (accountId: AccountId) => ["accountAddresses", accountId] as const;
+const accountAddressesKey = (accountGroupId: AccountGroupId) => ["accountAddresses", accountGroupId] as const;
 
-export function refreshAccountAddresses(queryClient: QueryClient, accountIds: readonly AccountId[]) {
-  for (const accountId of accountIds) {
-    const queryKey = accountAddressesKey(accountId);
+export function refreshAccountAddresses(queryClient: QueryClient, accountGroupIds: readonly AccountGroupId[]) {
+  for (const accountGroupId of accountGroupIds) {
+    const queryKey = accountAddressesKey(accountGroupId);
     void queryClient.cancelQueries({ queryKey });
     void queryClient.invalidateQueries({ queryKey });
   }
 }
 
-export function useAccountAddresses(account: Account) {
+export function useAccountAddresses(account: AccountGroup) {
   const { client: wallet } = useWallet();
-  const networkSelection = useNetworkSelection();
-  const chainRef = networkSelection.data?.selectedChainRefByNamespace[account.namespace];
-
-  const addresses = useQuery({
-    queryKey: [...accountAddressesKey(account.accountId), chainRef],
-    queryFn: chainRef ? () => wallet.accounts.getAddresses({ accountId: account.accountId, chainRef }) : skipToken,
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
+  return useQuery({
+    queryKey: accountAddressesKey(account.accountGroupId),
+    queryFn: () => wallet.accounts.getGroupAddresses({ accountGroupId: account.accountGroupId }),
   });
+}
 
-  return { networkSelection, addresses };
+export function useMemberAddresses(accountId: AccountId) {
+  const { client: wallet } = useWallet();
+  return useQuery({
+    queryKey: ["memberAddresses", accountId],
+    queryFn: () => wallet.accounts.getMemberAddresses({ accountId }),
+  });
 }

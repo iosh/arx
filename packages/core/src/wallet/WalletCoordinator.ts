@@ -196,8 +196,8 @@ export class WalletCoordinator {
       if (existingSource) return { status: "duplicate", walletName: existingSource.name };
       const derivedIds = await this.deriveFirstAccountIds(source);
       this.assertUnlocked();
-      const existingGroup = this.findAccountGroupToMove(derivedIds);
-      if (existingGroup) return { status: "move-available", account: existingGroup };
+      const candidate = this.findMoveCandidate(derivedIds);
+      if (candidate) return { status: "move-available", ...candidate };
       const createdAt = this.#time.now();
       const addition = await this.#keyring.prepareAddBip39Source({
         secret: source,
@@ -344,8 +344,8 @@ export class WalletCoordinator {
     return this.#mutations.run(async (commit) => {
       this.assertUnlocked();
       const { accountIndex, members } = await this.deriveNextGroupMembers(params.keySourceId);
-      const existingGroup = this.findAccountGroupToMove(members);
-      if (existingGroup) return { status: "move-available", account: existingGroup };
+      const candidate = this.findMoveCandidate(members);
+      if (candidate) return { status: "move-available", ...candidate };
       const accountsUpdate = this.#accounts.prepareAddGroup(
         {
           accountGroupId: crypto.randomUUID(),
@@ -493,19 +493,21 @@ export class WalletCoordinator {
     return { accountIndex, members };
   }
 
-  private findAccountGroupToMove(derivedIds: readonly { accountId: AccountId }[]): AccountGroup | null {
-    let candidateGroup: AccountGroup | null = null;
+  private findMoveCandidate(
+    derivedIds: readonly { accountId: AccountId }[],
+  ): Readonly<{ account: AccountGroup; accountId: AccountId }> | null {
+    let candidate: Readonly<{ account: AccountGroup; accountId: AccountId }> | null = null;
     for (const { accountId } of derivedIds) {
       const existingGroup = this.#accounts.getGroupForMember(accountId);
       if (!existingGroup) continue;
       if (
         existingGroup.source.type !== "private-key" ||
-        (candidateGroup !== null && candidateGroup.accountGroupId !== existingGroup.accountGroupId)
+        (candidate !== null && candidate.account.accountGroupId !== existingGroup.accountGroupId)
       )
         throw new AccountAlreadyExistsError(accountId);
-      candidateGroup = existingGroup;
+      candidate = { account: existingGroup, accountId };
     }
-    return candidateGroup;
+    return candidate;
   }
 
   private assertGroupMembersAreDerived(group: AccountGroup, derivedIds: readonly { accountId: AccountId }[]): void {

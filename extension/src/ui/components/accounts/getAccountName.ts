@@ -1,8 +1,8 @@
-import type { Account } from "@arx/core/accounts";
+import type { AccountGroup } from "@arx/core/accounts";
 import type { TFunction } from "i18next";
 
-export function getAccountName(account: Account, t: TFunction<"wallet">): string {
+export function getAccountName(account: AccountGroup, t: TFunction<"wallet">): string {
   return (
-    account.alias ?? t("accountName", { number: account.origin.type === "hd" ? account.origin.derivationIndex + 1 : 1 })
+    account.alias ?? t("accountName", { number: account.source.type === "bip39" ? account.source.accountIndex + 1 : 1 })
   );
 }

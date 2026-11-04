@@ -61,7 +61,12 @@ export type AddMnemonicAndMoveAccountInput = AddMnemonicSourceInput & Readonly<{
 
 export type AddMnemonicSourceResult =
   | (Bip39SourceAdded & Readonly<{ status: "added" }>)
-  | Readonly<{ status: "move-available"; account: AccountGroup }>
+  | Readonly<{
+      status: "move-available";
+      account: AccountGroup;
+      /** Confirms the move against this member's current group. */
+      accountId: AccountId;
+    }>
   | Readonly<{ status: "duplicate"; walletName: string }>;
 
 export type PrivateKeySourceInput = Readonly<{
@@ -87,4 +92,6 @@ export type HdAccountGroupCreationResult =
       /** Leaves state unchanged. The move command checks the current account source. */
       status: "move-available";
       account: AccountGroup;
+      /** Confirms the move against this member's current group. */
+      accountId: AccountId;
     }>;

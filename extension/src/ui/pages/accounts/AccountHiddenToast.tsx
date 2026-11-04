@@ -1,5 +1,5 @@
-import type { AccountId } from "@arx/core/accounts";
-import type { SetAccountHiddenResult } from "@arx/core/wallet";
+import type { AccountGroupId } from "@arx/core/accounts";
+import type { SetAccountGroupHiddenResult } from "@arx/core/wallet";
 import type { TFunction } from "i18next";
 import { EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -11,27 +11,27 @@ import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 export function showAccountHiddenToast(
-  { account, replacementAccount }: SetAccountHiddenResult,
+  { account: group, replacementAccount: replacementGroup }: SetAccountGroupHiddenResult,
   t: TFunction<"wallet">,
 ) {
-  const accountName = getAccountName(account, t);
-  const message = replacementAccount
-    ? t("accountHiddenAndSelected", { accountName, replacementName: getAccountName(replacementAccount, t) })
+  const accountName = getAccountName(group, t);
+  const message = replacementGroup
+    ? t("accountHiddenAndSelected", { accountName, replacementName: getAccountName(replacementGroup, t) })
     : t("accountHidden", { accountName });
-  const toastId = `hidden-account:${account.accountId}`;
+  const toastId = `hidden-account:${group.accountGroupId}`;
   toast.success(message, {
     id: toastId,
     icon: <EyeOff aria-hidden="true" className="size-3.75" />,
-    action: <UndoAccountHideButton accountId={account.accountId} toastId={toastId} message={message} />,
+    action: <UndoAccountHideButton accountGroupId={group.accountGroupId} toastId={toastId} message={message} />,
   });
 }
 
 function UndoAccountHideButton({
-  accountId,
+  accountGroupId,
   toastId,
   message,
 }: {
-  accountId: AccountId;
+  accountGroupId: AccountGroupId;
   toastId: string | number;
   message: string;
 }) {
@@ -50,10 +50,10 @@ function UndoAccountHideButton({
       onClick={() => {
         toast.success(message, { id: toastId, duration: Infinity, dismissible: false });
         restoring.mutate(
-          { accountId, hidden: false },
+          { accountGroupId, hidden: false },
           {
-            onSuccess: ({ account }) => {
-              toast.success(t("accountRestored", { accountName: getAccountName(account, t) }));
+            onSuccess: ({ account: group }) => {
+              toast.success(t("accountRestored", { accountName: getAccountName(group, t) }));
             },
             onSettled: () => toast.dismiss(toastId),
           },

@@ -1,4 +1,4 @@
-import type { AccountId } from "@arx/core/accounts";
+import type { AccountGroupId } from "@arx/core/accounts";
 import type { KeySourceId } from "@arx/core/keyring";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -21,13 +21,13 @@ export function HiddenAccountsPage({ keySourceId }: { keySourceId: KeySourceId }
   const restoring = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
   const hiddenAccounts =
     mnemonicWallet && accounts
-      ? getWalletAccounts(accounts, mnemonicWallet.hdKeyrings).filter((account) => account.hidden)
+      ? getWalletAccounts(accounts, keySourceId).filter((account) => account.hidden)
       : undefined;
 
-  function restoreAccount(accountId: AccountId) {
+  function restoreAccount(accountGroupId: AccountGroupId) {
     toast.dismiss();
     restoring.mutate(
-      { accountId, hidden: false },
+      { accountGroupId, hidden: false },
       {
         onSuccess: ({ account }) => toast.success(t("accountRestored", { accountName: getAccountName(account, t) })),
       },
@@ -39,7 +39,7 @@ export function HiddenAccountsPage({ keySourceId }: { keySourceId: KeySourceId }
       <title>{`${t("hiddenAccounts")} · ARX`}</title>
       <PageHeader
         title={t("hiddenAccounts")}
-        subtitle={mnemonicWallet?.source.name}
+        subtitle={mnemonicWallet?.name}
         backTo="/wallet/accounts"
         backLabel={t("backToAccounts")}
       />
@@ -57,10 +57,10 @@ export function HiddenAccountsPage({ keySourceId }: { keySourceId: KeySourceId }
         {hiddenAccounts && hiddenAccounts.length > 0 && (
           <ul className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
             {hiddenAccounts.map((account) => {
-              const pending = restoring.isPending && restoring.variables.accountId === account.accountId;
+              const pending = restoring.isPending && restoring.variables.accountGroupId === account.accountGroupId;
               return (
-                <li key={account.accountId} className="flex h-14 items-center gap-3 px-4">
-                  <AccountIdenticon accountId={account.accountId} size={32} />
+                <li key={account.accountGroupId} className="flex h-14 items-center gap-3 px-4">
+                  <AccountIdenticon seed={account.accountGroupId} size={32} />
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">{getAccountName(account, t)}</span>
                   <Button
                     type="button"
@@ -69,7 +69,7 @@ export function HiddenAccountsPage({ keySourceId }: { keySourceId: KeySourceId }
                     className="h-7 rounded-full px-3 aria-busy:opacity-70"
                     disabled={restoring.isPending}
                     aria-busy={pending}
-                    onClick={() => restoreAccount(account.accountId)}
+                    onClick={() => restoreAccount(account.accountGroupId)}
                   >
                     {pending && <Spinner aria-label={t("restoreAccount")} />}
                     {t("restoreAccount")}

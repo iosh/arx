@@ -14,7 +14,6 @@ import { Spinner } from "@/ui/components/ui/spinner";
 import { UnlockForm } from "@/ui/components/unlock-form/UnlockForm";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
-import { useNetworkSelection } from "@/ui/wallet/networks/useNetworkSelection";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { MnemonicBackup } from "./mnemonic/MnemonicBackup";
 import { MnemonicForm } from "./mnemonic/MnemonicForm";
@@ -48,14 +47,13 @@ function MnemonicWalletAddition({ mode }: { mode: AdditionMode }) {
   const { t } = useTranslation(["onboarding", "wallet"]);
   const navigate = useNavigate();
   const { data: mnemonicSources, isPending: sourcesPending } = useMnemonicSources();
-  const { data: network, isPending: networkPending } = useNetworkSelection();
-  const sources = mnemonicSources?.sources;
+  const sources = mnemonicSources;
 
-  if (!sources || !network) {
+  if (!sources) {
     return (
       <OnboardingStepLayout>
         <OnboardingCard title={t(mode === "create" ? "createWallet" : "importRecoveryPhrase")}>
-          {(sourcesPending || networkPending) && <Spinner aria-label={t("wallet:loadingWallet")} />}
+          {sourcesPending && <Spinner aria-label={t("wallet:loadingWallet")} />}
         </OnboardingCard>
       </OnboardingStepLayout>
     );
@@ -63,7 +61,6 @@ function MnemonicWalletAddition({ mode }: { mode: AdditionMode }) {
 
   const context: AddMnemonicWalletContext = {
     sources,
-    namespace: network.selectedNamespace,
     onAdded: () => void navigate(exitLocation),
   };
   return mode === "create" ? <NewMnemonicWallet {...context} /> : <ImportMnemonicWallet {...context} />;
@@ -185,6 +182,7 @@ function MnemonicAccountMoveSheet({
   return (
     <ConfirmAccountMoveSheet
       account={move.account}
+      accountId={move.accountId}
       walletName={move.walletName}
       description={t("firstAccountMoveDescription", {
         accountName: getAccountName(move.account, t),

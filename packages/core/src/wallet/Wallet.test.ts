@@ -411,11 +411,17 @@ describe("WalletCoordinator", () => {
       backupStatus: "confirmed",
     } as const;
 
-    expect(await wallet.addMnemonic(input)).toEqual({ status: "move-available", account: before });
+    const offered = await wallet.addMnemonic(input);
+    assert(offered.status === "move-available");
+    expect(offered).toEqual({
+      status: "move-available",
+      account: before,
+      accountId: memberId(accounts, imported.accountGroupId),
+    });
     expect(commits).toHaveLength(commitCount);
     expect(accounts.getSelectedGroupId()).toBe(other.accountGroupId);
 
-    const confirmed = { ...input, accountId: memberId(accounts, imported.accountGroupId) };
+    const confirmed = { ...input, accountId: offered.accountId };
     const added = await wallet.addMnemonicAndMoveAccount(confirmed);
     expect(commits).toHaveLength(commitCount + 1);
     assert(before !== null);
@@ -531,13 +537,15 @@ describe("WalletCoordinator", () => {
     await accounts.select(imported.accountGroupId);
 
     const candidate = await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
+    assert(candidate.status === "move-available");
     expect(candidate).toEqual({
       status: "move-available",
       account: accounts.getGroup(imported.accountGroupId),
+      accountId: memberId(accounts, imported.accountGroupId),
     });
 
     const moved = await wallet.movePrivateKeyAccount({
-      accountId: candidate.account.members[0].accountId,
+      accountId: candidate.accountId,
       keySourceId: first.keySourceId,
     });
     expect(moved).toEqual({

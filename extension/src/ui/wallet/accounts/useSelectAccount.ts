@@ -1,8 +1,10 @@
-import type { AccountId } from "@arx/core/accounts";
-import { useMutation } from "@tanstack/react-query";
+import type { AccountGroupId } from "@arx/core/accounts";
 import { useWallet } from "../connection/WalletContext";
+import { useWalletMutation } from "../useWalletMutation";
 
 export function useSelectAccount() {
   const { client: wallet } = useWallet();
-  return useMutation({ mutationFn: (accountId: AccountId) => wallet.accounts.select({ accountId }) });
+  return useWalletMutation({
+    mutationFn: (accountGroupId: AccountGroupId) => wallet.accounts.select({ accountGroupId }),
+  });
 }

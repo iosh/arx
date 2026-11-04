@@ -1,4 +1,4 @@
-import type { Account, Address } from "@arx/core/accounts";
+import type { AccountGroup, AccountId, Address } from "@arx/core/accounts";
 import { Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/ui/components/ui/button";
@@ -7,13 +7,17 @@ import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 
-export function AccountAddressCard({ account, copyable = true }: { account: Account; copyable?: boolean }) {
+export function AccountAddressCard({
+  account,
+  memberId,
+  copyable = true,
+}: {
+  account: AccountGroup;
+  memberId?: AccountId;
+  copyable?: boolean;
+}) {
   const { t } = useTranslation("wallet");
-  const {
-    networkSelection: { isPending: networkPending },
-    addresses: { data: addresses, isFetching: addressesFetching },
-  } = useAccountAddresses(account);
-  const loading = networkPending || addressesFetching;
+  const { data: addresses, isFetching: loading } = useAccountAddresses(account);
 
   return (
     <section
@@ -21,7 +25,9 @@ export function AccountAddressCard({ account, copyable = true }: { account: Acco
       className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground shadow-[0_1px_3px_var(--shadow)]"
     >
       {addresses ? (
-        addresses.map((address) => <AddressRow key={address.address} address={address} copyable={copyable} />)
+        addresses
+          .filter((address) => memberId === undefined || address.accountId === memberId)
+          .map((address) => <AddressRow key={address.accountId} address={address} copyable={copyable} />)
       ) : loading ? (
         <div className="flex min-h-15 items-center px-4 text-sm text-muted-foreground">
           <Spinner aria-label={t("loadingAddress")} />

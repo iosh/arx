@@ -12,11 +12,6 @@ export function useSelectedAccount() {
   const { client: wallet } = useWallet();
   return useQuery({
     queryKey: selectedAccountKey,
-    queryFn: () => wallet.accounts.getSelected(),
-    networkMode: "always",
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    gcTime: 0,
+    queryFn: () => wallet.accounts.getSelectedGroup(),
   });
 }

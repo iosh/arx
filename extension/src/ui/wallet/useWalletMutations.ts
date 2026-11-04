@@ -12,11 +12,8 @@ export function useCreateMnemonicWallet() {
   const { client: wallet } = useWallet();
   return useWalletMutation({
     mutationFn: async ({ password, name }: { password: string; name: string }) => {
-      const [{ mnemonic }, { selectedNamespace }] = await Promise.all([
-        wallet.keySources.generateMnemonic(),
-        wallet.networks.getSelection(),
-      ]);
-      const result = await wallet.createFromMnemonic({ password, mnemonic, name, namespace: selectedNamespace });
+      const { mnemonic } = await wallet.keySources.generateMnemonic();
+      const result = await wallet.createFromMnemonic({ password, mnemonic, name });
       return result.status === "initialized" ? { ...result, mnemonic } : result;
     },
     gcTime: 0,
@@ -26,10 +23,8 @@ export function useCreateMnemonicWallet() {
 export function useRestoreMnemonicWallet() {
   const { client: wallet } = useWallet();
   return useWalletMutation({
-    mutationFn: async ({ password, mnemonic, name }: { password: string; mnemonic: string; name: string }) => {
-      const { selectedNamespace } = await wallet.networks.getSelection();
-      return wallet.restoreFromMnemonic({ password, mnemonic, name, namespace: selectedNamespace });
-    },
+    mutationFn: ({ password, mnemonic, name }: { password: string; mnemonic: string; name: string }) =>
+      wallet.restoreFromMnemonic({ password, mnemonic, name }),
     gcTime: 0,
   });
 }

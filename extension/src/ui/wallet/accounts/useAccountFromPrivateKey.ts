@@ -1,15 +1,9 @@
-import type { ChainRef } from "@arx/core/networks";
+import type { Namespace } from "@arx/core/namespaces";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useWallet } from "../connection/WalletContext";
 
-export function useAccountFromPrivateKey({
-  privateKey,
-  chainRef,
-}: {
-  privateKey: string;
-  chainRef: ChainRef | undefined;
-}) {
+export function useAccountFromPrivateKey({ privateKey, namespace }: { privateKey: string; namespace: Namespace }) {
   const { client: wallet } = useWallet();
   const derivation = useMutation({
     mutationFn: wallet.accounts.fromPrivateKey,
@@ -21,11 +15,11 @@ export function useAccountFromPrivateKey({
   const { mutate, reset } = derivation;
 
   useEffect(() => {
-    if (privateKey && chainRef) mutate({ privateKey, chainRef });
+    if (privateKey) mutate({ privateKey, namespace });
     else reset();
-  }, [privateKey, chainRef, mutate, reset]);
+  }, [privateKey, namespace, mutate, reset]);
 
-  const matchesInput = derivation.variables?.privateKey === privateKey && derivation.variables.chainRef === chainRef;
+  const matchesInput = derivation.variables?.privateKey === privateKey && derivation.variables.namespace === namespace;
   return {
     account: matchesInput ? derivation.data : undefined,
     invalid: matchesInput && derivation.data === null,

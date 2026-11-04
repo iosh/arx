@@ -16,6 +16,8 @@ export type ChainDefinition = Readonly<{
   chainRef: ChainRef;
   name: string;
   nativeCurrency: NativeCurrency;
+  /** Marks testing use; absence does not establish asset value. */
+  isTestnet?: boolean | undefined;
   blockExplorers?: readonly BlockExplorer[] | undefined;
   iconUrl?: string | undefined;
 }>;
@@ -40,6 +42,7 @@ export type Network = Readonly<{
   source: "builtin" | "custom";
   name: string;
   nativeCurrency: NativeCurrency;
+  isTestnet?: boolean | undefined;
   blockExplorers?: readonly BlockExplorer[] | undefined;
   iconUrl?: string | undefined;
 }>;

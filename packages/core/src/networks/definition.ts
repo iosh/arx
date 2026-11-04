@@ -16,6 +16,7 @@ export const cloneChainDefinition = (definition: ChainDefinition): ChainDefiniti
     symbol: definition.nativeCurrency.symbol,
     decimals: definition.nativeCurrency.decimals,
   },
+  ...(definition.isTestnet !== undefined ? { isTestnet: definition.isTestnet } : {}),
   ...(definition.blockExplorers
     ? {
         blockExplorers: definition.blockExplorers.map((explorer) => ({
@@ -53,6 +54,7 @@ const chainDefinitionBaseSchema: z.ZodType<ChainDefinition> = z.strictObject({
   chainRef: z.string(),
   name: trimmedString(),
   nativeCurrency: nativeCurrencySchema,
+  isTestnet: z.boolean().optional(),
   blockExplorers: z.array(blockExplorerSchema).optional(),
   iconUrl: httpUrlSchema.optional(),
 });
@@ -107,6 +109,7 @@ export const isSameChainDefinition = (previous: ChainDefinition, next: ChainDefi
   if (
     previous.chainRef !== next.chainRef ||
     previous.name !== next.name ||
+    previous.isTestnet !== next.isTestnet ||
     previous.iconUrl !== next.iconUrl ||
     !isSameNativeCurrency(previous.nativeCurrency, next.nativeCurrency)
   ) {

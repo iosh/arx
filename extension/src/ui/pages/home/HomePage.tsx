@@ -1,6 +1,6 @@
 import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
-import { useRouter } from "@tanstack/react-router";
-import { ChevronRight, Ellipsis, Lock, ShieldAlert } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { ChevronRight, Ellipsis, Lock, Settings, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
@@ -56,6 +56,12 @@ export function HomePage() {
             alignOffset={-6}
             className="w-50 rounded-2xl border-0 bg-card p-1 text-card-foreground"
           >
+            <DropdownMenuItem asChild className="h-11 gap-2.5 px-3 text-sm font-medium">
+              <Link to="/wallet/settings">
+                <Settings aria-hidden="true" />
+                {t("settings")}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem className="h-11 gap-2.5 px-3 text-sm font-medium" onSelect={() => lockWallet()}>
               <Lock aria-hidden="true" />
               {t("lockWallet")}

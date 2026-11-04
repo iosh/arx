@@ -58,6 +58,7 @@ export const EIP155_TESTNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
     definition: {
       chainRef: "eip155:11155111",
       name: "Sepolia Testnet",
+      isTestnet: true,
       nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
       blockExplorers: [{ url: "https://sepolia.etherscan.io", name: "Etherscan (Sepolia)" }],
       iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png",
@@ -68,6 +69,7 @@ export const EIP155_TESTNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
     definition: {
       chainRef: "eip155:71",
       name: "Conflux eSpace Testnet",
+      isTestnet: true,
       nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
       blockExplorers: [{ url: "https://evmtestnet.confluxscan.net", name: "ConfluxScan eSpace Testnet" }],
       iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",

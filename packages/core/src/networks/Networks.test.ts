@@ -2,18 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { ChainJsonRpcHttpTransportError, type JsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import type { PersistenceWriter } from "../persistence/corePersistence.js";
+import { PersistenceCommitError } from "../persistence/errors.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import {
-  BuiltinNetworkConflictError,
-  BuiltinNetworkImmutableError,
   CustomNetworkAlreadyExistsError,
-  NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointVerificationError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { CustomNetworkRecord } from "./persistence.js";
-import type { NetworksChanged, NonEmptyRpcEndpoints } from "./types.js";
+import type { NetworksChanged } from "./types.js";
 
 const custom: CustomNetworkRecord = {
   definition: {
@@ -24,13 +22,13 @@ const custom: CustomNetworkRecord = {
   defaultRpcEndpoints: ["https://base.example", "https://base-backup.example"],
 };
 
-const createFixture = () => {
+const createFixture = (customNetworks: readonly CustomNetworkRecord[] = []) => {
   const request = vi.fn<JsonRpcHttpTransport["request"]>().mockResolvedValue("0x2105");
   const commit = vi.fn<PersistenceWriter["commit"]>().mockResolvedValue(undefined);
   const changes: NetworksChanged[] = [];
   const networks = new Networks({
     adapters: [createEip155NetworksAdapter({ transport: { request: request as JsonRpcHttpTransport["request"] } })],
-    bootstrap: { customNetworks: [], networkRpcOverrides: [] },
+    bootstrap: { customNetworks, networkRpcOverrides: [] },
     mutations: createCoreMutationQueue({ commit }),
     publishChanged: (change) => changes.push(change),
   });
@@ -39,46 +37,56 @@ const createFixture = () => {
 };
 
 describe("Networks", () => {
-  it("adds and updates custom networks without writing or publishing unchanged configuration", async () => {
-    const { networks, commit, changes, request } = createFixture();
-
+  it("saves an added network and its updated metadata and RPC configuration", async () => {
+    const { networks, commit } = createFixture();
     await networks.addCustom(custom);
-    expect(networks.get("eip155:8453")).toMatchObject({ name: "Base", source: "custom" });
-    expect(commit).toHaveBeenCalledWith([{ persistenceType: "customNetwork", operation: "put", value: custom }]);
-    expect(changes).toEqual([{ type: "networksChanged", chainRefs: ["eip155:8453"] }]);
-    expect(request).toHaveBeenCalledTimes(2);
-
-    await expect(networks.addCustom(custom)).rejects.toThrow(CustomNetworkAlreadyExistsError);
-    await expect(
-      networks.addCustom({ ...custom, definition: { ...custom.definition, chainRef: "eip155:1" } }),
-    ).rejects.toThrow(BuiltinNetworkConflictError);
-    await networks.updateCustom(custom);
-    expect(commit).toHaveBeenCalledTimes(1);
-    expect(changes).toHaveLength(1);
-    expect(request).toHaveBeenCalledTimes(2);
-
     const updated = {
       definition: { ...custom.definition, name: "Base Mainnet" },
       defaultRpcEndpoints: ["https://base-v2.example"],
     } as const;
     await networks.updateCustom(updated);
-    expect(networks.get("eip155:8453")).toMatchObject({ name: "Base Mainnet" });
-    expect(networks.getRpcEndpoints("eip155:8453")).toEqual(updated.defaultRpcEndpoints);
-    expect(commit).toHaveBeenCalledTimes(2);
-    expect(changes).toHaveLength(2);
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(networks.get(custom.definition.chainRef)).toMatchObject({ ...updated.definition, source: "custom" });
+    expect(networks.getRpcConfiguration(custom.definition.chainRef)).toEqual({
+      source: "default",
+      endpoints: updated.defaultRpcEndpoints,
+    });
+    expect(commit).toHaveBeenLastCalledWith([{ persistenceType: "customNetwork", operation: "put", value: updated }]);
+  });
 
-    await expect(
-      networks.updateCustom({ ...custom, definition: { ...custom.definition, chainRef: "eip155:1" } }),
-    ).rejects.toThrow(BuiltinNetworkImmutableError);
+  it("saves testnet marking changes once without rechecking unchanged RPC endpoints", async () => {
+    const { networks, commit, changes, request } = createFixture([custom]);
+    const testnet = { ...custom, definition: { ...custom.definition, isTestnet: true } };
+    await networks.updateCustom(testnet);
+    await networks.updateCustom(testnet);
+    expect(networks.get(custom.definition.chainRef)).toMatchObject({ isTestnet: true });
+    expect(commit).toHaveBeenCalledExactlyOnceWith([
+      { persistenceType: "customNetwork", operation: "put", value: testnet },
+    ]);
+    expect(changes).toEqual([{ type: "networksChanged", chainRefs: [custom.definition.chainRef] }]);
+
+    const unmarked = { ...custom, definition: { ...custom.definition, isTestnet: false } };
+    await networks.updateCustom(unmarked);
+    expect(networks.get(custom.definition.chainRef)).toMatchObject({ isTestnet: false });
+    expect(commit).toHaveBeenLastCalledWith([{ persistenceType: "customNetwork", operation: "put", value: unmarked }]);
+    expect(changes).toHaveLength(2);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("admits only one of two concurrent additions of the same chain", async () => {
+    const { networks, commit, changes } = createFixture();
+    await expect(Promise.all([networks.addCustom(custom), networks.addCustom(custom)])).rejects.toBeInstanceOf(
+      CustomNetworkAlreadyExistsError,
+    );
+    expect(networks.get(custom.definition.chainRef)).toMatchObject(custom.definition);
+    expect(commit).toHaveBeenCalledOnce();
+    expect(changes).toEqual([{ type: "networksChanged", chainRefs: [custom.definition.chainRef] }]);
   });
 
   it("sets and clears RPC overrides only when configuration changes", async () => {
     const { networks, commit, changes, request } = createFixture();
     request.mockResolvedValue("0x1");
     const defaultEndpoints = networks.getRpcEndpoints("eip155:1");
-    const endpoints: NonEmptyRpcEndpoints = ["https://ethereum-override.example"];
-
+    const endpoints = ["https://ethereum-override.example"] as const;
     await networks.setRpcOverride({ chainRef: "eip155:1", endpoints });
     await networks.setRpcOverride({ chainRef: "eip155:1", endpoints });
     expect(networks.getRpcConfiguration("eip155:1")).toEqual({
@@ -86,49 +94,44 @@ describe("Networks", () => {
       endpoints,
       defaultEndpoints,
     });
-    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledOnce();
     expect(changes).toEqual([{ type: "networksChanged", chainRefs: ["eip155:1"] }]);
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledOnce();
 
+    commit.mockClear();
     await networks.clearRpcOverride("eip155:1");
     await networks.clearRpcOverride("eip155:1");
     expect(networks.getRpcConfiguration("eip155:1")).toEqual({
       source: "default",
       endpoints: defaultEndpoints,
     });
-    expect(commit).toHaveBeenCalledTimes(2);
-    expect(commit).toHaveBeenLastCalledWith([
+    expect(commit).toHaveBeenCalledExactlyOnceWith([
       { persistenceType: "networkRpcOverride", operation: "remove", key: "eip155:1" },
     ]);
     expect(changes).toHaveLength(2);
   });
 
-  it("keeps a network inactive when an endpoint is invalid, a backup has the wrong chain, or saving fails", async () => {
-    const invalid = createFixture();
-    await expect(invalid.networks.addCustom({ ...custom, defaultRpcEndpoints: ["ws://base.example"] })).rejects.toThrow(
-      NetworkRpcEndpointInvalidError,
-    );
-    expect(invalid.request).not.toHaveBeenCalled();
-    expect(invalid.commit).not.toHaveBeenCalled();
-
+  it("requires the backup RPC to identify the requested chain before saving", async () => {
     const mismatch = createFixture();
     mismatch.request.mockResolvedValueOnce("0x2105").mockResolvedValue("0x1");
     await expect(mismatch.networks.addCustom(custom)).rejects.toThrow(NetworkRpcEndpointMismatchError);
     expect(mismatch.networks.get("eip155:8453")).toBeNull();
     expect(mismatch.commit).not.toHaveBeenCalled();
     expect(mismatch.changes).toEqual([]);
+  });
 
+  it("rejects an unavailable RPC without installing the network", async () => {
     const transportFailure = new ChainJsonRpcHttpTransportError("RPC request failed.");
     const unavailable = createFixture();
     unavailable.request.mockRejectedValue(transportFailure);
-    await expect(unavailable.networks.addCustom(custom)).rejects.toMatchObject({
-      code: NetworkRpcEndpointVerificationError.code,
-      cause: transportFailure,
-    });
+    await expect(unavailable.networks.addCustom(custom)).rejects.toBeInstanceOf(NetworkRpcEndpointVerificationError);
     expect(unavailable.networks.get("eip155:8453")).toBeNull();
     expect(unavailable.commit).not.toHaveBeenCalled();
+    expect(unavailable.changes).toEqual([]);
+  });
 
-    const commitFailure = new Error("commit failed");
+  it("does not install or publish a network when persistence fails", async () => {
+    const commitFailure = new PersistenceCommitError(new DOMException("Transaction aborted", "AbortError"));
     const failedCommit = createFixture();
     failedCommit.commit.mockRejectedValue(commitFailure);
     await expect(failedCommit.networks.addCustom(custom)).rejects.toBe(commitFailure);

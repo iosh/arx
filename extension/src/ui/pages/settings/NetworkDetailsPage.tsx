@@ -1,4 +1,6 @@
 import { type ChainRef, parseChainRef } from "@arx/core/networks";
+import { Link } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NetworkAvatar } from "@/ui/components/networks/NetworkAvatar";
 import { PageHeader } from "@/ui/components/PageHeader";
@@ -38,23 +40,34 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
                   {parseChainRef(network.chainRef).reference}
                 </dd>
               </div>
-              <div className="flex min-h-12 items-start gap-2 px-4 py-3 text-sm">
-                <dt className="shrink-0 font-medium">{t("rpcNodes")}</dt>
-                <dd className="min-w-0 flex-1 text-right text-muted-foreground">
-                  {rpc ? (
-                    <>
-                      <span>{rpc.source === "override" ? t("customRpc") : t("defaultRpc")}</span>
-                      <ul className="mt-1 space-y-1 text-xs leading-relaxed">
-                        {rpc.endpoints.map((endpoint) => (
-                          <li key={endpoint} className="wrap-anywhere">
-                            {endpoint}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : rpcPending ? (
-                    <Spinner aria-label={t("loadingRpcConfiguration")} className="ml-auto" />
-                  ) : null}
+              <div>
+                <dt className="sr-only">{t("rpcNodes")}</dt>
+                <dd>
+                  <Link
+                    to="/wallet/settings/networks/$chainRef/rpc"
+                    params={{ chainRef }}
+                    className="flex min-h-12 items-start gap-2 px-4 py-3 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  >
+                    <span className="shrink-0 font-medium">{t("rpcNodes")}</span>
+                    <div className="min-w-0 flex-1 text-right text-muted-foreground">
+                      {rpc ? (
+                        <>
+                          <span>{rpc.source === "override" ? t("customRpc") : t("defaultRpc")}</span>
+                          <ul className="mt-1 space-y-1 text-xs leading-relaxed">
+                            {rpc.endpoints.map((endpoint, index) => (
+                              // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate endpoints are allowed; these rows contain only text.
+                              <li key={`${index}-${endpoint}`} className="wrap-anywhere">
+                                {endpoint}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : rpcPending ? (
+                        <Spinner aria-label={t("loadingRpcConfiguration")} className="ml-auto" />
+                      ) : null}
+                    </div>
+                    <ChevronRight aria-hidden="true" className="mt-0.5 size-3.75 shrink-0 text-placeholder" />
+                  </Link>
                 </dd>
               </div>
               <div className="flex min-h-12 items-start gap-2 px-4 py-3 text-sm">

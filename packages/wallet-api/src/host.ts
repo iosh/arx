@@ -13,7 +13,7 @@ const METHOD_NOT_FOUND_CODE = "wallet_api.method_not_found";
 const INTERNAL_ERROR_CODE = "wallet_api.internal_error";
 const INTERNAL_ERROR_MESSAGE = "Wallet operation failed.";
 
-type WalletMethod = (input?: unknown) => unknown | Promise<unknown>;
+type WalletMethod = (...args: readonly unknown[]) => unknown | Promise<unknown>;
 type RemoteWalletApi = Omit<WalletApi, "subscribe">;
 
 type ChannelRegistration = Readonly<{
@@ -124,7 +124,7 @@ class WalletHostState implements WalletHost {
     }
 
     try {
-      const result = await method(request.input);
+      const result = await method(...(request.args ?? []));
       this.#send(channel, {
         type: "success",
         id: request.id,

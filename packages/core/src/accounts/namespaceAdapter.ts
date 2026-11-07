@@ -1,11 +1,10 @@
 import type { Namespace } from "../namespaces/types.js";
-import type { ChainRef } from "../networks/chainRef.js";
 import type { AccountId } from "./accountId.js";
 import { AccountNamespaceUnsupportedError } from "./errors.js";
 
 export type AccountsNamespaceAdapter = Readonly<{
   namespace: Namespace;
-  accountIdFromAddress(input: { chainRef: ChainRef; address: string }): AccountId;
+  accountIdFromAddress(input: { address: string }): AccountId;
   addressForAccountId(input: { accountId: AccountId }): Readonly<{
     canonicalAddress: string;
     displayAddress: string;

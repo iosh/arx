@@ -1,4 +1,5 @@
 import type { KeySourceId } from "../keyring/types.js";
+import type { Namespace } from "../namespaces/types.js";
 import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
@@ -130,9 +131,8 @@ export class Accounts {
     return lastIndex + 1;
   }
 
-  accountIdFromAddress(input: { chainRef: ChainRef; address: string }): AccountId {
-    const { namespace } = parseChainRef(input.chainRef);
-    return getAccountsNamespaceAdapter(this.#adapters, namespace).accountIdFromAddress(input);
+  accountIdFromAddress(input: { namespace: Namespace; address: string }): AccountId {
+    return getAccountsNamespaceAdapter(this.#adapters, input.namespace).accountIdFromAddress(input);
   }
 
   getAddress(input: { chainRef: ChainRef; accountId: AccountId }): AccountAddress {

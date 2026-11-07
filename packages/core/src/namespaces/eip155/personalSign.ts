@@ -8,7 +8,7 @@ const decodePersonalMessage = (value: string): Eip155PersonalMessage => {
   const body = hasPrefix ? value.slice(2) : value;
   const hex = `0x${body}`;
 
-  if (body.length > 0 && Hex.validate(hex, { strict: true })) {
+  if ((hasPrefix || body.length > 0) && Hex.validate(hex, { strict: true })) {
     return { format: "hex", value: hex };
   }
 

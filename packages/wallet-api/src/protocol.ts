@@ -5,7 +5,7 @@ export type WalletRequestMessage = Readonly<{
   type: "request";
   id: number;
   method: string;
-  input?: unknown;
+  args?: readonly unknown[];
 }>;
 
 export type WalletSuccessMessage = Readonly<{
@@ -116,11 +116,12 @@ export const parseWalletRequest = (value: unknown): WalletRequestMessage | null 
     return null;
   }
 
-  if (value.input === undefined) {
+  if (value.args === undefined) {
     return { type: "request", id: value.id, method: value.method };
   }
+  if (!Array.isArray(value.args)) return null;
 
-  return { type: "request", id: value.id, method: value.method, input: value.input };
+  return { type: "request", id: value.id, method: value.method, args: value.args };
 };
 
 export const parseWalletHostMessage = (value: unknown): WalletHostMessage | null => {

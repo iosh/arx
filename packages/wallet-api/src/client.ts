@@ -14,7 +14,7 @@ type PendingRequest = Readonly<{
   reject(reason: unknown): void;
 }>;
 
-type WalletMethodCall = <TResult>(method: string, input?: unknown) => Promise<TResult>;
+type WalletMethodCall = <TResult>(method: string, args: readonly unknown[]) => Promise<TResult>;
 
 class WalletClientConnection {
   readonly #channel: DuplexChannel;
@@ -31,7 +31,7 @@ class WalletClientConnection {
     this.#unsubscribeDisconnect = channel.onDisconnect(() => this.#disconnect());
   }
 
-  call<TResult>(method: string, input?: unknown): Promise<TResult> {
+  call<TResult>(method: string, args: readonly unknown[]): Promise<TResult> {
     if (this.#disconnectedError) {
       return Promise.reject(this.#disconnectedError);
     }
@@ -49,7 +49,7 @@ class WalletClientConnection {
         type: "request",
         id,
         method,
-        ...(input === undefined ? {} : { input }),
+        ...(args.length > 0 ? { args } : {}),
       };
 
       try {
@@ -123,7 +123,7 @@ const createMethodProxy = (call: WalletMethodCall, path: readonly string[]): unk
   const callable = (): undefined => undefined;
 
   return new Proxy(callable, {
-    apply: (_target, _thisArg, args) => call(formatWalletMethodPath(path), args[0]),
+    apply: (_target, _thisArg, args) => call(formatWalletMethodPath(path), args),
     get: (_target, property) => {
       if (property === "then" || typeof property !== "string") {
         return undefined;

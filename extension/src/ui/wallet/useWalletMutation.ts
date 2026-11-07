@@ -1,19 +1,18 @@
 import { type MutateOptions, type UseMutationOptions, useMutation } from "@tanstack/react-query";
 import { useWalletError } from "./useWalletError";
 
-type WalletMutationOptions<TData, TVariables> = Pick<
-  UseMutationOptions<TData, Error, TVariables>,
-  "mutationFn" | "gcTime"
-> & {
+type WalletMutationOptions<TData, TVariables> = Pick<UseMutationOptions<TData, Error, TVariables>, "gcTime"> & {
+  mutationFn(variables: TVariables): Promise<TData>;
   toasterId?: string | ((variables: TVariables) => string | undefined);
 };
 
-/** Supplies a default failure notice while mounted; per-call onError can replace it. */
+/** Passes only command variables and supplies a failure notice unless per-call onError replaces it. */
 export function useWalletMutation<TData, TVariables = void>({
   toasterId,
+  mutationFn,
   ...options
 }: WalletMutationOptions<TData, TVariables>) {
-  const mutation = useMutation(options);
+  const mutation = useMutation({ ...options, mutationFn: (variables: TVariables) => mutationFn(variables) });
   const reportError = useWalletError();
 
   function withErrorFeedback(

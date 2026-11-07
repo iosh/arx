@@ -15,7 +15,7 @@ export const getAuthorizedAccount = (
   input: Readonly<{ origin: string; chainRef: ChainRef; address: string }>,
 ): AccountAddress => {
   const accountId = dependencies.accounts.accountIdFromAddress({
-    chainRef: input.chainRef,
+    namespace: EIP155_NAMESPACE,
     address: input.address,
   });
   const permission = dependencies.permissions.get({

@@ -70,7 +70,7 @@ function NewMnemonicWallet(context: AddMnemonicWalletContext) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("onboarding");
   const flow = useAddMnemonicWallet(context);
-  const generation = useMutation({ mutationFn: wallet.keySources.generateMnemonic, gcTime: 0 });
+  const generation = useMutation({ mutationFn: () => wallet.keySources.generateMnemonic(), gcTime: 0 });
   const { mutate: generateMnemonic } = generation;
 
   useBlocker({ shouldBlockFn: () => flow.isAdding, enableBeforeUnload: false });

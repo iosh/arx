@@ -20,6 +20,8 @@ export default defineConfig({
     // action.openPopup requires Chrome 127 for extensions not installed by policy.
     ...(browser === "chrome" ? { minimum_chrome_version: "127" } : {}),
     permissions: ["storage"],
+    // Allow cross-origin requests to user-configured RPC nodes in production builds.
+    host_permissions: ["http://*/*", "https://*/*"],
     web_accessible_resources: [
       {
         resources: ["inpage.js"],

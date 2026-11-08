@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NetworkAvatar } from "@/ui/components/networks/NetworkAvatar";
 import { PageHeader } from "@/ui/components/PageHeader";
+import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useNetworks } from "@/ui/wallet/networks/useNetworks";
 
@@ -13,7 +14,18 @@ export function NetworksPage() {
   return (
     <main className="flex h-full flex-col font-sans">
       <title>{`${t("networks")} · ARX`}</title>
-      <PageHeader title={t("networks")} backTo="/wallet/settings" backLabel={t("backToSettings")} />
+      <PageHeader
+        title={t("networks")}
+        backTo="/wallet/settings"
+        backLabel={t("backToSettings")}
+        action={
+          <Button asChild variant="ghost" size="icon-sm" className="text-muted-foreground">
+            <Link to="/wallet/settings/networks/add" aria-label={t("addNetwork")}>
+              <Plus aria-hidden="true" className="size-4.5" />
+            </Link>
+          </Button>
+        }
+      />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
         {isPending && (
           <div className="flex min-h-14 items-center px-4">

@@ -14,4 +14,4 @@ export {
   type JsonRpcHttpRequest,
   type JsonRpcHttpTransport,
 } from "./JsonRpcHttpTransport.js";
-export type { JsonRpcParams } from "./types.js";
+export type { ChainJsonRpcTarget, JsonRpcParams } from "./types.js";

@@ -177,10 +177,7 @@ describe("EIP-155 transaction submission", () => {
 
   it("derives the EIP-155 hash when raw broadcast outcome is unknown", async () => {
     const { chainJsonRpc } = createRpc(() => {
-      throw new ChainJsonRpcOutcomeUnknownError({
-        chainRef: CHAIN_REF,
-        method: "eth_sendRawTransaction",
-      });
+      throw new ChainJsonRpcOutcomeUnknownError();
     });
     const { signing } = createSigning();
     const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
@@ -195,8 +192,6 @@ describe("EIP-155 transaction submission", () => {
   it("maps an explicit raw broadcast rejection to a transaction failure", async () => {
     const { chainJsonRpc } = createRpc(() => {
       throw new ChainJsonRpcResponseError({
-        chainRef: CHAIN_REF,
-        method: "eth_sendRawTransaction",
         rpcCode: -32_000,
         message: "insufficient funds",
         data: { available: "0x0" },

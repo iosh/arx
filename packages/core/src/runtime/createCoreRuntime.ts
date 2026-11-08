@@ -5,12 +5,7 @@ import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
-import {
-  type DappNamespaces,
-  getDappNamespace,
-  routeChainRpcRequest,
-  routeDappRequest,
-} from "../dappConnections/routeDappRequest.js";
+import { type DappNamespaces, getDappNamespace, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
@@ -19,6 +14,7 @@ import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
+import { createEip155Rpc } from "../namespaces/eip155/rpc.js";
 import { parseChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
@@ -31,7 +27,7 @@ import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAda
 import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
 import { createTransactions } from "../transactions/Transactions.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
-import type { WalletApiEvent, WalletChainRpcApi, WalletChainRpcRequest } from "../wallet/WalletApi.js";
+import type { WalletApiEvent } from "../wallet/WalletApi.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
 import type { CoreRuntime, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { createWalletApi } from "./createWalletApi.js";
@@ -116,6 +112,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     endpoints: networks,
     transport: jsonRpcHttpTransport,
   });
+  const eip155Rpc = createEip155Rpc(chainJsonRpc);
   const transactionAdapters = {
     [EIP155_NAMESPACE]: createEip155TransactionsAdapter({
       chainJsonRpc,
@@ -192,12 +189,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     prepareDappNetworkRemoval: (chainRef) =>
       getDappNamespace(parseChainRef(chainRef).namespace, dappNamespaces).prepareRemoveNetworkReferences(chainRef),
   });
-  const walletChainRpc: WalletChainRpcApi = {
-    async request<TResult = unknown>(request: WalletChainRpcRequest): Promise<TResult> {
-      return (await routeChainRpcRequest(dappNamespaces, request)) as TResult;
-    },
-  };
-
   const walletApi = createWalletApi({
     subscribe: (listener) => {
       walletEventListeners.add(listener);
@@ -211,7 +202,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     accounts,
     networks,
     customNetworkRemoval,
-    chainRpc: walletChainRpc,
+    eip155Rpc,
     permissions: dappAuthorization.permissions,
     approvals,
     transactions,

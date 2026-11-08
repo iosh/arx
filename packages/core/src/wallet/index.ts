@@ -31,8 +31,6 @@ export type {
   WalletApi,
   WalletApiEvent,
   WalletApprovalsApi,
-  WalletChainRpcApi,
-  WalletChainRpcRequest,
   WalletKeySourcesApi,
   WalletNetworksApi,
   WalletPermissionsApi,

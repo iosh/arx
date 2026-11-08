@@ -5,12 +5,13 @@ import type { Approvals } from "../approvals/Approvals.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
+import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Networks } from "../networks/Networks.js";
 import type { CustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import type { DappAuthorization } from "../permissions/createDappAuthorization.js";
 import type { Transactions } from "../transactions/Transactions.js";
 import type { AutoLockController } from "../wallet/AutoLockController.js";
-import type { WalletApi, WalletChainRpcApi } from "../wallet/WalletApi.js";
+import type { WalletApi } from "../wallet/WalletApi.js";
 import type { WalletCoordinator } from "../wallet/WalletCoordinator.js";
 
 type CreateWalletApiOptions = Readonly<{
@@ -21,7 +22,7 @@ type CreateWalletApiOptions = Readonly<{
   accounts: Accounts;
   networks: Networks;
   customNetworkRemoval: CustomNetworkRemoval;
-  chainRpc: WalletChainRpcApi;
+  eip155Rpc: Eip155Rpc;
   permissions: DappAuthorization["permissions"];
   approvals: Pick<Approvals, "get" | "list" | "approve" | "reject">;
   transactions: Transactions;
@@ -35,7 +36,7 @@ export const createWalletApi = ({
   accounts,
   networks,
   customNetworkRemoval,
-  chainRpc,
+  eip155Rpc,
   permissions,
   approvals,
   transactions,
@@ -110,7 +111,7 @@ export const createWalletApi = ({
     clearRpcOverride: async (chainRef) => networks.clearRpcOverride(chainRef),
   },
 
-  chainRpc,
+  eip155: eip155Rpc,
 
   permissions: {
     get: async (scope) => permissions.get(scope),

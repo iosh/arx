@@ -75,11 +75,7 @@ const receipt = (status: "0x0" | "0x1") => ({
 
 describe("EIP-155 transaction monitoring", () => {
   it("maps unavailable, confirmed, and execution-failed receipt checks", async () => {
-    const responses = [
-      new ChainJsonRpcUnavailableError({ chainRef: CHAIN_REF, method: "eth_getTransactionReceipt", attempts: 1 }),
-      receipt("0x1"),
-      receipt("0x0"),
-    ];
+    const responses = [new ChainJsonRpcUnavailableError(), receipt("0x1"), receipt("0x0")];
     const { chainJsonRpc } = createRpc(() => {
       const response = responses.shift();
       if (response instanceof Error) throw response;

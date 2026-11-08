@@ -158,8 +158,6 @@ describe("Transactions.submit", () => {
     const fixture = createFixture();
     fixture.request.mockRejectedValueOnce(
       new ChainJsonRpcResponseError({
-        chainRef: CHAIN_REF,
-        method: "eth_sendRawTransaction",
         rpcCode: -32_000,
         message: "insufficient funds",
         data: { available: "0x0" },
@@ -185,9 +183,7 @@ describe("Transactions.submit", () => {
 
   it("retains the pending recovery artifact and monitoring when the broadcast outcome is unknown", async () => {
     const fixture = createFixture();
-    fixture.request.mockRejectedValueOnce(
-      new ChainJsonRpcOutcomeUnknownError({ chainRef: CHAIN_REF, method: "eth_sendRawTransaction" }),
-    );
+    fixture.request.mockRejectedValueOnce(new ChainJsonRpcOutcomeUnknownError());
 
     const submission = await fixture.transactions.submit(prepared("0x1"));
 

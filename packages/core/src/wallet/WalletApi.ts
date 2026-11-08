@@ -2,8 +2,8 @@ import type { AccountGroupId } from "../accounts/accountGroupId.js";
 import type { AccountId } from "../accounts/accountId.js";
 import type { AccountGroup, AccountsChanged, Address } from "../accounts/types.js";
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
-import type { JsonRpcParams } from "../chainJsonRpc/types.js";
 import type { KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
+import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type {
@@ -111,16 +111,6 @@ export type WalletNetworksApi = Readonly<{
   clearRpcOverride(chainRef: ChainRef): Promise<void>;
 }>;
 
-export type WalletChainRpcRequest = Readonly<{
-  chainRef: ChainRef;
-  method: string;
-  params?: JsonRpcParams;
-}>;
-
-export type WalletChainRpcApi = Readonly<{
-  request<TResult = unknown>(input: WalletChainRpcRequest): Promise<TResult>;
-}>;
-
 export type WalletPermissionsApi = Readonly<{
   get(scope: PermissionScope): Promise<Permission | null>;
   list(): Promise<readonly Permission[]>;
@@ -170,7 +160,7 @@ export type WalletApi = Readonly<{
   keySources: WalletKeySourcesApi;
   accounts: WalletAccountsApi;
   networks: WalletNetworksApi;
-  chainRpc: WalletChainRpcApi;
+  eip155: Eip155Rpc;
   permissions: WalletPermissionsApi;
   approvals: WalletApprovalsApi;
   transactions: WalletTransactionsApi;

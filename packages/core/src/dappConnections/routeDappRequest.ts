@@ -2,7 +2,6 @@ import { ZodError } from "zod";
 import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../chainJsonRpc/errors.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
-import { parseChainRef } from "../networks/chainRef.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
 import {
   RpcChainUnavailableError,
@@ -143,12 +142,4 @@ export const routeDappRequest = async (
   if (namespaceRequests.nodeReadMethods.has(input.method)) return forwardNodeRead(namespaceRequests, input);
 
   throw unsupportedMethod(namespace, input.method);
-};
-
-export const routeChainRpcRequest = async (namespaces: DappNamespaces, input: NodeReadRequest): Promise<unknown> => {
-  const { namespace } = parseChainRef(input.chainRef);
-  const namespaceRequests = namespaces.get(namespace);
-  if (!namespaceRequests?.nodeReadMethods.has(input.method)) throw unsupportedMethod(namespace, input.method);
-
-  return forwardNodeRead(namespaceRequests, input);
 };

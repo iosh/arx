@@ -22,6 +22,7 @@ export type ChainDefinition = Readonly<{
   iconUrl?: string | undefined;
 }>;
 
+/** HTTP or HTTPS node URL. */
 export type RpcEndpoint = string;
 
 export type NonEmptyRpcEndpoints = readonly [RpcEndpoint, ...RpcEndpoint[]];

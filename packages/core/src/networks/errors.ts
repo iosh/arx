@@ -114,16 +114,13 @@ export class NetworkRpcEndpointMismatchError extends ArxBaseError {
   }
 }
 
-export class NetworkRpcEndpointVerificationError extends ArxBaseError {
-  static readonly code = "network.rpc_endpoint_verification_failed";
+export class NetworkRpcEndpointReadError extends ArxBaseError {
+  static readonly code = "network.rpc_endpoint_read_failed";
 
-  constructor(input: { endpoint: string; expectedChainRef: ChainRef; cause: unknown }) {
-    super("Network RPC endpoint could not be verified.", {
-      code: NetworkRpcEndpointVerificationError.code,
-      details: {
-        endpoint: input.endpoint,
-        expectedChainRef: input.expectedChainRef,
-      },
+  constructor(input: { endpoint: string; cause: unknown }) {
+    super("Could not read the RPC endpoint's chain identifier.", {
+      code: NetworkRpcEndpointReadError.code,
+      details: { endpoint: input.endpoint },
       cause: input.cause,
     });
   }

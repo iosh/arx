@@ -7,7 +7,7 @@ import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import {
   CustomNetworkAlreadyExistsError,
   NetworkRpcEndpointMismatchError,
-  NetworkRpcEndpointVerificationError,
+  NetworkRpcEndpointReadError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { CustomNetworkRecord } from "./persistence.js";
@@ -120,11 +120,14 @@ describe("Networks", () => {
     expect(mismatch.changes).toEqual([]);
   });
 
-  it("rejects an unavailable RPC without installing the network", async () => {
-    const transportFailure = new ChainJsonRpcHttpTransportError("RPC request failed.");
+  it.each(["unavailable", "invalid response"])("rejects an %s RPC without installing the network", async (failure) => {
     const unavailable = createFixture();
-    unavailable.request.mockRejectedValue(transportFailure);
-    await expect(unavailable.networks.addCustom(custom)).rejects.toBeInstanceOf(NetworkRpcEndpointVerificationError);
+    if (failure === "unavailable") {
+      unavailable.request.mockRejectedValue(new ChainJsonRpcHttpTransportError("RPC request failed."));
+    } else {
+      unavailable.request.mockResolvedValue(null);
+    }
+    await expect(unavailable.networks.addCustom(custom)).rejects.toBeInstanceOf(NetworkRpcEndpointReadError);
     expect(unavailable.networks.get("eip155:8453")).toBeNull();
     expect(unavailable.commit).not.toHaveBeenCalled();
     expect(unavailable.changes).toEqual([]);

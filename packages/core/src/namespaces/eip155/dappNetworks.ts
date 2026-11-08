@@ -9,7 +9,7 @@ import {
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
-  NetworkRpcEndpointVerificationError,
+  NetworkRpcEndpointReadError,
 } from "../../networks/errors.js";
 import type { Networks } from "../../networks/Networks.js";
 import {
@@ -119,7 +119,7 @@ export const createEip155DappNetworkHandlers = (
         if (
           error instanceof NetworkRpcEndpointInvalidError ||
           error instanceof NetworkRpcEndpointMismatchError ||
-          error instanceof NetworkRpcEndpointVerificationError
+          error instanceof NetworkRpcEndpointReadError
         ) {
           throw new RpcInvalidParamsError({ message: error.message });
         }

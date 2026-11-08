@@ -1,12 +1,4 @@
-import {
-  type ChainRef,
-  type Network,
-  NetworkNotFoundError,
-  type NetworkRpcConfiguration,
-  NetworkRpcEndpointMismatchError,
-  NetworkRpcEndpointVerificationError,
-  parseChainRef,
-} from "@arx/core/networks";
+import { type ChainRef, type Network, NetworkNotFoundError, type NetworkRpcConfiguration } from "@arx/core/networks";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
@@ -19,11 +11,13 @@ import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui/input-group";
 import { Spinner } from "@/ui/components/ui/spinner";
+import { isHttpUrl } from "@/ui/utils/url";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useNetworkRpcConfiguration } from "@/ui/wallet/networks/useNetworkRpcConfiguration";
 import { useNetwork } from "@/ui/wallet/networks/useNetworks";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
+import { getNetworkRpcError } from "./networkRpcError";
 
 type RpcNode = { url: string };
 
@@ -119,26 +113,11 @@ function NetworkRpcForm({ network, rpc }: { network: Network; rpc: NetworkRpcCon
       },
       onError: (error) => {
         if (isWalletApiError(error, NetworkNotFoundError)) return;
-        if (
-          isWalletApiError(error, NetworkRpcEndpointMismatchError) ||
-          isWalletApiError(error, NetworkRpcEndpointVerificationError)
-        ) {
-          const { endpoint } = error.details as Pick<
-            ConstructorParameters<typeof NetworkRpcEndpointVerificationError>[0],
-            "endpoint"
-          >;
-          const index = values.nodes.findIndex(({ url }) => url.trim() === endpoint);
-          let message: string = t("rpcVerificationFailed");
-          if (isWalletApiError(error, NetworkRpcEndpointMismatchError)) {
-            const details = error.details as ConstructorParameters<typeof NetworkRpcEndpointMismatchError>[0];
-            message = t("rpcChainMismatch", {
-              actualChainId: parseChainRef(details.actualChainRef).reference,
-              expectedChainId: parseChainRef(details.expectedChainRef).reference,
-              networkName: network.name,
-            });
-          }
+        const rpcError = getNetworkRpcError(error, network.name, t);
+        if (rpcError) {
+          const index = values.nodes.findIndex(({ url }) => url.trim() === rpcError.endpoint);
           // Read-only fields remain focusable before the settled mutation renders.
-          setError(`nodes.${index}.url`, { type: "rpc", message }, { shouldFocus: true });
+          setError(`nodes.${index}.url`, { type: "rpc", message: rpcError.message }, { shouldFocus: true });
           return;
         }
         reportError(error);
@@ -226,9 +205,7 @@ function NetworkRpcForm({ network, rpc }: { network: Network; rpc: NetworkRpcCon
                             if (getValues("source") === "default") return true;
                             const url = value.trim();
                             if (!url) return t("rpcUrlRequired");
-                            if (!URL.canParse(url)) return t("rpcUrlInvalid");
-                            const protocol = new URL(url).protocol;
-                            return protocol === "http:" || protocol === "https:" || t("rpcUrlInvalid");
+                            return isHttpUrl(url) || t("rpcUrlInvalid");
                           },
                         })}
                         id={inputId}

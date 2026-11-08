@@ -20,7 +20,7 @@ export {
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
-  NetworkRpcEndpointVerificationError,
+  NetworkRpcEndpointReadError,
 } from "./errors.js";
 export { Networks } from "./Networks.js";
 export type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";

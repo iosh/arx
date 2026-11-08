@@ -13,7 +13,7 @@ import {
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
-  NetworkRpcEndpointVerificationError,
+  NetworkRpcEndpointReadError,
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 import { customNetworkWrites, networkRpcOverrideWrites } from "./persistence.js";
@@ -154,7 +154,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     const namespace = parseChainRef(chainRef).namespace;
     this.assertCustomNetworkCanBeAdded(chainRef);
 
-    await this.admitRpcEndpoints(chainRef, namespace, input.defaultRpcEndpoints);
+    await this.validateRpcConfiguration(chainRef, input.defaultRpcEndpoints);
     await this.commitUpdate(() => this.prepareAddCustom(input, namespace));
   }
 
@@ -163,18 +163,18 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     const current = this.requireCustomNetwork(chainRef);
 
     if (!isSameRpcEndpoints(current.defaultRpcEndpoints, input.defaultRpcEndpoints)) {
-      await this.admitRpcEndpoints(chainRef, current.network.namespace, input.defaultRpcEndpoints);
+      await this.validateRpcConfiguration(chainRef, input.defaultRpcEndpoints);
     }
 
     await this.commitUpdate(() => this.prepareUpdateCustom(input));
   }
 
   async setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void> {
-    const installed = this.requireInstalledNetwork(input.chainRef);
+    this.requireInstalledNetwork(input.chainRef);
     const current = this.#rpcOverrides.get(input.chainRef);
 
     if (!current || !isSameRpcEndpoints(current, input.endpoints)) {
-      await this.admitRpcEndpoints(input.chainRef, installed.network.namespace, input.endpoints);
+      await this.validateRpcConfiguration(input.chainRef, input.endpoints);
     }
 
     await this.commitUpdate(() => this.prepareSetRpcOverride(input));
@@ -290,38 +290,32 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     this.#publishChanged(update.change);
   }
 
-  private async admitRpcEndpoints(
-    chainRef: ChainRef,
-    namespace: Namespace,
-    endpoints: NonEmptyRpcEndpoints,
-  ): Promise<void> {
-    const adapter = this.requireAdapter(namespace);
-
+  private async validateRpcConfiguration(expectedChainRef: ChainRef, endpoints: NonEmptyRpcEndpoints): Promise<void> {
     for (const endpoint of endpoints) {
       if (!URL.canParse(endpoint)) throw new NetworkRpcEndpointInvalidError(endpoint);
       const protocol = new URL(endpoint).protocol;
       if (protocol !== "http:" && protocol !== "https:") throw new NetworkRpcEndpointInvalidError(endpoint);
     }
 
-    for (const endpoint of endpoints) {
-      let actualChainRef: ChainRef;
-      try {
-        actualChainRef = await adapter.queryChainRef(endpoint);
-      } catch (cause) {
-        throw new NetworkRpcEndpointVerificationError({
-          endpoint,
-          expectedChainRef: chainRef,
-          cause,
-        });
-      }
-      if (actualChainRef !== chainRef) {
-        throw new NetworkRpcEndpointMismatchError({
-          endpoint,
-          expectedChainRef: chainRef,
-          actualChainRef,
-        });
-      }
-    }
+    const adapter = this.requireAdapter(parseChainRef(expectedChainRef).namespace);
+
+    await Promise.all(
+      endpoints.map(async (endpoint) => {
+        let reportedChainRef: ChainRef;
+        try {
+          reportedChainRef = await adapter.queryChainRef(endpoint);
+        } catch (cause) {
+          throw new NetworkRpcEndpointReadError({ endpoint, cause });
+        }
+        if (reportedChainRef !== expectedChainRef) {
+          throw new NetworkRpcEndpointMismatchError({
+            endpoint,
+            expectedChainRef,
+            actualChainRef: reportedChainRef,
+          });
+        }
+      }),
+    );
   }
 
   private async commitUpdate(prepare: () => NetworksUpdate | null): Promise<void> {

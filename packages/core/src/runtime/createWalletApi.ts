@@ -106,8 +106,9 @@ export const createWalletApi = ({
     getRpcConfiguration: async (chainRef) => networks.getRpcConfiguration(chainRef),
     addCustom: async (input) => networks.addCustom(input),
     updateCustom: async (input) => networks.updateCustom(input),
+    updateBlockExplorers: async (input) => networks.updateBlockExplorers(input),
     removeCustom: async (chainRef) => customNetworkRemoval.removeCustom(chainRef),
-    setRpcOverride: async (input) => networks.setRpcOverride(input),
+    updateRpcEndpoints: async (input) => networks.updateRpcEndpoints(input),
     clearRpcOverride: async (chainRef) => networks.clearRpcOverride(chainRef),
   },
 

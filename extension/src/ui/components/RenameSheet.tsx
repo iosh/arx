@@ -2,10 +2,13 @@ import { ChevronRight, CircleX, X } from "lucide-react";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/ui/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui/input-group";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/ui/components/ui/sheet";
+import { Toaster } from "@/ui/components/ui/sonner";
 import { Spinner } from "@/ui/components/ui/spinner";
+import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 export function RenameSheet({
   label,
@@ -19,27 +22,35 @@ export function RenameSheet({
   const { t } = useTranslation("wallet");
   const [open, setOpen] = useState(false);
   const errorId = useId();
+  const toasterId = useId();
+  const saving = useWalletMutation({ mutationFn: onRename, toasterId, gcTime: 0 });
   const {
     register,
     handleSubmit,
     reset,
     setFocus,
     setValue,
-    formState: { errors, isSubmitting, isValid },
+    formState: { errors, dirtyFields, isValid },
   } = useForm({ defaultValues: { name }, mode: "onChange" });
 
-  async function submit({ name: inputName }: { name: string }) {
+  function submit({ name: inputName }: { name: string }) {
     const nextName = inputName.trim();
-    if (nextName !== name) await onRename(nextName);
-    setOpen(false);
+    if (!dirtyFields.name || nextName === name) {
+      setOpen(false);
+      return;
+    }
+    saving.mutate(nextName, { onSuccess: () => setOpen(false) });
   }
 
   return (
     <Sheet
       open={open}
       onOpenChange={(nextOpen) => {
-        if (isSubmitting) return;
-        if (nextOpen) reset({ name });
+        if (saving.isPending) return;
+        if (nextOpen) {
+          toast.dismiss();
+          reset({ name });
+        }
         setOpen(nextOpen);
       }}
     >
@@ -68,13 +79,13 @@ export function RenameSheet({
               size="icon-sm"
               className="size-7.5 rounded-full text-muted-foreground"
               aria-label={t("closeRename")}
-              disabled={isSubmitting}
+              disabled={saving.isPending}
             >
               <X aria-hidden="true" className="size-4" />
             </Button>
           </SheetClose>
         </div>
-        <form onSubmit={handleSubmit(submit)} aria-busy={isSubmitting} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit(submit)} aria-busy={saving.isPending} className="flex flex-col gap-3">
           <InputGroup className="h-11 bg-card">
             <InputGroupInput
               {...register("name", { validate: (value) => value.trim().length > 0 })}
@@ -83,7 +94,7 @@ export function RenameSheet({
               aria-describedby={errors.name ? errorId : undefined}
               autoComplete="off"
               className="px-3.5 font-semibold"
-              disabled={isSubmitting}
+              disabled={saving.isPending}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault();
               }}
@@ -95,7 +106,7 @@ export function RenameSheet({
                 size="icon-xs"
                 className="rounded-full text-placeholder"
                 aria-label={t("clearName")}
-                disabled={isSubmitting}
+                disabled={saving.isPending}
                 onClick={() => {
                   setValue("name", "", { shouldDirty: true, shouldValidate: true });
                   setFocus("name");
@@ -111,11 +122,14 @@ export function RenameSheet({
             </p>
           )}
           <SheetDescription>{t("namePrivacy")}</SheetDescription>
-          <Button type="submit" className="w-full" disabled={!isValid || isSubmitting} aria-busy={isSubmitting}>
-            {isSubmitting && <Spinner aria-label={t("saveName")} />}
+          <Button type="submit" className="w-full" disabled={!isValid || saving.isPending} aria-busy={saving.isPending}>
+            {saving.isPending && <Spinner aria-label={t("saveName")} />}
             {t("saveName")}
           </Button>
         </form>
+        <div className="absolute">
+          <Toaster id={toasterId} position="top-center" />
+        </div>
       </SheetContent>
     </Sheet>
   );

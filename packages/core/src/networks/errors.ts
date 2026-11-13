@@ -125,3 +125,36 @@ export class NetworkRpcEndpointReadError extends ArxBaseError {
     });
   }
 }
+
+export class NetworkConfigurationChangedError extends ArxBaseError {
+  static readonly code = "network.configuration_changed";
+
+  constructor(chainRef: ChainRef) {
+    super("The network configuration changed while this item was being edited.", {
+      code: NetworkConfigurationChangedError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class NetworkRpcEndpointRequiredError extends ArxBaseError {
+  static readonly code = "network.rpc_endpoint_required";
+
+  constructor(chainRef: ChainRef) {
+    super("A network must retain at least one RPC endpoint.", {
+      code: NetworkRpcEndpointRequiredError.code,
+      details: { chainRef },
+    });
+  }
+}
+
+export class NetworkBlockExplorerExistsError extends ArxBaseError {
+  static readonly code = "network.block_explorer_exists";
+
+  constructor(input: { chainRef: ChainRef; url: string }) {
+    super("This block explorer is already configured for the network.", {
+      code: NetworkBlockExplorerExistsError.code,
+      details: input,
+    });
+  }
+}

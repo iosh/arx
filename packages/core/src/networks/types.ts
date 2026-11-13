@@ -37,6 +37,21 @@ export type CustomNetworkInput = Readonly<{
   defaultRpcEndpoints: NonEmptyRpcEndpoints;
 }>;
 
+export type CustomNetworkUpdate = Readonly<{
+  chainRef: ChainRef;
+  changes: Readonly<{
+    name?: string;
+    nativeCurrency?: Partial<Pick<NativeCurrency, "symbol" | "decimals">>;
+    isTestnet?: boolean;
+  }>;
+}>;
+
+/** Identifies the displayed row so an intervening list change cannot edit a different URL. */
+export type NetworkUrlUpdate =
+  | Readonly<{ type: "add"; url: string }>
+  | Readonly<{ type: "replace"; index: number; expectedUrl: string; url: string }>
+  | Readonly<{ type: "remove"; index: number; expectedUrl: string }>;
+
 export type Network = Readonly<{
   chainRef: ChainRef;
   namespace: Namespace;

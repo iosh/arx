@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AccountIdenticon } from "@/ui/components/accounts/AccountIdenticon";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { PageHeader } from "@/ui/components/PageHeader";
+import { RenameSheet } from "@/ui/components/RenameSheet";
 import { Button } from "@/ui/components/ui/button";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
@@ -17,7 +18,6 @@ import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
 import { showAccountHiddenToast } from "./AccountHiddenToast";
 import { RemoveKeySourceSheet } from "./RemoveKeySourceSheet";
-import { RenameSheet } from "./RenameSheet";
 import { useKeySourceRemoval } from "./useKeySourceRemoval";
 
 export function AccountDetailsPage({ accountGroupId }: { accountGroupId: AccountGroupId }) {

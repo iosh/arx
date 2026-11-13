@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Plus, RefreshCw, X } from "lucide-react";
-import { type ComponentProps, useId, useRef } from "react";
+import { useId, useRef } from "react";
 import { Controller, useFieldArray } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/ui/components/PageHeader";
@@ -9,46 +9,8 @@ import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui/input-group";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { isHttpUrl } from "@/ui/utils/url";
+import { NetworkFormInput } from "./NetworkFormInput";
 import { chainIdPattern, useAddEvmNetworkForm } from "./useAddEvmNetworkForm";
-
-function MetadataInput({
-  label,
-  description,
-  error,
-  ...props
-}: ComponentProps<typeof InputGroupInput> & {
-  label: string;
-  description?: string | undefined;
-  error?: string | undefined;
-}) {
-  const id = useId();
-  const message = error ?? description;
-  return (
-    <Field className="gap-2">
-      <FieldLabel htmlFor={id} className="px-1 text-sm text-muted-foreground">
-        {label}
-      </FieldLabel>
-      <InputGroup className="bg-card">
-        <InputGroupInput
-          autoComplete="off"
-          {...props}
-          id={id}
-          aria-invalid={Boolean(error)}
-          aria-describedby={message ? `${id}-help` : undefined}
-        />
-      </InputGroup>
-      {message && (
-        <FieldDescription
-          id={`${id}-help`}
-          aria-live="polite"
-          className={`px-1 ${error ? "text-destructive-foreground" : ""}`}
-        >
-          {message}
-        </FieldDescription>
-      )}
-    </Field>
-  );
-}
 
 export function AddEvmNetworkPage() {
   const { t } = useTranslation("wallet");
@@ -221,7 +183,7 @@ export function AddEvmNetworkPage() {
               </Link>
             )}
           </Field>
-          <MetadataInput
+          <NetworkFormInput
             {...form.register("name", {
               validate: (value) => value.trim().length > 0 || t("networkNameRequired"),
             })}
@@ -231,7 +193,7 @@ export function AddEvmNetworkPage() {
             description={network.metadataMessage}
           />
           <div className="grid grid-cols-2 gap-3">
-            <MetadataInput
+            <NetworkFormInput
               {...form.register("symbol", {
                 validate: (value) => value.trim().length > 0 || t("currencySymbolRequired"),
               })}
@@ -241,7 +203,7 @@ export function AddEvmNetworkPage() {
               readOnly={network.metadataReadOnly}
               spellCheck={false}
             />
-            <MetadataInput
+            <NetworkFormInput
               {...form.register("decimals", {
                 validate: (value) =>
                   (value.trim() !== "" && Number.isSafeInteger(Number(value)) && Number(value) >= 0) ||
@@ -256,7 +218,7 @@ export function AddEvmNetworkPage() {
               readOnly={network.metadataReadOnly}
             />
           </div>
-          <MetadataInput
+          <NetworkFormInput
             {...form.register("explorer", {
               validate: (value) => !value.trim() || isHttpUrl(value.trim()) || t("rpcUrlInvalid"),
             })}

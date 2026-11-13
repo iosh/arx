@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 describe("CoreRuntime EIP-155 RPC", () => {
-  it("queries an uninstalled node and restores all saved RPC endpoints without bootstrap requests", async () => {
+  it("queries an uninstalled node and restores network edits and RPC overrides without bootstrap requests", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (endpoint, init) => {
       const request = JSON.parse((init as RequestInit).body as string) as { id: number; method: string };
       const base = String(endpoint).startsWith("https://base");
@@ -44,17 +44,48 @@ describe("CoreRuntime EIP-155 RPC", () => {
       },
       defaultRpcEndpoints: ["https://base.example", "https://base-backup.example"],
     });
+    await runtime.wallet.networks.updateRpcEndpoints({
+      chainRef: "eip155:8453",
+      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-active.example" },
+    });
+    await runtime.wallet.networks.updateRpcEndpoints({
+      chainRef: "eip155:8453",
+      update: { type: "remove", index: 1, expectedUrl: "https://base-backup.example" },
+    });
+    await runtime.wallet.networks.updateCustom({
+      chainRef: "eip155:8453",
+      changes: { name: "Base Mainnet" },
+    });
+    await runtime.wallet.networks.updateBlockExplorers({
+      chainRef: "eip155:8453",
+      update: { type: "add", url: "https://basescan.org" },
+    });
+    await runtime.wallet.networks.updateBlockExplorers({
+      chainRef: "eip155:8453",
+      update: { type: "add", url: "https://base.blockscout.com" },
+    });
     await runtime.wallet.lock();
     await persistence.close();
 
     fetch.mockClear();
     const restored = (await open(databaseName)).runtime;
     expect(fetch).not.toHaveBeenCalled();
+    await expect(restored.wallet.networks.get("eip155:8453")).resolves.toMatchObject({
+      name: "Base Mainnet",
+      blockExplorers: [{ url: "https://basescan.org" }, { url: "https://base.blockscout.com" }],
+    });
     await expect(restored.wallet.networks.getRpcConfiguration("eip155:8453")).resolves.toMatchObject({
+      source: "override",
+      endpoints: ["https://base-active.example"],
+      defaultEndpoints: ["https://base.example", "https://base-backup.example"],
+    });
+    await expect(restored.wallet.eip155.eth_chainId([], { chainRef: "eip155:8453" })).resolves.toBe("0x2105");
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(String(fetch.mock.calls[0]?.[0])).toBe("https://base-active.example");
+    await expect(restored.wallet.networks.clearRpcOverride("eip155:8453")).resolves.toEqual({
       source: "default",
       endpoints: ["https://base.example", "https://base-backup.example"],
     });
-    await expect(restored.wallet.eip155.eth_chainId([], { chainRef: "eip155:8453" })).resolves.toBe("0x2105");
     expect(fetch).toHaveBeenCalledOnce();
   });
 

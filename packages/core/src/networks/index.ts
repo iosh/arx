@@ -15,12 +15,15 @@ export {
   ChainNamespaceMismatchError,
   CustomNetworkAlreadyExistsError,
   InvalidChainRefError,
+  NetworkBlockExplorerExistsError,
+  NetworkConfigurationChangedError,
   NetworkHasPendingTransactionsError,
   NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
+  NetworkRpcEndpointRequiredError,
 } from "./errors.js";
 export { Networks } from "./Networks.js";
 export type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
@@ -30,12 +33,14 @@ export type {
   BuiltinNetworkSeed,
   ChainDefinition,
   CustomNetworkInput,
+  CustomNetworkUpdate,
   NativeCurrency,
   Network,
   NetworkRpcConfiguration,
   NetworkRpcEndpointsReader,
   NetworksChanged,
   NetworksReader,
+  NetworkUrlUpdate,
   NonEmptyRpcEndpoints,
   RpcEndpoint,
 } from "./types.js";

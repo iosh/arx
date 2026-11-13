@@ -5,13 +5,13 @@ import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { PageHeader } from "@/ui/components/PageHeader";
+import { RenameSheet } from "@/ui/components/RenameSheet";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { getWalletAccounts } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
 import { RemoveKeySourceSheet } from "./RemoveKeySourceSheet";
-import { RenameSheet } from "./RenameSheet";
 import { useKeySourceRemoval } from "./useKeySourceRemoval";
 
 function getWalletRemovalInfo(accounts: readonly AccountGroup[], keySourceId: KeySourceId) {

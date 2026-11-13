@@ -6,8 +6,10 @@ import { PersistenceCommitError } from "../persistence/errors.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import {
   CustomNetworkAlreadyExistsError,
+  NetworkConfigurationChangedError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
+  NetworkRpcEndpointRequiredError,
 } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { CustomNetworkRecord } from "./persistence.js";
@@ -37,27 +39,41 @@ const createFixture = (customNetworks: readonly CustomNetworkRecord[] = []) => {
 };
 
 describe("Networks", () => {
-  it("saves an added network and its updated metadata and RPC configuration", async () => {
-    const { networks, commit } = createFixture();
+  it("edits network metadata and active RPC endpoints while retaining the restore baseline", async () => {
+    const { networks } = createFixture();
     await networks.addCustom(custom);
-    const updated = {
-      definition: { ...custom.definition, name: "Base Mainnet" },
-      defaultRpcEndpoints: ["https://base-v2.example"],
-    } as const;
-    await networks.updateCustom(updated);
-    expect(networks.get(custom.definition.chainRef)).toMatchObject({ ...updated.definition, source: "custom" });
-    expect(networks.getRpcConfiguration(custom.definition.chainRef)).toEqual({
-      source: "default",
-      endpoints: updated.defaultRpcEndpoints,
+    await networks.updateCustom({
+      chainRef: custom.definition.chainRef,
+      changes: { name: "Base Mainnet" },
     });
-    expect(commit).toHaveBeenLastCalledWith([{ persistenceType: "customNetwork", operation: "put", value: updated }]);
+    const rpc = await networks.updateRpcEndpoints({
+      chainRef: custom.definition.chainRef,
+      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-v2.example" },
+    });
+    expect(networks.get(custom.definition.chainRef)).toMatchObject({ name: "Base Mainnet", source: "custom" });
+    expect(rpc).toEqual({
+      source: "override",
+      endpoints: ["https://base-v2.example", "https://base-backup.example"],
+      defaultEndpoints: custom.defaultRpcEndpoints,
+    });
+  });
+
+  it("returns each committed network when another metadata edit is already queued", async () => {
+    const { networks } = createFixture([custom]);
+    const [renamed, marked] = await Promise.all([
+      networks.updateCustom({ chainRef: custom.definition.chainRef, changes: { name: "Renamed Base" } }),
+      networks.updateCustom({ chainRef: custom.definition.chainRef, changes: { isTestnet: true } }),
+    ]);
+    expect(renamed.name).toBe("Renamed Base");
+    expect(renamed.isTestnet).toBeUndefined();
+    expect(marked).toMatchObject({ name: "Renamed Base", isTestnet: true });
   });
 
   it("saves testnet marking changes once without rechecking unchanged RPC endpoints", async () => {
     const { networks, commit, changes, request } = createFixture([custom]);
     const testnet = { ...custom, definition: { ...custom.definition, isTestnet: true } };
-    await networks.updateCustom(testnet);
-    await networks.updateCustom(testnet);
+    await networks.updateCustom({ chainRef: custom.definition.chainRef, changes: { isTestnet: true } });
+    await networks.updateCustom({ chainRef: custom.definition.chainRef, changes: { isTestnet: true } });
     expect(networks.get(custom.definition.chainRef)).toMatchObject({ isTestnet: true });
     expect(commit).toHaveBeenCalledExactlyOnceWith([
       { persistenceType: "customNetwork", operation: "put", value: testnet },
@@ -65,7 +81,7 @@ describe("Networks", () => {
     expect(changes).toEqual([{ type: "networksChanged", chainRefs: [custom.definition.chainRef] }]);
 
     const unmarked = { ...custom, definition: { ...custom.definition, isTestnet: false } };
-    await networks.updateCustom(unmarked);
+    await networks.updateCustom({ chainRef: custom.definition.chainRef, changes: { isTestnet: false } });
     expect(networks.get(custom.definition.chainRef)).toMatchObject({ isTestnet: false });
     expect(commit).toHaveBeenLastCalledWith([{ persistenceType: "customNetwork", operation: "put", value: unmarked }]);
     expect(changes).toHaveLength(2);
@@ -86,12 +102,18 @@ describe("Networks", () => {
     const { networks, commit, changes, request } = createFixture();
     request.mockResolvedValue("0x1");
     const defaultEndpoints = networks.getRpcEndpoints("eip155:1");
-    const endpoints = ["https://ethereum-override.example"] as const;
-    await networks.setRpcOverride({ chainRef: "eip155:1", endpoints });
-    await networks.setRpcOverride({ chainRef: "eip155:1", endpoints });
-    expect(networks.getRpcConfiguration("eip155:1")).toEqual({
+    const endpoint = "https://ethereum-override.example";
+    await networks.updateRpcEndpoints({
+      chainRef: "eip155:1",
+      update: { type: "replace", index: 0, expectedUrl: defaultEndpoints[0], url: endpoint },
+    });
+    const unchanged = await networks.updateRpcEndpoints({
+      chainRef: "eip155:1",
+      update: { type: "replace", index: 0, expectedUrl: endpoint, url: endpoint },
+    });
+    expect(unchanged).toEqual({
       source: "override",
-      endpoints,
+      endpoints: [endpoint, ...defaultEndpoints.slice(1)],
       defaultEndpoints,
     });
     expect(commit).toHaveBeenCalledOnce();
@@ -99,16 +121,75 @@ describe("Networks", () => {
     expect(request).toHaveBeenCalledOnce();
 
     commit.mockClear();
-    await networks.clearRpcOverride("eip155:1");
-    await networks.clearRpcOverride("eip155:1");
-    expect(networks.getRpcConfiguration("eip155:1")).toEqual({
+    const restored = await networks.clearRpcOverride("eip155:1");
+    expect(restored).toEqual({
       source: "default",
       endpoints: defaultEndpoints,
     });
+    await expect(networks.clearRpcOverride("eip155:1")).resolves.toEqual(restored);
     expect(commit).toHaveBeenCalledExactlyOnceWith([
       { persistenceType: "networkRpcOverride", operation: "remove", key: "eip155:1" },
     ]);
     expect(changes).toHaveLength(2);
+  });
+
+  it("preserves intervening metadata and explorer edits while checking a new RPC URL", async () => {
+    const { networks, request } = createFixture([custom]);
+    const response = Promise.withResolvers<unknown>();
+    request.mockReturnValueOnce(response.promise);
+    const changingRpc = networks.updateRpcEndpoints({
+      chainRef: custom.definition.chainRef,
+      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-v2.example" },
+    });
+
+    await networks.updateCustom({
+      chainRef: custom.definition.chainRef,
+      changes: { name: "Renamed Base", nativeCurrency: { decimals: 19 } },
+    });
+    await networks.updateCustom({
+      chainRef: custom.definition.chainRef,
+      changes: { nativeCurrency: { symbol: "BASE" } },
+    });
+    await networks.updateBlockExplorers({
+      chainRef: custom.definition.chainRef,
+      update: { type: "add", url: "https://basescan.org" },
+    });
+    response.resolve("0x2105");
+    await changingRpc;
+
+    expect(networks.get(custom.definition.chainRef)).toMatchObject({
+      name: "Renamed Base",
+      nativeCurrency: { name: "Ether", symbol: "BASE", decimals: 19 },
+      blockExplorers: [{ url: "https://basescan.org" }],
+    });
+    expect(networks.getRpcEndpoints(custom.definition.chainRef)).toEqual([
+      "https://base-v2.example",
+      "https://base-backup.example",
+    ]);
+  });
+
+  it("keeps the last RPC node when a pending edit targets a removed row", async () => {
+    const { networks, request } = createFixture([custom]);
+    const response = Promise.withResolvers<unknown>();
+    request.mockReturnValueOnce(response.promise);
+    const changingRpc = networks.updateRpcEndpoints({
+      chainRef: custom.definition.chainRef,
+      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-v2.example" },
+    });
+    const rejected = expect(changingRpc).rejects.toBeInstanceOf(NetworkConfigurationChangedError);
+    await networks.updateRpcEndpoints({
+      chainRef: custom.definition.chainRef,
+      update: { type: "remove", index: 0, expectedUrl: "https://base.example" },
+    });
+    response.resolve("0x2105");
+    await rejected;
+    await expect(
+      networks.updateRpcEndpoints({
+        chainRef: custom.definition.chainRef,
+        update: { type: "remove", index: 0, expectedUrl: "https://base-backup.example" },
+      }),
+    ).rejects.toBeInstanceOf(NetworkRpcEndpointRequiredError);
+    expect(networks.getRpcEndpoints(custom.definition.chainRef)).toEqual(["https://base-backup.example"]);
   });
 
   it("requires the backup RPC to identify the requested chain before saving", async () => {

@@ -8,10 +8,11 @@ import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type {
   CustomNetworkInput,
+  CustomNetworkUpdate,
   Network,
   NetworkRpcConfiguration,
   NetworksChanged,
-  NonEmptyRpcEndpoints,
+  NetworkUrlUpdate,
 } from "../networks/types.js";
 import type { Permission, PermissionsChanged } from "../permissions/Permissions.js";
 import type { PermissionScope } from "../permissions/persistence.js";
@@ -99,16 +100,18 @@ export type WalletAccountsApi = Readonly<{
   select(input: { accountGroupId: AccountGroupId }): Promise<void>;
 }>;
 
+/** Metadata, explorer, and RPC edits return their committed state. */
 export type WalletNetworksApi = Readonly<{
   get(chainRef: ChainRef): Promise<Network | null>;
   list(): Promise<readonly Network[]>;
   listByNamespace(namespace: Namespace): Promise<readonly Network[]>;
   getRpcConfiguration(chainRef: ChainRef): Promise<NetworkRpcConfiguration>;
   addCustom(input: CustomNetworkInput): Promise<void>;
-  updateCustom(input: CustomNetworkInput): Promise<void>;
+  updateCustom(input: CustomNetworkUpdate): Promise<Network>;
+  updateBlockExplorers(input: { chainRef: ChainRef; update: NetworkUrlUpdate }): Promise<Network>;
   removeCustom(chainRef: ChainRef): Promise<void>;
-  setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void>;
-  clearRpcOverride(chainRef: ChainRef): Promise<void>;
+  updateRpcEndpoints(input: { chainRef: ChainRef; update: NetworkUrlUpdate }): Promise<NetworkRpcConfiguration>;
+  clearRpcOverride(chainRef: ChainRef): Promise<NetworkRpcConfiguration>;
 }>;
 
 export type WalletPermissionsApi = Readonly<{

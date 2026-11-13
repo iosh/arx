@@ -1,4 +1,4 @@
-import type { ChainRef } from "@arx/core/networks";
+import type { ChainRef, NetworkRpcConfiguration } from "@arx/core/networks";
 import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
@@ -10,6 +10,17 @@ export function refreshNetworkRpcConfigurations(queryClient: QueryClient, chainR
     void queryClient.cancelQueries({ queryKey, exact: true });
     void queryClient.invalidateQueries({ queryKey, exact: true });
   }
+}
+
+export async function updateRpcCache(
+  queryClient: QueryClient,
+  chainRef: ChainRef,
+  configuration: NetworkRpcConfiguration,
+) {
+  const queryKey = networkRpcConfigurationKey(chainRef);
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  queryClient.setQueryData(queryKey, configuration);
+  void queryClient.invalidateQueries({ queryKey, exact: true });
 }
 
 export function useNetworkRpcConfiguration(chainRef: ChainRef, enabled: boolean) {

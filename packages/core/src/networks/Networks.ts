@@ -4,26 +4,31 @@ import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { NetworksBootstrap } from "./bootstrap.js";
 import type { ChainRef } from "./chainRef.js";
 import { parseChainRef } from "./chainRef.js";
-import { isSameChainDefinition } from "./definition.js";
+import { cloneChainDefinition, isSameChainDefinition } from "./definition.js";
 import {
   BuiltinNetworkConflictError,
   BuiltinNetworkImmutableError,
   CustomNetworkAlreadyExistsError,
+  NetworkBlockExplorerExistsError,
+  NetworkConfigurationChangedError,
   NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
+  NetworkRpcEndpointRequiredError,
 } from "./errors.js";
 import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 import { customNetworkWrites, networkRpcOverrideWrites } from "./persistence.js";
 import type {
   CustomNetworkInput,
+  CustomNetworkUpdate,
   Network,
   NetworkRpcConfiguration,
   NetworkRpcEndpointsReader,
   NetworksChanged,
   NetworksReader,
+  NetworkUrlUpdate,
   NonEmptyRpcEndpoints,
 } from "./types.js";
 
@@ -155,33 +160,93 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     this.assertCustomNetworkCanBeAdded(chainRef);
 
     await this.validateRpcConfiguration(chainRef, input.defaultRpcEndpoints);
-    await this.commitUpdate(() => this.prepareAddCustom(input, namespace));
+    await this.commitUpdate(
+      () => this.prepareAddCustom(input, namespace),
+      () => undefined,
+    );
   }
 
-  async updateCustom(input: CustomNetworkInput): Promise<void> {
-    const chainRef = input.definition.chainRef;
-    const current = this.requireCustomNetwork(chainRef);
+  updateCustom({ chainRef, changes }: CustomNetworkUpdate): Promise<Network> {
+    return this.commitUpdate(
+      () => {
+        const current = this.requireCustomNetwork(chainRef);
+        return this.prepareUpdateCustom({
+          definition: {
+            ...cloneChainDefinition(current.network),
+            ...changes,
+            nativeCurrency: { ...current.network.nativeCurrency, ...changes.nativeCurrency },
+          },
+          defaultRpcEndpoints: current.defaultRpcEndpoints,
+        });
+      },
+      () => this.requireInstalledNetwork(chainRef).network,
+    );
+  }
 
-    if (!isSameRpcEndpoints(current.defaultRpcEndpoints, input.defaultRpcEndpoints)) {
-      await this.validateRpcConfiguration(chainRef, input.defaultRpcEndpoints);
+  updateBlockExplorers({ chainRef, update }: { chainRef: ChainRef; update: NetworkUrlUpdate }): Promise<Network> {
+    return this.commitUpdate(
+      () => {
+        const current = this.requireCustomNetwork(chainRef);
+        const explorers = [...(current.network.blockExplorers ?? [])];
+        if (update.type !== "add" && explorers[update.index]?.url !== update.expectedUrl) {
+          throw new NetworkConfigurationChangedError(chainRef);
+        }
+        if (update.type === "replace" && update.url === update.expectedUrl) {
+          return null;
+        }
+        if (update.type !== "remove" && explorers.some(({ url }) => url === update.url)) {
+          throw new NetworkBlockExplorerExistsError({ chainRef, url: update.url });
+        }
+        if (update.type === "add") explorers.push({ url: update.url });
+        else if (update.type === "replace") explorers[update.index] = { url: update.url };
+        else explorers.splice(update.index, 1);
+
+        return this.prepareUpdateCustom({
+          definition: { ...cloneChainDefinition(current.network), blockExplorers: explorers },
+          defaultRpcEndpoints: current.defaultRpcEndpoints,
+        });
+      },
+      () => this.requireInstalledNetwork(chainRef).network,
+    );
+  }
+
+  async updateRpcEndpoints({
+    chainRef,
+    update,
+  }: {
+    chainRef: ChainRef;
+    update: NetworkUrlUpdate;
+  }): Promise<NetworkRpcConfiguration> {
+    this.requireInstalledNetwork(chainRef);
+    if (update.type === "add" || (update.type === "replace" && update.url !== update.expectedUrl)) {
+      await this.validateRpcConfiguration(chainRef, [update.url]);
     }
 
-    await this.commitUpdate(() => this.prepareUpdateCustom(input));
+    return this.commitUpdate(
+      () => {
+        const current = this.getRpcConfiguration(chainRef);
+        const endpoints: [string, ...string[]] = [...current.endpoints];
+        if (update.type !== "add" && endpoints[update.index] !== update.expectedUrl) {
+          throw new NetworkConfigurationChangedError(chainRef);
+        }
+        if (update.type === "add") endpoints.push(update.url);
+        else if (update.type === "replace") endpoints[update.index] = update.url;
+        else {
+          if (endpoints.length === 1) throw new NetworkRpcEndpointRequiredError(chainRef);
+          endpoints.splice(update.index, 1);
+        }
+        if (isSameRpcEndpoints(current.endpoints, endpoints)) return null;
+        return this.prepareSetRpcOverride({ chainRef, endpoints });
+      },
+      () => this.getRpcConfiguration(chainRef),
+    );
   }
 
-  async setRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Promise<void> {
-    this.requireInstalledNetwork(input.chainRef);
-    const current = this.#rpcOverrides.get(input.chainRef);
-
-    if (!current || !isSameRpcEndpoints(current, input.endpoints)) {
-      await this.validateRpcConfiguration(input.chainRef, input.endpoints);
-    }
-
-    await this.commitUpdate(() => this.prepareSetRpcOverride(input));
-  }
-
-  clearRpcOverride(chainRef: ChainRef): Promise<void> {
-    return this.commitUpdate(() => this.prepareClearRpcOverride(chainRef));
+  clearRpcOverride(chainRef: ChainRef): Promise<NetworkRpcConfiguration> {
+    return this.commitUpdate(
+      () => this.prepareClearRpcOverride(chainRef),
+      () => this.getRpcConfiguration(chainRef),
+    );
   }
 
   private prepareAddCustom(input: CustomNetworkInput, namespace: Namespace): NetworksUpdate {
@@ -318,15 +383,16 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     );
   }
 
-  private async commitUpdate(prepare: () => NetworksUpdate | null): Promise<void> {
-    await this.#mutations.run(async (commit) => {
+  /** Read the result before releasing the queue to the next mutation. */
+  private commitUpdate<TResult>(prepare: () => NetworksUpdate | null, readResult: () => TResult): Promise<TResult> {
+    return this.#mutations.run(async (commit) => {
       const update = prepare();
-      if (!update) return;
-
-      await commit(update.persistenceChanges);
-
-      this.#applyCommittedUpdate(update);
-      this.#publishCommittedUpdate(update);
+      if (update) {
+        await commit(update.persistenceChanges);
+        this.#applyCommittedUpdate(update);
+        this.#publishCommittedUpdate(update);
+      }
+      return readResult();
     });
   }
 

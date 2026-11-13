@@ -1,4 +1,4 @@
-import { Secp256k1 } from "ox";
+import { Secp256k1, Signature } from "ox";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
@@ -1040,9 +1040,12 @@ describe("WalletCoordinator", () => {
     commit.release();
 
     const [signature] = await Promise.all([pendingSignature, changing]);
-    expect(Secp256k1.recoverAddress({ payload: digest, signature }).toLowerCase()).toBe(
-      "0x9858effd232b4033e47d90003d41ec34ecaeda94",
-    );
+    expect(
+      Secp256k1.recoverAddress({
+        payload: digest,
+        signature: { ...Signature.fromCompactBytes(signature.bytes), yParity: signature.yParity },
+      }).toLowerCase(),
+    ).toBe("0x9858effd232b4033e47d90003d41ec34ecaeda94");
     expect(wallet.getStatus()).toBe("unlocked");
   });
 

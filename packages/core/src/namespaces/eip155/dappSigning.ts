@@ -73,7 +73,11 @@ export const createEip155DappSigningHandlers = (
         accountId: account.accountId,
         digest: Hex.toBytes(input.digest),
       });
-      return Signature.toHex(signature);
+      return Signature.toHex({
+        r: Hex.fromNumber(signature.r, { size: 32 }),
+        s: Hex.fromNumber(signature.s, { size: 32 }),
+        yParity: signature.yParity,
+      });
     } catch (error) {
       if (isAccountSigningUnavailableError(error)) throw new RpcUnauthorizedError();
       throw new RpcInternalError({ message: "Unable to sign the EIP-155 request.", cause: error });

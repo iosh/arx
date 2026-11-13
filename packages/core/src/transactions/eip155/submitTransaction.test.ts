@@ -1,7 +1,7 @@
 import * as Hash from "ox/Hash";
-import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
-import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
-import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
+import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
+import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
+import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
 import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
@@ -81,7 +81,7 @@ describe("EIP-155 transaction submission", () => {
       transaction,
     });
 
-    expect(TransactionEnvelopeLegacy.deserialize(signed.recovery.rawTransaction)).toMatchObject({
+    expect(TxEnvelopeLegacy.deserialize(signed.recovery.rawTransaction)).toMatchObject({
       chainId: 1,
       nonce: 1n,
       gasPrice: 1_000_000_000n,
@@ -118,14 +118,14 @@ describe("EIP-155 transaction submission", () => {
       transaction,
     });
 
-    expect(
-      TransactionEnvelopeEip2930.deserialize(signed.recovery.rawTransaction as TransactionEnvelopeEip2930.Serialized),
-    ).toMatchObject({
-      chainId: 1,
-      nonce: 1n,
-      gasPrice: 1_000_000_000n,
-      accessList: ACCESS_LIST,
-    });
+    expect(TxEnvelopeEip2930.deserialize(signed.recovery.rawTransaction as TxEnvelopeEip2930.Serialized)).toMatchObject(
+      {
+        chainId: 1,
+        nonce: 1n,
+        gasPrice: 1_000_000_000n,
+        accessList: ACCESS_LIST,
+      },
+    );
   });
 
   it("signs and broadcasts an EIP-1559 transaction without replaying the raw submission", async () => {
@@ -157,16 +157,16 @@ describe("EIP-155 transaction submission", () => {
       transactionHash: TRANSACTION_HASH,
     });
 
-    expect(
-      TransactionEnvelopeEip1559.deserialize(signed.recovery.rawTransaction as TransactionEnvelopeEip1559.Serialized),
-    ).toMatchObject({
-      chainId: 1,
-      nonce: 9n,
-      maxFeePerGas: 2_000_000_000n,
-      maxPriorityFeePerGas: 1_500_000_000n,
-      gas: 21_000n,
-      value: 1n,
-    });
+    expect(TxEnvelopeEip1559.deserialize(signed.recovery.rawTransaction as TxEnvelopeEip1559.Serialized)).toMatchObject(
+      {
+        chainId: 1,
+        nonce: 9n,
+        maxFeePerGas: 2_000_000_000n,
+        maxPriorityFeePerGas: 1_500_000_000n,
+        gas: 21_000n,
+        value: 1n,
+      },
+    );
     expect(request).toHaveBeenCalledWith({
       chainRef: CHAIN_REF,
       method: "eth_sendRawTransaction",

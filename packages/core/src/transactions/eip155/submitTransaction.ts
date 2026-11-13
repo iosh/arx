@@ -1,9 +1,9 @@
 import * as Hash from "ox/Hash";
 import type { Hex } from "ox/Hex";
 import * as HexValue from "ox/Hex";
-import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
-import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
-import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
+import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
+import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
+import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import { isArxBaseError } from "../../errors.js";
@@ -24,30 +24,36 @@ const signEip155Transaction = async (
   try {
     const transaction = input.transaction;
     const transactionEnvelope = createEip155TransactionEnvelope(input.chainRef, transaction);
-    const signPayload = async (payload: Hex) =>
-      signing.signDigest({
+    const signPayload = async (payload: Hex) => {
+      const signature = await signing.signDigest({
         accountId: input.accountId,
         digest: HexValue.toBytes(payload),
       });
+      return {
+        r: HexValue.fromNumber(signature.r, { size: 32 }),
+        s: HexValue.fromNumber(signature.s, { size: 32 }),
+        yParity: signature.yParity,
+      };
+    };
 
     let rawTransaction: Hex;
     switch (transactionEnvelope.type) {
       case "legacy": {
         const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TransactionEnvelopeLegacy.getSignPayload(envelope));
-        rawTransaction = TransactionEnvelopeLegacy.serialize(envelope, { signature });
+        const signature = await signPayload(TxEnvelopeLegacy.getSignPayload(envelope));
+        rawTransaction = TxEnvelopeLegacy.serialize(envelope, { signature });
         break;
       }
       case "eip2930": {
         const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TransactionEnvelopeEip2930.getSignPayload(envelope));
-        rawTransaction = TransactionEnvelopeEip2930.serialize(envelope, { signature });
+        const signature = await signPayload(TxEnvelopeEip2930.getSignPayload(envelope));
+        rawTransaction = TxEnvelopeEip2930.serialize(envelope, { signature });
         break;
       }
       case "eip1559": {
         const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TransactionEnvelopeEip1559.getSignPayload(envelope));
-        rawTransaction = TransactionEnvelopeEip1559.serialize(envelope, { signature });
+        const signature = await signPayload(TxEnvelopeEip1559.getSignPayload(envelope));
+        rawTransaction = TxEnvelopeEip1559.serialize(envelope, { signature });
         break;
       }
     }

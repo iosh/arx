@@ -1,9 +1,9 @@
 import * as AccessList from "ox/AccessList";
 import type { Address } from "ox/Address";
 import type { Hex } from "ox/Hex";
-import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
-import * as TransactionEnvelopeEip2930 from "ox/TransactionEnvelopeEip2930";
-import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
+import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
+import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
+import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
 import { isArxBaseError } from "../../errors.js";
 import { chainIdFromChainRef } from "../../namespaces/eip155/chainId.js";
 import type { ChainRef } from "../../networks/chainRef.js";
@@ -36,7 +36,7 @@ export const createEip155TransactionEnvelope = (chainRef: ChainRef, transaction:
       case "legacy":
         return {
           type: "legacy" as const,
-          envelope: TransactionEnvelopeLegacy.from({
+          envelope: TxEnvelopeLegacy.from({
             ...fields,
             gasPrice: BigInt(transaction.gasPrice),
           }),
@@ -45,7 +45,7 @@ export const createEip155TransactionEnvelope = (chainRef: ChainRef, transaction:
         validateAccessList(transaction.accessList);
         return {
           type: "eip2930" as const,
-          envelope: TransactionEnvelopeEip2930.from({
+          envelope: TxEnvelopeEip2930.from({
             ...fields,
             gasPrice: BigInt(transaction.gasPrice),
             accessList: transaction.accessList,
@@ -55,7 +55,7 @@ export const createEip155TransactionEnvelope = (chainRef: ChainRef, transaction:
         validateAccessList(transaction.accessList);
         return {
           type: "eip1559" as const,
-          envelope: TransactionEnvelopeEip1559.from({
+          envelope: TxEnvelopeEip1559.from({
             ...fields,
             maxFeePerGas: BigInt(transaction.maxFeePerGas),
             maxPriorityFeePerGas: BigInt(transaction.maxPriorityFeePerGas),

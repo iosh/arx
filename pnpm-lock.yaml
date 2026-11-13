@@ -4625,7 +4625,7 @@ snapshots:
 
   parse5-parser-stream@8.1.0:
     dependencies:
-      parse5: 8.0.0
+      parse5: 8.1.0
 
   parse5@7.3.0:
     dependencies:

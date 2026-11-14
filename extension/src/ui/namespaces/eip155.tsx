@@ -1,6 +1,9 @@
-export function EvmNamespaceIcon() {
+export function EvmNamespaceIcon({ compact = false }: { compact?: boolean }) {
   return (
-    <span aria-hidden="true" className="grid size-8 shrink-0 grid-cols-2 gap-0.5">
+    <span
+      aria-hidden="true"
+      className={compact ? "flex h-2 shrink-0 gap-0.75 [&>span]:size-2" : "grid size-8 shrink-0 grid-cols-2 gap-0.5"}
+    >
       <span className="rounded-full bg-[#627eea]" />
       <span className="rounded-full bg-[#0052ff]" />
       <span className="rounded-full bg-[#12aaff]" />
@@ -36,10 +39,10 @@ function EvmCompactAddress({ address }: { address: string }) {
 export const eip155Ui = {
   labelKey: "common:evmNetworks",
   Icon: EvmNamespaceIcon,
+  GroupedAddress: EvmGroupedAddress,
   CompactAddress: EvmCompactAddress,
   privateKeyImport: {
     descriptionKey: "onboarding:importPrivateKeyDescription",
     formatHintKey: "onboarding:privateKeyFormat",
-    GroupedAddress: EvmGroupedAddress,
   },
 } as const;

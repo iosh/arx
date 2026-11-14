@@ -1,6 +1,6 @@
 import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
-import { ChevronRight, Ellipsis, Lock, Settings, ShieldAlert } from "lucide-react";
+import { ArrowDownLeft, ChevronRight, Ellipsis, Lock, Settings, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
@@ -70,7 +70,26 @@ export function HomePage() {
         </DropdownMenu>
       </header>
       <section className="overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
-        <div aria-hidden="true" className="h-35.5" />
+        <div className="flex h-35.5 items-end px-4 pb-5">
+          <div className="grid w-full grid-cols-2 gap-2.5">
+            {account ? (
+              <Button asChild variant="secondary" className="h-10">
+                <Link
+                  to="/wallet/receive/$accountGroupId/$accountId"
+                  params={{ accountGroupId: account.accountGroupId, accountId: account.members[0].accountId }}
+                >
+                  <ArrowDownLeft aria-hidden="true" />
+                  {t("receive")}
+                </Link>
+              </Button>
+            ) : (
+              <Button type="button" variant="secondary" className="h-10" disabled>
+                <ArrowDownLeft aria-hidden="true" />
+                {t("receive")}
+              </Button>
+            )}
+          </div>
+        </div>
         {source && (
           <a
             href={`${browser.runtime.getURL("/onboarding.html")}#${

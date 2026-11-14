@@ -84,7 +84,7 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
         )}
         {account && (
           <>
-            <AccountAddressCard account={account} />
+            <AccountAddressCard account={account} receivable />
             <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
               <RenameSheet
                 label={t("accountNameLabel")}

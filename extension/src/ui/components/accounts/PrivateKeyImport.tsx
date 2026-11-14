@@ -66,8 +66,7 @@ export function PrivateKeyAddressPreview({
     >
       <h2 className="text-xs font-medium text-muted-foreground">{t("privateKeyAddress")}</h2>
       {addresses.map((address) => {
-        const { Icon, labelKey, privateKeyImport } = getNamespaceUi(address.namespace);
-        const { GroupedAddress } = privateKeyImport;
+        const { Icon, labelKey, GroupedAddress } = getNamespaceUi(address.namespace);
         return (
           <div key={address.address} className="flex flex-col gap-3">
             <div className="flex items-center gap-2.5">

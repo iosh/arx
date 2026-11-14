@@ -11,12 +11,12 @@ import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { Spinner } from "@/ui/components/ui/spinner";
+import { useCopyToClipboard } from "@/ui/hooks/useCopyToClipboard";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
-import { useCopyToClipboard } from "./useCopyToClipboard";
 
 export function ExportPrivateKeyPage({
   accountGroupId,

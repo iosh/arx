@@ -106,6 +106,13 @@ export const wallet = {
   blockExplorer: "区块浏览器",
   noBlockExplorer: "未设置",
   builtinNetworkNote: "ARX 内置网络不可删除。",
+  deleteNetwork: "删除网络",
+  deleteNetworkTitle: "删除「{{name}}」？",
+  deleteEvmNetworkDescription:
+    "将删除此网络及其 RPC 设置。使用此网络的网站会改用 Ethereum，已有账户授权保留。链上资产不受影响。",
+  deletingNetwork: "正在删除网络",
+  networkDeleted: "已删除「{{name}}」",
+  networkHasPendingTransactions: "此网络仍有待处理交易，无法删除。",
   addNetwork: "添加网络",
   networkAdded: "已添加{{networkName}}",
   networkRpcUrl: "RPC 节点 URL",
@@ -155,4 +162,5 @@ export const wallet = {
   cancel: "取消",
   delete: "删除",
   operationFailed: "操作未能完成。",
+  operationOutcomeUnknown: "连接已中断，暂时无法确认操作结果。",
 } as const satisfies WalletMessages;

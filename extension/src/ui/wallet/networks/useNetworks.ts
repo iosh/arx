@@ -17,6 +17,14 @@ export async function updateNetworkCache(queryClient: QueryClient, network: Netw
   void queryClient.invalidateQueries({ queryKey: networksKey, exact: true });
 }
 
+export async function removeNetworkCache(queryClient: QueryClient, chainRef: ChainRef) {
+  await queryClient.cancelQueries({ queryKey: networksKey, exact: true });
+  queryClient.setQueryData<readonly Network[]>(networksKey, (networks) =>
+    networks?.filter((network) => network.chainRef !== chainRef),
+  );
+  void queryClient.invalidateQueries({ queryKey: networksKey, exact: true });
+}
+
 function useNetworksOptions() {
   const { client: wallet } = useWallet();
   return queryOptions({

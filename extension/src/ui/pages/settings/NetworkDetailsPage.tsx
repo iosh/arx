@@ -1,21 +1,63 @@
-import { type ChainRef, type Network, parseChainRef } from "@arx/core/networks";
+import { type ChainRef, type Network, NetworkHasPendingTransactionsError, parseChainRef } from "@arx/core/networks";
+import { isWalletApiError } from "@arx/wallet-api/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { RenameSheet } from "@/ui/components/RenameSheet";
 import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useNetworkRpcConfiguration } from "@/ui/wallet/networks/useNetworkRpcConfiguration";
-import { updateNetworkCache, useNetwork } from "@/ui/wallet/networks/useNetworks";
+import { removeNetworkCache, updateNetworkCache, useNetwork } from "@/ui/wallet/networks/useNetworks";
+import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { NetworkCurrencySheet } from "./NetworkCurrencySheet";
+import { NetworkDeleteDialog } from "./NetworkDeleteDialog";
 import { NetworkExplorersSection } from "./NetworkExplorersSection";
 import { NetworkRpcSection } from "./NetworkRpcSection";
 
 export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
   const { t } = useTranslation("wallet");
+  const { client: wallet } = useWallet();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const reportError = useWalletError();
+  const [deletionOpen, setDeletionOpen] = useState(false);
   const { data: network, isPending } = useNetwork(chainRef);
   const { data: rpc, isPending: rpcPending } = useNetworkRpcConfiguration(chainRef, network != null);
+  const deletion = useWalletMutation({
+    mutationFn: async (chainRef: ChainRef) => {
+      await wallet.networks.removeCustom(chainRef);
+      await removeNetworkCache(queryClient, chainRef);
+    },
+    gcTime: 0,
+  });
+
+  useEffect(() => {
+    if (network === null) setDeletionOpen(false);
+  }, [network]);
+
+  function deleteNetwork(network: Network) {
+    deletion.mutate(network.chainRef, {
+      onSuccess: () => {
+        toast.success(t("networkDeleted", { name: network.name }));
+        void navigate({ to: "/wallet/settings/networks", replace: true });
+      },
+      onError: (error) => {
+        setDeletionOpen(false);
+        if (isWalletApiError(error, NetworkHasPendingTransactionsError)) {
+          toast.error(t("networkHasPendingTransactions"), {
+            duration: Infinity,
+            closeButton: true,
+          });
+          return;
+        }
+        reportError(error);
+      },
+    });
+  }
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -53,6 +95,16 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
           ) : null}
           {network.source === "builtin" && (
             <p className="px-1.5 text-xs leading-relaxed text-muted-foreground">{t("builtinNetworkNote")}</p>
+          )}
+          {network.source === "custom" && (
+            <NetworkDeleteDialog
+              network={network}
+              description={t("deleteEvmNetworkDescription")}
+              open={deletionOpen}
+              onOpenChange={setDeletionOpen}
+              pending={deletion.isPending}
+              onConfirm={() => deleteNetwork(network)}
+            />
           )}
         </div>
       )}

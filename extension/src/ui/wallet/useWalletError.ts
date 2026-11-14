@@ -1,3 +1,4 @@
+import { isWalletApiError, WalletChannelDisconnectedError } from "@arx/wallet-api/client";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -6,6 +7,9 @@ export function useWalletError() {
   const { t } = useTranslation("wallet");
   return (error: unknown, toasterId?: string) => {
     console.error("[arx:ui] Wallet operation failed", error);
-    toast.error(t("operationFailed"), { duration: Infinity, closeButton: true, toasterId });
+    const message = isWalletApiError(error, WalletChannelDisconnectedError)
+      ? "operationOutcomeUnknown"
+      : "operationFailed";
+    toast.error(t(message), { duration: Infinity, closeButton: true, toasterId });
   };
 }

@@ -108,6 +108,13 @@ export const wallet = {
   blockExplorer: "Block explorer",
   noBlockExplorer: "Not set",
   builtinNetworkNote: "ARX built-in networks cannot be deleted.",
+  deleteNetwork: "Delete network",
+  deleteNetworkTitle: "Delete “{{name}}”?",
+  deleteEvmNetworkDescription:
+    "This network and its RPC settings will be deleted. Sites using it will switch to Ethereum and keep their account permissions. On-chain assets are unaffected.",
+  deletingNetwork: "Deleting network",
+  networkDeleted: "Deleted “{{name}}”",
+  networkHasPendingTransactions: "This network has pending transactions and cannot be deleted.",
   addNetwork: "Add network",
   networkAdded: "{{networkName}} added",
   networkRpcUrl: "RPC node URL",
@@ -160,6 +167,7 @@ export const wallet = {
   cancel: "Cancel",
   delete: "Delete",
   operationFailed: "The operation could not be completed.",
+  operationOutcomeUnknown: "The connection was interrupted. The operation's outcome could not be confirmed.",
 } as const;
 
 export type WalletMessages = { [Key in keyof typeof wallet]: string };

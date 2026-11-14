@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 
+import { persistenceTypes } from "@arx/core/persistence";
 import { type CoreRuntime, createCoreRuntime } from "@arx/core/runtime";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { createDexiePersistence, type DexiePersistence } from "./createDexiePersistence.js";
@@ -22,7 +23,7 @@ afterEach(async () => {
 });
 
 describe("CoreRuntime EIP-155 RPC", () => {
-  it("queries an uninstalled node and restores network edits and RPC overrides without bootstrap requests", async () => {
+  it("persists network edits and removes RPC overrides and site references across runtime reloads", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (endpoint, init) => {
       const request = JSON.parse((init as RequestInit).body as string) as { id: number; method: string };
       const base = String(endpoint).startsWith("https://base");
@@ -64,11 +65,14 @@ describe("CoreRuntime EIP-155 RPC", () => {
       chainRef: "eip155:8453",
       update: { type: "add", url: "https://base.blockscout.com" },
     });
+    const removedSite = { origin: "https://base-site.example", namespace: "eip155", chainRef: "eip155:8453" };
+    const otherSite = { origin: "https://other-site.example", namespace: "eip155", chainRef: "eip155:10" };
+    await persistence.writer.commit([removedSite, otherSite].map(persistenceTypes.dappNetworkSelection.put));
     await runtime.wallet.lock();
     await persistence.close();
 
     fetch.mockClear();
-    const restored = (await open(databaseName)).runtime;
+    const { runtime: restored, persistence: restoredPersistence } = await open(databaseName);
     expect(fetch).not.toHaveBeenCalled();
     await expect(restored.wallet.networks.get("eip155:8453")).resolves.toMatchObject({
       name: "Base Mainnet",
@@ -87,6 +91,21 @@ describe("CoreRuntime EIP-155 RPC", () => {
       endpoints: ["https://base.example", "https://base-backup.example"],
     });
     expect(fetch).toHaveBeenCalledOnce();
+    await restored.wallet.networks.updateRpcEndpoints({
+      chainRef: "eip155:8453",
+      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-active.example" },
+    });
+
+    fetch.mockClear();
+    await restored.wallet.networks.removeCustom("eip155:8453");
+    await restored.wallet.lock();
+    await restoredPersistence.close();
+
+    const afterRemoval = await open(databaseName);
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(afterRemoval.runtime.wallet.networks.get("eip155:8453")).resolves.toBeNull();
+    await expect(afterRemoval.persistence.readers.networkRpcOverrides.listAll()).resolves.toEqual([]);
+    await expect(afterRemoval.persistence.readers.dappNetworkSelections.listAll()).resolves.toEqual([otherSite]);
   });
 
   it("signs empty personal data only after dapp authorization and approval", async () => {

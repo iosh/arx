@@ -53,5 +53,5 @@ function CreateMnemonicWalletForm({ onCreated }: { onCreated(result: WalletCreat
     });
   }
 
-  return <CreatePasswordForm totalSteps={3} onSubmit={create} />;
+  return <CreatePasswordForm totalSteps={3} loading onSubmit={create} />;
 }

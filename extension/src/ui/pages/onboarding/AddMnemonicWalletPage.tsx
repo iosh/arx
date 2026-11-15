@@ -2,7 +2,7 @@ import { type BackupStatus, KeyringInvalidMnemonicError } from "@arx/core/keyrin
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { useMutation } from "@tanstack/react-query";
 import { Navigate, useBlocker, useNavigate } from "@tanstack/react-router";
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -10,10 +10,8 @@ import { ConfirmAccountMoveSheet } from "@/ui/components/accounts/ConfirmAccount
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { UnlockForm } from "@/ui/components/unlock-form/UnlockForm";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
-import { useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { MnemonicBackup } from "./mnemonic/MnemonicBackup";
 import { MnemonicForm } from "./mnemonic/MnemonicForm";
@@ -24,8 +22,10 @@ type AdditionMode = "create" | "import";
 const exitLocation = { to: "/onboarding", replace: true, ignoreBlocker: true } as const;
 
 export function AddMnemonicWalletPage({ mode }: { mode: AdditionMode }) {
+  const navigate = useNavigate();
   const { status } = useWallet();
   const { t } = useTranslation("onboarding");
+  const onAdded = () => void navigate(exitLocation);
 
   if (status === "uninitialized") return <Navigate to="/onboarding" replace />;
   if (status === "locked") {
@@ -40,30 +40,7 @@ export function AddMnemonicWalletPage({ mode }: { mode: AdditionMode }) {
       </OnboardingStepLayout>
     );
   }
-  return <MnemonicWalletAddition mode={mode} />;
-}
-
-function MnemonicWalletAddition({ mode }: { mode: AdditionMode }) {
-  const { t } = useTranslation(["onboarding", "wallet"]);
-  const navigate = useNavigate();
-  const { data: mnemonicSources, isPending: sourcesPending } = useMnemonicSources();
-  const sources = mnemonicSources;
-
-  if (!sources) {
-    return (
-      <OnboardingStepLayout>
-        <OnboardingCard title={t(mode === "create" ? "createWallet" : "importRecoveryPhrase")}>
-          {sourcesPending && <Spinner aria-label={t("wallet:loadingWallet")} />}
-        </OnboardingCard>
-      </OnboardingStepLayout>
-    );
-  }
-
-  const context: AddMnemonicWalletContext = {
-    sources,
-    onAdded: () => void navigate(exitLocation),
-  };
-  return mode === "create" ? <NewMnemonicWallet {...context} /> : <ImportMnemonicWallet {...context} />;
+  return mode === "create" ? <NewMnemonicWallet onAdded={onAdded} /> : <ImportMnemonicWallet onAdded={onAdded} />;
 }
 
 function NewMnemonicWallet(context: AddMnemonicWalletContext) {
@@ -72,28 +49,24 @@ function NewMnemonicWallet(context: AddMnemonicWalletContext) {
   const flow = useAddMnemonicWallet(context);
   const generation = useMutation({ mutationFn: () => wallet.keySources.generateMnemonic(), gcTime: 0 });
   const { mutate: generateMnemonic } = generation;
+  const started = useRef(false);
 
   useBlocker({ shouldBlockFn: () => flow.isAdding, enableBeforeUnload: false });
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     generateMnemonic();
   }, [generateMnemonic]);
-  if (!generation.data) {
-    return (
-      <OnboardingStepLayout progress={{ current: 1, total: 2 }}>
-        <OnboardingCard title={t("backupTitle")}>
-          {generation.isPending && <Spinner aria-label={t("createWallet")} />}
-        </OnboardingCard>
-      </OnboardingStepLayout>
-    );
-  }
 
-  const mnemonic = generation.data.mnemonic;
-  const words: readonly MnemonicWord[] = mnemonic.split(" ").map((word, index) => ({ position: index + 1, word }));
+  const mnemonic = generation.data?.mnemonic;
+  const words: readonly MnemonicWord[] | undefined = mnemonic
+    ?.split(" ")
+    .map((word, index) => ({ position: index + 1, word }));
 
-  function add(backupStatus: BackupStatus, returnFocusElement?: HTMLElement | null) {
+  async function add(backupStatus: BackupStatus, returnFocusElement?: HTMLElement | null) {
+    if (!mnemonic) return false;
     const deferred = backupStatus === "pending";
-
     return flow.add(
       { mnemonic, backupStatus },
       {
@@ -114,14 +87,11 @@ function NewMnemonicWallet(context: AddMnemonicWalletContext) {
       <MnemonicBackup
         words={words}
         totalSteps={2}
-        pending={flow.isAdding || flow.move !== null}
+        pending={flow.isAdding}
+        loading
+        submitDisabled={!flow.canAdd}
         onComplete={() => void add("confirmed").catch(() => undefined)}
-        onDefer={(trigger) =>
-          add("pending", trigger).then(
-            (result) => result.status === "added" || result.status === "move-available",
-            () => false,
-          )
-        }
+        onDefer={(trigger) => add("pending", trigger).catch(() => false)}
       />
       <MnemonicAccountMoveSheet move={flow.move} returnFocusRef={flow.returnFocusRef} />
     </>
@@ -163,7 +133,7 @@ function ImportMnemonicWallet(context: AddMnemonicWalletContext) {
 
   return (
     <>
-      <MnemonicForm form={form} onSubmit={importWallet} disabled={flow.move !== null} />
+      <MnemonicForm form={form} onSubmit={importWallet} submitDisabled={!flow.canAdd} />
       <MnemonicAccountMoveSheet move={flow.move} returnFocusRef={flow.returnFocusRef} />
     </>
   );

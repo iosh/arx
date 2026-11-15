@@ -9,7 +9,6 @@ import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
@@ -89,9 +88,8 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
             size="lg"
             className="w-full aria-busy:opacity-70"
             disabled={!account || pending}
-            aria-busy={pending}
+            loading={pending}
           >
-            {pending && <Spinner aria-label={t("importPrivateKeyAction")} />}
             {t("importPrivateKeyAction")}
           </Button>
         </form>

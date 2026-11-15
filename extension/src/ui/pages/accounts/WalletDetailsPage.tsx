@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { RenameSheet } from "@/ui/components/RenameSheet";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { getWalletAccounts } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
@@ -32,7 +31,7 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
   const { data: accounts } = useAccounts();
-  const { data: mnemonicWallet, isPending: walletPending } = useMnemonicWallet(keySourceId);
+  const { data: mnemonicWallet } = useMnemonicWallet(keySourceId);
   const removal = useKeySourceRemoval();
   const name = mnemonicWallet?.name ?? t("walletDetails");
   const removalInfo = mnemonicWallet && accounts ? getWalletRemovalInfo(accounts, keySourceId) : undefined;
@@ -53,45 +52,51 @@ export function WalletDetailsPage({ keySourceId }: { keySourceId: KeySourceId })
         backLabel={t("backToAccounts")}
         backDisabled={removal.isPending}
         subtitle={mnemonicWallet ? subtitle : undefined}
+        subtitleSpace
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
-        {mnemonicWallet ? (
+        {mnemonicWallet === null ? (
+          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">{t("walletUnavailable")}</div>
+        ) : (
           <>
-            <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+            <div className="min-h-26 shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
               <RenameSheet
                 label={t("walletNameLabel")}
-                name={mnemonicWallet.name}
+                name={mnemonicWallet?.name}
+                disabled={!mnemonicWallet}
                 onRename={(name) => wallet.keySources.renameMnemonic({ keySourceId, name })}
               />
-              <a
-                href={`${browser.runtime.getURL("/onboarding.html")}#${
-                  router.buildLocation({
-                    to: "/onboarding/backup-mnemonic/$keySourceId",
-                    params: { keySourceId },
-                  }).href
-                }`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                {t(mnemonicWallet.backupStatus === "confirmed" ? "viewRecoveryPhrase" : "backupRecoveryPhrase")}
-                <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
-              </a>
+              {mnemonicWallet ? (
+                <a
+                  href={`${browser.runtime.getURL("/onboarding.html")}#${
+                    router.buildLocation({
+                      to: "/onboarding/backup-mnemonic/$keySourceId",
+                      params: { keySourceId },
+                    }).href
+                  }`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  {t(mnemonicWallet.backupStatus === "confirmed" ? "viewRecoveryPhrase" : "backupRecoveryPhrase")}
+                  <ExternalLink aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+                </a>
+              ) : (
+                <div className="flex h-12 items-center px-4 text-sm font-medium">{t("recoveryPhrase")}</div>
+              )}
             </div>
-            <RemoveKeySourceSheet
-              label={t("removeWallet")}
-              title={t("removeWalletTitle", { walletName: name })}
-              description={removalDescription}
-              backupLabel={t("confirmPhraseBackup")}
-              canRemove={removalInfo?.canRemove}
-              isPending={removal.isPending}
-              onConfirm={() => removal.removeKeySource(keySourceId, name)}
-            />
+            {mnemonicWallet && (
+              <RemoveKeySourceSheet
+                label={t("removeWallet")}
+                title={t("removeWalletTitle", { walletName: name })}
+                description={removalDescription}
+                backupLabel={t("confirmPhraseBackup")}
+                canRemove={removalInfo?.canRemove}
+                isPending={removal.isPending}
+                onConfirm={() => removal.removeKeySource(keySourceId, name)}
+              />
+            )}
           </>
-        ) : (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            {walletPending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
-          </div>
         )}
       </div>
     </main>

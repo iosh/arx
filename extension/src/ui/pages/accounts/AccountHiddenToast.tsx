@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { Button } from "@/ui/components/ui/button";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
@@ -44,7 +43,7 @@ function UndoAccountHideButton({
       type="button"
       variant="ghost"
       size="xs"
-      className="h-auto rounded-sm p-0 text-inherit hover:bg-transparent hover:text-inherit hover:underline aria-busy:opacity-70"
+      className="h-auto rounded-sm p-0 text-inherit hover:bg-transparent hover:text-inherit hover:underline"
       disabled={restoring.isPending}
       aria-busy={restoring.isPending}
       onClick={() => {
@@ -60,7 +59,6 @@ function UndoAccountHideButton({
         );
       }}
     >
-      {restoring.isPending && <Spinner aria-label={t("common:undo")} />}
       {t("common:undo")}
     </Button>
   );

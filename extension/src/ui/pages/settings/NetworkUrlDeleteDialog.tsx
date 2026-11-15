@@ -9,7 +9,6 @@ import {
 } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 
 export function NetworkUrlDeleteDialog({
   title,
@@ -59,7 +58,6 @@ export function NetworkUrlDeleteDialog({
                 onConfirm();
               }}
             >
-              {pending && <Spinner aria-label={t("savingNetwork")} />}
               {t("delete")}
             </Button>
           </AlertDialogAction>

@@ -18,7 +18,6 @@ export function AddEvmNetworkPage() {
   const rpcUrlOnFocus = useRef("");
   const network = useAddEvmNetworkForm();
   const { form, pending } = network;
-  const saveLabel = network.loadingMessage ?? (network.saving ? t("savingNetwork") : t("addNetwork"));
   const { fields: rpcFields, append, remove } = useFieldArray({ control: form.control, name: "nodes" });
   const { errors } = form.formState;
   return (
@@ -244,14 +243,8 @@ export function AddEvmNetworkPage() {
           <p className="px-1 text-xs leading-relaxed text-muted-foreground">{t("rpcPrivacyNotice")}</p>
         </div>
         <footer className="shrink-0 px-3.5 pt-2 pb-3.5">
-          <Button
-            type="submit"
-            disabled={network.metadataReadOnly}
-            aria-busy={pending}
-            className="w-full aria-busy:opacity-70"
-          >
-            {pending && <Spinner aria-label={saveLabel} />}
-            {saveLabel}
+          <Button type="submit" disabled={network.metadataReadOnly} loading={network.saving} className="w-full">
+            {t("addNetwork")}
           </Button>
         </footer>
       </form>

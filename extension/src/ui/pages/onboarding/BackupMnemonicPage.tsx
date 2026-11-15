@@ -1,4 +1,4 @@
-import { type BackupStatus, type KeySourceId, KeySourceNotFoundError } from "@arx/core/keyring";
+import { type KeySource, type KeySourceId, KeySourceNotFoundError } from "@arx/core/keyring";
 import { WalletLockedError } from "@arx/core/wallet";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { Navigate } from "@tanstack/react-router";
@@ -10,7 +10,6 @@ import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useConfirmMnemonicBackup } from "@/ui/wallet/keyring/useConfirmMnemonicBackup";
 import { useMnemonicWallet } from "@/ui/wallet/keyring/useMnemonicSources";
@@ -21,41 +20,29 @@ import type { MnemonicWord } from "./mnemonic/mnemonic";
 export function BackupMnemonicPage({ keySourceId }: { keySourceId: KeySourceId }) {
   const { status } = useWallet();
   const { t } = useTranslation(["onboarding", "wallet"]);
-  const { data: mnemonicWallet, isPending: sourcePending } = useMnemonicWallet(keySourceId);
+  const { data: mnemonicWallet } = useMnemonicWallet(keySourceId);
 
   if (status === "uninitialized") return <Navigate to="/onboarding" replace />;
 
-  if (!mnemonicWallet) {
+  if (mnemonicWallet === null) {
     return (
       <OnboardingStepLayout>
         <OnboardingCard title={t("viewPhraseTitle")} description={t("viewPhraseDescription")}>
-          {sourcePending ? (
-            <Spinner aria-label={t("wallet:loadingWallet")} />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("wallet:walletUnavailable")}</p>
-          )}
+          <p className="text-sm text-muted-foreground">{t("wallet:walletUnavailable")}</p>
         </OnboardingCard>
       </OnboardingStepLayout>
     );
   }
 
-  return (
-    <MnemonicWalletFlow
-      keySourceId={keySourceId}
-      walletName={mnemonicWallet.name}
-      backupStatus={mnemonicWallet.backupStatus}
-    />
-  );
+  return <MnemonicWalletFlow keySourceId={keySourceId} source={mnemonicWallet} />;
 }
 
 function MnemonicWalletFlow({
   keySourceId,
-  walletName,
-  backupStatus,
+  source,
 }: {
   keySourceId: KeySourceId;
-  walletName: string;
-  backupStatus: BackupStatus;
+  source: Extract<KeySource, { type: "bip39" }> | undefined;
 }) {
   const [words, setWords] = useState<readonly MnemonicWord[] | null>(null);
   const confirmBackup = useConfirmMnemonicBackup();
@@ -65,25 +52,26 @@ function MnemonicWalletFlow({
     window.close();
   }
 
-  if (!words) {
+  if (!words || !source) {
     return (
       <OnboardingStepLayout>
         <RevealMnemonicForm
           keySourceId={keySourceId}
-          walletName={walletName}
+          walletName={source?.name}
+          disabled={!source}
           onReveal={(mnemonic) => setWords(mnemonic.split(" ").map((word, index) => ({ position: index + 1, word })))}
         />
       </OnboardingStepLayout>
     );
   }
 
-  if (backupStatus === "confirmed") {
+  if (source.backupStatus === "confirmed") {
     return (
       <OnboardingStepLayout>
         <MnemonicDisplay
           mode="view"
           words={words}
-          walletName={walletName}
+          walletName={source.name}
           pending={confirmBackup.isPending}
           onContinue={complete}
         />
@@ -94,7 +82,7 @@ function MnemonicWalletFlow({
   return (
     <MnemonicBackup
       words={words}
-      walletName={walletName}
+      walletName={source.name}
       totalSteps={2}
       pending={confirmBackup.isPending}
       onComplete={() => confirmBackup.mutate(keySourceId, { onSuccess: complete })}
@@ -106,10 +94,12 @@ function RevealMnemonicForm({
   keySourceId,
   onReveal,
   walletName,
+  disabled,
 }: {
   keySourceId: KeySourceId;
   onReveal: (mnemonic: string) => void;
-  walletName: string;
+  walletName?: string;
+  disabled: boolean;
 }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("onboarding");
@@ -148,7 +138,7 @@ function RevealMnemonicForm({
   return (
     <OnboardingCard asChild title={t("viewPhraseTitle")} description={t("viewPhraseDescription")}>
       <form aria-busy={pending} onSubmit={handleSubmit(submit)}>
-        <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>
+        <p className="min-h-5 text-sm font-semibold wrap-anywhere">{walletName}</p>
         <Field>
           <FieldLabel htmlFor={id}>{walletText("unlockPassword")}</FieldLabel>
           <PasswordInput
@@ -157,7 +147,7 @@ function RevealMnemonicForm({
             fieldLabel={walletText("unlockPassword")}
             placeholder={t("unlockPasswordPlaceholder")}
             autoComplete="current-password"
-            disabled={pending}
+            disabled={pending || disabled}
             aria-invalid={incorrect}
             aria-describedby={`${id}-description`}
           />
@@ -169,10 +159,9 @@ function RevealMnemonicForm({
           type="submit"
           size="lg"
           className="w-full aria-busy:opacity-70"
-          disabled={!isValid || pending}
-          aria-busy={pending}
+          disabled={!isValid || pending || disabled}
+          loading={pending}
         >
-          {pending && <Spinner aria-label={t("continue")} />}
           {t("continue")}
         </Button>
       </form>

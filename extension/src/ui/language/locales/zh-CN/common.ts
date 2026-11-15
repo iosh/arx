@@ -6,7 +6,6 @@ export const common = {
   undo: "撤销",
   notifications: "操作提示",
   evmNetworks: "EVM 网络",
-  loadingNetwork: "正在读取网络",
   reload: "重新加载",
   showPassword: "显示{{field}}",
   hidePassword: "隐藏{{field}}",

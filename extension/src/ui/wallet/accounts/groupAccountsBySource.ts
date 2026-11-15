@@ -7,16 +7,20 @@ export function getWalletAccounts(accounts: readonly AccountGroup[], keySourceId
   return accounts.filter((account) => account.source.type === "bip39" && account.source.keySourceId === keySourceId);
 }
 
-export function groupAccountsBySource(accounts: readonly AccountGroup[], wallets: readonly MnemonicSource[]) {
-  const walletGroups = wallets
-    .map((source) => ({
-      type: "hd" as const,
-      id: source.keySourceId,
-      createdAt: source.createdAt,
-      source,
-      accounts: getWalletAccounts(accounts, source.keySourceId),
-    }))
-    .filter((group) => group.accounts.length > 0);
+export function groupAccountsBySource(
+  accounts: readonly AccountGroup[],
+  wallets: readonly MnemonicSource[] | undefined,
+) {
+  const walletGroups =
+    wallets
+      ?.map((source) => ({
+        type: "hd" as const,
+        id: source.keySourceId,
+        createdAt: source.createdAt,
+        source,
+        accounts: getWalletAccounts(accounts, source.keySourceId),
+      }))
+      .filter((group) => group.accounts.length > 0) ?? [];
   const privateKeyGroups = accounts
     .filter((account) => account.source.type === "private-key")
     .map((account) => ({

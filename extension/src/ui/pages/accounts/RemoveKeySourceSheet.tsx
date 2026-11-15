@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/ui/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/ui/components/ui/sheet";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 
 export function RemoveKeySourceSheet({
   label,
@@ -100,10 +99,9 @@ export function RemoveKeySourceSheet({
             variant="destructive"
             className="w-full"
             disabled={!backedUp || canRemove !== true || isPending}
-            aria-busy={isPending}
+            loading={isPending}
             onClick={onConfirm}
           >
-            {isPending && <Spinner aria-label={label} />}
             {label}
           </Button>
           <div className="absolute">

@@ -14,7 +14,6 @@ import {
 } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 import type { MnemonicWord } from "./mnemonic";
 
 export function MnemonicDisplay({
@@ -22,13 +21,17 @@ export function MnemonicDisplay({
   words,
   walletName,
   pending,
+  loading = false,
+  deferDisabled = false,
   onContinue,
   onDefer,
 }: {
   mode?: "backup" | "view";
-  words: readonly MnemonicWord[];
+  words: readonly MnemonicWord[] | undefined;
   walletName?: string;
   pending: boolean;
+  loading?: boolean;
+  deferDisabled?: boolean;
   onContinue: () => void;
   onDefer?: (returnFocusElement: HTMLButtonElement | null) => boolean | Promise<boolean>;
 }) {
@@ -37,17 +40,18 @@ export function MnemonicDisplay({
   const [hasRevealed, setHasRevealed] = useState(false);
   const hintId = useId();
   const viewing = mode === "view";
+  const blocked = pending || !words;
 
   return (
     <OnboardingCard
       title={t(viewing ? "viewPhraseTitle" : "backupTitle")}
-      description={t(viewing ? "viewPhraseWordsDescription" : "backupDescription", { count: words.length })}
+      description={viewing ? words && t("viewPhraseWordsDescription", { count: words.length }) : t("backupDescription")}
     >
       {walletName && <p className="text-sm font-semibold wrap-anywhere">{walletName}</p>}
       <div className="relative flex min-h-50 flex-col gap-2 rounded-xl bg-background px-4 py-3">
         <div className="flex h-7 items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">
-            {t("phraseWordCount", { count: words.length })}
+            {words && t("phraseWordCount", { count: words.length })}
           </span>
           <Button
             type="button"
@@ -60,7 +64,7 @@ export function MnemonicDisplay({
             }
             aria-label={visible ? t("hidePhrase") : t("showPhrase")}
             aria-describedby={visible ? undefined : hintId}
-            disabled={pending}
+            disabled={blocked}
             onClick={() => {
               setVisible((current) => !current);
               setHasRevealed(true);
@@ -91,7 +95,7 @@ export function MnemonicDisplay({
           )}
           aria-hidden={!visible}
         >
-          {words.map(({ position, word }) => (
+          {words?.map(({ position, word }) => (
             <li key={position} className="flex h-8 min-w-0 items-center gap-2">
               <span className="w-4.5 shrink-0 select-none text-right text-xs text-muted-foreground">{position}</span>
               <span lang="en" className="text-base leading-6 font-medium">
@@ -110,12 +114,20 @@ export function MnemonicDisplay({
           type="button"
           size="lg"
           className="w-full"
-          disabled={pending || (!viewing && !hasRevealed)}
+          disabled={blocked || (!viewing && !hasRevealed)}
           onClick={onContinue}
         >
           {t(viewing ? "complete" : "continue")}
         </Button>
-        {onDefer && <DeferBackupDialog onConfirm={onDefer} onOpen={() => setVisible(false)} pending={pending} />}
+        {onDefer && (
+          <DeferBackupDialog
+            onConfirm={onDefer}
+            onOpen={() => setVisible(false)}
+            pending={pending}
+            loading={loading}
+            disabled={deferDisabled || !words}
+          />
+        )}
       </div>
     </OnboardingCard>
   );
@@ -125,14 +137,19 @@ function DeferBackupDialog({
   onConfirm,
   onOpen,
   pending,
+  loading,
+  disabled,
 }: {
   onConfirm: (returnFocusElement: HTMLButtonElement | null) => boolean | Promise<boolean>;
   onOpen: () => void;
   pending: boolean;
+  loading: boolean;
+  disabled: boolean;
 }) {
   const { t } = useTranslation("onboarding");
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const blocked = pending || disabled;
 
   return (
     <AlertDialog
@@ -150,7 +167,7 @@ function DeferBackupDialog({
           variant="ghost"
           size="sm"
           className="font-normal text-muted-foreground"
-          disabled={pending}
+          disabled={blocked}
         >
           {t("deferBackup")}
         </Button>
@@ -165,15 +182,16 @@ function DeferBackupDialog({
             <Button
               type="button"
               variant="outline"
+              size="sm"
               className="h-10 rounded-md font-medium"
-              disabled={pending}
+              disabled={blocked}
+              loading={loading && pending}
               onClick={async (event) => {
                 event.preventDefault();
                 const shouldClose = await onConfirm(triggerRef.current);
                 if (shouldClose) setOpen(false);
               }}
             >
-              {pending && <Spinner aria-label={t("enterWallet")} />}
               {t("enterWallet")}
             </Button>
           </AlertDialogAction>

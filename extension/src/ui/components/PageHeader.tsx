@@ -1,4 +1,5 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
+import { cn } from "cn";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "./ui/button";
@@ -10,6 +11,7 @@ export function PageHeader({
   backDisabled = false,
   icon,
   subtitle,
+  subtitleSpace = false,
   action,
 }: Readonly<{
   title: string;
@@ -18,6 +20,7 @@ export function PageHeader({
   backDisabled?: boolean;
   icon?: ReactNode;
   subtitle?: string;
+  subtitleSpace?: boolean;
   action?: ReactNode;
 }>) {
   return (
@@ -34,7 +37,7 @@ export function PageHeader({
         </Link>
       </Button>
       {icon}
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0 flex-1", subtitleSpace && "min-h-10")}>
         <h1 className="truncate text-base font-semibold">{title}</h1>
         {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
       </div>

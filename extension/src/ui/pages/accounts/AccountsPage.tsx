@@ -16,12 +16,12 @@ import { useAccountCreation } from "./useAccountCreation";
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
-  const { data: accounts = [], isPending } = useAccounts();
-  const { data: wallets = [], isPending: walletsPending } = useMnemonicSources();
+  const { data: accounts } = useAccounts();
+  const { data: wallets } = useMnemonicSources();
   const creation = useAccountCreation();
   const { candidate } = creation;
 
-  const sections = groupAccountsBySource(accounts, wallets);
+  const sections = accounts && groupAccountsBySource(accounts, wallets);
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -43,17 +43,7 @@ export function AccountsPage() {
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
-        {isPending && (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            <Spinner aria-label={t("loadingAccounts")} />
-          </div>
-        )}
-        {walletsPending && !isPending && (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            <Spinner aria-label={t("loadingAccounts")} />
-          </div>
-        )}
-        {sections.map((section) => {
+        {sections?.map((section) => {
           if (section.type === "private-key") {
             return (
               <section key={section.id} className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
@@ -73,7 +63,7 @@ export function AccountsPage() {
               <h2>
                 <Link
                   to="/wallet/wallets/$keySourceId"
-                  params={{ keySourceId: source.keySourceId }}
+                  params={{ keySourceId: id }}
                   className="flex h-11 items-center gap-2 rounded-xl px-4 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <KeyRound aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
@@ -90,12 +80,10 @@ export function AccountsPage() {
                 disabled={creation.isPending}
                 aria-label={`${t("createAccount")} · ${source.name}`}
                 className="w-full justify-start gap-3 px-4"
-                onClick={(event) =>
-                  creation.create({ keySourceId: source.keySourceId, walletName: source.name }, event.currentTarget)
-                }
+                onClick={(event) => creation.create({ keySourceId: id, walletName: source.name }, event.currentTarget)}
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                  {creation.creatingSourceId === source.keySourceId ? (
+                  {creation.creatingSourceId === id ? (
                     <Spinner aria-label={t("creatingAccount")} />
                   ) : (
                     <Plus aria-hidden="true" className="size-4" />
@@ -106,7 +94,7 @@ export function AccountsPage() {
               {hiddenCount > 0 && (
                 <Link
                   to="/wallet/wallets/$keySourceId/hidden-accounts"
-                  params={{ keySourceId: source.keySourceId }}
+                  params={{ keySourceId: id }}
                   className="flex h-11 items-center gap-2 border-t border-border px-4 text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <EyeOff aria-hidden="true" className="size-4 shrink-0" />

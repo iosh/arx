@@ -15,7 +15,7 @@ export function AddAccountPage() {
   const router = useRouter();
   const createPath = router.buildLocation({ to: "/onboarding/add-wallet/create" }).href;
   const importPath = router.buildLocation({ to: "/onboarding/add-wallet/import" }).href;
-  const { data: targets = [], isPending, isSuccess } = useMnemonicSources();
+  const { data: targets } = useMnemonicSources();
   const creation = useAccountCreation(() => {
     void navigate({ to: "/wallet/accounts", replace: true });
   });
@@ -26,17 +26,11 @@ export function AddAccountPage() {
       <title>{`${t("add")} · ARX`}</title>
       <PageHeader title={t("add")} backTo="/wallet/accounts" backLabel={t("backToAccounts")} />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
-        {isPending && (
-          <div className="flex min-h-14 items-center px-4 text-muted-foreground">
-            <Spinner aria-label={t("loadingWallet")} />
-          </div>
-        )}
-        {isSuccess && targets.length === 0 && (
-          <p className="px-4 py-4 text-sm text-muted-foreground">{t("noHdWallet")}</p>
-        )}
-        {targets.length > 0 && (
-          <section className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
-            {targets.map((source) => (
+        <section className="min-h-17 shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
+          {targets?.length === 0 ? (
+            <p className="flex min-h-15 items-center px-4 text-sm text-muted-foreground">{t("noHdWallet")}</p>
+          ) : (
+            targets?.map((source) => (
               <Button
                 key={source.keySourceId}
                 type="button"
@@ -61,9 +55,9 @@ export function AddAccountPage() {
                   </span>
                 </span>
               </Button>
-            ))}
-          </section>
-        )}
+            ))
+          )}
+        </section>
         <section className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
           <Button
             asChild

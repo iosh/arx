@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { RenameSheet } from "@/ui/components/RenameSheet";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useNetworkRpcConfiguration } from "@/ui/wallet/networks/useNetworkRpcConfiguration";
 import { removeNetworkCache, updateNetworkCache, useNetwork } from "@/ui/wallet/networks/useNetworks";
@@ -25,8 +24,8 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
   const navigate = useNavigate();
   const reportError = useWalletError();
   const [deletionOpen, setDeletionOpen] = useState(false);
-  const { data: network, isPending } = useNetwork(chainRef);
-  const { data: rpc, isPending: rpcPending } = useNetworkRpcConfiguration(chainRef, network != null);
+  const { data: network } = useNetwork(chainRef);
+  const { data: rpc } = useNetworkRpcConfiguration(chainRef, network != null);
   const deletion = useWalletMutation({
     mutationFn: async (chainRef: ChainRef) => {
       await wallet.networks.removeCustom(chainRef);
@@ -67,44 +66,39 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
         backTo="/wallet/settings/networks"
         backLabel={t("backToNetworks")}
         subtitle={network?.isTestnet ? t("testnet") : undefined}
+        subtitleSpace
       />
-      {!network ? (
-        <div className="flex min-h-14 items-center px-7.5 text-sm text-muted-foreground">
-          {network === null ? t("networkUnavailable") : isPending ? <Spinner aria-label={t("loadingNetwork")} /> : null}
-        </div>
+      {network === null ? (
+        <div className="flex min-h-14 items-center px-7.5 text-sm text-muted-foreground">{t("networkUnavailable")}</div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-4">
-          <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
-            {network.source === "custom" ? (
+          <div className="min-h-13 shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+            {network?.source === "custom" ? (
               <CustomNetworkInformation network={network} />
             ) : (
-              <NetworkChainId chainRef={chainRef} />
+              <NetworkChainId chainRef={network?.chainRef} />
             )}
           </div>
-          <NetworkExplorersSection network={network} />
-          {rpc ? (
+          {network && (
             <>
+              <NetworkExplorersSection network={network} />
               <NetworkRpcSection network={network} configuration={rpc} />
               <p className="px-1 text-xs leading-relaxed text-muted-foreground">{t("rpcNodeOrder")}</p>
               <p className="px-1 text-xs leading-relaxed text-muted-foreground">{t("rpcPrivacyNotice")}</p>
+              {network.source === "builtin" && (
+                <p className="px-1.5 text-xs leading-relaxed text-muted-foreground">{t("builtinNetworkNote")}</p>
+              )}
+              {network.source === "custom" && (
+                <NetworkDeleteDialog
+                  network={network}
+                  description={t("deleteEvmNetworkDescription")}
+                  open={deletionOpen}
+                  onOpenChange={setDeletionOpen}
+                  pending={deletion.isPending}
+                  onConfirm={() => deleteNetwork(network)}
+                />
+              )}
             </>
-          ) : rpcPending ? (
-            <div className="flex min-h-14 items-center px-4">
-              <Spinner aria-label={t("loadingRpcConfiguration")} />
-            </div>
-          ) : null}
-          {network.source === "builtin" && (
-            <p className="px-1.5 text-xs leading-relaxed text-muted-foreground">{t("builtinNetworkNote")}</p>
-          )}
-          {network.source === "custom" && (
-            <NetworkDeleteDialog
-              network={network}
-              description={t("deleteEvmNetworkDescription")}
-              open={deletionOpen}
-              onOpenChange={setDeletionOpen}
-              pending={deletion.isPending}
-              onConfirm={() => deleteNetwork(network)}
-            />
           )}
         </div>
       )}
@@ -162,12 +156,12 @@ function CustomNetworkInformation({ network }: { network: Network }) {
   );
 }
 
-function NetworkChainId({ chainRef }: { chainRef: ChainRef }) {
+function NetworkChainId({ chainRef }: { chainRef: ChainRef | undefined }) {
   return (
     <div className="flex min-h-11 items-center gap-2 px-4 py-1.5 text-sm">
       <span className="shrink-0 font-medium">Chain ID</span>
       <span className="min-w-0 flex-1 text-right wrap-anywhere text-muted-foreground">
-        {parseChainRef(chainRef).reference}
+        {chainRef && parseChainRef(chainRef).reference}
       </span>
     </div>
   );

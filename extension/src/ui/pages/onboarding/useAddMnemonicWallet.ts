@@ -1,15 +1,14 @@
 import type { AccountGroup, AccountId } from "@arx/core/accounts";
-import type { KeySource } from "@arx/core/keyring";
 import type { AddMnemonicSourceInput } from "@arx/core/wallet";
 import { useBlocker } from "@tanstack/react-router";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
+import { useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 export type AddMnemonicWalletInput = Pick<AddMnemonicSourceInput, "mnemonic" | "backupStatus">;
 export type AddMnemonicWalletContext = Readonly<{
-  sources: readonly Extract<KeySource, { type: "bip39" }>[];
   onAdded(): void;
 }>;
 
@@ -21,9 +20,10 @@ type AdditionOptions = {
 
 type MoveCandidate = Readonly<{ account: AccountGroup; accountId: AccountId; input: AddMnemonicSourceInput }>;
 
-export function useAddMnemonicWallet({ sources, onAdded }: AddMnemonicWalletContext) {
+export function useAddMnemonicWallet({ onAdded }: AddMnemonicWalletContext) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation("wallet");
+  const { data: sources } = useMnemonicSources();
   const addition = useWalletMutation({
     mutationFn: wallet.keySources.addMnemonic,
     gcTime: 0,
@@ -37,14 +37,16 @@ export function useAddMnemonicWallet({ sources, onAdded }: AddMnemonicWalletCont
   const returnFocusRef = useRef<HTMLElement | null>(null);
   useBlocker({ shouldBlockFn: () => confirmation.isPending, enableBeforeUnload: false });
 
-  function add({ mnemonic, backupStatus }: AddMnemonicWalletInput, options: AdditionOptions) {
+  // False keeps the caller's form or deferred-backup confirmation open.
+  async function add({ mnemonic, backupStatus }: AddMnemonicWalletInput, options: AdditionOptions) {
+    if (!sources) return false;
     returnFocusRef.current =
       options.returnFocusElement ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     let number = sources.length + 1;
     let name = t("defaultWalletName", { number });
     while (sources.some((source) => source.name === name)) name = t("defaultWalletName", { number: ++number });
 
-    return addition.mutateAsync(
+    const result = await addition.mutateAsync(
       { mnemonic, backupStatus, name },
       {
         onError: options.onError,
@@ -57,6 +59,7 @@ export function useAddMnemonicWallet({ sources, onAdded }: AddMnemonicWalletCont
         },
       },
     );
+    return result.status === "added" || result.status === "move-available";
   }
 
   const candidate: MoveCandidate | null =
@@ -90,5 +93,5 @@ export function useAddMnemonicWallet({ sources, onAdded }: AddMnemonicWalletCont
       }
     : null;
 
-  return { add, isAdding: addition.isPending, move, returnFocusRef };
+  return { add, canAdd: Boolean(sources) && !candidate, isAdding: addition.isPending, move, returnFocusRef };
 }

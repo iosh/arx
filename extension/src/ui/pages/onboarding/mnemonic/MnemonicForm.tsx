@@ -7,7 +7,6 @@ import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui/input-group";
-import { Spinner } from "@/ui/components/ui/spinner";
 import type { MnemonicFields } from "./mnemonic";
 
 const wordPositions = Array.from({ length: 24 }, (_, index) => index + 1);
@@ -17,13 +16,13 @@ export function MnemonicForm({
   onSubmit,
   onBack,
   progress,
-  disabled = false,
+  submitDisabled = false,
 }: {
   form: UseFormReturn<MnemonicFields>;
   onSubmit: SubmitHandler<MnemonicFields>;
   onBack?: () => void;
   progress?: { current: number; total: number };
-  disabled?: boolean;
+  submitDisabled?: boolean;
 }) {
   const { t } = useTranslation("onboarding");
   const id = useId();
@@ -40,7 +39,6 @@ export function MnemonicForm({
   const wordCount = useWatch({ control, name: "wordCount" });
   const words = useWatch({ control, name: "words" }).slice(0, wordCount);
   const canSubmit = words.every((word) => word.trim().length > 0);
-  const busy = pending || disabled;
 
   function pasteMnemonic(event: ClipboardEvent<HTMLInputElement>) {
     const pasted = event.clipboardData.getData("text/plain").trim().toLowerCase().split(/\s+/u);
@@ -59,7 +57,7 @@ export function MnemonicForm({
   }
 
   return (
-    <OnboardingStepLayout progress={progress} onBack={onBack} backDisabled={busy}>
+    <OnboardingStepLayout progress={progress} onBack={onBack} backDisabled={pending}>
       <OnboardingCard asChild title={t("importRecoveryPhrase")} description={t("importPhraseInstructions")}>
         <form
           onSubmit={handleSubmit(onSubmit)}
@@ -84,7 +82,7 @@ export function MnemonicForm({
                   setValue("wordCount", Number(value) as MnemonicFields["wordCount"]);
                   clearErrors("root");
                 }}
-                disabled={busy}
+                disabled={pending}
                 className="flex gap-0.5 rounded-md bg-background p-0.5"
               >
                 {([12, 24] as const).map((count) => (
@@ -113,7 +111,7 @@ export function MnemonicForm({
                     autoCorrect="off"
                     spellCheck={false}
                     lang="en"
-                    disabled={busy}
+                    disabled={pending}
                     className="px-2.5 py-2 font-normal"
                     onPaste={pasteMnemonic}
                   />
@@ -130,10 +128,9 @@ export function MnemonicForm({
             type="submit"
             size="lg"
             className="w-full aria-busy:opacity-70"
-            disabled={!canSubmit || busy}
-            aria-busy={pending}
+            disabled={!canSubmit || pending || submitDisabled}
+            loading={pending}
           >
-            {pending && <Spinner aria-label={t("importWallet")} />}
             {t("importWallet")}
           </Button>
         </form>

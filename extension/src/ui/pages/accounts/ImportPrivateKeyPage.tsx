@@ -9,7 +9,6 @@ import { PrivateKeyAddressPreview, PrivateKeyInput } from "@/ui/components/accou
 import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
@@ -105,9 +104,8 @@ export function ImportPrivateKeyPage() {
             type="submit"
             className="w-full aria-busy:opacity-70"
             disabled={!account || Boolean(duplicateAccount) || pending}
-            aria-busy={pending}
+            loading={pending}
           >
-            {pending && <Spinner aria-label={t("onboarding:importPrivateKeyAction")} />}
             {t("onboarding:importPrivateKeyAction")}
           </Button>
         </footer>

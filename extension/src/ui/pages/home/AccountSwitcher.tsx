@@ -14,7 +14,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/ui/components/ui/dropdown-menu";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
 import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
@@ -22,20 +21,13 @@ import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useSelectAccount } from "@/ui/wallet/accounts/useSelectAccount";
 import { useMnemonicSource, useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
 
-export function AccountSwitcher({
-  selectedAccount,
-  selectedAccountPending,
-}: Readonly<{
-  selectedAccount: AccountGroup | undefined;
-  selectedAccountPending: boolean;
-}>) {
+export function AccountSwitcher({ selectedAccount }: Readonly<{ selectedAccount: AccountGroup | undefined }>) {
   const { t } = useTranslation("wallet");
   const [open, setOpen] = useState(false);
   const { mutate: selectAccount, isPending: isSelectingAccount } = useSelectAccount();
-  const { data: accounts, isPending: accountsPending } = useVisibleAccounts();
-  const { data: wallets = [], isPending: walletsPending } = useMnemonicSources();
-  const groups = groupAccountsBySource(accounts ?? [], wallets);
-  const menuPending = accountsPending || selectedAccountPending || walletsPending;
+  const { data: accounts } = useVisibleAccounts();
+  const { data: wallets } = useMnemonicSources();
+  const groups = accounts && groupAccountsBySource(accounts, wallets);
 
   function select(accountGroupId: AccountGroupId) {
     if (accountGroupId === selectedAccount?.accountGroupId) {
@@ -47,7 +39,7 @@ export function AccountSwitcher({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <AccountSwitchTrigger account={selectedAccount} pending={selectedAccountPending} />
+      <AccountSwitchTrigger account={selectedAccount} />
       {open && (
         <DropdownMenuPortal>
           <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 bg-overlay" />
@@ -60,18 +52,11 @@ export function AccountSwitcher({
         collisionPadding={14}
         className="flex w-93 max-w-[calc(100vw-1.75rem)] flex-col overflow-hidden rounded-2xl border-0 bg-card px-0 py-1 text-card-foreground shadow-none"
       >
-        {menuPending && (
-          <div className="flex h-13 items-center px-4 text-sm text-muted-foreground">
-            <Spinner aria-label={t("loadingAccounts")} />
-          </div>
-        )}
-        {accounts && (
-          <DropdownMenuRadioGroup value={selectedAccount?.accountGroupId} className="min-h-0 overflow-y-auto">
-            {groups.map((group) => (
-              <AccountSwitchGroup key={group.id} group={group} disabled={isSelectingAccount} onSelect={select} />
-            ))}
-          </DropdownMenuRadioGroup>
-        )}
+        <DropdownMenuRadioGroup value={selectedAccount?.accountGroupId} className="min-h-14 overflow-y-auto">
+          {groups?.map((group) => (
+            <AccountSwitchGroup key={group.id} group={group} disabled={isSelectingAccount} onSelect={select} />
+          ))}
+        </DropdownMenuRadioGroup>
         <DropdownMenuItem
           asChild
           className="h-12 shrink-0 gap-3 rounded-none border-t border-border px-4 text-sm font-semibold"
@@ -88,7 +73,7 @@ export function AccountSwitcher({
   );
 }
 
-function AccountSwitchTrigger({ account, pending }: { account: AccountGroup | undefined; pending: boolean }) {
+function AccountSwitchTrigger({ account }: { account: AccountGroup | undefined }) {
   const { t } = useTranslation("wallet");
   const { data: source } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : null;
@@ -99,15 +84,14 @@ function AccountSwitchTrigger({ account, pending }: { account: AccountGroup | un
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="group flex h-11 w-full items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={name ? `${t("switchAccount")} · ${name}` : t("switchAccount")}
+          className="group grid h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {account && <AccountIdenticon seed={account.accountGroupId} />}
-          <span className="flex h-11 min-w-0 flex-1 flex-col justify-center px-1">
+          <span className="col-start-2 flex h-11 min-w-0 flex-col justify-center px-1">
             <span className="truncate text-xs leading-4 font-medium text-muted-foreground">{sourceName}</span>
             <span className="flex h-6 min-w-0 items-center gap-1">
-              <span className="min-w-0 flex-1 truncate">
-                {pending ? <Spinner aria-label={t("loadingAccount")} /> : name}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{name}</span>
               <ChevronDown
                 aria-hidden="true"
                 className="size-3.25 shrink-0 text-muted-foreground group-data-[state=open]:rotate-180"
@@ -156,7 +140,7 @@ function AccountSwitchItem({
 }) {
   const { t } = useTranslation("wallet");
   const accountName = getAccountName(account, t);
-  const { data: addresses, isLoading: addressPending } = useAccountAddresses(account);
+  const { data: addresses } = useAccountAddresses(account);
 
   return (
     <DropdownMenuRadioItem
@@ -180,12 +164,10 @@ function AccountSwitchItem({
           )}
         </span>
         <span className="min-h-4 text-xs leading-4 font-normal text-muted-foreground">
-          {addresses
-            ? addresses.map((address) => {
-                const { CompactAddress } = getNamespaceUi(address.namespace);
-                return <CompactAddress key={address.address} address={address.address} />;
-              })
-            : addressPending && <Spinner aria-label={t("loadingAddress")} />}
+          {addresses?.map((address) => {
+            const { CompactAddress } = getNamespaceUi(address.namespace);
+            return <CompactAddress key={address.address} address={address.address} />;
+          })}
         </span>
       </span>
     </DropdownMenuRadioItem>

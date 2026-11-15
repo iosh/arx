@@ -38,7 +38,7 @@ export const onboarding = {
   back: "返回",
   progress: "第 {{current}} 步，共 {{total}} 步",
   backupTitle: "备份恢复短语",
-  backupDescription: "以下 {{count}} 个单词是恢复钱包的唯一凭证。请按顺序抄在纸上。",
+  backupDescription: "恢复短语是恢复钱包的唯一凭证。请将单词按顺序抄在纸上。",
   showPhrase: "点击显示恢复短语",
   showPhraseHint: "确认无人看到屏幕后再显示",
   hidePhrase: "隐藏恢复短语",

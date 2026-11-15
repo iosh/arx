@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/ui/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/ui/components/ui/sheet";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { updateNetworkCache } from "@/ui/wallet/networks/useNetworks";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
@@ -123,7 +122,6 @@ export function NetworkCurrencySheet({ network }: { network: Network }) {
             />
           </div>
           <Button type="submit" className="w-full" disabled={!isValid || saving.isPending} aria-busy={saving.isPending}>
-            {saving.isPending && <Spinner aria-label={t("savingNetwork")} />}
             {t("saveName")}
           </Button>
         </form>

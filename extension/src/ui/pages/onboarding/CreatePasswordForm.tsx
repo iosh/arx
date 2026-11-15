@@ -8,16 +8,17 @@ import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 const exitLocation = { to: "/onboarding", replace: true } as const;
 
 export function CreatePasswordForm({
   totalSteps,
+  loading = false,
   onSubmit,
 }: {
   totalSteps: number;
+  loading?: boolean;
   onSubmit: (password: string) => void | Promise<void>;
 }) {
   const { status } = useWallet();
@@ -104,11 +105,10 @@ export function CreatePasswordForm({
           <Button
             type="submit"
             size="lg"
-            className="w-full aria-busy:opacity-70"
+            className="w-full"
             disabled={!isValid || pending}
-            aria-busy={pending}
+            loading={loading && pending}
           >
-            {pending && <Spinner aria-label={t("continue")} />}
             {t("continue")}
           </Button>
         </form>

@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
 export function UnlockForm({ focusPassword = false }: { focusPassword?: boolean }) {
@@ -59,8 +58,7 @@ export function UnlockForm({ focusPassword = false }: { focusPassword?: boolean 
           </FieldDescription>
         )}
       </Field>
-      <Button type="submit" disabled={!isValid || pending} aria-busy={pending} className="w-full aria-busy:opacity-70">
-        {pending && <Spinner aria-label={t("unlock")} />}
+      <Button type="submit" disabled={!isValid || pending} loading={pending} className="w-full aria-busy:opacity-70">
         {t("unlock")}
       </Button>
     </form>

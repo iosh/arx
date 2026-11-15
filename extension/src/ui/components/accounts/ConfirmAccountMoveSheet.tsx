@@ -7,7 +7,6 @@ import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { Button } from "@/ui/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/ui/components/ui/sheet";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { useMemberAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 
@@ -35,7 +34,7 @@ export function ConfirmAccountMoveSheet({
   const { t } = useTranslation(["wallet", "common"]);
   const accountName = getAccountName(account, t);
   const namespaceLabel = account.members.map((member) => t(getNamespaceUi(member.namespace).labelKey)).join(" · ");
-  const { data: addresses, isFetching: loadingAddress } = useMemberAddresses(accountId);
+  const { data: addresses } = useMemberAddresses(accountId);
 
   return (
     <Sheet
@@ -69,7 +68,7 @@ export function ConfirmAccountMoveSheet({
         <SheetDescription className="text-sm font-normal text-foreground wrap-anywhere">
           {description ?? t("accountMoveDescription", { accountName, walletName })}
         </SheetDescription>
-        <div className="flex flex-col gap-2.5 rounded-xl bg-secondary p-3">
+        <div className="grid grid-rows-[auto_minmax(1.125rem,auto)] gap-2.5 rounded-xl bg-secondary p-3">
           <div className="flex items-center gap-2.5">
             <AccountIdenticon seed={account.accountGroupId} size={32} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -77,17 +76,11 @@ export function ConfirmAccountMoveSheet({
               <span className="text-xs font-medium text-muted-foreground">{`${namespaceLabel} · ${t("privateKeyImport")}`}</span>
             </div>
           </div>
-          {addresses ? (
-            addresses.map((address) => (
-              <p key={address.address} dir="ltr" className="break-all text-xs leading-4.5">
-                {address.address}
-              </p>
-            ))
-          ) : loadingAddress ? (
-            <div className="text-xs text-muted-foreground">
-              <Spinner aria-label={t("loadingAddress")} />
-            </div>
-          ) : null}
+          {addresses?.map((address) => (
+            <p key={address.address} dir="ltr" className="break-all text-xs leading-4.5">
+              {address.address}
+            </p>
+          ))}
         </div>
         <div className="flex items-start gap-2 px-1 text-sm">
           <span className="shrink-0 font-medium text-muted-foreground">{t("moveTargetWallet")}</span>
@@ -101,8 +94,7 @@ export function ConfirmAccountMoveSheet({
           <Button variant="outline" className="flex-1" disabled={isPending} onClick={onCancel}>
             {t("cancel")}
           </Button>
-          <Button className="flex-1" disabled={isPending || !addresses} onClick={onConfirm}>
-            {isPending && <Spinner aria-label={t("moveAccount")} />}
+          <Button className="flex-1" disabled={isPending || !addresses} loading={isPending} onClick={onConfirm}>
             {t("moveAccount")}
           </Button>
         </div>

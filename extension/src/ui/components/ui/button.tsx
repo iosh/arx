@@ -2,6 +2,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import type * as React from "react";
+import { Spinner } from "./spinner";
 
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -40,21 +41,44 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  loading,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    /** Passing a boolean keeps the spinner slot and label position stable. */
+    loading?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
+  const withLoading = !asChild && loading !== undefined;
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size }),
+        withLoading && "inline-grid grid-cols-[1em_auto_1em]",
+        className,
+      )}
       {...props}
-    />
+      aria-busy={loading || props["aria-busy"]}
+    >
+      {withLoading ? (
+        <>
+          {loading && (
+            <span className="col-start-1 row-start-1 flex items-center justify-center">
+              <Spinner aria-hidden="true" className="size-[1em]" />
+            </span>
+          )}
+          <span className="col-start-2 row-start-1">{children}</span>
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   );
 }
 

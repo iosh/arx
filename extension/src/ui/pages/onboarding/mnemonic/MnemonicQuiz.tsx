@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { FormErrorAlert } from "@/ui/components/FormErrorAlert";
 import { OnboardingCard } from "@/ui/components/OnboardingCard";
 import { Button } from "@/ui/components/ui/button";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { buildMnemonicQuiz, type MnemonicWord } from "./mnemonic";
 
 export function MnemonicQuiz({
@@ -13,26 +12,31 @@ export function MnemonicQuiz({
   onSubmit,
   onBack,
   pending,
+  loading = false,
+  submitDisabled = false,
 }: {
   words: readonly MnemonicWord[];
   walletName?: string;
   onSubmit: () => void;
   onBack: () => void;
   pending: boolean;
+  loading?: boolean;
+  submitDisabled?: boolean;
 }) {
   const { t } = useTranslation("onboarding");
   const id = useId();
   const [quiz] = useState(() => buildMnemonicQuiz(words));
   const [selected, setSelected] = useState<Partial<Record<number, string>>>({});
   const [incorrect, setIncorrect] = useState(false);
-  const canSubmit = quiz.every(({ position }) => selected[position] !== undefined);
+  const canSubmit = quiz.every(({ position }) => Boolean(selected[position]));
+  const blocked = !canSubmit || pending || submitDisabled;
 
   return (
     <OnboardingCard asChild title={t("verifyPhraseTitle")} description={t("verifyPhraseDescription")}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (!canSubmit || pending) return;
+          if (blocked) return;
           if (quiz.some(({ position, answer }) => selected[position] !== answer)) {
             setIncorrect(true);
             return;
@@ -88,14 +92,7 @@ export function MnemonicQuiz({
         </div>
         {incorrect && <FormErrorAlert>{t("verifyPhraseIncorrect")}</FormErrorAlert>}
         <div className="flex flex-col gap-2.5">
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full aria-busy:opacity-70"
-            disabled={!canSubmit || pending}
-            aria-busy={pending}
-          >
-            {pending && <Spinner aria-label={t("completeBackup")} />}
+          <Button type="submit" size="lg" className="w-full" disabled={blocked} loading={loading && pending}>
             {t("completeBackup")}
           </Button>
           <Button type="button" variant="secondary" size="lg" className="w-full" onClick={onBack} disabled={pending}>

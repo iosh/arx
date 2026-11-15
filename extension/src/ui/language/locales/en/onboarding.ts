@@ -37,7 +37,7 @@ export const onboarding = {
   back: "Back",
   progress: "Step {{current}} of {{total}}",
   backupTitle: "Back up your recovery phrase",
-  backupDescription: "These {{count}} words are the only way to recover your wallet. Write them on paper in order.",
+  backupDescription: "Your recovery phrase is the only way to recover your wallet. Write the words on paper in order.",
   showPhrase: "Click to reveal your recovery phrase",
   showPhraseHint: "Make sure no one can see your screen",
   hidePhrase: "Hide recovery phrase",

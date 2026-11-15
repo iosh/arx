@@ -11,7 +11,6 @@ import {
   AlertDialogTrigger,
 } from "@/ui/components/ui/alert-dialog";
 import { Button } from "@/ui/components/ui/button";
-import { Spinner } from "@/ui/components/ui/spinner";
 
 export function NetworkDeleteDialog({
   network,
@@ -76,7 +75,6 @@ export function NetworkDeleteDialog({
                 onConfirm();
               }}
             >
-              {pending && <Spinner aria-label={t("deletingNetwork")} />}
               {t("deleteNetwork")}
             </Button>
           </AlertDialogAction>

@@ -10,7 +10,6 @@ import { PageHeader } from "@/ui/components/PageHeader";
 import { PasswordInput } from "@/ui/components/PasswordInput";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useCopyToClipboard } from "@/ui/hooks/useCopyToClipboard";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
@@ -26,24 +25,35 @@ export function ExportPrivateKeyPage({
   accountId: AccountId;
 }) {
   const { t } = useTranslation("wallet");
-  const { data: accounts, isPending } = useVisibleAccounts();
+  const { data: accounts } = useVisibleAccounts();
   const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
 
-  if (account?.members.some((member) => member.accountId === accountId))
-    return <ExportPrivateKeyFlow account={account} accountId={accountId} />;
+  if (!accounts || account?.members.some((member) => member.accountId === accountId))
+    return <ExportPrivateKeyFlow account={account} accountGroupId={accountGroupId} accountId={accountId} />;
 
   return (
     <main className="flex h-full flex-col font-sans">
       <title>{`${t("exportPrivateKey")} · ARX`}</title>
-      <PageHeader title={t("exportPrivateKey")} backTo="/wallet/accounts" backLabel={t("backToAccounts")} />
-      <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-        {isPending ? <Spinner aria-label={t("loadingAccount")} /> : t("accountUnavailable")}
-      </div>
+      <PageHeader
+        title={t("exportPrivateKey")}
+        backTo="/wallet/accounts"
+        backLabel={t("backToAccounts")}
+        subtitleSpace
+      />
+      <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">{t("accountUnavailable")}</div>
     </main>
   );
 }
 
-function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; accountId: AccountId }) {
+function ExportPrivateKeyFlow({
+  account,
+  accountGroupId,
+  accountId,
+}: {
+  account: AccountGroup | undefined;
+  accountGroupId: AccountGroupId;
+  accountId: AccountId;
+}) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation(["wallet", "onboarding"]);
   const navigate = useNavigate();
@@ -92,7 +102,7 @@ function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; a
     setPrivateKey(null);
     void navigate({
       to: "/wallet/accounts/$accountGroupId",
-      params: { accountGroupId: account.accountGroupId },
+      params: { accountGroupId },
       replace: true,
     });
   }
@@ -102,13 +112,14 @@ function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; a
       <title>{`${t("exportPrivateKey")} · ARX`}</title>
       <PageHeader
         title={t("exportPrivateKey")}
-        subtitle={getAccountName(account, t)}
+        subtitle={account ? getAccountName(account, t) : undefined}
+        subtitleSpace
         backTo="/wallet/accounts/$accountGroupId"
         backLabel={t("backToAccountDetails")}
         backDisabled={pending}
       />
       <form
-        onSubmit={privateKey === null ? handleSubmit(submit) : undefined}
+        onSubmit={account && privateKey === null ? handleSubmit(submit) : undefined}
         aria-busy={pending}
         className="flex min-h-0 flex-1 flex-col"
       >
@@ -131,7 +142,7 @@ function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; a
                 autoComplete="current-password"
                 className="pl-3.5 font-semibold"
                 groupClassName="bg-card [&_[data-slot=input-group-addon]]:pr-2 [&_button]:size-7 [&_button]:rounded-md"
-                disabled={pending}
+                disabled={pending || !account}
                 aria-invalid={incorrect}
                 aria-describedby={incorrect ? `${id}-description` : undefined}
               />
@@ -150,10 +161,9 @@ function ExportPrivateKeyFlow({ account, accountId }: { account: AccountGroup; a
             <Button
               type="submit"
               className="w-full aria-busy:opacity-70"
-              disabled={!isValid || pending}
-              aria-busy={pending}
+              disabled={!isValid || pending || !account}
+              loading={pending}
             >
-              {pending && <Spinner aria-label={t("showPrivateKey")} />}
               {t("showPrivateKey")}
             </Button>
           ) : (

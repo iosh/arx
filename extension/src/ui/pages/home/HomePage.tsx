@@ -20,7 +20,7 @@ import { AccountSwitcher } from "./AccountSwitcher";
 export function HomePage() {
   const router = useRouter();
   const { t } = useTranslation("wallet");
-  const { data: account, isPending: selectedAccountPending } = useSelectedAccount();
+  const { data: account } = useSelectedAccount();
   const { data: source } = usePendingMnemonicSource(account);
   const [menuOpen, setMenuOpen] = useState(false);
   const { mutate: lockWallet, isPending: isLocking } = useLockWallet();
@@ -31,7 +31,7 @@ export function HomePage() {
     <main className="flex h-full flex-col gap-2.5 px-3.5 font-sans">
       <title>{name ? `${name} · ARX` : "ARX"}</title>
       <header className="flex h-14 shrink-0 items-center gap-2 px-1.5 py-1">
-        <AccountSwitcher selectedAccount={account} selectedAccountPending={selectedAccountPending} />
+        <AccountSwitcher selectedAccount={account} />
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button

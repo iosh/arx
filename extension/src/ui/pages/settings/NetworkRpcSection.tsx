@@ -25,7 +25,7 @@ export function NetworkRpcSection({
   configuration,
 }: {
   network: Network;
-  configuration: NetworkRpcConfiguration;
+  configuration: NetworkRpcConfiguration | undefined;
 }) {
   const { t } = useTranslation("wallet");
   const { client: wallet } = useWallet();
@@ -64,8 +64,8 @@ export function NetworkRpcSection({
       <div className="flex min-h-8 items-center justify-between gap-2 px-1">
         <h2 className="text-sm font-medium">{t("rpcNodes")}</h2>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{t(configuration.source === "override" ? "customRpc" : "defaultRpc")}</span>
-          {configuration.source === "override" && (
+          <span>{configuration && t(configuration.source === "override" ? "customRpc" : "defaultRpc")}</span>
+          {configuration?.source === "override" && (
             <Button
               type="button"
               variant="link"
@@ -80,8 +80,8 @@ export function NetworkRpcSection({
           )}
         </div>
       </div>
-      <NetworkUrlList>
-        {configuration.endpoints.map((url, index) => {
+      <NetworkUrlList className="min-h-14">
+        {configuration?.endpoints.map((url, index) => {
           const occurrence = occurrences.get(url) ?? 0;
           occurrences.set(url, occurrence + 1);
           // Equal RPC URLs have no distinct domain ID; retain other URLs' nodes when a preceding row is removed.
@@ -131,6 +131,7 @@ export function NetworkRpcSection({
         type="button"
         variant="outline"
         className="h-10 w-full"
+        disabled={!configuration}
         onClick={(event) => {
           trigger.current = event.currentTarget;
           toast.dismiss();
@@ -148,6 +149,7 @@ export function NetworkRpcSection({
           requiredMessage={t("rpcUrlRequired")}
           target={editing.target}
           onSave={saveUrl}
+          loading
           onCloseAutoFocus={restoreFocus}
           onClose={() => setEditing(null)}
         />

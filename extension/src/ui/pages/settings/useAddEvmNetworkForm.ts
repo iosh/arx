@@ -192,7 +192,6 @@ export function useAddEvmNetworkForm() {
     loading: loading.isPending,
     saving: saving.isPending,
     metadataReadOnly,
-    loadingMessage: loading.isPending ? t("loadingNetworkMetadata") : undefined,
     existingNetwork,
     metadataMessage,
     startLoading,

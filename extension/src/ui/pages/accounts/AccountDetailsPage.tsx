@@ -9,7 +9,6 @@ import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { RenameSheet } from "@/ui/components/RenameSheet";
 import { Button } from "@/ui/components/ui/button";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
@@ -27,11 +26,12 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
   const reportError = useWalletError();
   const hiding = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
   const removal = useKeySourceRemoval();
-  const { data: accounts = [], isPending } = useVisibleAccounts();
-  const account = accounts.find((candidate) => candidate.accountGroupId === accountGroupId);
-  const { data: source, isPending: sourcePending } = useMnemonicSource(account);
+  const { data: accounts } = useVisibleAccounts();
+  const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
+  const { data: source } = useMnemonicSource(account);
   const name = account ? getAccountName(account, t) : t("accountDetails");
-  const canHide = account !== undefined && findAccountHideReplacement(account, accounts) !== null;
+  const unavailable = Boolean(accounts && !account);
+  const canHide = Boolean(account && accounts && findAccountHideReplacement(account, accounts));
   const privateKeySourceId = account?.source.type === "private-key" ? account.source.keySourceId : undefined;
   const exportPrivateKeyLink = account?.members.map((member) => (
     <Link
@@ -74,51 +74,62 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
         backTo="/wallet/accounts"
         backLabel={t("backToAccounts")}
         backDisabled={hiding.isPending || removal.isPending}
-        icon={account && <AccountIdenticon seed={account.accountGroupId} size={28} />}
+        icon={
+          <span className="size-7 shrink-0">
+            {account && <AccountIdenticon seed={account.accountGroupId} size={28} />}
+          </span>
+        }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
-        {!account && (
-          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">
-            {isPending ? <Spinner aria-label={t("loadingAccount")} /> : t("accountUnavailable")}
+        {unavailable ? (
+          <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">{t("accountUnavailable")}</div>
+        ) : (
+          <AccountAddressCard account={account} receivable />
+        )}
+        {!unavailable && (
+          <div className="min-h-26 shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
+            <RenameSheet
+              label={t("accountNameLabel")}
+              name={account ? name : undefined}
+              disabled={!account}
+              onRename={(alias) => wallet.accounts.rename({ accountGroupId, alias })}
+            />
+            {account?.source.type === "private-key" ? (
+              <div className="flex h-12 items-center justify-between gap-2 px-4 text-sm">
+                <span className="font-medium">{t("accountSource")}</span>
+                <span className="text-muted-foreground">{t("privateKeyImport")}</span>
+              </div>
+            ) : source ? (
+              <Link
+                to="/wallet/wallets/$keySourceId"
+                params={{ keySourceId: source.keySourceId }}
+                className="flex h-12 items-center gap-2 px-4 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <span className="shrink-0 font-medium">{t("parentWallet")}</span>
+                <span className="ml-auto truncate text-muted-foreground">{source.name}</span>
+                <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
+              </Link>
+            ) : (
+              <div className="flex h-12 items-center gap-2 px-4 text-sm">
+                <span className="shrink-0 font-medium">
+                  {t(account?.source.type === "bip39" ? "parentWallet" : "accountSource")}
+                </span>
+                <span className="ml-auto text-muted-foreground">
+                  {account && source === null && t("walletUnavailable")}
+                </span>
+              </div>
+            )}
           </div>
         )}
         {account && (
           <>
-            <AccountAddressCard account={account} receivable />
-            <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
-              <RenameSheet
-                label={t("accountNameLabel")}
-                name={name}
-                onRename={(alias) => wallet.accounts.rename({ accountGroupId, alias })}
-              />
-              {account.source.type === "private-key" ? (
-                <div className="flex h-12 items-center justify-between gap-2 px-4 text-sm">
-                  <span className="font-medium">{t("accountSource")}</span>
-                  <span className="text-muted-foreground">{t("privateKeyImport")}</span>
-                </div>
-              ) : source ? (
-                <Link
-                  to="/wallet/wallets/$keySourceId"
-                  params={{ keySourceId: source.keySourceId }}
-                  className="flex h-12 items-center gap-2 px-4 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                >
-                  <span className="shrink-0 font-medium">{t("parentWallet")}</span>
-                  <span className="ml-auto truncate text-muted-foreground">{source.name}</span>
-                  <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-placeholder" />
-                </Link>
-              ) : (
-                <div className="flex h-12 items-center px-4 text-sm text-muted-foreground">
-                  {sourcePending ? <Spinner aria-label={t("loadingWallet")} /> : t("walletUnavailable")}
-                </div>
-              )}
-            </div>
             {privateKeySourceId && (
               <RemoveKeySourceSheet
                 label={t("removeAccount")}
                 title={t("removeAccountTitle", { accountName: name })}
                 description={t("removeAccountDescription")}
                 backupLabel={t("confirmPrivateKeyBackup")}
-                canRemove={accounts.some((candidate) => candidate.accountGroupId !== accountGroupId)}
+                canRemove={accounts?.some((candidate) => candidate.accountGroupId !== accountGroupId)}
                 isPending={removal.isPending}
                 leadingAction={exportPrivateKeyLink}
                 onConfirm={() => removal.removeKeySource(privateKeySourceId, name)}
@@ -132,13 +143,12 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
                     type="button"
                     variant="ghost"
                     size="lg"
-                    className="w-full justify-start px-4 aria-busy:opacity-70"
+                    className="w-full justify-start px-4"
                     disabled={!canHide || hiding.isPending}
                     aria-busy={hiding.isPending}
                     aria-describedby={!canHide ? "hide-account-help" : undefined}
                     onClick={hideAccount}
                   >
-                    {hiding.isPending && <Spinner aria-label={t("hideAccount")} />}
                     {t("hideAccount")}
                   </Button>
                 </div>

@@ -10,7 +10,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/ui/components/ui/button";
 import { Sheet, SheetContent } from "@/ui/components/ui/sheet";
 import { Toaster } from "@/ui/components/ui/sonner";
-import { Spinner } from "@/ui/components/ui/spinner";
 import { isHttpUrl } from "@/ui/utils/url";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
@@ -27,6 +26,7 @@ export function NetworkUrlSheet({
   requiredMessage,
   target,
   onSave,
+  loading = false,
   onCloseAutoFocus,
   onClose,
 }: {
@@ -36,6 +36,7 @@ export function NetworkUrlSheet({
   requiredMessage: string;
   target: NetworkUrlTarget | null;
   onSave(update: NetworkUrlUpdate): Promise<void>;
+  loading?: boolean;
   onCloseAutoFocus(event: Event): void;
   onClose(): void;
 }) {
@@ -126,8 +127,12 @@ export function NetworkUrlSheet({
             readOnly={saving.isPending}
             className="text-sm"
           />
-          <Button type="submit" className="w-full" disabled={!isValid || saving.isPending} aria-busy={saving.isPending}>
-            {saving.isPending && <Spinner aria-label={t("savingNetwork")} />}
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!isValid || saving.isPending}
+            loading={loading && saving.isPending}
+          >
             {t("saveName")}
           </Button>
         </form>

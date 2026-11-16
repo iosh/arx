@@ -8,18 +8,16 @@
     "test": "vitest run",
     "compile": "tsc --noEmit"
   },
-
   "dependencies": {
     "@arx/core": "workspace:*",
-    "dexie": "4.2.0"
+    "dexie": "4.4.7"
   },
-
   "exports": {
     ".": "./src/index.ts"
   },
   "devDependencies": {
-    "vitest": "catalog:",
+    "fake-indexeddb": "6.2.5",
     "typescript": "catalog:",
-    "fake-indexeddb": "6.2.5"
+    "vitest": "catalog:"
   }
 }

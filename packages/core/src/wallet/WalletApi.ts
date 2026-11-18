@@ -2,6 +2,7 @@ import type { AccountGroupId } from "../accounts/accountGroupId.js";
 import type { AccountId } from "../accounts/accountId.js";
 import type { AccountGroup, AccountsChanged, Address } from "../accounts/types.js";
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
+import type { Assets } from "../assets/Assets.js";
 import type { KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
 import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Namespace } from "../namespaces/types.js";
@@ -163,6 +164,7 @@ export type WalletApi = Readonly<{
   keySources: WalletKeySourcesApi;
   accounts: WalletAccountsApi;
   networks: WalletNetworksApi;
+  assets: Assets;
   eip155: Eip155Rpc;
   permissions: WalletPermissionsApi;
   approvals: WalletApprovalsApi;

@@ -12,6 +12,7 @@
     ".": "./src/index.ts",
     "./accounts": "./src/accounts/index.ts",
     "./approvals": "./src/approvals/index.ts",
+    "./assets": "./src/assets/index.ts",
     "./persistence": "./src/persistence/index.ts",
     "./chains": "./src/chains/index.ts",
     "./networks": "./src/networks/index.ts",

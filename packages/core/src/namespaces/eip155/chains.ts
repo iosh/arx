@@ -25,7 +25,7 @@ export const EIP155_MAINNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
     definition: {
       chainRef: "eip155:137",
       name: "Polygon PoS",
-      nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+      nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
       blockExplorers: [{ url: "https://polygonscan.com", name: "Polygonscan" }],
       iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png",
     },

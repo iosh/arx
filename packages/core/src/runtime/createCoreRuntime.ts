@@ -1,6 +1,7 @@
 import { Accounts } from "../accounts/Accounts.js";
 import type { AccountsNamespaceAdapters } from "../accounts/namespaceAdapter.js";
 import { Approvals } from "../approvals/Approvals.js";
+import { createAssets } from "../assets/Assets.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
@@ -10,6 +11,7 @@ import { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
+import { createEip155AssetsAdapter } from "../namespaces/eip155/assets.js";
 import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
@@ -113,6 +115,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     transport: jsonRpcHttpTransport,
   });
   const eip155Rpc = createEip155Rpc(chainJsonRpc);
+  const assets = createAssets({
+    accounts,
+    networks,
+    adapters: { [EIP155_NAMESPACE]: createEip155AssetsAdapter({ chainJsonRpc }) },
+  });
   const transactionAdapters = {
     [EIP155_NAMESPACE]: createEip155TransactionsAdapter({
       chainJsonRpc,
@@ -202,6 +209,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     accounts,
     networks,
     customNetworkRemoval,
+    assets,
     eip155Rpc,
     permissions: dappAuthorization.permissions,
     approvals,

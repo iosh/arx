@@ -2,6 +2,7 @@ import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
 import { AccountGroupNotFoundError } from "../accounts/errors.js";
 import type { Approvals } from "../approvals/Approvals.js";
+import type { Assets } from "../assets/Assets.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
@@ -21,6 +22,7 @@ type CreateWalletApiOptions = Readonly<{
   keyring: Keyring;
   accounts: Accounts;
   networks: Networks;
+  assets: Assets;
   customNetworkRemoval: CustomNetworkRemoval;
   eip155Rpc: Eip155Rpc;
   permissions: DappAuthorization["permissions"];
@@ -35,6 +37,7 @@ export const createWalletApi = ({
   keyring,
   accounts,
   networks,
+  assets,
   customNetworkRemoval,
   eip155Rpc,
   permissions,
@@ -112,6 +115,7 @@ export const createWalletApi = ({
     clearRpcOverride: async (chainRef) => networks.clearRpcOverride(chainRef),
   },
 
+  assets,
   eip155: eip155Rpc,
 
   permissions: {

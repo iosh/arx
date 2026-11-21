@@ -71,8 +71,8 @@ export type WalletKeySourcesApi = Readonly<{
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
-  /** Removes the source and its accounts atomically, then cancels their pending sign/transaction approvals. */
-  remove(input: { keySourceId: KeySourceId }): Promise<void>;
+  /** Removes the source and its accounts atomically, cancels their pending approvals, and returns removed member IDs. */
+  remove(input: { keySourceId: KeySourceId }): Promise<readonly AccountId[]>;
 }>;
 
 export type WalletAccountsApi = Readonly<{

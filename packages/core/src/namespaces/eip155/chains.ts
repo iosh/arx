@@ -29,7 +29,7 @@ export const EIP155_MAINNET_NETWORK_SEEDS = defineBuiltinNetworkSeeds([
       blockExplorers: [{ url: "https://polygonscan.com", name: "Polygonscan" }],
       iconUrl: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png",
     },
-    defaultRpcEndpoints: ["https://polygon-rpc.com", "https://polygon.drpc.org"],
+    defaultRpcEndpoints: ["https://polygon.drpc.org"],
   },
   {
     definition: {

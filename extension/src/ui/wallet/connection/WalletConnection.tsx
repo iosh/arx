@@ -2,10 +2,11 @@ import type { WalletClient } from "@arx/wallet-api/client";
 import { Fragment, type ReactNode, use, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { useHomeNetworkFilter } from "@/ui/pages/home/useHomeNetworkFilter";
 import type { WalletConnectionResult } from "./connectWallet";
 import { useWalletActivity } from "./useWalletActivity";
+import { useWalletDataSync } from "./useWalletDataSync";
 import { useWalletEvents } from "./useWalletEvents";
-import { useWalletQuerySync } from "./useWalletQuerySync";
 import { useWalletStatus } from "./useWalletStatus";
 import { useWallet, WalletContext } from "./WalletContext";
 
@@ -32,7 +33,7 @@ export function WalletConnection({
 
 function WalletProvider({ wallet, loading, failure, children }: WalletContentProps & { wallet: WalletClient }) {
   const { data: status, isError } = useWalletStatus(wallet);
-  useWalletQuerySync(wallet);
+  useWalletDataSync(wallet);
   useWalletActivity(wallet, status === "unlocked");
 
   if (status === undefined) return isError ? failure : loading;
@@ -42,12 +43,14 @@ function WalletProvider({ wallet, loading, failure, children }: WalletContentPro
 export function WalletLockBoundary({ children }: { children: ReactNode }) {
   const { client: wallet } = useWallet();
   const [lockCount, setLockCount] = useState(0);
+  const setChainRef = useHomeNetworkFilter((state) => state.setChainRef);
 
   useWalletEvents(wallet, "walletStatusChanged", (event) => {
     // Locking discards page state; unlocking must preserve the pending password submission.
     if (event.status === "locked") {
       // Reset before a following channel response can run the old page's callbacks.
       flushSync(() => {
+        setChainRef(null);
         // Sonner replays active notifications when its container remounts.
         toast.dismiss();
         setLockCount((current) => current + 1);

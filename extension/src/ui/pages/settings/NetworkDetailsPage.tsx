@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { PageHeader } from "@/ui/components/PageHeader";
 import { RenameSheet } from "@/ui/components/RenameSheet";
+import { useHomeNetworkFilter } from "@/ui/pages/home/useHomeNetworkFilter";
+import { useAssetBalances } from "@/ui/wallet/assets/useAssetBalances";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useNetworkRpcConfiguration } from "@/ui/wallet/networks/useNetworkRpcConfiguration";
 import { removeNetworkCache, updateNetworkCache, useNetwork } from "@/ui/wallet/networks/useNetworks";
@@ -23,12 +25,16 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const reportError = useWalletError();
+  const removeBalances = useAssetBalances((state) => state.remove);
+  const clearNetworkFilter = useHomeNetworkFilter((state) => state.clear);
   const [deletionOpen, setDeletionOpen] = useState(false);
   const { data: network } = useNetwork(chainRef);
   const { data: rpc } = useNetworkRpcConfiguration(chainRef, network != null);
   const deletion = useWalletMutation({
     mutationFn: async (chainRef: ChainRef) => {
       await wallet.networks.removeCustom(chainRef);
+      removeBalances({ chainRefs: [chainRef] });
+      clearNetworkFilter(chainRef);
       await removeNetworkCache(queryClient, chainRef);
     },
     gcTime: 0,

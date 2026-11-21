@@ -21,6 +21,13 @@ export function useAccounts() {
   return useQuery(useAccountsOptions());
 }
 
+export function useSelectedAccount() {
+  return useQuery({
+    ...useAccountsOptions(),
+    select: (accounts) => accounts.find((account) => account.selected),
+  });
+}
+
 export function useVisibleAccounts() {
   return useQuery({
     ...useAccountsOptions(),

@@ -5,6 +5,7 @@ import { isWalletApiError } from "@arx/wallet-api/client";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useAssetBalances } from "@/ui/wallet/assets/useAssetBalances";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
@@ -14,7 +15,14 @@ export function useKeySourceRemoval() {
   const { t } = useTranslation("wallet");
   const navigate = useNavigate();
   const reportError = useWalletError();
-  const removal = useWalletMutation({ mutationFn: wallet.keySources.remove, gcTime: 0 });
+  const removeBalances = useAssetBalances((state) => state.remove);
+  const removal = useWalletMutation({
+    mutationFn: async (input: { keySourceId: KeySourceId }) => {
+      const removedAccountIds = await wallet.keySources.remove(input);
+      removeBalances({ accountIds: removedAccountIds });
+    },
+    gcTime: 0,
+  });
 
   function removeKeySource(keySourceId: KeySourceId, name: string) {
     toast.dismiss();

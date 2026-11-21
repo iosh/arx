@@ -664,8 +664,14 @@ describe("WalletCoordinator", () => {
 
     const removalCommitCount = commits.length;
     const removedKeyringId = hdKeyringId(accounts, second.accountGroupId);
-    await wallet.removeKeySource({ keySourceId: second.keySourceId });
+    const expectedRemoved = [
+      memberId(accounts, second.accountGroupId),
+      another.account.members[0].accountId,
+      hidden.account.members[0].accountId,
+    ];
+    const removed = await wallet.removeKeySource({ keySourceId: second.keySourceId });
 
+    expect(new Set(removed)).toEqual(new Set(expectedRemoved));
     expect(commits).toHaveLength(removalCommitCount + 1);
     expect(keyring.getKeySource(second.keySourceId)).toBeNull();
     expect(keyring.getHdKeyring(removedKeyringId)).toBeNull();
@@ -748,11 +754,12 @@ describe("WalletCoordinator", () => {
     setCommitFailure(null);
     const commitCount = commits.length;
     const commit = holdNextCommit();
+    const removedAccountId = memberId(accounts, imported.accountGroupId);
     const removing = wallet.removeKeySource({ keySourceId: imported.keySourceId });
     await commit.started;
     requestAccountSign(harness, memberId(accounts, imported.accountGroupId));
     commit.release();
-    await removing;
+    expect(await removing).toEqual([removedAccountId]);
 
     expect(commits).toHaveLength(commitCount + 1);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();

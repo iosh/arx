@@ -105,9 +105,10 @@ export class Approvals implements ApprovalsReader {
     this.cancel([...this.#pending.keys()]);
   }
 
-  cancelByAccount(accountId: AccountId): void {
+  cancelByAccounts(accountIds: readonly AccountId[]): void {
+    const ids = new Set(accountIds);
     const approvalIds = this.list()
-      .filter((approval) => approval.accountId === accountId)
+      .filter((approval) => approval.accountId !== undefined && ids.has(approval.accountId))
       .map((approval) => approval.approvalId);
     this.cancel(approvalIds);
   }

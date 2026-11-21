@@ -1,77 +1,41 @@
-import { Portal as DropdownMenuPortal } from "@radix-ui/react-dropdown-menu";
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowDownLeft, ChevronRight, Ellipsis, Lock, Settings, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { ArrowDownLeft, ChevronRight, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import browser from "webextension-polyfill";
 import { getAccountName } from "@/ui/components/accounts/getAccountName";
 import { Button } from "@/ui/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/components/ui/dropdown-menu";
-import { useSelectedAccount } from "@/ui/wallet/accounts/useSelectedAccount";
+import { useSelectedAccount } from "@/ui/wallet/accounts/useAccounts";
+import { useBalancePolling } from "@/ui/wallet/assets/useBalancePolling";
 import { usePendingMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
-import { useLockWallet } from "@/ui/wallet/useWalletMutations";
-import { AccountSwitcher } from "./AccountSwitcher";
+import { useNetworks } from "@/ui/wallet/networks/useNetworks";
+import { BalanceStatus } from "./BalanceStatus";
+import { HomeHeader } from "./HomeHeader";
+import { HomeNetworkFilter } from "./HomeNetworkFilter";
+import { NativeAssetRow } from "./NativeAssetRow";
+import { useHomeNetworkFilter } from "./useHomeNetworkFilter";
 
 export function HomePage() {
   const router = useRouter();
   const { t } = useTranslation("wallet");
   const { data: account } = useSelectedAccount();
+  const { data: networks = [] } = useNetworks();
   const { data: source } = usePendingMnemonicSource(account);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { mutate: lockWallet, isPending: isLocking } = useLockWallet();
+  const { chainRef, setChainRef } = useHomeNetworkFilter();
 
   const name = account ? getAccountName(account, t) : null;
+  const accountId = account?.members[0].accountId;
+  const selectedNetwork = networks.find((network) => network.chainRef === chainRef);
+  const filteredNetworks = selectedNetwork ? [selectedNetwork] : networks;
+  useBalancePolling(accountId, selectedNetwork?.chainRef);
 
   return (
     <main className="flex h-full flex-col gap-2.5 px-3.5 font-sans">
       <title>{name ? `${name} · ARX` : "ARX"}</title>
-      <header className="flex h-14 shrink-0 items-center gap-2 px-1.5 py-1">
-        <AccountSwitcher selectedAccount={account} />
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-7.5 rounded-md text-muted-foreground"
-              aria-label={t("moreMenu")}
-              disabled={isLocking}
-            >
-              <Ellipsis aria-hidden="true" className="size-4.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          {menuOpen && (
-            <DropdownMenuPortal>
-              <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 bg-overlay" />
-            </DropdownMenuPortal>
-          )}
-          <DropdownMenuContent
-            align="end"
-            sideOffset={7}
-            alignOffset={-6}
-            className="w-50 rounded-2xl border-0 bg-card p-1 text-card-foreground"
-          >
-            <DropdownMenuItem asChild className="h-11 gap-2.5 px-3 text-sm font-medium">
-              <Link to="/wallet/settings">
-                <Settings aria-hidden="true" />
-                {t("settings")}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="h-11 gap-2.5 px-3 text-sm font-medium" onSelect={() => lockWallet()}>
-              <Lock aria-hidden="true" />
-              {t("lockWallet")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
-      <section className="overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
-        <div className="flex h-35.5 items-end px-4 pb-5">
-          <div className="grid w-full grid-cols-2 gap-2.5">
+      <HomeHeader account={account} />
+      <section className="shrink-0 overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
+        <div className="px-4 pt-3 pb-4">
+          <BalanceStatus accountId={accountId} networks={filteredNetworks} networkName={selectedNetwork?.name} />
+          <div className="mt-3 grid w-full grid-cols-2 gap-2.5">
             {account ? (
               <Button asChild variant="secondary" className="h-10">
                 <Link
@@ -107,6 +71,18 @@ export function HomePage() {
             <ChevronRight aria-hidden="true" className="size-3.75 shrink-0 text-warning" />
           </a>
         )}
+      </section>
+      <div className="flex h-9 shrink-0 items-center justify-between gap-3 px-4">
+        <h2 className="flex h-full items-center border-b-2 border-brand text-base font-semibold">{t("assets")}</h2>
+        <HomeNetworkFilter networks={networks} selectedNetwork={selectedNetwork} onSelect={setChainRef} />
+      </div>
+      <section aria-label={t("assets")} className="min-h-0 flex-1 pb-3.5">
+        <ul className="max-h-full overflow-y-auto rounded-2xl border border-border bg-card text-card-foreground shadow-[0_1px_3px_var(--shadow)]">
+          {accountId &&
+            filteredNetworks.map((network) => (
+              <NativeAssetRow key={`${accountId}:${network.chainRef}`} network={network} accountId={accountId} />
+            ))}
+        </ul>
       </section>
     </main>
   );

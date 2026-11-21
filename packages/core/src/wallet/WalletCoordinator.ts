@@ -50,7 +50,7 @@ type WalletCoordinatorOptions = Readonly<{
   keyring: Keyring;
   accounts: Accounts;
   permissions: Pick<Permissions, "prepareRemoveAccountReferences" | "applyCommittedUpdate">;
-  approvals: Pick<Approvals, "cancelByAccount" | "cancelAll">;
+  approvals: Pick<Approvals, "cancelByAccounts" | "cancelAll">;
   dappConnections: Pick<DappConnections, "refreshAccountsForOpenConnections">;
   autoLock: AutoLockController;
   publishStatusChanged(change: WalletStatusChanged): void;
@@ -278,16 +278,15 @@ export class WalletCoordinator {
     });
   }
 
-  async removeKeySource(params: { keySourceId: KeySourceId }): Promise<void> {
-    await this.#mutations.run(async (commit) => {
+  async removeKeySource(params: { keySourceId: KeySourceId }): Promise<readonly AccountId[]> {
+    return await this.#mutations.run(async (commit) => {
       this.assertUnlocked();
       const source = this.#keyring.getKeySource(params.keySourceId);
       if (!source) throw new KeySourceNotFoundError(params.keySourceId);
       if (this.#keyring.listKeySources().length === 1) throw new WalletLastKeySourceRemovalError();
       const accountsUpdate = this.#accounts.prepareRemoveSourceGroups(params.keySourceId);
-      const permissionsUpdate = this.#permissions.prepareRemoveAccountReferences(
-        accountsUpdate?.removedAccountIds ?? [],
-      );
+      const removedAccountIds = accountsUpdate?.removedAccountIds ?? [];
+      const permissionsUpdate = this.#permissions.prepareRemoveAccountReferences(removedAccountIds);
       const keyringUpdate = await this.#keyring.prepareRemoveKeySource(params.keySourceId);
       this.assertUnlocked();
 
@@ -299,12 +298,13 @@ export class WalletCoordinator {
       keyringUpdate.activate();
       if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
-      for (const accountId of accountsUpdate?.removedAccountIds ?? []) this.#approvals.cancelByAccount(accountId);
+      this.#approvals.cancelByAccounts(removedAccountIds);
       this.lockIfExpired();
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishKeyringChanged({ type: "keyringChanged" });
       if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
+      return removedAccountIds;
     });
   }
 
@@ -405,7 +405,7 @@ export class WalletCoordinator {
       this.#accounts.applyCommittedUpdate(accountsUpdate);
       if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
       if (params.hidden)
-        for (const member of accountsUpdate.account.members) this.#approvals.cancelByAccount(member.accountId);
+        this.#approvals.cancelByAccounts(accountsUpdate.account.members.map((member) => member.accountId));
       this.#dappConnections.refreshAccountsForOpenConnections();
       this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
       if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));

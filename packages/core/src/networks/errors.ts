@@ -8,7 +8,7 @@ export class InvalidChainRefError extends ArxBaseError {
   static readonly code = "network.invalid_chain_ref";
 
   constructor(rule: InvalidChainRefRule) {
-    super("Invalid CAIP-2 chain reference.", {
+    super("Invalid wallet chain reference.", {
       code: InvalidChainRefError.code,
       details: { rule },
     });
@@ -33,17 +33,6 @@ export class NetworkNotFoundError extends ArxBaseError {
     super(`Network "${chainRef}" was not found.`, {
       code: NetworkNotFoundError.code,
       details: { chainRef },
-    });
-  }
-}
-
-export class NetworkNamespaceUnsupportedError extends ArxBaseError {
-  static readonly code = "network.namespace_unsupported";
-
-  constructor(namespace: Namespace) {
-    super(`Networks are not configured for namespace "${namespace}".`, {
-      code: NetworkNamespaceUnsupportedError.code,
-      details: { namespace },
     });
   }
 }

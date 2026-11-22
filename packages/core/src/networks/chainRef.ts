@@ -1,14 +1,24 @@
-import { NAMESPACE_PATTERN, type Namespace } from "../namespaces/types.js";
+import { isSupportedNamespace, type Namespace } from "../namespaces/types.js";
 import { InvalidChainRefError } from "./errors.js";
 
 const CHAIN_REFERENCE_PATTERN = /^[-_a-zA-Z0-9]{1,32}$/;
 
-export type ChainRef = string;
+/** CAIP-2 chain identity within the wallet's supported namespaces. */
+export type ChainRef = `${Namespace}:${string}`;
 
 export type ParsedChainRef = Readonly<{
   namespace: Namespace;
   reference: string;
 }>;
+
+/** Splits an already validated chain reference without decoding it again. */
+export const splitChainRef = (chainRef: ChainRef): ParsedChainRef => {
+  const separatorIndex = chainRef.indexOf(":");
+  return {
+    namespace: chainRef.slice(0, separatorIndex) as Namespace,
+    reference: chainRef.slice(separatorIndex + 1),
+  };
+};
 
 export const parseChainRef = (value: unknown): ParsedChainRef => {
   if (typeof value !== "string") {
@@ -25,7 +35,7 @@ export const parseChainRef = (value: unknown): ParsedChainRef => {
 
   const namespace = value.slice(0, separatorIndex);
   const reference = value.slice(separatorIndex + 1);
-  if (!NAMESPACE_PATTERN.test(namespace)) {
+  if (!isSupportedNamespace(namespace)) {
     throw new InvalidChainRefError("namespace");
   }
   if (!CHAIN_REFERENCE_PATTERN.test(reference)) {

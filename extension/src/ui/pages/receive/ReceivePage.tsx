@@ -1,4 +1,4 @@
-import type { AccountGroupId, AccountId } from "@arx/core/accounts";
+import type { AccountGroupId } from "@arx/core/accounts";
 import { Check, Copy } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +17,7 @@ export function ReceivePage({
   from,
 }: {
   accountGroupId: AccountGroupId;
-  accountId: AccountId;
+  accountId: string;
   from: "home" | "account";
 }) {
   const { t } = useTranslation(["wallet", "common"]);

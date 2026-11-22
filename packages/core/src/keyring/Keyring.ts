@@ -21,7 +21,7 @@ import {
   KeySourceNotFoundError,
   KeySourceTypeMismatchError,
 } from "./errors.js";
-import { getKeyringNamespaceAdapter, type KeyringNamespaceAdapters } from "./namespaceAdapter.js";
+import type { KeyringNamespaceAdapters } from "./namespaceAdapter.js";
 import {
   type Bip39KeySourceRecord,
   type HdKeyringId,
@@ -148,7 +148,7 @@ export class Keyring {
     return this.listHdKeyrings().filter((hdKeyring) => selected.has(hdKeyring.keySourceId));
   }
 
-  listHdKeyringsByNamespace(namespace: string): readonly HdKeyringRecord[] {
+  listHdKeyringsByNamespace(namespace: Namespace): readonly HdKeyringRecord[] {
     return this.listHdKeyrings().filter((hdKeyring) => hdKeyring.namespace === namespace);
   }
 
@@ -173,7 +173,7 @@ export class Keyring {
   }): Promise<AccountId> {
     const seed = await deriveBip39Seed(params.source);
     try {
-      return getKeyringNamespaceAdapter(this.#namespaceAdapters, params.namespace).deriveHdAccountId({
+      return this.#namespaceAdapters[params.namespace].deriveHdAccountId({
         seed,
         derivationIndex: params.derivationIndex,
       });
@@ -202,7 +202,7 @@ export class Keyring {
     const source = this.requireKeySourceSecret(hdKeyring.keySourceId) as Bip39KeySourceSecret;
     const seed = await deriveBip39Seed(source);
     try {
-      return getKeyringNamespaceAdapter(this.#namespaceAdapters, hdKeyring.namespace).deriveHdPrivateKey({
+      return this.#namespaceAdapters[hdKeyring.namespace].deriveHdPrivateKey({
         seed,
         derivationIndex: origin.derivationIndex,
       });
@@ -212,9 +212,7 @@ export class Keyring {
   }
 
   accountIdFromPrivateKey(params: { namespace: Namespace; privateKey: string }): AccountId {
-    return getKeyringNamespaceAdapter(this.#namespaceAdapters, params.namespace).accountIdFromPrivateKey(
-      params.privateKey,
-    );
+    return this.#namespaceAdapters[params.namespace].accountIdFromPrivateKey(params.privateKey);
   }
 
   /** The wallet command supplies the source of an existing private-key account. */

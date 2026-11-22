@@ -50,7 +50,7 @@ export function HomeNetworkFilter({
       >
         <DropdownMenuRadioGroup
           value={selectedNetwork?.chainRef ?? "all"}
-          onValueChange={(value) => onSelect(value === "all" ? null : value)}
+          onValueChange={(value) => onSelect(value === "all" ? null : (value as ChainRef))}
         >
           <DropdownMenuRadioItem value="all" className="min-h-11 px-3 pr-8">
             {t("allNetworks")}

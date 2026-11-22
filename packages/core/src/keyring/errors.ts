@@ -85,14 +85,3 @@ export class KeySourceBackupUnsupportedError extends ArxBaseError {
     });
   }
 }
-
-export class KeyringUnsupportedNamespaceError extends ArxBaseError {
-  static readonly code = "keyring.namespace_unsupported";
-
-  constructor(namespace: string) {
-    super(`Namespace "${namespace}" is not supported by keyring.`, {
-      code: KeyringUnsupportedNamespaceError.code,
-      details: { namespace },
-    });
-  }
-}

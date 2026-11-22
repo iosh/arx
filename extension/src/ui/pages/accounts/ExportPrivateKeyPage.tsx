@@ -17,19 +17,26 @@ import { useWalletError } from "@/ui/wallet/useWalletError";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
 
+type ExportTarget = Readonly<{
+  account: AccountGroup;
+  accountId: AccountId;
+}>;
+
 export function ExportPrivateKeyPage({
   accountGroupId,
   accountId,
 }: {
   accountGroupId: AccountGroupId;
-  accountId: AccountId;
+  accountId: string;
 }) {
   const { t } = useTranslation("wallet");
   const { data: accounts } = useVisibleAccounts();
   const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
 
-  if (!accounts || account?.members.some((member) => member.accountId === accountId))
-    return <ExportPrivateKeyFlow account={account} accountGroupId={accountGroupId} accountId={accountId} />;
+  const member = account?.members.find((candidate) => candidate.accountId === accountId);
+  const target: ExportTarget | undefined = account && member ? { account, accountId: member.accountId } : undefined;
+
+  if (!accounts || target) return <ExportPrivateKeyFlow target={target} accountGroupId={accountGroupId} />;
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -46,13 +53,11 @@ export function ExportPrivateKeyPage({
 }
 
 function ExportPrivateKeyFlow({
-  account,
+  target,
   accountGroupId,
-  accountId,
 }: {
-  account: AccountGroup | undefined;
+  target: ExportTarget | undefined;
   accountGroupId: AccountGroupId;
-  accountId: AccountId;
 }) {
   const { client: wallet } = useWallet();
   const { t } = useTranslation(["wallet", "onboarding"]);
@@ -69,16 +74,16 @@ function ExportPrivateKeyFlow({
   } = useForm({ defaultValues: { password: "" }, mode: "onChange" });
   const incorrect = errors.password?.type === "incorrectPassword";
   const reveal = useWalletMutation({
-    mutationFn: ({ password }: { password: string }) => wallet.accounts.exportPrivateKey({ accountId, password }),
+    mutationFn: wallet.accounts.exportPrivateKey,
     gcTime: 0,
   });
   const pending = reveal.isPending;
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
-  function submit({ password }: { password: string }) {
+  function submit({ password }: { password: string }, accountId: AccountId) {
     reveal.mutate(
-      { password },
+      { accountId, password },
       {
         onSuccess: (result) => {
           if (result === null) {
@@ -112,14 +117,16 @@ function ExportPrivateKeyFlow({
       <title>{`${t("exportPrivateKey")} · ARX`}</title>
       <PageHeader
         title={t("exportPrivateKey")}
-        subtitle={account ? getAccountName(account, t) : undefined}
+        subtitle={target ? getAccountName(target.account, t) : undefined}
         subtitleSpace
         backTo="/wallet/accounts/$accountGroupId"
         backLabel={t("backToAccountDetails")}
         backDisabled={pending}
       />
       <form
-        onSubmit={account && privateKey === null ? handleSubmit(submit) : undefined}
+        onSubmit={
+          target && privateKey === null ? handleSubmit((values) => submit(values, target.accountId)) : undefined
+        }
         aria-busy={pending}
         className="flex min-h-0 flex-1 flex-col"
       >
@@ -128,7 +135,7 @@ function ExportPrivateKeyFlow({
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <p>{t("privateKeyWarning")}</p>
           </div>
-          <AccountAddressCard account={account} memberId={accountId} copyable={false} />
+          <AccountAddressCard account={target?.account} memberId={target?.accountId} copyable={false} />
           {privateKey === null ? (
             <Field className="gap-2">
               <FieldLabel htmlFor={id} className="px-1 text-xs text-muted-foreground">
@@ -142,7 +149,7 @@ function ExportPrivateKeyFlow({
                 autoComplete="current-password"
                 className="pl-3.5 font-semibold"
                 groupClassName="bg-card [&_[data-slot=input-group-addon]]:pr-2 [&_button]:size-7 [&_button]:rounded-md"
-                disabled={pending || !account}
+                disabled={pending || !target}
                 aria-invalid={incorrect}
                 aria-describedby={incorrect ? `${id}-description` : undefined}
               />
@@ -161,7 +168,7 @@ function ExportPrivateKeyFlow({
             <Button
               type="submit"
               className="w-full aria-busy:opacity-70"
-              disabled={!isValid || pending || !account}
+              disabled={!isValid || pending || !target}
               loading={pending}
             >
               {t("showPrivateKey")}

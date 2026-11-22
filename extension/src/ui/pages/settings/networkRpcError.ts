@@ -1,8 +1,8 @@
+import { chainIdFromChainRef } from "@arx/core/namespaces";
 import {
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
-  parseChainRef,
 } from "@arx/core/networks";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import type { TFunction } from "i18next";
@@ -19,8 +19,8 @@ export function getNetworkRpcError(error: unknown, networkName: string, t: TFunc
     return {
       endpoint,
       message: t("rpcChainMismatch", {
-        actualChainId: parseChainRef(actualChainRef).reference,
-        expectedChainId: parseChainRef(expectedChainRef).reference,
+        actualChainId: `${chainIdFromChainRef(actualChainRef)}`,
+        expectedChainId: `${chainIdFromChainRef(expectedChainRef)}`,
         networkName,
       }),
     };

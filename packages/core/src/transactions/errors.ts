@@ -1,5 +1,4 @@
 import { ArxBaseError } from "../errors.js";
-import type { Namespace } from "../namespaces/types.js";
 import type { TransactionId, TransactionStatus } from "./types.js";
 
 export class TransactionNotFoundError extends ArxBaseError {
@@ -28,17 +27,6 @@ export class TransactionReplacementUnavailableError extends ArxBaseError {
     super(message, {
       code: TransactionReplacementUnavailableError.code,
       details: input,
-    });
-  }
-}
-
-export class TransactionNamespaceUnsupportedError extends ArxBaseError {
-  static readonly code = "transaction.namespace_unsupported";
-
-  constructor(namespace: Namespace) {
-    super(`Transactions are not supported for namespace "${namespace}".`, {
-      code: TransactionNamespaceUnsupportedError.code,
-      details: { namespace },
     });
   }
 }

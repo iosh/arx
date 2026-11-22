@@ -87,7 +87,7 @@ function decodeDomainChainId(value: Eip155TypedDataValue | undefined, method: st
 function parseDecimalChainId(value: string): bigint | undefined {
   try {
     const chainId = BigInt(value);
-    return chainId >= 0n && chainId.toString(10) === value ? chainId : undefined;
+    return chainId >= 0n && `${chainId}` === value ? chainId : undefined;
   } catch {
     return undefined;
   }
@@ -100,7 +100,7 @@ function withDecimalChainId(typedData: Eip155TypedData, chainId: bigint | undefi
     ...typedData,
     domain: {
       ...typedData.domain,
-      chainId: chainId.toString(10),
+      chainId: `${chainId}`,
     },
   };
 }

@@ -37,7 +37,7 @@ export function useNetworks() {
   return useQuery(useNetworksOptions());
 }
 
-export function useNetwork(chainRef: ChainRef) {
+export function useNetwork(chainRef: string) {
   return useQuery({
     ...useNetworksOptions(),
     select: (networks) => networks.find((network) => network.chainRef === chainRef) ?? null,

@@ -18,7 +18,7 @@ export const createEip155AssetsAdapter = (options: { chainJsonRpc: ChainJsonRpc 
       {
         assetId: `${network.chainRef}/native`,
         ...network.nativeCurrency,
-        balance: Hex.toBigInt(result).toString(),
+        balance: `${Hex.toBigInt(result)}`,
       },
     ];
   },

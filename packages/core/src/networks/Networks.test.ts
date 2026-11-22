@@ -29,7 +29,9 @@ const createFixture = (customNetworks: readonly CustomNetworkRecord[] = []) => {
   const commit = vi.fn<PersistenceWriter["commit"]>().mockResolvedValue(undefined);
   const changes: NetworksChanged[] = [];
   const networks = new Networks({
-    adapters: [createEip155NetworksAdapter({ transport: { request: request as JsonRpcHttpTransport["request"] } })],
+    adapters: {
+      eip155: createEip155NetworksAdapter({ transport: { request: request as JsonRpcHttpTransport["request"] } }),
+    },
     bootstrap: { customNetworks, networkRpcOverrides: [] },
     mutations: createCoreMutationQueue({ commit }),
     publishChanged: (change) => changes.push(change),

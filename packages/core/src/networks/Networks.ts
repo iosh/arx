@@ -3,7 +3,7 @@ import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { NetworksBootstrap } from "./bootstrap.js";
 import type { ChainRef } from "./chainRef.js";
-import { parseChainRef } from "./chainRef.js";
+import { parseChainRef, splitChainRef } from "./chainRef.js";
 import { cloneChainDefinition, isSameChainDefinition } from "./definition.js";
 import {
   BuiltinNetworkConflictError,
@@ -11,14 +11,13 @@ import {
   CustomNetworkAlreadyExistsError,
   NetworkBlockExplorerExistsError,
   NetworkConfigurationChangedError,
-  NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
   NetworkRpcEndpointRequiredError,
 } from "./errors.js";
-import type { NetworksNamespaceAdapter, NetworksNamespaceAdapters } from "./namespaceAdapter.js";
+import type { NetworksNamespaceAdapters } from "./namespaceAdapter.js";
 import { customNetworkWrites, networkRpcOverrideWrites } from "./persistence.js";
 import type {
   CustomNetworkInput,
@@ -72,17 +71,15 @@ const createInstalledCustomNetwork = (input: CustomNetworkInput, namespace: Name
 
 /** Owns installed network state, RPC configuration, and standalone network mutations. */
 export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
-  readonly #adapters: ReadonlyMap<Namespace, NetworksNamespaceAdapter>;
+  readonly #adapters: NetworksNamespaceAdapters;
   readonly #mutations: CoreMutationQueue;
   readonly #publishChanged: NetworksOptions["publishChanged"];
   #networks: ReadonlyMap<ChainRef, InstalledNetwork>;
   #rpcOverrides: ReadonlyMap<ChainRef, NonEmptyRpcEndpoints>;
 
   constructor(options: NetworksOptions) {
-    const adapters = new Map(options.adapters.map((adapter) => [adapter.namespace, adapter]));
-
     const networks = new Map<ChainRef, InstalledNetwork>();
-    for (const adapter of options.adapters) {
+    for (const adapter of Object.values(options.adapters)) {
       for (const seed of adapter.builtinNetworks) {
         networks.set(seed.definition.chainRef, {
           network: {
@@ -106,7 +103,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       rpcOverrides.set(record.chainRef, record.endpoints);
     }
 
-    this.#adapters = adapters;
+    this.#adapters = options.adapters;
     this.#mutations = options.mutations;
     this.#publishChanged = options.publishChanged;
     this.#networks = networks;
@@ -128,7 +125,6 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
   }
 
   listByNamespace(namespace: Namespace): readonly Network[] {
-    this.requireAdapter(namespace);
     return this.list().filter((network) => network.namespace === namespace);
   }
 
@@ -362,7 +358,7 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       if (protocol !== "http:" && protocol !== "https:") throw new NetworkRpcEndpointInvalidError(endpoint);
     }
 
-    const adapter = this.requireAdapter(parseChainRef(expectedChainRef).namespace);
+    const adapter = this.#adapters[splitChainRef(expectedChainRef).namespace];
 
     await Promise.all(
       endpoints.map(async (endpoint) => {
@@ -394,12 +390,6 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       }
       return readResult();
     });
-  }
-
-  private requireAdapter(namespace: Namespace): NetworksNamespaceAdapter {
-    const adapter = this.#adapters.get(namespace);
-    if (!adapter) throw new NetworkNamespaceUnsupportedError(namespace);
-    return adapter;
   }
 
   private requireInstalledNetwork(chainRef: ChainRef): InstalledNetwork {

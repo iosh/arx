@@ -1,4 +1,5 @@
-import { type ChainRef, type Network, NetworkHasPendingTransactionsError, parseChainRef } from "@arx/core/networks";
+import { chainIdFromChainRef } from "@arx/core/namespaces";
+import { type ChainRef, type Network, NetworkHasPendingTransactionsError } from "@arx/core/networks";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -19,7 +20,7 @@ import { NetworkDeleteDialog } from "./NetworkDeleteDialog";
 import { NetworkExplorersSection } from "./NetworkExplorersSection";
 import { NetworkRpcSection } from "./NetworkRpcSection";
 
-export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
+export function NetworkDetailsPage({ chainRef }: { chainRef: string }) {
   const { t } = useTranslation("wallet");
   const { client: wallet } = useWallet();
   const queryClient = useQueryClient();
@@ -29,7 +30,7 @@ export function NetworkDetailsPage({ chainRef }: { chainRef: ChainRef }) {
   const clearNetworkFilter = useHomeNetworkFilter((state) => state.clear);
   const [deletionOpen, setDeletionOpen] = useState(false);
   const { data: network } = useNetwork(chainRef);
-  const { data: rpc } = useNetworkRpcConfiguration(chainRef, network != null);
+  const { data: rpc } = useNetworkRpcConfiguration(network?.chainRef);
   const deletion = useWalletMutation({
     mutationFn: async (chainRef: ChainRef) => {
       await wallet.networks.removeCustom(chainRef);
@@ -167,7 +168,7 @@ function NetworkChainId({ chainRef }: { chainRef: ChainRef | undefined }) {
     <div className="flex min-h-11 items-center gap-2 px-4 py-1.5 text-sm">
       <span className="shrink-0 font-medium">Chain ID</span>
       <span className="min-w-0 flex-1 text-right wrap-anywhere text-muted-foreground">
-        {chainRef && parseChainRef(chainRef).reference}
+        {chainRef && `${chainIdFromChainRef(chainRef)}`}
       </span>
     </div>
   );

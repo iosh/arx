@@ -37,17 +37,6 @@ export class AccountNotFoundError extends ArxBaseError {
   }
 }
 
-export class AccountNamespaceUnsupportedError extends ArxBaseError {
-  static readonly code = "account.namespace_unsupported";
-
-  constructor(namespace: Namespace) {
-    super(`Accounts are not supported for namespace "${namespace}".`, {
-      code: AccountNamespaceUnsupportedError.code,
-      details: { namespace },
-    });
-  }
-}
-
 export class AccountNamespaceMismatchError extends ArxBaseError {
   static readonly code = "account.namespace_mismatch";
 

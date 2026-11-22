@@ -1,5 +1,4 @@
 import type { Namespace } from "../namespaces/types.js";
-import { TransactionNamespaceUnsupportedError } from "./errors.js";
 import type { PendingTransactionRecord } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
 import type {
@@ -46,13 +45,4 @@ export type TransactionsNamespaceAdapter = Readonly<{
   ): Promise<PendingTransactionInspection>;
 }>;
 
-export type TransactionsNamespaceAdapters = Readonly<Record<Namespace, TransactionsNamespaceAdapter | undefined>>;
-
-export const getTransactionsNamespaceAdapter = (
-  adapters: TransactionsNamespaceAdapters,
-  namespace: Namespace,
-): TransactionsNamespaceAdapter => {
-  const adapter = adapters[namespace];
-  if (!adapter) throw new TransactionNamespaceUnsupportedError(namespace);
-  return adapter;
-};
+export type TransactionsNamespaceAdapters = Readonly<Record<Namespace, TransactionsNamespaceAdapter>>;

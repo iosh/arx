@@ -74,7 +74,7 @@ describe("Accounts", () => {
 
   it("keeps hidden identities queryable while excluding them from account access choices", () => {
     const visibleGroupId = "56128651-0451-4057-801e-3b3d5b9fe409";
-    const accountIds = [member.accountId, "eip155:6fac4d18c912343bf86fa7049364dd4e424ab9c0"];
+    const accountIds = [member.accountId, "eip155:6fac4d18c912343bf86fa7049364dd4e424ab9c0"] as const;
     const { accounts } = createAccounts({
       groups: accountIds.map((_, accountIndex) => ({
         ...group,

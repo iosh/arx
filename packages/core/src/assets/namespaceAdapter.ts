@@ -7,4 +7,4 @@ export type AssetsNamespaceAdapter = Readonly<{
   getBalances(input: { network: Network; address: string }): Promise<readonly AssetBalance[]>;
 }>;
 
-export type AssetsNamespaceAdapters = Readonly<Record<Namespace, AssetsNamespaceAdapter | undefined>>;
+export type AssetsNamespaceAdapters = Readonly<Record<Namespace, AssetsNamespaceAdapter>>;

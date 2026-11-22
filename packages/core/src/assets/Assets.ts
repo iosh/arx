@@ -23,8 +23,6 @@ export const createAssets = ({ accounts, networks, adapters }: AssetsOptions): A
     if (!network) throw new NetworkNotFoundError(input.chainRef);
 
     const adapter = adapters[network.namespace];
-    if (!adapter) throw new Error(`Assets are not configured for namespace "${network.namespace}".`);
-
     const { canonicalAddress } = accounts.getAddress(input);
     return adapter.getBalances({ network, address: canonicalAddress });
   },

@@ -104,12 +104,15 @@ describe("Transactions", () => {
   it.each([
     {
       missing: "member",
-      request: { ...input, accountId: "eip155:0000000000000000000000000000000000000004" },
+      request: {
+        ...input,
+        accountId: "eip155:0000000000000000000000000000000000000004",
+      } satisfies PrepareTransactionInput,
       code: "account.not_found",
     },
     {
       missing: "network",
-      request: { ...input, chainRef: "eip155:999999" },
+      request: { ...input, chainRef: "eip155:999999" } satisfies PrepareTransactionInput,
       code: "network.not_found",
     },
   ])("rejects a removed $missing before requesting RPC", async (testCase) => {

@@ -1,4 +1,5 @@
 import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "@arx/core/chain-json-rpc";
+import { chainRefFromChainId, MAX_EIP155_CHAIN_ID } from "@arx/core/namespaces";
 import {
   BuiltinNetworkConflictError,
   CustomNetworkAlreadyExistsError,
@@ -39,6 +40,9 @@ type LoadedNetwork = {
 const metadataFields = ["name", "symbol", "decimals", "explorer"] as const;
 export const chainIdPattern = /^[1-9][0-9]{0,31}$/;
 
+const isSupportedChainId = (value: string): boolean =>
+  chainIdPattern.test(value) && BigInt(value) <= MAX_EIP155_CHAIN_ID;
+
 export function useAddEvmNetworkForm() {
   const { t } = useTranslation("wallet");
   const { client: wallet } = useWallet();
@@ -77,12 +81,12 @@ export function useAddEvmNetworkForm() {
     let loadedChainId: string;
     if ("rpcUrl" in source) {
       const result = await wallet.eip155.eth_chainId([], { endpoint: source.rpcUrl });
-      loadedChainId = BigInt(result).toString(10);
+      loadedChainId = `${BigInt(result)}`;
     } else {
       loadedChainId = source.chainId;
     }
     const installed = networks?.some((network) => network.chainRef === `eip155:${loadedChainId}`);
-    if (!chainIdPattern.test(loadedChainId) || loadedChainId === confirmedChainId || installed) {
+    if (!isSupportedChainId(loadedChainId) || loadedChainId === confirmedChainId || installed) {
       return { chainId: loadedChainId };
     }
 
@@ -96,7 +100,7 @@ export function useAddEvmNetworkForm() {
 
   function applyLoadedNetwork(result: LoadedNetwork) {
     form.setValue("chainId", result.chainId, { shouldValidate: true });
-    if (!chainIdPattern.test(result.chainId) || result.chainId === confirmedChainId) return;
+    if (!isSupportedChainId(result.chainId) || result.chainId === confirmedChainId) return;
     for (const name of [...metadataFields, "isTestnet"] as const) form.resetField(name);
     form.clearErrors("nodes");
     if (result.metadata) {
@@ -130,7 +134,7 @@ export function useAddEvmNetworkForm() {
 
   function confirmChainId() {
     const value = form.getValues("chainId");
-    if (chainIdPattern.test(value) && value !== confirmedChainId) startLoading({ chainId: value });
+    if (isSupportedChainId(value) && value !== confirmedChainId) startLoading({ chainId: value });
   }
 
   function readFromFirstRpc() {
@@ -150,7 +154,7 @@ export function useAddEvmNetworkForm() {
     const [first, ...rest] = values.nodes;
     const input: CustomNetworkInput = {
       definition: {
-        chainRef: `eip155:${values.chainId}`,
+        chainRef: chainRefFromChainId(BigInt(values.chainId)),
         name: values.name.trim(),
         nativeCurrency: { name: symbol, symbol, decimals: Number(values.decimals) },
         isTestnet: values.isTestnet,
@@ -198,6 +202,9 @@ export function useAddEvmNetworkForm() {
     confirmChainId,
     readFromFirstRpc,
     validateChainId: (value: string) => {
+      if (chainIdPattern.test(value) && BigInt(value) > MAX_EIP155_CHAIN_ID) {
+        return t("chainIdInvalid");
+      }
       const network = networks?.find((candidate) => candidate.chainRef === `eip155:${value}`);
       return network ? t("chainIdUsedByNetwork", { chainId: value, networkName: network.name }) : true;
     },

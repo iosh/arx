@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
+import { chainRefFromChainId, MAX_EIP155_CHAIN_ID } from "../../namespaces/eip155/chainId.js";
+import { Eip155InvalidChainIdError } from "../../namespaces/eip155/errors.js";
 import { createEip155TransactionSubmitter } from "./submitTransaction.js";
 import type * as Eip155 from "./types.js";
 
@@ -63,7 +65,9 @@ describe("EIP-155 transaction submission", () => {
       throw new Error("Unexpected RPC request");
     });
     const { signing, signDigest } = createSigning();
+    signDigest.mockResolvedValue({ r: 1n, s: 2n, yParity: 1, bytes: new Uint8Array(64) });
     const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const chainRef = chainRefFromChainId(MAX_EIP155_CHAIN_ID);
     const transaction = {
       from: FROM,
       to: TO,
@@ -76,22 +80,31 @@ describe("EIP-155 transaction submission", () => {
     } satisfies Eip155.PreparedTransaction;
 
     const signed = await submitter.sign({
-      chainRef: CHAIN_REF,
+      chainRef,
       accountId: ACCOUNT_ID,
       transaction,
     });
 
     expect(TxEnvelopeLegacy.deserialize(signed.recovery.rawTransaction)).toMatchObject({
-      chainId: 1,
+      chainId: Number(MAX_EIP155_CHAIN_ID),
+      yParity: 1,
       nonce: 1n,
       gasPrice: 1_000_000_000n,
       gas: 21_000n,
       to: TO,
       value: 1n,
     });
-    expect(signed.chainRef).toBe(CHAIN_REF);
+    expect(signed.chainRef).toBe(chainRef);
     expect(signDigest).toHaveBeenCalledWith({ accountId: ACCOUNT_ID, digest: expect.any(Uint8Array) });
     expect(signed.transaction).toEqual({ ...transaction, nonce: "0x1" });
+
+    await expect(
+      submitter.sign({
+        chainRef: `eip155:${MAX_EIP155_CHAIN_ID + 1n}`,
+        accountId: ACCOUNT_ID,
+        transaction,
+      }),
+    ).rejects.toBeInstanceOf(Eip155InvalidChainIdError);
   });
 
   it("signs an EIP-2930 transaction with its access list", async () => {

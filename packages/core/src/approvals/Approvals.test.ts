@@ -16,7 +16,7 @@ const accountAccessDraft = {
   request: {
     selectableAccounts: [
       {
-        accountId: "account-1",
+        accountId: "eip155:0000000000000000000000000000000000000001",
         chainRef: "eip155:1",
         canonicalAddress: "0x0000000000000000000000000000000000000001",
         displayAddress: "0x0000...0001",
@@ -125,7 +125,7 @@ describe("Approvals", () => {
     const decision = {
       approvalId: handle.approvalId,
       type: "accountAccess",
-      accountIds: ["account-1"],
+      accountIds: ["eip155:0000000000000000000000000000000000000001"],
     } as const;
     harness.approvals.approve(decision);
 

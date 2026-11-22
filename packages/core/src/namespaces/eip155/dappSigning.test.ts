@@ -3,12 +3,13 @@ import { assert, expect, it } from "vitest";
 import { Approvals } from "../../approvals/Approvals.js";
 import { Permissions } from "../../permissions/Permissions.js";
 import { ACCOUNT_ID, ADDRESS, createAccounts, PRIVATE_KEY } from "./__tests__/fixtures.js";
+import { chainRefFromChainId } from "./chainId.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
 import { signEip155PrivateKeyDigest } from "./keyring.js";
 
 it("approves only signed typed-data fields and rejects inconsistent request data", async () => {
   const chainId = 4_294_967_297n;
-  const chainRef = `eip155:${chainId}`;
+  const chainRef = chainRefFromChainId(chainId);
   const origin = "https://dapp.example";
   const accounts = createAccounts();
   const permissions = new Permissions({
@@ -49,7 +50,7 @@ it("approves only signed typed-data fields and rejects inconsistent request data
   expect(approval.request.typedData).toEqual({
     types: typedData.types,
     primaryType: "Message",
-    domain: { chainId: chainId.toString(10) },
+    domain: { chainId: `${chainId}` },
     message: { details: [{ contents: "hello" }] },
   });
   approvals.approve({ approvalId: approval.approvalId, type: "sign" });
@@ -65,9 +66,9 @@ it("approves only signed typed-data fields and rejects inconsistent request data
     ),
   );
 
-  await expect(
-    request([ADDRESS, { ...typedData, domain: { chainId: (chainId + 1n).toString(10) } }]),
-  ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
+  await expect(request([ADDRESS, { ...typedData, domain: { chainId: `${chainId + 1n}` } }])).rejects.toMatchObject({
+    code: "global.rpc.invalid_params",
+  });
   await expect(
     request([
       ADDRESS,

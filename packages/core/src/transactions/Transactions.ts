@@ -5,7 +5,7 @@ import type { NetworksReader } from "../networks/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import { TransactionNotFoundError, TransactionReplacementUnavailableError } from "./errors.js";
-import { getTransactionsNamespaceAdapter, type TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
+import type { TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
 import {
   type PendingTransactionRecord,
   type TransactionRecord,
@@ -56,7 +56,7 @@ type TransactionsOptions = Readonly<{
 
 export const createTransactions = (params: TransactionsOptions): Transactions => ({
   async prepare(input) {
-    const adapter = getTransactionsNamespaceAdapter(params.adapters, input.namespace);
+    const adapter = params.adapters[input.namespace];
     if (!params.accounts.getMember(input.accountId)) throw new AccountNotFoundError(input.accountId);
     if (!params.networks.get(input.chainRef)) throw new NetworkNotFoundError(input.chainRef);
 
@@ -70,7 +70,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
   async prepareReplacement(input) {
     const target = await readReplaceableTransaction(params.readers.transactions, input.transactionId);
 
-    const adapter = getTransactionsNamespaceAdapter(params.adapters, target.namespace);
+    const adapter = params.adapters[target.namespace];
     if (!params.accounts.getMember(target.accountId)) throw new AccountNotFoundError(target.accountId);
     if (!params.networks.get(target.chainRef)) throw new NetworkNotFoundError(target.chainRef);
 
@@ -92,7 +92,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
   },
 
   async submit(prepared) {
-    const adapter = getTransactionsNamespaceAdapter(params.adapters, prepared.namespace);
+    const adapter = params.adapters[prepared.namespace];
 
     // Recheck before and after RPC-backed preparation because these prerequisites may change while it awaits.
     if (!params.accounts.getMember(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);

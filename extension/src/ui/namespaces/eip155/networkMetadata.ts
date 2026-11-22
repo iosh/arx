@@ -37,7 +37,7 @@ async function getMetadata(url: string, chainId: bigint): Promise<Eip155NetworkM
 
 /** Gets editable defaults from the CDN, then the upstream repository if needed. */
 export async function getEip155NetworkMetadata(chainId: bigint): Promise<Eip155NetworkMetadata | null> {
-  const path = `_data/chains/eip155-${chainId.toString(10)}.json`;
+  const path = `_data/chains/eip155-${chainId}.json`;
   const sources = [
     `https://cdn.jsdelivr.net/gh/ethereum-lists/chains@master/${path}`,
     `https://raw.githubusercontent.com/ethereum-lists/chains/master/${path}`,

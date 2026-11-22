@@ -7,7 +7,6 @@ import type { PermissionRecord } from "./persistence.js";
 
 const EIP155_ACCOUNT_A = "eip155:0000000000000000000000000000000000000001";
 const EIP155_ACCOUNT_B = "eip155:0000000000000000000000000000000000000002";
-const SOLANA_ACCOUNT = "solana:account-1";
 const MISSING_ACCOUNT = "eip155:0000000000000000000000000000000000000004";
 
 const account = (accountId: AccountId, namespace: Namespace): AccountMember => ({
@@ -18,11 +17,7 @@ const account = (accountId: AccountId, namespace: Namespace): AccountMember => (
   hidden: false,
 });
 
-const accounts = [
-  account(EIP155_ACCOUNT_A, "eip155"),
-  account(EIP155_ACCOUNT_B, "eip155"),
-  account(SOLANA_ACCOUNT, "solana"),
-];
+const accounts = [account(EIP155_ACCOUNT_A, "eip155"), account(EIP155_ACCOUNT_B, "eip155")];
 
 const permission = (
   origin: string,
@@ -61,7 +56,7 @@ describe("Permissions", () => {
 
   it("builds scope and origin revocation drafts", () => {
     const first = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A]);
-    const second = permission("https://a.example", "solana", [SOLANA_ACCOUNT]);
+    const second = permission("https://c.example", "eip155", [EIP155_ACCOUNT_B]);
     const third = permission("https://b.example", "eip155", [EIP155_ACCOUNT_B]);
     const permissions = createPermissions({ records: [third, second, first] });
 
@@ -83,7 +78,7 @@ describe("Permissions", () => {
   it("removes account references and deletes permissions that become empty", () => {
     const retained = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B]);
     const removed = permission("https://b.example", "eip155", [EIP155_ACCOUNT_A]);
-    const unrelated = permission("https://c.example", "solana", [SOLANA_ACCOUNT]);
+    const unrelated = permission("https://c.example", "eip155", [EIP155_ACCOUNT_B]);
     const permissions = createPermissions({ records: [unrelated, removed, retained] });
 
     expect(permissions.prepareRemoveAccountReferences([])).toBeNull();

@@ -5,7 +5,7 @@ import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
 import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
 import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
 import { isArxBaseError } from "../../errors.js";
-import { chainIdFromChainRef } from "../../namespaces/eip155/chainId.js";
+import { assertEip155ChainId, chainIdFromChainRef } from "../../namespaces/eip155/chainId.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import { Eip155TransactionInvalidError } from "./errors.js";
 import type * as Eip155 from "./types.js";
@@ -23,8 +23,11 @@ const validateAccessList = (accessList: AccessList.AccessList): void => {
 
 export const createEip155TransactionEnvelope = (chainRef: ChainRef, transaction: EnvelopeTransaction) => {
   try {
+    const chainId = chainIdFromChainRef(chainRef);
+    // Persisted chain references can predate the current signing limit.
+    assertEip155ChainId(chainId);
     const fields = {
-      chainId: Number(chainIdFromChainRef(chainRef)),
+      chainId: Number(chainId),
       ...(transaction.nonce === undefined ? {} : { nonce: BigInt(transaction.nonce) }),
       ...(transaction.gas === undefined ? {} : { gas: BigInt(transaction.gas) }),
       to: transaction.to === null ? null : (transaction.to as Address),

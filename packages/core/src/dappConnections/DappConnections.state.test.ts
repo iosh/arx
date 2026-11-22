@@ -93,7 +93,7 @@ describe("DappConnections active state", () => {
   it("changes the site's chain without changing its accounts and restores it when reopened", async () => {
     const scope = { origin: "https://dapp.example", namespace: "eip155" } as const;
     const initial = selection(scope.origin, scope.namespace, "eip155:1");
-    const next = { ...initial, chainRef: "eip155:10" };
+    const next = { ...initial, chainRef: "eip155:10" } as const;
     const permission: PermissionRecord = { ...scope, accountIds: [EIP155_ACCOUNT_A] };
     const { dappConnections, stateChanges } = createDappConnections({
       networkSelections: [initial],

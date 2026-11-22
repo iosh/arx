@@ -1,3 +1,6 @@
-export const NAMESPACE_PATTERN = /^[-a-z0-9]{3,8}$/;
+export const SUPPORTED_NAMESPACES = ["eip155"] as const;
 
-export type Namespace = string;
+export type Namespace = (typeof SUPPORTED_NAMESPACES)[number];
+
+export const isSupportedNamespace = (value: string): value is Namespace =>
+  SUPPORTED_NAMESPACES.some((namespace) => namespace === value);

@@ -50,7 +50,7 @@ const blockExplorerSchema: z.ZodType<BlockExplorer> = z.strictObject({
   name: trimmedString().optional(),
 });
 
-const chainDefinitionBaseSchema: z.ZodType<ChainDefinition> = z.strictObject({
+const chainDefinitionBaseSchema = z.strictObject({
   chainRef: z.string(),
   name: trimmedString(),
   nativeCurrency: nativeCurrencySchema,
@@ -63,7 +63,7 @@ export const createChainDefinitionSchema = (options?: {
   namespaceValidators?: Readonly<Record<string, NamespaceChainDefinitionValidator>>;
 }): z.ZodType<ChainDefinition> => {
   const validators = options?.namespaceValidators ?? {};
-  return chainDefinitionBaseSchema.superRefine((value, ctx) => {
+  return chainDefinitionBaseSchema.transform((value, ctx) => {
     let parsed: ParsedChainRef;
     try {
       parsed = parseChainRef(value.chainRef);
@@ -73,10 +73,11 @@ export const createChainDefinitionSchema = (options?: {
         message: (error as Error).message,
         path: ["chainRef"],
       });
-      return;
+      return z.NEVER;
     }
 
-    validators[parsed.namespace]?.({ definition: value, parsed, ctx });
+    const definition: ChainDefinition = { ...value, chainRef: `${parsed.namespace}:${parsed.reference}` };
+    validators[parsed.namespace]?.({ definition, parsed, ctx });
 
     if (value.blockExplorers) {
       const explorerUrls = new Set<string>();
@@ -91,6 +92,7 @@ export const createChainDefinitionSchema = (options?: {
         explorerUrls.add(explorer.url);
       }
     }
+    return definition;
   });
 };
 

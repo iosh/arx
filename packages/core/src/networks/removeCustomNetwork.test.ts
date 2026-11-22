@@ -7,6 +7,7 @@ import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import type { PendingTransactionRecord } from "../transactions/persistence.js";
+import type { ChainRef } from "./chainRef.js";
 import { NetworkHasPendingTransactionsError } from "./errors.js";
 import { Networks } from "./Networks.js";
 import type { CustomNetworkRecord } from "./persistence.js";
@@ -32,7 +33,7 @@ const dappSelection: DappNetworkSelectionRecord = { ...selectedScope, chainRef: 
 const closedSelection: DappNetworkSelectionRecord = { ...closedScope, chainRef: CUSTOM_CHAIN_REF };
 const otherSelection: DappNetworkSelectionRecord = { ...otherScope, chainRef: "eip155:10" };
 
-const pendingTransaction = (chainRef = CUSTOM_CHAIN_REF): PendingTransactionRecord => ({
+const pendingTransaction = (chainRef: ChainRef = CUSTOM_CHAIN_REF): PendingTransactionRecord => ({
   transactionId: "pending-transaction",
   namespace: "eip155",
   chainRef,
@@ -70,15 +71,15 @@ const createFixture = (
     },
   });
   const networks = new Networks({
-    adapters: [
-      createEip155NetworksAdapter({
+    adapters: {
+      eip155: createEip155NetworksAdapter({
         transport: {
           request: async () => {
             throw new Error("Unexpected RPC request during network removal.");
           },
         },
       }),
-    ],
+    },
     bootstrap: {
       customNetworks: [customNetwork],
       networkRpcOverrides: [{ chainRef: CUSTOM_CHAIN_REF, endpoints: ["https://base-override.example"] }],

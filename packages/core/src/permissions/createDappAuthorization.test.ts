@@ -59,7 +59,7 @@ const approval = (
     chainRef: "eip155:1",
     canonicalAddress: ADDRESS,
     displayAddress: "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c",
-  };
+  } as const;
   switch (type) {
     case "accountAccess":
       return { type, ...inputScope, request: { selectableAccounts: [account] } };

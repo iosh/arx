@@ -1,8 +1,8 @@
 import type { ChainRef, NetworkRpcConfiguration } from "@arx/core/networks";
-import { type QueryClient, type QueryFilters, useQuery } from "@tanstack/react-query";
+import { type QueryClient, type QueryFilters, skipToken, useQuery } from "@tanstack/react-query";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 
-const networkRpcConfigurationKey = (chainRef: ChainRef) => ["networkRpcConfiguration", chainRef] as const;
+const networkRpcConfigurationKey = (chainRef: ChainRef | undefined) => ["networkRpcConfiguration", chainRef] as const;
 
 export function refreshNetworkRpcConfigurations(queryClient: QueryClient, chainRefs: readonly ChainRef[]) {
   const ids = new Set<unknown>(chainRefs);
@@ -25,11 +25,10 @@ export async function updateRpcCache(
   void queryClient.invalidateQueries({ queryKey, exact: true });
 }
 
-export function useNetworkRpcConfiguration(chainRef: ChainRef, enabled: boolean) {
+export function useNetworkRpcConfiguration(chainRef: ChainRef | undefined) {
   const { client: wallet } = useWallet();
   return useQuery({
     queryKey: networkRpcConfigurationKey(chainRef),
-    queryFn: () => wallet.networks.getRpcConfiguration(chainRef),
-    enabled,
+    queryFn: chainRef === undefined ? skipToken : () => wallet.networks.getRpcConfiguration(chainRef),
   });
 }

@@ -65,8 +65,8 @@ describe("CoreRuntime EIP-155 RPC", () => {
       chainRef: "eip155:8453",
       update: { type: "add", url: "https://base.blockscout.com" },
     });
-    const removedSite = { origin: "https://base-site.example", namespace: "eip155", chainRef: "eip155:8453" };
-    const otherSite = { origin: "https://other-site.example", namespace: "eip155", chainRef: "eip155:10" };
+    const removedSite = { origin: "https://base-site.example", namespace: "eip155", chainRef: "eip155:8453" } as const;
+    const otherSite = { origin: "https://other-site.example", namespace: "eip155", chainRef: "eip155:10" } as const;
     await persistence.writer.commit([removedSite, otherSite].map(persistenceTypes.dappNetworkSelection.put));
     await runtime.wallet.lock();
     await persistence.close();
@@ -119,7 +119,7 @@ describe("CoreRuntime EIP-155 RPC", () => {
     assert(created.status === "initialized");
     const [account] = (await wallet.accounts.getGroup(created.accountGroupId)).members;
     const address = "0xfcad0b19bb29d4674531d6f115237e16afce377c";
-    const scope = { origin: "https://signing.example", namespace: "eip155" };
+    const scope = { origin: "https://signing.example", namespace: "eip155" } as const;
     runtime.dappConnections.openConnection(scope);
     const params = ["0x", address] as const;
     await expect(runtime.dappConnections.request({ scope, method: "personal_sign", params })).rejects.toMatchObject({

@@ -36,15 +36,7 @@ export type DappNamespace = Readonly<{
   forwardNodeRead(input: NodeReadRequest): Promise<unknown>;
 }>;
 
-export type DappNamespaces = ReadonlyMap<Namespace, DappNamespace>;
-
-export const getDappNamespace = (namespace: Namespace, namespaces: DappNamespaces): DappNamespace => {
-  const owner = namespaces.get(namespace);
-  if (!owner) {
-    throw new RpcUnsupportedMethodError({ message: `Namespace "${namespace}" has no dapp implementation.` });
-  }
-  return owner;
-};
+export type DappNamespaces = Readonly<Record<Namespace, DappNamespace>>;
 
 export const invalidDappParams = (method: string, reason: string): RpcInvalidParamsError =>
   new RpcInvalidParamsError({ message: `${method}: ${reason}` });
@@ -133,8 +125,7 @@ export const routeDappRequest = async (
   namespaces: DappNamespaces,
   input: DappRequest,
 ): Promise<unknown> => {
-  const namespaceRequests = namespaces.get(namespace);
-  if (!namespaceRequests) throw unsupportedMethod(namespace, input.method);
+  const namespaceRequests = namespaces[namespace];
 
   const namespaceMethod = namespaceRequests.namespaceMethods.get(input.method);
   if (namespaceMethod) return namespaceMethod(input);

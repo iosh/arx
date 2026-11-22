@@ -1,4 +1,5 @@
-import { type Network, parseChainRef } from "@arx/core/networks";
+import { chainIdFromChainRef } from "@arx/core/namespaces";
+import type { Network } from "@arx/core/networks";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -55,7 +56,7 @@ export function NetworkDeleteDialog({
         <AlertDialogTitle className="wrap-anywhere">{t("deleteNetworkTitle", { name: network.name })}</AlertDialogTitle>
         <AlertDialogDescription className="wrap-anywhere">{description}</AlertDialogDescription>
         <p className="text-sm text-muted-foreground wrap-anywhere">
-          Chain ID · {parseChainRef(network.chainRef).reference}
+          {`Chain ID · ${chainIdFromChainRef(network.chainRef)}`}
         </p>
         <div className="flex gap-3">
           <AlertDialogCancel asChild>

@@ -1,4 +1,3 @@
-import { chainIdFromChainRef } from "@arx/core/namespaces";
 import type { DuplexChannel } from "@arx/message-channel";
 import * as z from "zod/mini";
 import type { DappRequestParams, PageToWalletMessage, ProviderConnection } from "../protocol/messages.js";
@@ -59,7 +58,12 @@ const parseRequestArguments = (input: unknown): ParsedRequestArguments | null =>
   }
 };
 
-const eip1193ChainIdFromChainRef = (chainRef: string): string => `0x${chainIdFromChainRef(chainRef).toString(16)}`;
+const eip1193ChainIdFromChainRef = (chainRef: string): string => {
+  const separatorIndex = chainRef.indexOf(":");
+  const reference = chainRef.slice(separatorIndex + 1);
+  const chainId = BigInt(reference);
+  return `0x${chainId.toString(16)}`;
+};
 
 const accountsEqual = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((account, index) => account === right[index]);

@@ -1,6 +1,6 @@
 import type { KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
-import { type ChainRef, parseChainRef } from "../networks/chainRef.js";
+import { type ChainRef, splitChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { uniqueSortedStrings } from "../utils/array.js";
@@ -18,7 +18,7 @@ import {
   LastVisibleAccountHiddenError,
   PrivateKeyAccountHiddenUnsupportedError,
 } from "./errors.js";
-import { type AccountsNamespaceAdapters, getAccountsNamespaceAdapter } from "./namespaceAdapter.js";
+import type { AccountsNamespaceAdapters } from "./namespaceAdapter.js";
 import {
   type AccountGroupRecord,
   type AccountMemberRecord,
@@ -132,11 +132,11 @@ export class Accounts {
   }
 
   accountIdFromAddress(input: { namespace: Namespace; address: string }): AccountId {
-    return getAccountsNamespaceAdapter(this.#adapters, input.namespace).accountIdFromAddress(input);
+    return this.#adapters[input.namespace].accountIdFromAddress(input);
   }
 
   getAddress(input: { chainRef: ChainRef; accountId: AccountId }): AccountAddress {
-    const { namespace: chainNamespace } = parseChainRef(input.chainRef);
+    const { namespace: chainNamespace } = splitChainRef(input.chainRef);
     const accountNamespace = getAccountIdNamespace(input.accountId);
     if (accountNamespace !== chainNamespace) {
       throw new AccountNamespaceMismatchError({
@@ -145,13 +145,13 @@ export class Accounts {
         expectedNamespace: chainNamespace,
       });
     }
-    const address = getAccountsNamespaceAdapter(this.#adapters, accountNamespace).addressForAccountId(input);
+    const address = this.#adapters[accountNamespace].addressForAccountId(input);
     return { accountId: input.accountId, chainRef: input.chainRef, ...address };
   }
 
   getMemberAddresses(input: { accountId: AccountId }): readonly Address[] {
     const namespace = getAccountIdNamespace(input.accountId);
-    const { displayAddress } = getAccountsNamespaceAdapter(this.#adapters, namespace).addressForAccountId(input);
+    const { displayAddress } = this.#adapters[namespace].addressForAccountId(input);
     return [{ accountId: input.accountId, address: displayAddress, namespace }];
   }
 
@@ -161,8 +161,7 @@ export class Accounts {
   }
 
   listSelectableAddresses(chainRef: ChainRef): readonly AccountAddress[] {
-    const { namespace } = parseChainRef(chainRef);
-    getAccountsNamespaceAdapter(this.#adapters, namespace);
+    const { namespace } = splitChainRef(chainRef);
     return this.listGroupRecords()
       .filter((group) => !group.hidden)
       .flatMap((group) => this.listMemberRecords(group.accountGroupId))
@@ -184,7 +183,6 @@ export class Accounts {
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
   ): AccountGroupUpdate {
     for (const member of members) {
-      getAccountsNamespaceAdapter(this.#adapters, getAccountIdNamespace(member.accountId));
       if (this.#records.has(member.accountId)) throw new AccountAlreadyExistsError(member.accountId);
     }
     return this.prepareGroupUpdate({ ...group, hidden: false }, members, selectAsCurrent || this.#selection === null);

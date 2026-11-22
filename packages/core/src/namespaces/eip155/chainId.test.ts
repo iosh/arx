@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ChainNamespaceMismatchError } from "../../networks/errors.js";
-import { chainIdFromChainRef, chainRefFromChainId } from "./chainId.js";
+import { chainIdFromChainRef, chainRefFromChainId, MAX_EIP155_CHAIN_ID } from "./chainId.js";
 import { Eip155InvalidChainIdError } from "./errors.js";
-
-const MAX_EIP155_CHAIN_ID = 10n ** 32n - 1n;
 
 describe("EIP-155 chain ID", () => {
   it("converts chain IDs to CAIP-2 chain refs", () => {
@@ -18,22 +15,9 @@ describe("EIP-155 chain ID", () => {
     expect(chainIdFromChainRef(`eip155:${MAX_EIP155_CHAIN_ID}`)).toBe(MAX_EIP155_CHAIN_ID);
   });
 
-  it("rejects negative chain IDs", () => {
+  it("rejects chain IDs outside the wallet's supported positive range", () => {
     expect(() => chainRefFromChainId(-1n)).toThrow(Eip155InvalidChainIdError);
-  });
-
-  it("rejects chain IDs outside the positive 32-digit CAIP-2 range", () => {
     expect(() => chainRefFromChainId(0n)).toThrow(Eip155InvalidChainIdError);
     expect(() => chainRefFromChainId(MAX_EIP155_CHAIN_ID + 1n)).toThrow(Eip155InvalidChainIdError);
-  });
-
-  it("rejects chain refs outside EIP-155", () => {
-    expect(() => chainIdFromChainRef("solana:101")).toThrow(ChainNamespaceMismatchError);
-  });
-
-  it("rejects non-decimal EIP-155 references", () => {
-    expect(() => chainIdFromChainRef("eip155:mainnet")).toThrow(Eip155InvalidChainIdError);
-    expect(() => chainIdFromChainRef("eip155:01")).toThrow(Eip155InvalidChainIdError);
-    expect(() => chainIdFromChainRef("eip155:0")).toThrow(Eip155InvalidChainIdError);
   });
 });

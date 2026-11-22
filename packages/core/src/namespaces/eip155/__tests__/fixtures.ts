@@ -48,7 +48,7 @@ export const createAccounts = () =>
 
 export const createNetworks = () =>
   new Networks({
-    adapters: [createEip155NetworksAdapter({ transport: createJsonRpcHttpTransport() })],
+    adapters: { eip155: createEip155NetworksAdapter({ transport: createJsonRpcHttpTransport() }) },
     bootstrap: { customNetworks: [], networkRpcOverrides: [] },
     mutations: createCoreMutationQueue({ commit: async () => {} }),
     publishChanged: () => {},

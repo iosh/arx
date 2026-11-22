@@ -1,11 +1,7 @@
 import type { ChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
-import {
-  getTransactionsNamespaceAdapter,
-  type TerminalTransactionChange,
-  type TransactionsNamespaceAdapters,
-} from "./namespaceAdapter.js";
+import type { TerminalTransactionChange, TransactionsNamespaceAdapters } from "./namespaceAdapter.js";
 import { type PendingTransactionRecord, type TransactionRecord, transactionWrites } from "./persistence.js";
 import type { TransactionsChanged } from "./Transactions.js";
 import type { TransactionId } from "./types.js";
@@ -112,7 +108,7 @@ export class TransactionMonitor {
         const recoveryTransactionIds = monitoredRecords
           .filter(({ needsRecovery }) => needsRecovery)
           .map(({ record }) => record.transactionId);
-        const adapter = getTransactionsNamespaceAdapter(this.#adapters, representativeRecord.namespace);
+        const adapter = this.#adapters[representativeRecord.namespace];
         const inspection =
           recoveryTransactionIds.length === 0
             ? await adapter.inspectPending(records)

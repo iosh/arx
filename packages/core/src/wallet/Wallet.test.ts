@@ -692,7 +692,7 @@ describe("WalletCoordinator", () => {
     const { accounts, commits, wallet } = createHarness();
     const first = await initializeWallet(wallet);
     const commitCount = commits.length;
-    const input = { privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE };
+    const input = { privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE } as const;
     const [imported, duplicate] = await Promise.all([wallet.importPrivateKey(input), wallet.importPrivateKey(input)]);
     assert(imported.status === "added");
     expect(duplicate).toMatchObject({ status: "duplicate", account: { accountGroupId: imported.accountGroupId } });

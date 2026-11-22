@@ -5,7 +5,7 @@ import { createDappConnections, EIP155_ACCOUNT_A, selection } from "./__tests__/
 describe("DappConnections selections", () => {
   it("activates standalone changes only after a successful commit", async () => {
     const initial = selection("https://dapp.example", "eip155", "eip155:1");
-    const next = { ...initial, chainRef: "eip155:10" };
+    const next = { ...initial, chainRef: "eip155:10" } as const;
     const scope = { origin: initial.origin, namespace: initial.namespace };
     const { dappConnections, commits, setCommitFailure, stateChanges } = createDappConnections({
       networkSelections: [initial],

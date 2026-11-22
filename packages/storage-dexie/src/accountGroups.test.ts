@@ -83,7 +83,7 @@ describe("CoreRuntime persistence", () => {
     const first = await wallet.accounts.getGroup(created.accountGroupId);
     const second = await wallet.accounts.create({ keySourceId: created.keySourceId });
     assert(second.status === "created");
-    const scope = { origin: "https://hidden-accounts.example", namespace: "eip155" };
+    const scope = { origin: "https://hidden-accounts.example", namespace: "eip155" } as const;
     await wallet.permissions.setAccounts({ ...scope, accountIds: [first.members[0].accountId] });
 
     await wallet.accounts.setHidden({ accountGroupId: first.accountGroupId, hidden: true });
@@ -114,7 +114,7 @@ describe("CoreRuntime persistence", () => {
   it("restores a site's selected chain without restoring revoked account access", async () => {
     const databaseName = `arx-account-group-runtime-${nextDatabaseId++}`;
     const { runtime, persistence } = await openRuntime(databaseName);
-    const scope = { origin: "https://network-context.example", namespace: "eip155" };
+    const scope = { origin: "https://network-context.example", namespace: "eip155" } as const;
     const created = await runtime.wallet.createFromMnemonic({
       password: "password",
       mnemonic: MNEMONIC,

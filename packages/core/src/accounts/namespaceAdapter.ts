@@ -1,6 +1,5 @@
 import type { Namespace } from "../namespaces/types.js";
 import type { AccountId } from "./accountId.js";
-import { AccountNamespaceUnsupportedError } from "./errors.js";
 
 export type AccountsNamespaceAdapter = Readonly<{
   namespace: Namespace;
@@ -11,13 +10,4 @@ export type AccountsNamespaceAdapter = Readonly<{
   }>;
 }>;
 
-export type AccountsNamespaceAdapters = Readonly<Record<Namespace, AccountsNamespaceAdapter | undefined>>;
-
-export const getAccountsNamespaceAdapter = (
-  adapters: AccountsNamespaceAdapters,
-  namespace: Namespace,
-): AccountsNamespaceAdapter => {
-  const adapter = adapters[namespace];
-  if (!adapter) throw new AccountNamespaceUnsupportedError(namespace);
-  return adapter;
-};
+export type AccountsNamespaceAdapters = Readonly<Record<Namespace, AccountsNamespaceAdapter>>;

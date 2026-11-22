@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 
+import type { ChainRef } from "@arx/core/networks";
 import {
   type AccountGroupRecord,
   type AccountMemberRecord,
@@ -37,7 +38,7 @@ const transaction = (
     accountId = ACCOUNT_A,
     status = "pending",
   }: {
-    chainRef?: string;
+    chainRef?: ChainRef;
     accountId?: typeof ACCOUNT_A | typeof ACCOUNT_B;
     status?: "pending" | "confirmed";
   } = {},
@@ -151,7 +152,7 @@ describe("Dexie persistence boundary", () => {
       namespace: "eip155",
       chainRef: "eip155:10",
     };
-    const second = { ...first, origin: "https://second.example", chainRef: "eip155:1" };
+    const second = { ...first, origin: "https://second.example", chainRef: "eip155:1" } as const;
 
     await persistence.writer.commit([first, second].map(persistenceTypes.dappNetworkSelection.put));
     expect(await persistence.readers.dappNetworkSelections.listAll()).toEqual(expect.arrayContaining([first, second]));

@@ -18,7 +18,6 @@ export {
   NetworkBlockExplorerExistsError,
   NetworkConfigurationChangedError,
   NetworkHasPendingTransactionsError,
-  NetworkNamespaceUnsupportedError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,

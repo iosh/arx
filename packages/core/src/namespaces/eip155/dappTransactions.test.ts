@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { Approvals } from "../../approvals/Approvals.js";
 import type { SendTransactionApproval } from "../../approvals/types.js";
+import { createChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import { routeDappRequest } from "../../dappConnections/routeDappRequest.js";
 import { Permissions } from "../../permissions/Permissions.js";
 import type { Transactions } from "../../transactions/Transactions.js";
-import { ACCOUNT_ID, ADDRESS, createAccounts } from "./__tests__/fixtures.js";
+import { ACCOUNT_ID, ADDRESS, createAccounts, createNetworks } from "./__tests__/fixtures.js";
 import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
 import { decodeSendTransactionParams } from "./transactionRequest.js";
 
@@ -61,12 +63,17 @@ const createHarness = () => {
     transactions: { prepare, submit },
   });
 
+  const chainJsonRpc = createChainJsonRpc({ endpoints: createNetworks() });
+  const namespaceRequests = {
+    namespaceMethods: new Map([["eth_sendTransaction", sendTransaction]]),
+    nodeReadMethods: new Set<string>(),
+  };
   const request = (params: unknown) =>
-    sendTransaction({
-      origin: ORIGIN,
-      chainRef: CHAIN_REF,
-      method: "eth_sendTransaction",
-      params,
+    routeDappRequest({
+      namespace: "eip155",
+      namespaceRequests,
+      chainJsonRpc,
+      request: { origin: ORIGIN, chainRef: CHAIN_REF, method: "eth_sendTransaction", params },
     });
   const nextApproval = async (): Promise<SendTransactionApproval> => {
     await vi.waitFor(() => expect(approvals.list()).toHaveLength(1));

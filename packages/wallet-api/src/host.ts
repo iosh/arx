@@ -57,6 +57,7 @@ const serializeError = (error: unknown): SerializedWalletApiError => {
     };
   }
 
+  console.error("Unexpected wallet API error.", error);
   return { code: INTERNAL_ERROR_CODE, message: INTERNAL_ERROR_MESSAGE };
 };
 
@@ -111,7 +112,8 @@ class WalletHostState implements WalletHost {
 
     try {
       channel.send(message);
-    } catch {
+    } catch (error) {
+      console.error("Failed to send a wallet API message.", error);
       this.#detach(channel);
     }
   }

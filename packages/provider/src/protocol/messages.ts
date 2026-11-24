@@ -14,7 +14,6 @@ export type ProviderConnection = Readonly<{
 }>;
 
 export const DAPP_ERROR_KINDS = [
-  "invalid_request",
   "invalid_params",
   "unauthorized",
   "user_rejected",

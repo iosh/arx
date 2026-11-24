@@ -1,9 +1,7 @@
 import { isArxBaseError } from "@arx/core";
 import {
   RpcChainUnavailableError,
-  RpcInternalError,
   RpcInvalidParamsError,
-  RpcInvalidRequestError,
   RpcJsonRpcResponseError,
   RpcOutcomeUnknownError,
   RpcUnauthorizedError,
@@ -58,7 +56,6 @@ const DISCONNECTED_ERROR = {
 } as const satisfies SerializedDappError;
 
 const DAPP_ERROR_KINDS_BY_CORE_CODE: Readonly<Record<string, Exclude<DappErrorKind, "json_rpc_response">>> = {
-  [RpcInvalidRequestError.code]: "invalid_request",
   [RpcInvalidParamsError.code]: "invalid_params",
   [RpcUserRejectedRequestError.code]: "user_rejected",
   [RpcUnauthorizedError.code]: "unauthorized",
@@ -76,30 +73,25 @@ const toProviderConnection = (state: DappConnectionState): ProviderConnection =>
 });
 
 const serializeDappError = (error: unknown): SerializedDappError => {
-  if (!isArxBaseError(error)) {
-    return INTERNAL_ERROR;
+  if (isArxBaseError(error)) {
+    if (error.code === RpcJsonRpcResponseError.code) {
+      const jsonRpcError = error as RpcJsonRpcResponseError;
+      return {
+        kind: "json_rpc_response",
+        message: jsonRpcError.message,
+        data: {
+          code: jsonRpcError.rpcCode,
+          ...(jsonRpcError.rpcData === undefined ? {} : { data: jsonRpcError.rpcData }),
+        },
+      };
+    }
+
+    const kind = DAPP_ERROR_KINDS_BY_CORE_CODE[error.code];
+    if (kind) return { kind, message: error.message };
   }
 
-  if (error.code === RpcJsonRpcResponseError.code) {
-    const jsonRpcError = error as RpcJsonRpcResponseError;
-    return {
-      kind: "json_rpc_response",
-      message: jsonRpcError.message,
-      data: {
-        code: jsonRpcError.rpcCode,
-        ...(jsonRpcError.rpcData === undefined ? {} : { data: jsonRpcError.rpcData }),
-      },
-    };
-  }
-
-  if (error.code === RpcInternalError.code) return INTERNAL_ERROR;
-
-  const kind = DAPP_ERROR_KINDS_BY_CORE_CODE[error.code];
-  if (!kind) {
-    return INTERNAL_ERROR;
-  }
-
-  return { kind, message: error.message };
+  console.error("Unexpected dapp request error.", error);
+  return INTERNAL_ERROR;
 };
 
 class DappTransportHostState implements DappTransportHost {
@@ -270,7 +262,8 @@ class DappTransportHostState implements DappTransportHost {
 
     try {
       channel.send(message);
-    } catch {
+    } catch (error) {
+      console.error("Failed to send a dapp message.", error);
       this.#detach(channel, attached);
     }
   }

@@ -19,7 +19,7 @@
     "./chain-json-rpc": "./src/chainJsonRpc/index.ts",
     "./namespaces": "./src/namespaces/index.ts",
     "./permissions": "./src/permissions/index.ts",
-    "./rpc": "./src/rpc/index.ts",
+    "./rpc": "./src/dappConnections/errors.ts",
     "./runtime": "./src/runtime/index.ts",
     "./settings": "./src/settings/index.ts",
     "./transactions/eip155": "./src/transactions/eip155/index.ts",

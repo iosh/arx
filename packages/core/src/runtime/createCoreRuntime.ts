@@ -10,6 +10,7 @@ import {
   DappConnections,
 } from "../dappConnections/DappConnections.js";
 import type { DappConnectionScopeInput, DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
+import { RpcUnsupportedMethodError } from "../dappConnections/errors.js";
 import type { DappConnectionScope } from "../dappConnections/persistence.js";
 import { type DappNamespaces, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { Keyring } from "../keyring/Keyring.js";
@@ -30,7 +31,6 @@ import { createCustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
-import { RpcUnsupportedMethodError } from "../rpc/errors.js";
 import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
 import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAdapter.js";
 import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
@@ -236,11 +236,16 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     request: async ({ scope: inputScope, method, params }) => {
       const scope = parseDappConnectionScope(inputScope);
       const { chainRef } = getConnectionState(scope);
-      return routeDappRequest(scope.namespace, dappNamespaces, {
-        origin: scope.origin,
-        chainRef,
-        method,
-        ...(params !== undefined ? { params } : {}),
+      return routeDappRequest({
+        namespace: scope.namespace,
+        namespaceRequests: dappNamespaces[scope.namespace],
+        chainJsonRpc,
+        request: {
+          origin: scope.origin,
+          chainRef,
+          method,
+          ...(params !== undefined ? { params } : {}),
+        },
       });
     },
     subscribeStateChanged: (listener) => {

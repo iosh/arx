@@ -59,15 +59,14 @@ const createHarness = () => {
       method,
       params,
     });
-  const approval = async <TType extends "switchNetwork" | "addNetwork">(type: TType) => {
+  const nextApproval = async <TType extends "switchNetwork" | "addNetwork">(type: TType) => {
     await vi.waitFor(() => expect(approvals.list()).toHaveLength(1));
     const approval = approvals.list()[0];
     if (approval?.type !== type) throw new Error(`Expected a ${type} approval.`);
-    approvals.approve({ approvalId: approval.approvalId, type });
     return approval as Extract<SwitchNetworkApproval | AddNetworkApproval, { type: TType }>;
   };
 
-  return { approvals, addCustom, selectNetwork, request, approval };
+  return { approvals, addCustom, selectNetwork, request, nextApproval };
 };
 
 describe("EIP-155 dapp networks", () => {
@@ -81,8 +80,9 @@ describe("EIP-155 dapp networks", () => {
     expect(harness.approvals.list()).toEqual([]);
 
     const pending = harness.request("wallet_switchEthereumChain", [{ chainId: "0xa" }]);
-    const approval = await harness.approval("switchNetwork");
+    const approval = await harness.nextApproval("switchNetwork");
     expect(approval.request).toEqual({ currentNetwork: ETHEREUM, targetNetwork: OPTIMISM });
+    harness.approvals.approve({ approvalId: approval.approvalId, type: "switchNetwork" });
     await expect(pending).resolves.toBeNull();
     expect(harness.selectNetwork).toHaveBeenCalledWith({
       origin: ORIGIN,
@@ -104,9 +104,10 @@ describe("EIP-155 dapp networks", () => {
     expect(harness.approvals.list()).toEqual([]);
 
     const pending = harness.request("wallet_addEthereumChain", [BASE_REQUEST]);
-    const approval = await harness.approval("addNetwork");
+    const approval = await harness.nextApproval("addNetwork");
     expect(harness.addCustom).not.toHaveBeenCalled();
     expect(approval.request.definition.chainRef).toBe("eip155:8453");
+    harness.approvals.approve({ approvalId: approval.approvalId, type: "addNetwork" });
 
     await expect(pending).resolves.toBeNull();
     expect(harness.addCustom).toHaveBeenCalledWith(approval.request);

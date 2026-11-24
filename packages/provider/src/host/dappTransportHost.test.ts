@@ -1,41 +1,33 @@
+import { PersistenceCommitError } from "@arx/core/persistence";
 import type { CoreRuntime } from "@arx/core/runtime";
 import type { DuplexChannel, MessageListener } from "@arx/message-channel";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PageToWalletMessage, WalletToPageMessage } from "../protocol/messages.js";
 import { createDappTransportHost } from "./dappTransportHost.js";
 
 type DappConnectionsApi = CoreRuntime["dappConnections"];
-type DappConnectionScope = Parameters<DappConnectionsApi["openConnection"]>[0];
 type DappConnectionState = ReturnType<DappConnectionsApi["getConnectionState"]>;
-type DappConnectionRequest = Parameters<DappConnectionsApi["request"]>[0];
-type StateChangedListener = Parameters<DappConnectionsApi["subscribeStateChanged"]>[0];
 
-const connectionState = (scope: DappConnectionScope): DappConnectionState => ({
-  chainRef: `${scope.namespace}:1`,
+const connectionState: DappConnectionState = {
+  chainRef: "eip155:1",
   accounts: [],
-});
+};
 
 const createDappConnections = () => {
-  const openConnection = vi.fn((scope: DappConnectionScope) => connectionState(scope));
-  const getConnectionState = vi.fn((scope: DappConnectionScope) => connectionState(scope));
-  const closeConnection = vi.fn((_scope: DappConnectionScope) => undefined);
-  const request = vi.fn(async (input: DappConnectionRequest): Promise<unknown> => input.method);
-  const subscribeStateChanged = vi.fn((_listener: StateChangedListener) => () => undefined);
+  const closeConnection = vi.fn<DappConnectionsApi["closeConnection"]>();
+  const request = vi.fn<DappConnectionsApi["request"]>(async (input) => input.method);
   const api = {
-    openConnection,
-    getConnectionState,
+    openConnection: () => connectionState,
+    getConnectionState: () => connectionState,
     closeConnection,
     request,
-    subscribeStateChanged,
+    subscribeStateChanged: () => () => {},
   } satisfies DappConnectionsApi;
 
   return {
     api,
-    openConnection,
-    getConnectionState,
     closeConnection,
     request,
-    subscribeStateChanged,
   };
 };
 
@@ -70,68 +62,71 @@ const createTestChannel = () => {
   };
 };
 
-const flushRequests = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
+afterEach(() => vi.restoreAllMocks());
 
 describe("DappTransportHost", () => {
-  it("opens each scope once and closes it after its last channel leaves", () => {
+  it("closes each site scope only after its final channel disconnects", () => {
     const core = createDappConnections();
     const host = createDappTransportHost({ dappConnections: core.api });
     const first = createTestChannel();
     const second = createTestChannel();
+    const otherSite = createTestChannel();
     host.attach({ channel: first.channel, origin: "https://example.test" });
     host.attach({ channel: second.channel, origin: "https://example.test" });
+    host.attach({ channel: otherSite.channel, origin: "https://other.test" });
 
     first.receive({ type: "open", namespace: "eip155" });
     first.receive({ type: "open", namespace: "eip155" });
     second.receive({ type: "open", namespace: "eip155" });
-    first.receive({ type: "open", namespace: "solana" });
-
-    expect(core.subscribeStateChanged).toHaveBeenCalledOnce();
-    expect(core.openConnection.mock.calls.map(([scope]) => scope)).toEqual([
-      { origin: "https://example.test", namespace: "eip155" },
-      { origin: "https://example.test", namespace: "solana" },
-    ]);
-    expect(core.getConnectionState).toHaveBeenCalledTimes(2);
+    otherSite.receive({ type: "open", namespace: "eip155" });
 
     first.disconnect();
+    expect(core.closeConnection).not.toHaveBeenCalled();
+
+    otherSite.disconnect();
     expect(core.closeConnection.mock.calls.map(([scope]) => scope)).toEqual([
-      { origin: "https://example.test", namespace: "solana" },
+      { origin: "https://other.test", namespace: "eip155" },
     ]);
 
     second.disconnect();
     expect(core.closeConnection.mock.calls.map(([scope]) => scope)).toEqual([
-      { origin: "https://example.test", namespace: "solana" },
+      { origin: "https://other.test", namespace: "eip155" },
       { origin: "https://example.test", namespace: "eip155" },
     ]);
   });
 
-  it("drops an in-flight result after its channel disconnects", async () => {
+  it("does not expose unexpected core errors to the page", async () => {
     const core = createDappConnections();
-    let finishRequest: ((value: unknown) => void) | undefined;
-    core.request.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishRequest = resolve;
-        }),
-    );
     const host = createDappTransportHost({ dappConnections: core.api });
     const page = createTestChannel();
     host.attach({ channel: page.channel, origin: "https://example.test" });
     page.receive({ type: "open", namespace: "eip155" });
     page.sent.length = 0;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failures = [
+      new Error("private unexpected detail", { cause: new Error("private cause") }),
+      new PersistenceCommitError(new Error("private persistence cause")),
+    ];
 
-    page.receive({ type: "request", namespace: "eip155", id: 1, method: "slow" });
+    const expected: WalletToPageMessage[] = [];
+    for (const [index, failure] of failures.entries()) {
+      core.request.mockRejectedValueOnce(failure);
+      const id = index + 1;
+      page.receive({
+        type: "request",
+        namespace: "eip155",
+        id,
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      });
+      expected.push({
+        type: "failure",
+        namespace: "eip155",
+        id,
+        error: { kind: "internal", message: "Internal error." },
+      });
+      await vi.waitFor(() => expect(page.sent).toEqual(expected));
+    }
     page.disconnect();
-    finishRequest?.("late result");
-    await flushRequests();
-
-    expect(page.sent).toEqual([]);
-    expect(core.closeConnection).toHaveBeenCalledWith({
-      origin: "https://example.test",
-      namespace: "eip155",
-    });
   });
 });

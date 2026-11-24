@@ -1,7 +1,7 @@
 import { Hex, Solidity, TypedData } from "ox";
 import { z } from "zod";
-import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
-import { RpcInvalidParamsError } from "../../rpc/errors.js";
+import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
+import { RpcInvalidParamsError } from "../../dappConnections/errors.js";
 import * as EvmAddress from "./address.js";
 import type { Eip155TypedData, Eip155TypedDataField, Eip155TypedDataValue } from "./signingRequest.js";
 

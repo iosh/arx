@@ -1,8 +1,8 @@
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { AccountAddress } from "../../accounts/types.js";
+import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
-import { RpcUnauthorizedError } from "../../rpc/errors.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
 type AuthorizedAccountDependencies = Readonly<{

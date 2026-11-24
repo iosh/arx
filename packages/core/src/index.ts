@@ -1,12 +1,12 @@
 export * from "./accounts/index.js";
 export * from "./assets/index.js";
 export * from "./chains/index.js";
+export * from "./dappConnections/errors.js";
 export type { ArxErrorDetails, JsonValue } from "./errors.js";
 export { ArxBaseError, isArxBaseError } from "./errors.js";
 export * from "./namespaces/index.js";
 export * from "./networks/index.js";
 export * from "./permissions/index.js";
-export * from "./rpc/index.js";
 export * from "./runtime/index.js";
 export * from "./vault/index.js";
 export * from "./wallet/index.js";

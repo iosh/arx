@@ -1,5 +1,5 @@
 import { Hex } from "ox";
-import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
+import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import { chainRefFromChainId } from "./chainId.js";
 import { Eip155InvalidChainIdError } from "./errors.js";

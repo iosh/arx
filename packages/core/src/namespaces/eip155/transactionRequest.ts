@@ -1,7 +1,7 @@
 import { Address, Hex } from "ox";
 import type { AccessList } from "ox/AccessList";
 import { z } from "zod";
-import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
+import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type * as Eip155 from "../../transactions/eip155/types.js";
 import { decodeChainId, decodeHexBytes, decodeHexNumber } from "./rpcHex.js";

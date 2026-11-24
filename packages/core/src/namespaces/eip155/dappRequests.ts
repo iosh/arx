@@ -6,19 +6,18 @@ import {
   AccountNotFoundError,
 } from "../../accounts/errors.js";
 import type { Approvals } from "../../approvals/Approvals.js";
-import { isApprovalDecisionError } from "../../approvals/errors.js";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
-import type { JsonRpcParams } from "../../chainJsonRpc/types.js";
 import type { DappConnections } from "../../dappConnections/DappConnections.js";
+import { decodeNoParams, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
+import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
 import type { DappConnectionScope } from "../../dappConnections/persistence.js";
-import { type DappNamespace, decodeNoParams, defineDappMethod } from "../../dappConnections/routeDappRequest.js";
+import type { DappNamespace } from "../../dappConnections/routeDappRequest.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { Networks } from "../../networks/Networks.js";
 import type { DappAuthorization } from "../../permissions/createDappAuthorization.js";
 import { buildEip2255Permissions } from "../../permissions/eip2255.js";
 import { PermissionAccountAccessUnavailableError } from "../../permissions/errors.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
-import { RpcUnauthorizedError, RpcUserRejectedRequestError } from "../../rpc/errors.js";
 import type { Transactions } from "../../transactions/Transactions.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
@@ -115,7 +114,6 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
     try {
       await options.dappAuthorization.requestAccountAccess({ scope, chainRef });
     } catch (error) {
-      if (isApprovalDecisionError(error)) throw new RpcUserRejectedRequestError();
       if (isAccountAccessUnavailable(error)) throw new RpcUnauthorizedError();
       throw error;
     }
@@ -213,12 +211,5 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       ["wallet_addEthereumChain", networkHandlers.addEthereumChain],
     ]),
     nodeReadMethods: EIP155_NODE_READ_METHODS,
-    forwardNodeRead: ({ chainRef, method, params }) =>
-      options.chainJsonRpc.request({
-        chainRef,
-        method,
-        ...(params !== undefined ? { params: params as JsonRpcParams } : {}),
-        replay: "allowed",
-      }),
   };
 };

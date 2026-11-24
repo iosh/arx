@@ -1,5 +1,5 @@
 import { Hex, PersonalMessage } from "ox";
-import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
+import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import * as EvmAddress from "./address.js";
 import type { Eip155PersonalMessage } from "./signingRequest.js";
 

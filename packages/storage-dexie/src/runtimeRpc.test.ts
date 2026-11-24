@@ -23,6 +23,19 @@ afterEach(async () => {
 });
 
 describe("CoreRuntime EIP-155 RPC", () => {
+  it("reports an uncertain raw broadcast without replaying it", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetch);
+    const { runtime } = await open();
+    const scope = { origin: "https://rpc.example", namespace: "eip155" } as const;
+    runtime.dappConnections.openConnection(scope);
+
+    await expect(
+      runtime.dappConnections.request({ scope, method: "eth_sendRawTransaction", params: ["0x01"] }),
+    ).rejects.toMatchObject({ code: "global.rpc.outcome_unknown" });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("persists network edits and removes RPC overrides and site references across runtime reloads", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (endpoint, init) => {
       const request = JSON.parse((init as RequestInit).body as string) as { id: number; method: string };

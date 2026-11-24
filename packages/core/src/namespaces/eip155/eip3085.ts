@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invalidDappParams } from "../../dappConnections/routeDappRequest.js";
+import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import type { CustomNetworkInput, NonEmptyRpcEndpoints } from "../../networks/types.js";
 import { decodeChainId } from "./rpcHex.js";
 

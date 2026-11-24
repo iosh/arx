@@ -19,7 +19,6 @@ export class ProviderRpcError extends Error {
 }
 
 const ERROR_CODE_BY_KIND: Readonly<Record<Exclude<DappErrorKind, "json_rpc_response">, number>> = {
-  invalid_request: -32600,
   invalid_params: -32602,
   internal: -32603,
   outcome_unknown: -32603,

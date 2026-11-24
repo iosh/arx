@@ -5,21 +5,6 @@ export type RpcErrorInput = {
   details?: JsonObject | undefined;
 };
 
-type RpcInternalErrorInput = RpcErrorInput & {
-  cause?: unknown;
-};
-
-export class RpcInvalidRequestError extends ArxBaseError {
-  static readonly code = "global.rpc.invalid_request";
-
-  constructor(input: RpcErrorInput = {}) {
-    super(input.message ?? "Invalid request.", {
-      code: RpcInvalidRequestError.code,
-      details: input.details,
-    });
-  }
-}
-
 export class RpcInvalidParamsError extends ArxBaseError {
   static readonly code = "global.rpc.invalid_params";
 
@@ -114,17 +99,5 @@ export class RpcJsonRpcResponseError extends ArxBaseError {
     });
     this.rpcCode = input.rpcCode;
     if (rpcData !== undefined) this.rpcData = rpcData;
-  }
-}
-
-export class RpcInternalError extends ArxBaseError {
-  static readonly code = "global.rpc.internal";
-
-  constructor(input: RpcInternalErrorInput = {}) {
-    super(input.message ?? "Internal error.", {
-      code: RpcInternalError.code,
-      details: input.details,
-      cause: input.cause,
-    });
   }
 }

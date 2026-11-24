@@ -1,16 +1,10 @@
 import { Hex, Signature } from "ox";
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { Approvals } from "../../approvals/Approvals.js";
-import { isApprovalDecisionError } from "../../approvals/errors.js";
-import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/routeDappRequest.js";
+import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
+import { RpcInvalidParamsError, RpcUnauthorizedError } from "../../dappConnections/errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
-import {
-  RpcInternalError,
-  RpcInvalidParamsError,
-  RpcUnauthorizedError,
-  RpcUserRejectedRequestError,
-} from "../../rpc/errors.js";
 import { type Eip155AccountSigning, isAccountSigningUnavailableError } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
@@ -59,12 +53,7 @@ export const createEip155DappSigningHandlers = (
       request,
     });
 
-    try {
-      await approval.decision;
-    } catch (error) {
-      if (isApprovalDecisionError(error)) throw new RpcUserRejectedRequestError({ message: error.message });
-      throw error;
-    }
+    await approval.decision;
 
     getAuthorizedAccount(options, input);
 
@@ -80,7 +69,7 @@ export const createEip155DappSigningHandlers = (
       });
     } catch (error) {
       if (isAccountSigningUnavailableError(error)) throw new RpcUnauthorizedError();
-      throw new RpcInternalError({ message: "Unable to sign the EIP-155 request.", cause: error });
+      throw error;
     }
   };
 

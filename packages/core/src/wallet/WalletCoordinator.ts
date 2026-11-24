@@ -1,21 +1,22 @@
-import { type AccountGroupUpdate, type Accounts, accountsChangedFromUpdate } from "../accounts/Accounts.js";
+import type { Accounts } from "../accounts/Accounts.js";
 import type { AccountGroupId } from "../accounts/accountGroupId.js";
 import type { AccountId } from "../accounts/accountId.js";
 import { AccountAlreadyExistsError, AccountNotFoundError } from "../accounts/errors.js";
 import type { AccountMemberRecord } from "../accounts/persistence.js";
-import type { AccountGroup, AccountsChanged } from "../accounts/types.js";
+import type { AccountGroup } from "../accounts/types.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { DappConnections } from "../dappConnections/DappConnections.js";
 import { importBip39KeySourceSecret } from "../keyring/bip39.js";
 import { KeySourceNotFoundError, KeySourceTypeMismatchError } from "../keyring/errors.js";
-import type { Keyring, KeyringUpdate } from "../keyring/Keyring.js";
+import type { Keyring } from "../keyring/Keyring.js";
 import type { HdKeyringRecord } from "../keyring/persistence.js";
 import type { Bip39KeySourceSecret, PrivateKeySourceSecret } from "../keyring/secrets.js";
-import type { BackupStatus, KeyringChanged, KeySourceId } from "../keyring/types.js";
+import type { BackupStatus, KeySourceId } from "../keyring/types.js";
 import type { Namespace } from "../namespaces/types.js";
-import { type Permissions, type PermissionsChanged, permissionsChangedFromUpdate } from "../permissions/Permissions.js";
+import type { Permissions } from "../permissions/Permissions.js";
 import type { PersistenceWriter } from "../persistence/corePersistence.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import { commitUpdates, type PreparedUpdate } from "../persistence/preparedUpdate.js";
 import type { CoreTime } from "../runtime/time.js";
 import { AUTO_LOCK_SETTING_KEY, settingWrites } from "../settings/persistence.js";
 import {
@@ -49,14 +50,11 @@ type WalletCoordinatorOptions = Readonly<{
   time: CoreTime;
   keyring: Keyring;
   accounts: Accounts;
-  permissions: Pick<Permissions, "prepareRemoveAccountReferences" | "applyCommittedUpdate">;
+  permissions: Pick<Permissions, "prepareRemoveAccountReferences">;
   approvals: Pick<Approvals, "cancelByAccounts" | "cancelAll">;
   dappConnections: Pick<DappConnections, "refreshAccountsForOpenConnections">;
   autoLock: AutoLockController;
   publishStatusChanged(change: WalletStatusChanged): void;
-  publishKeyringChanged(change: KeyringChanged): void;
-  publishAccountsChanged(change: AccountsChanged): void;
-  publishPermissionsChanged(change: PermissionsChanged): void;
 }>;
 
 /** Coordinates wallet session and identity mutations across their owning modules. */
@@ -71,9 +69,6 @@ export class WalletCoordinator {
   readonly #dappConnections: WalletCoordinatorOptions["dappConnections"];
   readonly #autoLock: AutoLockController;
   readonly #publishStatusChanged: WalletCoordinatorOptions["publishStatusChanged"];
-  readonly #publishKeyringChanged: WalletCoordinatorOptions["publishKeyringChanged"];
-  readonly #publishAccountsChanged: WalletCoordinatorOptions["publishAccountsChanged"];
-  readonly #publishPermissionsChanged: WalletCoordinatorOptions["publishPermissionsChanged"];
 
   constructor(options: WalletCoordinatorOptions) {
     this.#mutations = options.mutations;
@@ -86,9 +81,6 @@ export class WalletCoordinator {
     this.#dappConnections = options.dappConnections;
     this.#autoLock = options.autoLock;
     this.#publishStatusChanged = options.publishStatusChanged;
-    this.#publishKeyringChanged = options.publishKeyringChanged;
-    this.#publishAccountsChanged = options.publishAccountsChanged;
-    this.#publishPermissionsChanged = options.publishPermissionsChanged;
   }
 
   getStatus(): WalletStatus {
@@ -119,7 +111,7 @@ export class WalletCoordinator {
         privateKey: secret.privateKey,
       });
       const createdAt = this.#time.now();
-      const accountsUpdate = this.#accounts.prepareAddGroup(
+      const accountCreation = this.#accounts.prepareAddGroup(
         { accountGroupId, source: { type: "private-key", keySourceId }, createdAt },
         [{ accountId, origin: { type: "private-key", keySourceId } }],
       );
@@ -129,8 +121,8 @@ export class WalletCoordinator {
         createdAt,
         password: params.password,
       });
-      await commit([...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges]);
-      this.activateInitializedWallet(keyringUpdate, accountsUpdate);
+      await commitUpdates(commit, [keyringUpdate, accountCreation.update]);
+      this.startUnlockedSession();
       return { status: "initialized", keySourceId, accountGroupId };
     });
   }
@@ -143,9 +135,7 @@ export class WalletCoordinator {
       if (unlocked === null) return false;
 
       unlocked.activate();
-      this.startAutoLock();
-      this.#dappConnections.refreshAccountsForOpenConnections();
-      this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
+      this.startUnlockedSession();
       return true;
     });
   }
@@ -161,8 +151,7 @@ export class WalletCoordinator {
       this.assertUnlocked();
       const update = await this.#keyring.prepareChangePassword(params);
       this.assertUnlocked();
-      await commit(update.persistenceChanges);
-      update.activate();
+      await commitUpdates(commit, [update]);
       this.lockIfExpired();
     });
   }
@@ -207,12 +196,12 @@ export class WalletCoordinator {
         createdAt,
       });
       const accountGroupId = crypto.randomUUID();
-      const accountsUpdate = this.#accounts.prepareAddGroup(
+      const accountCreation = this.#accounts.prepareAddGroup(
         { accountGroupId, source: { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 }, createdAt },
         this.buildFirstHdMembers(addition.hdKeyrings, derivedIds),
         { selectAsCurrent: true },
       );
-      await this.commitKeyringAndAccounts(commit, addition, accountsUpdate);
+      await this.commitKeyringAndAccounts(commit, addition.update, accountCreation.update);
       return { status: "added", keySourceId: addition.keySourceId, accountGroupId };
     });
   }
@@ -239,13 +228,13 @@ export class WalletCoordinator {
         createdAt: this.#time.now(),
         removePrivateKeySourceId: privateKeySourceId,
       });
-      const accountsUpdate = this.#accounts.prepareMoveGroup(
+      const accountMove = this.#accounts.prepareMoveGroup(
         group.accountGroupId,
         { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 },
         this.buildFirstHdMembers(addition.hdKeyrings, derivedIds),
         { selectAsCurrent: true },
       );
-      await this.commitKeyringAndAccounts(commit, addition, accountsUpdate);
+      await this.commitKeyringAndAccounts(commit, addition.update, accountMove.update);
       return { keySourceId: addition.keySourceId, accountGroupId: group.accountGroupId };
     });
   }
@@ -263,7 +252,7 @@ export class WalletCoordinator {
       if (existingGroup) return { status: "duplicate", account: existingGroup };
       const createdAt = this.#time.now();
       const accountGroupId = crypto.randomUUID();
-      const accountsUpdate = this.#accounts.prepareAddGroup(
+      const accountCreation = this.#accounts.prepareAddGroup(
         { accountGroupId, source: { type: "private-key", keySourceId }, createdAt },
         [{ accountId, origin: { type: "private-key", keySourceId } }],
         { selectAsCurrent: true },
@@ -273,7 +262,7 @@ export class WalletCoordinator {
         namespace: params.namespace,
         createdAt,
       });
-      await this.commitKeyringAndAccounts(commit, keyringUpdate, accountsUpdate);
+      await this.commitKeyringAndAccounts(commit, keyringUpdate, accountCreation.update);
       return { status: "added", keySourceId, accountGroupId };
     });
   }
@@ -284,26 +273,16 @@ export class WalletCoordinator {
       const source = this.#keyring.getKeySource(params.keySourceId);
       if (!source) throw new KeySourceNotFoundError(params.keySourceId);
       if (this.#keyring.listKeySources().length === 1) throw new WalletLastKeySourceRemovalError();
-      const accountsUpdate = this.#accounts.prepareRemoveSourceGroups(params.keySourceId);
-      const removedAccountIds = accountsUpdate?.removedAccountIds ?? [];
+      const accountsRemoval = this.#accounts.prepareRemoveSourceGroups(params.keySourceId);
+      const removedAccountIds = accountsRemoval.removedAccountIds;
       const permissionsUpdate = this.#permissions.prepareRemoveAccountReferences(removedAccountIds);
       const keyringUpdate = await this.#keyring.prepareRemoveKeySource(params.keySourceId);
       this.assertUnlocked();
 
-      await commit([
-        ...keyringUpdate.persistenceChanges,
-        ...(accountsUpdate?.persistenceChanges ?? []),
-        ...(permissionsUpdate?.persistenceChanges ?? []),
-      ]);
-      keyringUpdate.activate();
-      if (accountsUpdate) this.#accounts.applyCommittedUpdate(accountsUpdate);
-      if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
+      await commitUpdates(commit, [keyringUpdate, accountsRemoval.update, permissionsUpdate]);
       this.#approvals.cancelByAccounts(removedAccountIds);
       this.lockIfExpired();
       this.#dappConnections.refreshAccountsForOpenConnections();
-      this.#publishKeyringChanged({ type: "keyringChanged" });
-      if (accountsUpdate) this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
-      if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
       return removedAccountIds;
     });
   }
@@ -346,7 +325,7 @@ export class WalletCoordinator {
       const { accountIndex, members } = await this.deriveNextGroupMembers(params.keySourceId);
       const candidate = this.findMoveCandidate(members);
       if (candidate) return { status: "move-available", ...candidate };
-      const accountsUpdate = this.#accounts.prepareAddGroup(
+      const accountCreation = this.#accounts.prepareAddGroup(
         {
           accountGroupId: crypto.randomUUID(),
           source: { type: "bip39", keySourceId: params.keySourceId, accountIndex },
@@ -355,11 +334,9 @@ export class WalletCoordinator {
         members,
       );
       this.assertUnlocked();
-      await commit(accountsUpdate.persistenceChanges);
-      this.#accounts.applyCommittedUpdate(accountsUpdate);
+      await commitUpdates(commit, [accountCreation.update]);
       this.lockIfExpired();
-      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
-      return { status: "created", account: accountsUpdate.account };
+      return { status: "created", account: accountCreation.account };
     });
   }
 
@@ -374,14 +351,14 @@ export class WalletCoordinator {
       this.assertGroupMembersAreDerived(group, members);
       for (const member of group.members)
         this.assertPrivateKeyControlsAccount(group.source.keySourceId, member.accountId);
-      const accountsUpdate = this.#accounts.prepareMoveGroup(
+      const accountMove = this.#accounts.prepareMoveGroup(
         group.accountGroupId,
         { type: "bip39", keySourceId, accountIndex },
         members,
       );
       const keySourceUpdate = await this.#keyring.prepareRemoveKeySource(group.source.keySourceId);
-      await this.commitKeyringAndAccounts(commit, keySourceUpdate, accountsUpdate);
-      return accountsUpdate.account;
+      await this.commitKeyringAndAccounts(commit, keySourceUpdate, accountMove.update);
+      return accountMove.account;
     });
   }
 
@@ -390,25 +367,16 @@ export class WalletCoordinator {
     hidden: boolean;
   }): Promise<SetAccountGroupHiddenResult> {
     return this.#mutations.run(async (commit) => {
-      const accountsUpdate = this.#accounts.prepareSetGroupHidden(params.accountGroupId, params.hidden);
-      const result = { account: accountsUpdate.account, replacementAccount: accountsUpdate.replacementAccount };
-      if (accountsUpdate.persistenceChanges.length === 0) return result;
+      const visibility = this.#accounts.prepareSetGroupHidden(params.accountGroupId, params.hidden);
+      const result = { account: visibility.account, replacementAccount: visibility.replacementAccount };
+      if (!visibility.update) return result;
 
-      const permissionsUpdate = params.hidden
-        ? this.#permissions.prepareRemoveAccountReferences(
-            accountsUpdate.account.members.map((member) => member.accountId),
-          )
-        : null;
+      const accountIds = visibility.account.members.map((member) => member.accountId);
+      const permissionsUpdate = params.hidden ? this.#permissions.prepareRemoveAccountReferences(accountIds) : null;
 
-      await commit([...accountsUpdate.persistenceChanges, ...(permissionsUpdate?.persistenceChanges ?? [])]);
-
-      this.#accounts.applyCommittedUpdate(accountsUpdate);
-      if (permissionsUpdate) this.#permissions.applyCommittedUpdate(permissionsUpdate);
-      if (params.hidden)
-        this.#approvals.cancelByAccounts(accountsUpdate.account.members.map((member) => member.accountId));
+      await commitUpdates(commit, [visibility.update, permissionsUpdate]);
+      if (params.hidden) this.#approvals.cancelByAccounts(accountIds);
       this.#dappConnections.refreshAccountsForOpenConnections();
-      this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
-      if (permissionsUpdate) this.#publishPermissionsChanged(permissionsChangedFromUpdate(permissionsUpdate));
       return result;
     });
   }
@@ -431,24 +399,20 @@ export class WalletCoordinator {
         password: params.password,
       });
       const accountGroupId = crypto.randomUUID();
-      const accountsUpdate = this.#accounts.prepareAddGroup(
+      const accountCreation = this.#accounts.prepareAddGroup(
         { accountGroupId, source: { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 }, createdAt },
         this.buildFirstHdMembers(addition.hdKeyrings, derivedIds),
       );
-      await commit([...addition.persistenceChanges, ...accountsUpdate.persistenceChanges]);
-      this.activateInitializedWallet(addition, accountsUpdate);
+      await commitUpdates(commit, [addition.update, accountCreation.update]);
+      this.startUnlockedSession();
       return { status: "initialized", keySourceId: addition.keySourceId, accountGroupId };
     });
   }
 
-  private activateInitializedWallet(keyringUpdate: KeyringUpdate, accountsUpdate: AccountGroupUpdate): void {
-    keyringUpdate.activate();
-    this.#accounts.applyCommittedUpdate(accountsUpdate);
+  private startUnlockedSession(): void {
     this.startAutoLock();
     this.#dappConnections.refreshAccountsForOpenConnections();
     this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
-    this.#publishKeyringChanged({ type: "keyringChanged" });
-    this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   }
 
   private deriveFirstAccountIds(
@@ -519,16 +483,12 @@ export class WalletCoordinator {
 
   private async commitKeyringAndAccounts(
     commit: PersistenceWriter["commit"],
-    keyringUpdate: KeyringUpdate,
-    accountsUpdate: AccountGroupUpdate,
+    keyringUpdate: PreparedUpdate,
+    accountsUpdate: PreparedUpdate,
   ): Promise<void> {
     this.assertUnlocked();
-    await commit([...keyringUpdate.persistenceChanges, ...accountsUpdate.persistenceChanges]);
-    keyringUpdate.activate();
-    this.#accounts.applyCommittedUpdate(accountsUpdate);
+    await commitUpdates(commit, [keyringUpdate, accountsUpdate]);
     this.lockIfExpired();
-    this.#publishKeyringChanged({ type: "keyringChanged" });
-    this.#publishAccountsChanged(accountsChangedFromUpdate(accountsUpdate));
   }
 
   private getCompletedMnemonicMove(group: AccountGroup, keySourceId: KeySourceId): Bip39SourceAdded {

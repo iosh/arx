@@ -11,7 +11,7 @@ describe("DappConnections selections", () => {
       networkSelections: [initial],
       permissions: [{ ...scope, accountIds: [EIP155_ACCOUNT_A] }],
     });
-    dappConnections.openConnection(scope, "eip155:1");
+    dappConnections.openConnection(scope);
 
     await dappConnections.selectNetwork(initial);
     expect(commits).toEqual([]);
@@ -20,7 +20,7 @@ describe("DappConnections selections", () => {
     setCommitFailure(failure);
     await expect(dappConnections.selectNetwork(next)).rejects.toBe(failure);
     expect(dappConnections.getNetworkSelection(initial)).toEqual(initial);
-    expect(dappConnections.getConnectionState(initial, "eip155:1")).toEqual({
+    expect(dappConnections.getConnectionState(initial)).toEqual({
       chainRef: "eip155:1",
       accounts: [ADDRESS],
     });

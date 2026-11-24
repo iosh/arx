@@ -8,7 +8,7 @@ export type CustomNetworkRecord = Readonly<{
 }>;
 
 export interface CustomNetworksReader {
-  listAll(): Promise<CustomNetworkRecord[]>;
+  listAll(): Promise<readonly CustomNetworkRecord[]>;
 }
 
 export const customNetworkWrites: KeyedPersistenceType<"customNetwork", CustomNetworkRecord, ChainRef> =
@@ -20,7 +20,7 @@ export type NetworkRpcOverrideRecord = Readonly<{
 }>;
 
 export interface NetworkRpcOverridesReader {
-  listAll(): Promise<NetworkRpcOverrideRecord[]>;
+  listAll(): Promise<readonly NetworkRpcOverrideRecord[]>;
 }
 
 export const networkRpcOverrideWrites: KeyedPersistenceType<"networkRpcOverride", NetworkRpcOverrideRecord, ChainRef> =

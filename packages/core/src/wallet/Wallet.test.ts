@@ -16,6 +16,7 @@ import { Permissions } from "../permissions/Permissions.js";
 import type { PermissionRecord } from "../permissions/persistence.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { commitUpdates } from "../persistence/preparedUpdate.js";
 import { systemTime } from "../runtime/time.js";
 import { AUTO_LOCK_SETTING_KEY } from "../settings/persistence.js";
 import { unlockVaultRecord } from "../vault/crypto.js";
@@ -77,12 +78,14 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
   };
   const accounts = new Accounts({
     adapters: { [EIP155_NAMESPACE]: eip155AccountsAdapter },
+    bootstrap: { groups: [], records: [], selection: null },
     mutations,
     publishChanged: publishAccountsChanged,
   });
   const permissions = new Permissions({
     bootstrap: { records: [] },
     accounts,
+    publishChanged: () => undefined,
   });
   const approvals = new Approvals({
     time: systemTime,
@@ -103,17 +106,11 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
     dappConnections: { refreshAccountsForOpenConnections: () => undefined },
     autoLock,
     publishStatusChanged: (event) => events.push(event),
-    publishKeyringChanged,
-    publishAccountsChanged,
-    publishPermissionsChanged: () => undefined,
   });
   const grantPermission = async (permission: PermissionRecord): Promise<void> => {
     await mutations.run(async (commit) => {
       const update = permissions.prepareSetAccounts(permission);
-      if (!update) return;
-
-      await commit(update.persistenceChanges);
-      permissions.applyCommittedUpdate(update);
+      await commitUpdates(commit, [update]);
     });
   };
   return {

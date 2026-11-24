@@ -201,8 +201,8 @@ describe("Transactions.submit", () => {
     const submission = fixture.transactions.submit(prepared());
     await vi.waitFor(() => expect(fixture.request).toHaveBeenCalled());
     const removal = fixture.accounts.prepareRemoveSourceGroups(KEY_SOURCE_ID);
-    assert(removal);
-    fixture.accounts.applyCommittedUpdate(removal);
+    assert(removal.update);
+    removal.update.activate();
     nonce.resolve("0x1");
 
     await expect(submission).rejects.toMatchObject({ code: "account.not_found" });

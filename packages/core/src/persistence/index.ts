@@ -9,7 +9,6 @@ export type {
   PrivateKeyAccountOrigin,
 } from "../accounts/persistence.js";
 export type {
-  DappConnectionScope,
   DappNetworkSelectionRecord,
   DappNetworkSelectionsReader,
 } from "../dappConnections/persistence.js";
@@ -30,7 +29,8 @@ export type {
   NetworkRpcOverrideRecord,
   NetworkRpcOverridesReader,
 } from "../networks/persistence.js";
-export type { PermissionRecord, PermissionRecordsReader, PermissionScope } from "../permissions/persistence.js";
+export type { PermissionRecord, PermissionRecordsReader } from "../permissions/persistence.js";
+export type { DappScope } from "../permissions/scope.js";
 export type {
   AutoLockSetting,
   SettingKey,
@@ -57,19 +57,9 @@ export type {
   TransactionStatus,
 } from "../transactions/types.js";
 export type { EncryptedVaultReader, EncryptedVaultRecord } from "../vault/persistence.js";
-export type {
-  PersistenceChangeOf,
-  PersistencePutChangeOf,
-  PersistenceRemoveChangeOf,
-} from "./change.js";
+export type { PersistenceChangeOf } from "./change.js";
 export type { CorePersistence, CorePersistenceReaders, PersistenceWriter } from "./corePersistence.js";
-export type {
-  AnyPersistenceType,
-  KeyedPersistenceType,
-  PersistenceKeyOf,
-  PersistenceValueOf,
-  SingletonPersistenceType,
-} from "./definition.js";
+export type { KeyedPersistenceType, SingletonPersistenceType } from "./definition.js";
 export { defineKeyedPersistenceType, defineSingletonPersistenceType } from "./definition.js";
 export { PersistenceCommitError, PersistenceReadError } from "./errors.js";
 export type { CoreMutationQueue } from "./mutationQueue.js";

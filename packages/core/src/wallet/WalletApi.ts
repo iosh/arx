@@ -16,7 +16,7 @@ import type {
   NetworkUrlUpdate,
 } from "../networks/types.js";
 import type { Permission, PermissionsChanged } from "../permissions/Permissions.js";
-import type { PermissionScope } from "../permissions/persistence.js";
+import type { DappScope } from "../permissions/scope.js";
 import type { PreparedTransaction, WalletPrepareTransactionInput } from "../transactions/preparedTransaction.js";
 import type { TransactionsChanged } from "../transactions/Transactions.js";
 import type {
@@ -116,11 +116,11 @@ export type WalletNetworksApi = Readonly<{
 }>;
 
 export type WalletPermissionsApi = Readonly<{
-  get(scope: PermissionScope): Promise<Permission | null>;
+  get(scope: DappScope): Promise<Permission | null>;
   list(): Promise<readonly Permission[]>;
   listByOrigin(origin: string): Promise<readonly Permission[]>;
   setAccounts(input: Permission): Promise<void>;
-  revoke(scope: PermissionScope): Promise<void>;
+  revoke(scope: DappScope): Promise<void>;
   disconnectOrigin(input: { origin: string }): Promise<void>;
 }>;
 

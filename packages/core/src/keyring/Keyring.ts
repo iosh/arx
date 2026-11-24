@@ -3,6 +3,7 @@ import type { AccountOrigin } from "../accounts/persistence.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { commitUpdates, type PreparedUpdate } from "../persistence/preparedUpdate.js";
 import {
   changeVaultPassword,
   createUnlockedVault,
@@ -45,23 +46,14 @@ import {
 import type { BackupStatus, KeyringChanged } from "./types.js";
 
 /**
- * Prepare and activate within one shared mutation queue operation.
- * Activate once, after the complete wallet command commits.
- */
-export type KeyringUpdate = Readonly<{
-  persistenceChanges: readonly PersistenceChange[];
-  activate(): void;
-}>;
-
-/**
  * Includes the namespace keyrings for a recovery source.
  * The wallet command creates their account members in the same commit.
  */
-export type Bip39SourceAddition = KeyringUpdate &
-  Readonly<{
-    keySourceId: KeySourceId;
-    hdKeyrings: readonly HdKeyringRecord[];
-  }>;
+export type Bip39SourceAddition = Readonly<{
+  update: PreparedUpdate;
+  keySourceId: KeySourceId;
+  hdKeyrings: readonly HdKeyringRecord[];
+}>;
 
 type SoftwareKeyState =
   | Readonly<{ status: "uninitialized" }>
@@ -248,7 +240,7 @@ export class Keyring {
     return true;
   }
 
-  async prepareChangePassword(params: { currentPassword: string; newPassword: string }): Promise<KeyringUpdate> {
+  async prepareChangePassword(params: { currentPassword: string; newPassword: string }): Promise<PreparedUpdate> {
     const state = this.requireUnlocked();
     const vault = await changeVaultPassword({ unlocked: state.vault, ...params });
     return this.createEncryptedUpdate({ persistenceChanges: [] }, vault, state.secrets);
@@ -266,12 +258,12 @@ export class Keyring {
   ): Promise<Bip39SourceAddition> {
     const { keySourceId, hdKeyrings, records } = this.prepareBip39Records(params);
     const update = await this.prepareInitialVault(records, createKeyringSecrets([params.secret]), params.password);
-    return { keySourceId, hdKeyrings, ...update };
+    return { update, keySourceId, hdKeyrings };
   }
 
   async prepareInitializePrivateKeySource(
     params: PrivateKeySourceInput & Readonly<{ password: string }>,
-  ): Promise<KeyringUpdate> {
+  ): Promise<PreparedUpdate> {
     return this.prepareInitialVault(
       this.preparePrivateKeyRecords(params),
       createKeyringSecrets([params.secret]),
@@ -293,10 +285,10 @@ export class Keyring {
         ? secrets.keySources
         : secrets.keySources.filter((source) => source.keySourceId !== params.removePrivateKeySourceId);
     const update = await this.prepareSecretsReplacement(records, createKeyringSecrets([...remaining, params.secret]));
-    return { keySourceId, hdKeyrings, ...update };
+    return { update, keySourceId, hdKeyrings };
   }
 
-  async prepareAddPrivateKeySource(params: PrivateKeySourceInput): Promise<KeyringUpdate> {
+  async prepareAddPrivateKeySource(params: PrivateKeySourceInput): Promise<PreparedUpdate> {
     const secrets = this.requireUnlocked().secrets;
     return this.prepareSecretsReplacement(
       this.preparePrivateKeyRecords(params),
@@ -304,7 +296,7 @@ export class Keyring {
     );
   }
 
-  async prepareRemoveKeySource(keySourceId: KeySourceId): Promise<KeyringUpdate> {
+  async prepareRemoveKeySource(keySourceId: KeySourceId): Promise<PreparedUpdate> {
     const secrets = this.requireUnlocked().secrets;
     const removedHdKeyrings = this.listHdKeyringsByKeySourceIds([keySourceId]);
     const nextKeySources = new Map(this.#keySources);
@@ -389,15 +381,22 @@ export class Keyring {
     return { nextKeySources, persistenceChanges: [keySourceWrites.put(source)] };
   }
 
-  private createRecordUpdate(records: RecordUpdate): KeyringUpdate {
-    return { persistenceChanges: records.persistenceChanges, activate: () => this.applyRecords(records) };
+  private createRecordUpdate(records: RecordUpdate): PreparedUpdate {
+    const changed = records.nextKeySources !== undefined || records.nextHdKeyrings !== undefined;
+    return {
+      persistenceChanges: records.persistenceChanges,
+      activate: () => this.applyRecords(records),
+      publish: () => {
+        if (changed) this.#publishChanged({ type: "keyringChanged" });
+      },
+    };
   }
 
   private async prepareInitialVault(
     records: RecordUpdate,
     secrets: KeyringSecrets,
     password: string,
-  ): Promise<KeyringUpdate> {
+  ): Promise<PreparedUpdate> {
     const plaintext = encodeKeyringSecrets(secrets);
     let vault: UnlockedVault;
     try {
@@ -408,7 +407,7 @@ export class Keyring {
     return this.createEncryptedUpdate(records, vault, secrets);
   }
 
-  private async prepareSecretsReplacement(records: RecordUpdate, secrets: KeyringSecrets): Promise<KeyringUpdate> {
+  private async prepareSecretsReplacement(records: RecordUpdate, secrets: KeyringSecrets): Promise<PreparedUpdate> {
     const plaintext = encodeKeyringSecrets(secrets);
     let vault: UnlockedVault;
     try {
@@ -419,13 +418,15 @@ export class Keyring {
     return this.createEncryptedUpdate(records, vault, secrets);
   }
 
-  private createEncryptedUpdate(records: RecordUpdate, vault: UnlockedVault, secrets: KeyringSecrets): KeyringUpdate {
+  private createEncryptedUpdate(records: RecordUpdate, vault: UnlockedVault, secrets: KeyringSecrets): PreparedUpdate {
+    const recordUpdate = this.createRecordUpdate(records);
     return {
-      persistenceChanges: [encryptedVaultWrites.put(vault.record), ...records.persistenceChanges],
+      persistenceChanges: [encryptedVaultWrites.put(vault.record), ...recordUpdate.persistenceChanges],
       activate: () => {
-        this.applyRecords(records);
+        recordUpdate.activate();
         this.#softwareState = { status: "unlocked", vault, secrets };
       },
+      publish: recordUpdate.publish,
     };
   }
 
@@ -449,9 +450,7 @@ export class Keyring {
         nextKeySources,
         persistenceChanges: [keySourceWrites.put(nextSource)],
       });
-      await commit(prepared.persistenceChanges);
-      prepared.activate();
-      this.#publishChanged({ type: "keyringChanged" });
+      await commitUpdates(commit, [prepared]);
     });
   }
 

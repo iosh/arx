@@ -3,6 +3,7 @@ import type { Namespace } from "../namespaces/types.js";
 import { type ChainRef, splitChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { commitUpdates, type PreparedUpdate } from "../persistence/preparedUpdate.js";
 import { uniqueSortedStrings } from "../utils/array.js";
 import type { AccountGroupId } from "./accountGroupId.js";
 import { type AccountId, getAccountIdNamespace } from "./accountId.js";
@@ -28,22 +29,10 @@ import {
 } from "./persistence.js";
 import type { AccountAddress, AccountGroup, AccountMember, AccountsChanged, Address } from "./types.js";
 
-export type AccountsUpdate = Readonly<{
-  nextGroups: ReadonlyMap<AccountGroupId, AccountGroupRecord>;
-  nextRecords: ReadonlyMap<AccountId, AccountMemberRecord>;
-  nextSelection: AccountGroupId | null;
-  persistenceChanges: readonly PersistenceChange[];
-  changedAccountGroupIds: readonly AccountGroupId[];
-  changedAccountIds: readonly AccountId[];
-}>;
-
-export type AccountGroupUpdate = AccountsUpdate & Readonly<{ account: AccountGroup }>;
-export type AccountHiddenUpdate = AccountGroupUpdate & Readonly<{ replacementAccount: AccountGroup | null }>;
-export type AccountsRemovalUpdate = AccountsUpdate & Readonly<{ removedAccountIds: readonly AccountId[] }>;
+type PreparedAccountGroup = Readonly<{ update: PreparedUpdate; account: AccountGroup }>;
 
 type NewMember = Omit<AccountMemberRecord, "accountGroupId">;
 
-const EMPTY_BOOTSTRAP: AccountsBootstrap = { groups: [], records: [], selection: null };
 const sortGroups = (groups: readonly AccountGroupRecord[]): AccountGroupRecord[] =>
   [...groups].sort(
     (left, right) => left.createdAt - right.createdAt || left.accountGroupId.localeCompare(right.accountGroupId),
@@ -51,7 +40,7 @@ const sortGroups = (groups: readonly AccountGroupRecord[]): AccountGroupRecord[]
 
 type AccountsOptions = Readonly<{
   adapters: AccountsNamespaceAdapters;
-  bootstrap?: AccountsBootstrap;
+  bootstrap: AccountsBootstrap;
   mutations: CoreMutationQueue;
   publishChanged(change: AccountsChanged): void;
 }>;
@@ -66,7 +55,7 @@ export class Accounts {
   #selection: AccountGroupId | null;
 
   constructor(options: AccountsOptions) {
-    const bootstrap = options.bootstrap ?? EMPTY_BOOTSTRAP;
+    const bootstrap = options.bootstrap;
     this.#adapters = options.adapters;
     this.#mutations = options.mutations;
     this.#publishChanged = options.publishChanged;
@@ -181,7 +170,7 @@ export class Accounts {
     group: Omit<AccountGroupRecord, "hidden">,
     members: readonly NewMember[],
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
-  ): AccountGroupUpdate {
+  ): PreparedAccountGroup {
     for (const member of members) {
       if (this.#records.has(member.accountId)) throw new AccountAlreadyExistsError(member.accountId);
     }
@@ -194,23 +183,23 @@ export class Accounts {
     source: AccountGroupRecord["source"],
     members: readonly NewMember[],
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
-  ): AccountGroupUpdate {
+  ): PreparedAccountGroup {
     return this.prepareGroupUpdate({ ...this.requireGroupRecord(accountGroupId), source }, members, selectAsCurrent);
   }
 
-  private prepareRenameGroup(accountGroupId: AccountGroupId, alias: string | undefined): AccountsUpdate | null {
+  private prepareRenameGroup(accountGroupId: AccountGroupId, alias: string | undefined): PreparedUpdate | null {
     const current = this.requireGroupRecord(accountGroupId);
     if (current.alias === alias) return null;
     const { alias: _alias, ...withoutAlias } = current;
-    return this.prepareGroupUpdate(alias === undefined ? withoutAlias : { ...withoutAlias, alias });
+    return this.prepareGroupUpdate(alias === undefined ? withoutAlias : { ...withoutAlias, alias }).update;
   }
 
-  private prepareSelectGroup(accountGroupId: AccountGroupId): AccountsUpdate | null {
+  private prepareSelectGroup(accountGroupId: AccountGroupId): PreparedUpdate | null {
     const group = this.requireGroupRecord(accountGroupId);
     if (group.hidden) throw new AccountHiddenSelectionError({ accountGroupId });
     if (this.#selection === accountGroupId) return null;
     const changed = [accountGroupId, ...(this.#selection === null ? [] : [this.#selection])];
-    return this.update(
+    return this.prepareUpdate(
       this.#groups,
       this.#records,
       accountGroupId,
@@ -219,11 +208,19 @@ export class Accounts {
     );
   }
 
-  prepareSetGroupHidden(accountGroupId: AccountGroupId, hidden: boolean): AccountHiddenUpdate {
+  /** Visibility commands refresh connections. Hiding also commits permission cleanup and cancels affected approvals afterward. */
+  prepareSetGroupHidden(
+    accountGroupId: AccountGroupId,
+    hidden: boolean,
+  ): Readonly<{
+    update: PreparedUpdate | null;
+    account: AccountGroup;
+    replacementAccount: AccountGroup | null;
+  }> {
     const current = this.requireGroupRecord(accountGroupId);
     if (current.hidden === hidden) {
       return {
-        ...this.update(this.#groups, this.#records, this.#selection, [], []),
+        update: null,
         account: this.toGroup(current),
         replacementAccount: null,
       };
@@ -236,16 +233,20 @@ export class Accounts {
         throw new LastVisibleAccountHiddenError({ accountGroupId, keySourceId: current.source.keySourceId });
       if (this.#selection === accountGroupId) replacement = candidate;
     }
-    const update = this.prepareGroupUpdate({ ...current, hidden }, [], false, replacement?.accountGroupId);
+    const preparation = this.prepareGroupUpdate({ ...current, hidden }, [], false, replacement?.accountGroupId);
     return {
-      ...update,
-      replacementAccount: replacement ? this.toGroup(replacement, update.nextRecords, update.nextSelection) : null,
+      ...preparation,
+      replacementAccount: replacement ? this.toGroup(replacement, this.#records, replacement.accountGroupId) : null,
     };
   }
 
-  prepareRemoveSourceGroups(keySourceId: KeySourceId): AccountsRemovalUpdate | null {
+  /** The wallet command commits source removal and permission cleanup together, then cancels approvals and refreshes connections. */
+  prepareRemoveSourceGroups(keySourceId: KeySourceId): Readonly<{
+    update: PreparedUpdate | null;
+    removedAccountIds: readonly AccountId[];
+  }> {
     const removed = this.listGroupRecords().filter((group) => group.source.keySourceId === keySourceId);
-    if (removed.length === 0) return null;
+    if (removed.length === 0) return { update: null, removedAccountIds: [] };
     const removedGroupIds = new Set(removed.map((group) => group.accountGroupId));
     const members = this.listMemberRecords().filter((member) => removedGroupIds.has(member.accountGroupId));
     const nextGroups = new Map(this.#groups);
@@ -269,23 +270,18 @@ export class Accounts {
       );
       if (nextSelection !== null) changedGroupIds.push(nextSelection);
     }
+    const removedAccountIds = members.map((member) => member.accountId);
     return {
-      ...this.update(
+      update: this.prepareUpdate(
         nextGroups,
         nextRecords,
         nextSelection,
         persistenceChanges,
         changedGroupIds,
-        members.map((member) => member.accountId),
+        removedAccountIds,
       ),
-      removedAccountIds: members.map((member) => member.accountId),
+      removedAccountIds,
     };
-  }
-
-  applyCommittedUpdate(update: AccountsUpdate): void {
-    this.#groups = update.nextGroups;
-    this.#records = update.nextRecords;
-    this.#selection = update.nextSelection;
   }
 
   private prepareGroupUpdate(
@@ -293,7 +289,7 @@ export class Accounts {
     members: readonly NewMember[] = [],
     selectAsCurrent = false,
     replacementSelection?: AccountGroupId,
-  ): AccountGroupUpdate {
+  ): PreparedAccountGroup {
     const nextGroups = new Map(this.#groups);
     nextGroups.set(group.accountGroupId, group);
     const nextRecords = new Map(this.#records);
@@ -314,33 +310,41 @@ export class Accounts {
       changedGroupIds.push(nextSelection);
     }
     return {
-      ...this.update(nextGroups, nextRecords, nextSelection, changes, changedGroupIds),
+      update: this.prepareUpdate(nextGroups, nextRecords, nextSelection, changes, changedGroupIds),
       account: this.toGroup(group, nextRecords, nextSelection),
     };
   }
 
-  private update(
+  private prepareUpdate(
     nextGroups: ReadonlyMap<AccountGroupId, AccountGroupRecord>,
     nextRecords: ReadonlyMap<AccountId, AccountMemberRecord>,
     nextSelection: AccountGroupId | null,
     persistenceChanges: readonly PersistenceChange[],
     groupIds: readonly AccountGroupId[],
     removedAccountIds: readonly AccountId[] = [],
-  ): AccountsUpdate {
+  ): PreparedUpdate {
     const changedAccountGroupIds = uniqueSortedStrings(groupIds);
     const changed = new Set(changedAccountGroupIds);
+    const changedAccountIds = uniqueSortedStrings([
+      ...removedAccountIds,
+      ...[...nextRecords.values()]
+        .filter((record) => changed.has(record.accountGroupId))
+        .map((record) => record.accountId),
+    ]);
+    const change: AccountsChanged = {
+      type: "accountsChanged",
+      accountGroupIds: changedAccountGroupIds,
+      accountIds: changedAccountIds,
+      namespaces: uniqueSortedStrings(changedAccountIds.map(getAccountIdNamespace)),
+    };
     return {
-      nextGroups,
-      nextRecords,
-      nextSelection,
       persistenceChanges,
-      changedAccountGroupIds,
-      changedAccountIds: uniqueSortedStrings([
-        ...removedAccountIds,
-        ...[...nextRecords.values()]
-          .filter((record) => changed.has(record.accountGroupId))
-          .map((record) => record.accountId),
-      ]),
+      activate: () => {
+        this.#groups = nextGroups;
+        this.#records = nextRecords;
+        this.#selection = nextSelection;
+      },
+      publish: () => this.#publishChanged(change),
     };
   }
 
@@ -367,20 +371,7 @@ export class Accounts {
     };
   }
 
-  private async commitUpdate(prepare: () => AccountsUpdate | null): Promise<void> {
-    await this.#mutations.run(async (commit) => {
-      const update = prepare();
-      if (!update) return;
-      await commit(update.persistenceChanges);
-      this.applyCommittedUpdate(update);
-      this.#publishChanged(accountsChangedFromUpdate(update));
-    });
+  private commitUpdate(prepare: () => PreparedUpdate | null): Promise<void> {
+    return this.#mutations.run((commit) => commitUpdates(commit, [prepare()]));
   }
 }
-
-export const accountsChangedFromUpdate = (update: AccountsUpdate): AccountsChanged => ({
-  type: "accountsChanged",
-  accountGroupIds: update.changedAccountGroupIds,
-  accountIds: update.changedAccountIds,
-  namespaces: uniqueSortedStrings(update.changedAccountIds.map(getAccountIdNamespace)),
-});

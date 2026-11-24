@@ -7,9 +7,7 @@ import {
 } from "../chainJsonRpc/errors.js";
 import type { JsonRpcParams } from "../chainJsonRpc/types.js";
 import type { Namespace } from "../namespaces/types.js";
-import type { ChainRef } from "../networks/chainRef.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
-import type { DappConnectionState, DappConnectionsUpdate } from "./DappConnections.js";
 import type { DappRequest, DappRequestMethod } from "./defineDappMethod.js";
 import {
   RpcChainUnavailableError,
@@ -20,9 +18,6 @@ import {
 } from "./errors.js";
 
 export type DappNamespace = Readonly<{
-  openConnection(origin: string): DappConnectionState;
-  getConnectionState(origin: string): DappConnectionState;
-  prepareRemoveNetworkReferences(chainRef: ChainRef): DappConnectionsUpdate;
   namespaceMethods: ReadonlyMap<string, DappRequestMethod>;
   nodeReadMethods: ReadonlySet<string>;
 }>;

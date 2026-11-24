@@ -1,33 +1,27 @@
 import type { Accounts } from "../accounts/Accounts.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { Approval } from "../approvals/types.js";
-import type { DappConnectionState, DappConnections } from "../dappConnections/DappConnections.js";
-import type { DappConnectionScope } from "../dappConnections/persistence.js";
+import type { DappConnections } from "../dappConnections/DappConnections.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import { commitUpdates } from "../persistence/preparedUpdate.js";
 import { WalletLockedError } from "../wallet/errors.js";
 import type { WalletStatusReader } from "../wallet/Wallet.js";
 import { PermissionAccountAccessUnavailableError } from "./errors.js";
-import {
-  type Permission,
-  type Permissions,
-  type PermissionsChanged,
-  type PermissionsReader,
-  permissionsChangedFromUpdate,
-} from "./Permissions.js";
-import type { PermissionScope } from "./persistence.js";
+import type { Permission, Permissions, PermissionsReader } from "./Permissions.js";
+import type { DappScope } from "./scope.js";
 
 export type PermissionsApi = PermissionsReader &
   Readonly<{
     setAccounts(permission: Permission): Promise<void>;
-    revoke(scope: PermissionScope): Promise<void>;
+    revoke(scope: DappScope): Promise<void>;
     disconnectOrigin(input: Readonly<{ origin: string }>): Promise<void>;
   }>;
 
 export type DappAuthorization = Readonly<{
   permissions: PermissionsApi;
-  requestAccountAccess(input: Readonly<{ scope: DappConnectionScope; chainRef: ChainRef }>): Promise<void>;
-  closeConnection(scope: DappConnectionScope): void;
+  requestAccountAccess(input: Readonly<{ scope: DappScope; chainRef: ChainRef }>): Promise<void>;
+  closeConnection(scope: DappScope): void;
 }>;
 
 export type CreateDappAuthorizationOptions = Readonly<{
@@ -36,25 +30,10 @@ export type CreateDappAuthorizationOptions = Readonly<{
   accounts: Pick<Accounts, "listSelectableAddresses">;
   permissions: Pick<
     Permissions,
-    | "get"
-    | "list"
-    | "listByOrigin"
-    | "prepareSetAccounts"
-    | "prepareRevoke"
-    | "prepareRevokeOrigin"
-    | "applyCommittedUpdate"
+    "get" | "list" | "listByOrigin" | "prepareSetAccounts" | "prepareRevoke" | "prepareRevokeOrigin"
   >;
-  dappConnections: Pick<
-    DappConnections,
-    | "getNetworkSelection"
-    | "prepareSelectNetwork"
-    | "refreshAccountsForOpenConnections"
-    | "isConnectionOpen"
-    | "closeConnection"
-  >;
-  getConnectionState(scope: DappConnectionScope): DappConnectionState;
+  dappConnections: Pick<DappConnections, "refreshAccountsForOpenConnections" | "isConnectionOpen" | "closeConnection">;
   approvals: Pick<Approvals, "list" | "request" | "cancel">;
-  publishPermissionsChanged(change: PermissionsChanged): void;
 }>;
 
 const dependsOnAccountPermission = (approval: Approval): boolean =>
@@ -62,7 +41,7 @@ const dependsOnAccountPermission = (approval: Approval): boolean =>
 
 const approvalIdsForScope = (
   approvals: readonly Approval[],
-  scope: PermissionScope,
+  scope: DappScope,
   matches: (approval: Approval) => boolean,
 ) =>
   approvals
@@ -72,7 +51,7 @@ const approvalIdsForScope = (
     .map((approval) => approval.approvalId);
 
 export const createDappAuthorization = (options: CreateDappAuthorizationOptions): DappAuthorization => {
-  const cancelScopeApprovals = (scope: PermissionScope, matches: (approval: Approval) => boolean) => {
+  const cancelScopeApprovals = (scope: DappScope, matches: (approval: Approval) => boolean) => {
     options.approvals.cancel(approvalIdsForScope(options.approvals.list(), scope, matches));
   };
 
@@ -80,32 +59,16 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
     await options.mutations.run(async (commit) => {
       if (options.wallet.getStatus() !== "unlocked") throw new WalletLockedError();
 
-      const scope = { origin: permission.origin, namespace: permission.namespace };
       const permissionUpdate = options.permissions.prepareSetAccounts(permission);
-      const existingSelection = options.dappConnections.getNetworkSelection(scope);
-      const selectionUpdate = existingSelection
-        ? null
-        : options.dappConnections.prepareSelectNetwork({
-            ...scope,
-            chainRef: options.getConnectionState(scope).chainRef,
-          });
-      if (!permissionUpdate && !selectionUpdate) return;
-
-      await commit([...(permissionUpdate?.persistenceChanges ?? []), ...(selectionUpdate?.persistenceChanges ?? [])]);
-
-      if (permissionUpdate) options.permissions.applyCommittedUpdate(permissionUpdate);
-      if (selectionUpdate) selectionUpdate.activate();
+      await commitUpdates(commit, [permissionUpdate]);
       if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
-
-      if (selectionUpdate) selectionUpdate.publish();
-      if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
     });
   };
 
   const requestAccountAccess = async ({
     scope,
     chainRef,
-  }: Readonly<{ scope: DappConnectionScope; chainRef: ChainRef }>): Promise<void> => {
+  }: Readonly<{ scope: DappScope; chainRef: ChainRef }>): Promise<void> => {
     if (options.wallet.getStatus() === "uninitialized") {
       throw new PermissionAccountAccessUnavailableError(scope.namespace);
     }
@@ -128,30 +91,22 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
     });
   };
 
-  const revoke = async (scope: PermissionScope): Promise<void> => {
+  const revoke = async (scope: DappScope): Promise<void> => {
     await options.mutations.run(async (commit) => {
       const permissionUpdate = options.permissions.prepareRevoke(scope);
-      if (permissionUpdate) {
-        await commit(permissionUpdate.persistenceChanges);
-        options.permissions.applyCommittedUpdate(permissionUpdate);
-        options.dappConnections.refreshAccountsForOpenConnections();
-      }
+      await commitUpdates(commit, [permissionUpdate]);
+      if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
 
       // An approval can be created while persistence is committing, so select cancellation targets after activation.
       cancelScopeApprovals(scope, dependsOnAccountPermission);
-
-      if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
     });
   };
 
   const disconnectOrigin = async ({ origin }: Readonly<{ origin: string }>): Promise<void> => {
     await options.mutations.run(async (commit) => {
       const permissionUpdate = options.permissions.prepareRevokeOrigin(origin);
-      if (permissionUpdate) {
-        await commit(permissionUpdate.persistenceChanges);
-        options.permissions.applyCommittedUpdate(permissionUpdate);
-        options.dappConnections.refreshAccountsForOpenConnections();
-      }
+      await commitUpdates(commit, [permissionUpdate]);
+      if (permissionUpdate) options.dappConnections.refreshAccountsForOpenConnections();
 
       options.approvals.cancel(
         options.approvals
@@ -159,12 +114,10 @@ export const createDappAuthorization = (options: CreateDappAuthorizationOptions)
           .filter((approval) => approval.origin === origin)
           .map((approval) => approval.approvalId),
       );
-
-      if (permissionUpdate) options.publishPermissionsChanged(permissionsChangedFromUpdate(permissionUpdate));
     });
   };
 
-  const closeConnection = (scope: DappConnectionScope): void => {
+  const closeConnection = (scope: DappScope): void => {
     if (!options.dappConnections.isConnectionOpen(scope)) return;
 
     options.dappConnections.closeConnection(scope);

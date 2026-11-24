@@ -96,9 +96,11 @@ const createFixture = (
       ],
     },
     accounts,
+    publishChanged: () => undefined,
   });
   const dappConnections = new DappConnections({
     bootstrap: { networkSelections: [dappSelection, closedSelection, otherSelection] },
+    defaultChainRefs: { eip155: ETHEREUM_CHAIN_REF },
     accounts,
     networks,
     permissions,
@@ -110,8 +112,7 @@ const createFixture = (
     mutations,
     networks,
     transactions: { listPending: async () => input.pendingTransactions ?? [] },
-    prepareDappNetworkRemoval: (chainRef) =>
-      dappConnections.prepareRemoveNetworkReferences(chainRef, ETHEREUM_CHAIN_REF),
+    dappConnections,
   });
 
   return { removal, networks, dappConnections, commits, changes, connectionChanges };
@@ -120,8 +121,8 @@ const createFixture = (
 describe("custom network removal", () => {
   it("clears open and closed site references while preserving accounts and other sites' chains", async () => {
     const fixture = createFixture({ pendingTransactions: [pendingTransaction("eip155:1")] });
-    fixture.dappConnections.openConnection(otherScope, ETHEREUM_CHAIN_REF);
-    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
+    fixture.dappConnections.openConnection(otherScope);
+    fixture.dappConnections.openConnection(selectedScope);
 
     await fixture.removal.removeCustom(CUSTOM_CHAIN_REF);
 
@@ -138,16 +139,16 @@ describe("custom network removal", () => {
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toBeNull();
     expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toBeNull();
     expect(fixture.dappConnections.getNetworkSelection(closedScope)).toBeNull();
-    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
+    expect(fixture.dappConnections.getConnectionState(selectedScope)).toEqual({
       chainRef: ETHEREUM_CHAIN_REF,
       accounts: [ADDRESS],
     });
     expect(fixture.dappConnections.getNetworkSelection(otherScope)).toEqual(otherSelection);
-    expect(fixture.dappConnections.getConnectionState(otherScope, ETHEREUM_CHAIN_REF)).toEqual({
+    expect(fixture.dappConnections.getConnectionState(otherScope)).toEqual({
       chainRef: "eip155:10",
       accounts: ["0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"],
     });
-    expect(fixture.dappConnections.openConnection(closedScope, ETHEREUM_CHAIN_REF)).toEqual({
+    expect(fixture.dappConnections.openConnection(closedScope)).toEqual({
       chainRef: ETHEREUM_CHAIN_REF,
       accounts: [],
     });
@@ -163,7 +164,7 @@ describe("custom network removal", () => {
 
   it("keeps the network and site state when a pending transaction blocks removal", async () => {
     const fixture = createFixture({ pendingTransactions: [pendingTransaction()] });
-    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
+    fixture.dappConnections.openConnection(selectedScope);
 
     await expect(fixture.removal.removeCustom(CUSTOM_CHAIN_REF)).rejects.toBeInstanceOf(
       NetworkHasPendingTransactionsError,
@@ -172,7 +173,7 @@ describe("custom network removal", () => {
     expect(fixture.commits).toEqual([]);
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toMatchObject({ source: "custom" });
     expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toEqual(dappSelection);
-    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
+    expect(fixture.dappConnections.getConnectionState(selectedScope)).toEqual({
       chainRef: CUSTOM_CHAIN_REF,
       accounts: [ADDRESS],
     });
@@ -183,14 +184,14 @@ describe("custom network removal", () => {
   it("does not activate removal when persistence fails", async () => {
     const failure = new Error("commit failed");
     const fixture = createFixture({ commitFailure: failure });
-    fixture.dappConnections.openConnection(selectedScope, ETHEREUM_CHAIN_REF);
+    fixture.dappConnections.openConnection(selectedScope);
 
     await expect(fixture.removal.removeCustom(CUSTOM_CHAIN_REF)).rejects.toBe(failure);
 
     expect(fixture.commits).toEqual([]);
     expect(fixture.networks.get(CUSTOM_CHAIN_REF)).toMatchObject({ source: "custom" });
     expect(fixture.dappConnections.getNetworkSelection(selectedScope)).toEqual(dappSelection);
-    expect(fixture.dappConnections.getConnectionState(selectedScope, ETHEREUM_CHAIN_REF)).toEqual({
+    expect(fixture.dappConnections.getConnectionState(selectedScope)).toEqual({
       chainRef: CUSTOM_CHAIN_REF,
       accounts: [ADDRESS],
     });

@@ -1,6 +1,7 @@
 import type { Namespace } from "../namespaces/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { commitUpdates, type PreparedUpdate } from "../persistence/preparedUpdate.js";
 import type { NetworksBootstrap } from "./bootstrap.js";
 import type { ChainRef } from "./chainRef.js";
 import { parseChainRef, splitChainRef } from "./chainRef.js";
@@ -34,19 +35,6 @@ import type {
 type InstalledNetwork = Readonly<{
   network: Network;
   defaultRpcEndpoints: NonEmptyRpcEndpoints;
-}>;
-
-type NetworksUpdate = Readonly<{
-  nextNetworks: ReadonlyMap<ChainRef, InstalledNetwork>;
-  nextRpcOverrides: ReadonlyMap<ChainRef, NonEmptyRpcEndpoints>;
-  persistenceChanges: readonly PersistenceChange[];
-  change: NetworksChanged;
-}>;
-
-export type CustomNetworkRemovalPlan = Readonly<{
-  persistenceChanges: readonly PersistenceChange[];
-  activate(): void;
-  publish(): void;
 }>;
 
 type NetworksOptions = Readonly<{
@@ -156,54 +144,45 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     this.assertCustomNetworkCanBeAdded(chainRef);
 
     await this.validateRpcConfiguration(chainRef, input.defaultRpcEndpoints);
-    await this.commitUpdate(
-      () => this.prepareAddCustom(input, namespace),
-      () => undefined,
-    );
+    await this.commitUpdate(() => ({ update: this.prepareAddCustom(input, namespace), result: undefined }));
   }
 
   updateCustom({ chainRef, changes }: CustomNetworkUpdate): Promise<Network> {
-    return this.commitUpdate(
-      () => {
-        const current = this.requireCustomNetwork(chainRef);
-        return this.prepareUpdateCustom({
-          definition: {
-            ...cloneChainDefinition(current.network),
-            ...changes,
-            nativeCurrency: { ...current.network.nativeCurrency, ...changes.nativeCurrency },
-          },
-          defaultRpcEndpoints: current.defaultRpcEndpoints,
-        });
-      },
-      () => this.requireInstalledNetwork(chainRef).network,
-    );
+    return this.commitUpdate(() => {
+      const current = this.requireCustomNetwork(chainRef);
+      return this.prepareUpdateCustom({
+        definition: {
+          ...cloneChainDefinition(current.network),
+          ...changes,
+          nativeCurrency: { ...current.network.nativeCurrency, ...changes.nativeCurrency },
+        },
+        defaultRpcEndpoints: current.defaultRpcEndpoints,
+      });
+    });
   }
 
   updateBlockExplorers({ chainRef, update }: { chainRef: ChainRef; update: NetworkUrlUpdate }): Promise<Network> {
-    return this.commitUpdate(
-      () => {
-        const current = this.requireCustomNetwork(chainRef);
-        const explorers = [...(current.network.blockExplorers ?? [])];
-        if (update.type !== "add" && explorers[update.index]?.url !== update.expectedUrl) {
-          throw new NetworkConfigurationChangedError(chainRef);
-        }
-        if (update.type === "replace" && update.url === update.expectedUrl) {
-          return null;
-        }
-        if (update.type !== "remove" && explorers.some(({ url }) => url === update.url)) {
-          throw new NetworkBlockExplorerExistsError({ chainRef, url: update.url });
-        }
-        if (update.type === "add") explorers.push({ url: update.url });
-        else if (update.type === "replace") explorers[update.index] = { url: update.url };
-        else explorers.splice(update.index, 1);
+    return this.commitUpdate(() => {
+      const current = this.requireCustomNetwork(chainRef);
+      const explorers = [...(current.network.blockExplorers ?? [])];
+      if (update.type !== "add" && explorers[update.index]?.url !== update.expectedUrl) {
+        throw new NetworkConfigurationChangedError(chainRef);
+      }
+      if (update.type === "replace" && update.url === update.expectedUrl) {
+        return { update: null, result: current.network };
+      }
+      if (update.type !== "remove" && explorers.some(({ url }) => url === update.url)) {
+        throw new NetworkBlockExplorerExistsError({ chainRef, url: update.url });
+      }
+      if (update.type === "add") explorers.push({ url: update.url });
+      else if (update.type === "replace") explorers[update.index] = { url: update.url };
+      else explorers.splice(update.index, 1);
 
-        return this.prepareUpdateCustom({
-          definition: { ...cloneChainDefinition(current.network), blockExplorers: explorers },
-          defaultRpcEndpoints: current.defaultRpcEndpoints,
-        });
-      },
-      () => this.requireInstalledNetwork(chainRef).network,
-    );
+      return this.prepareUpdateCustom({
+        definition: { ...cloneChainDefinition(current.network), blockExplorers: explorers },
+        defaultRpcEndpoints: current.defaultRpcEndpoints,
+      });
+    });
   }
 
   async updateRpcEndpoints({
@@ -218,106 +197,110 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
       await this.validateRpcConfiguration(chainRef, [update.url]);
     }
 
-    return this.commitUpdate(
-      () => {
-        const current = this.getRpcConfiguration(chainRef);
-        const endpoints: [string, ...string[]] = [...current.endpoints];
-        if (update.type !== "add" && endpoints[update.index] !== update.expectedUrl) {
-          throw new NetworkConfigurationChangedError(chainRef);
-        }
-        if (update.type === "add") endpoints.push(update.url);
-        else if (update.type === "replace") endpoints[update.index] = update.url;
-        else {
-          if (endpoints.length === 1) throw new NetworkRpcEndpointRequiredError(chainRef);
-          endpoints.splice(update.index, 1);
-        }
-        if (isSameRpcEndpoints(current.endpoints, endpoints)) return null;
-        return this.prepareSetRpcOverride({ chainRef, endpoints });
-      },
-      () => this.getRpcConfiguration(chainRef),
-    );
+    return this.commitUpdate(() => {
+      const current = this.getRpcConfiguration(chainRef);
+      const endpoints: [string, ...string[]] = [...current.endpoints];
+      if (update.type !== "add" && endpoints[update.index] !== update.expectedUrl) {
+        throw new NetworkConfigurationChangedError(chainRef);
+      }
+      if (update.type === "add") endpoints.push(update.url);
+      else if (update.type === "replace") endpoints[update.index] = update.url;
+      else {
+        if (endpoints.length === 1) throw new NetworkRpcEndpointRequiredError(chainRef);
+        endpoints.splice(update.index, 1);
+      }
+      if (isSameRpcEndpoints(current.endpoints, endpoints)) return { update: null, result: current };
+      return this.prepareSetRpcOverride({ chainRef, endpoints });
+    });
   }
 
   clearRpcOverride(chainRef: ChainRef): Promise<NetworkRpcConfiguration> {
-    return this.commitUpdate(
-      () => this.prepareClearRpcOverride(chainRef),
-      () => this.getRpcConfiguration(chainRef),
-    );
+    return this.commitUpdate(() => this.prepareClearRpcOverride(chainRef));
   }
 
-  private prepareAddCustom(input: CustomNetworkInput, namespace: Namespace): NetworksUpdate {
+  private prepareAddCustom(input: CustomNetworkInput, namespace: Namespace): PreparedUpdate {
     const chainRef = input.definition.chainRef;
     this.assertCustomNetworkCanBeAdded(chainRef);
 
     const nextNetworks = new Map(this.#networks);
     nextNetworks.set(chainRef, createInstalledCustomNetwork(input, namespace));
 
-    return {
-      nextNetworks,
-      nextRpcOverrides: this.#rpcOverrides,
-      persistenceChanges: [customNetworkWrites.put(input)],
-      change: { type: "networksChanged", chainRefs: [chainRef] },
-    };
+    return this.prepareUpdate(nextNetworks, this.#rpcOverrides, [customNetworkWrites.put(input)], chainRef);
   }
 
-  private prepareUpdateCustom(input: CustomNetworkInput): NetworksUpdate | null {
+  private prepareUpdateCustom(input: CustomNetworkInput): Readonly<{ update: PreparedUpdate | null; result: Network }> {
     const chainRef = input.definition.chainRef;
     const current = this.requireCustomNetwork(chainRef);
     if (
       isSameChainDefinition(current.network, input.definition) &&
       isSameRpcEndpoints(current.defaultRpcEndpoints, input.defaultRpcEndpoints)
     ) {
-      return null;
+      return { update: null, result: current.network };
     }
 
     const nextNetworks = new Map(this.#networks);
-    nextNetworks.set(chainRef, createInstalledCustomNetwork(input, current.network.namespace));
+    const installed = createInstalledCustomNetwork(input, current.network.namespace);
+    nextNetworks.set(chainRef, installed);
 
     return {
-      nextNetworks,
-      nextRpcOverrides: this.#rpcOverrides,
-      persistenceChanges: [customNetworkWrites.put(input)],
-      change: { type: "networksChanged", chainRefs: [chainRef] },
+      update: this.prepareUpdate(nextNetworks, this.#rpcOverrides, [customNetworkWrites.put(input)], chainRef),
+      result: installed.network,
     };
   }
 
-  private prepareSetRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): NetworksUpdate | null {
-    this.requireInstalledNetwork(input.chainRef);
+  private prepareSetRpcOverride(input: { chainRef: ChainRef; endpoints: NonEmptyRpcEndpoints }): Readonly<{
+    update: PreparedUpdate | null;
+    result: NetworkRpcConfiguration;
+  }> {
+    const installed = this.requireInstalledNetwork(input.chainRef);
     const current = this.#rpcOverrides.get(input.chainRef);
-    if (current && isSameRpcEndpoints(current, input.endpoints)) return null;
+    if (current && isSameRpcEndpoints(current, input.endpoints)) {
+      return { update: null, result: this.getRpcConfiguration(input.chainRef) };
+    }
 
     const nextRpcOverrides = new Map(this.#rpcOverrides);
     nextRpcOverrides.set(input.chainRef, input.endpoints);
 
     return {
-      nextNetworks: this.#networks,
-      nextRpcOverrides,
-      persistenceChanges: [
-        networkRpcOverrideWrites.put({
-          chainRef: input.chainRef,
-          endpoints: input.endpoints,
-        }),
-      ],
-      change: { type: "networksChanged", chainRefs: [input.chainRef] },
+      update: this.prepareUpdate(
+        this.#networks,
+        nextRpcOverrides,
+        [
+          networkRpcOverrideWrites.put({
+            chainRef: input.chainRef,
+            endpoints: input.endpoints,
+          }),
+        ],
+        input.chainRef,
+      ),
+      result: { source: "override", endpoints: input.endpoints, defaultEndpoints: installed.defaultRpcEndpoints },
     };
   }
 
-  private prepareClearRpcOverride(chainRef: ChainRef): NetworksUpdate | null {
-    this.requireInstalledNetwork(chainRef);
-    if (!this.#rpcOverrides.has(chainRef)) return null;
+  private prepareClearRpcOverride(chainRef: ChainRef): Readonly<{
+    update: PreparedUpdate | null;
+    result: NetworkRpcConfiguration;
+  }> {
+    const installed = this.requireInstalledNetwork(chainRef);
+    const result: NetworkRpcConfiguration = { source: "default", endpoints: installed.defaultRpcEndpoints };
+    if (!this.#rpcOverrides.has(chainRef)) return { update: null, result };
 
     const nextRpcOverrides = new Map(this.#rpcOverrides);
     nextRpcOverrides.delete(chainRef);
 
     return {
-      nextNetworks: this.#networks,
-      nextRpcOverrides,
-      persistenceChanges: [networkRpcOverrideWrites.remove(chainRef)],
-      change: { type: "networksChanged", chainRefs: [chainRef] },
+      update: this.prepareUpdate(
+        this.#networks,
+        nextRpcOverrides,
+        [networkRpcOverrideWrites.remove(chainRef)],
+        chainRef,
+      ),
+      result,
     };
   }
 
-  prepareRemoveCustom(chainRef: ChainRef): CustomNetworkRemovalPlan {
+  /** The complete command checks pending transactions and commits dapp reference cleanup with this removal. */
+  prepareRemoveCustom(chainRef: ChainRef): PreparedUpdate {
     this.requireCustomNetwork(chainRef);
 
     const nextNetworks = new Map(this.#networks);
@@ -328,27 +311,24 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
 
     const persistenceChanges: PersistenceChange[] = [customNetworkWrites.remove(chainRef)];
     if (hadRpcOverride) persistenceChanges.push(networkRpcOverrideWrites.remove(chainRef));
-    const update: NetworksUpdate = {
-      nextNetworks,
-      nextRpcOverrides,
-      persistenceChanges,
-      change: { type: "networksChanged", chainRefs: [chainRef] },
-    };
+    return this.prepareUpdate(nextNetworks, nextRpcOverrides, persistenceChanges, chainRef);
+  }
 
+  private prepareUpdate(
+    nextNetworks: ReadonlyMap<ChainRef, InstalledNetwork>,
+    nextRpcOverrides: ReadonlyMap<ChainRef, NonEmptyRpcEndpoints>,
+    persistenceChanges: readonly PersistenceChange[],
+    chainRef: ChainRef,
+  ): PreparedUpdate {
+    const change: NetworksChanged = { type: "networksChanged", chainRefs: [chainRef] };
     return {
       persistenceChanges,
-      activate: () => this.#applyCommittedUpdate(update),
-      publish: () => this.#publishCommittedUpdate(update),
+      activate: () => {
+        this.#networks = nextNetworks;
+        this.#rpcOverrides = nextRpcOverrides;
+      },
+      publish: () => this.#publishChanged(change),
     };
-  }
-
-  #applyCommittedUpdate(update: NetworksUpdate): void {
-    this.#networks = update.nextNetworks;
-    this.#rpcOverrides = update.nextRpcOverrides;
-  }
-
-  #publishCommittedUpdate(update: NetworksUpdate): void {
-    this.#publishChanged(update.change);
   }
 
   private async validateRpcConfiguration(expectedChainRef: ChainRef, endpoints: NonEmptyRpcEndpoints): Promise<void> {
@@ -379,16 +359,13 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     );
   }
 
-  /** Read the result before releasing the queue to the next mutation. */
-  private commitUpdate<TResult>(prepare: () => NetworksUpdate | null, readResult: () => TResult): Promise<TResult> {
+  private commitUpdate<TResult>(
+    prepare: () => Readonly<{ update: PreparedUpdate | null; result: TResult }>,
+  ): Promise<TResult> {
     return this.#mutations.run(async (commit) => {
-      const update = prepare();
-      if (update) {
-        await commit(update.persistenceChanges);
-        this.#applyCommittedUpdate(update);
-        this.#publishCommittedUpdate(update);
-      }
-      return readResult();
+      const { update, result } = prepare();
+      await commitUpdates(commit, [update]);
+      return result;
     });
   }
 

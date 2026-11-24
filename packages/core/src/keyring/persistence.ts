@@ -12,11 +12,11 @@ export type KeySourceRecord = KeySource;
 export type HdKeyringRecord = HdKeyring;
 
 export interface KeySourcesReader {
-  listAll(): Promise<KeySourceRecord[]>;
+  listAll(): Promise<readonly KeySourceRecord[]>;
 }
 
 export interface HdKeyringsReader {
-  listAll(): Promise<HdKeyringRecord[]>;
+  listAll(): Promise<readonly HdKeyringRecord[]>;
 }
 
 export const keySourceWrites: KeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId> =

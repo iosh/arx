@@ -1,11 +1,7 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { Namespace } from "../namespaces/types.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
-
-export type PermissionScope = Readonly<{
-  origin: string;
-  namespace: Namespace;
-}>;
+import type { DappScope } from "./scope.js";
 
 export type PermissionRecord = Readonly<{
   origin: string;
@@ -17,5 +13,5 @@ export interface PermissionRecordsReader {
   listAll(): Promise<readonly PermissionRecord[]>;
 }
 
-export const permissionWrites: KeyedPersistenceType<"permission", PermissionRecord, PermissionScope> =
-  defineKeyedPersistenceType<"permission", PermissionRecord, PermissionScope>("permission");
+export const permissionWrites: KeyedPersistenceType<"permission", PermissionRecord, DappScope> =
+  defineKeyedPersistenceType<"permission", PermissionRecord, DappScope>("permission");

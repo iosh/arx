@@ -13,10 +13,10 @@ describe("DappConnections active state", () => {
     const scope = { origin: "https://dapp.example", namespace: "eip155" } as const;
     const { commits, dappConnections } = createDappConnections();
 
-    expect(dappConnections.getConnectionState(scope, "eip155:1")).toEqual({ chainRef: "eip155:1", accounts: [] });
+    expect(dappConnections.getConnectionState(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
     expect(dappConnections.isConnectionOpen(scope)).toBe(false);
 
-    expect(dappConnections.openConnection(scope, "eip155:1")).toEqual({ chainRef: "eip155:1", accounts: [] });
+    expect(dappConnections.openConnection(scope)).toEqual({ chainRef: "eip155:1", accounts: [] });
     expect(dappConnections.isConnectionOpen(scope)).toBe(true);
     expect(commits).toEqual([]);
 
@@ -33,8 +33,8 @@ describe("DappConnections active state", () => {
       permissions: [firstPermission, secondPermission],
     });
 
-    dappConnections.openConnection(secondScope, "eip155:1");
-    dappConnections.openConnection(firstScope, "eip155:1");
+    dappConnections.openConnection(secondScope);
+    dappConnections.openConnection(firstScope);
     expect(stateChanges).toEqual([]);
 
     setWalletStatus("unlocked");
@@ -49,8 +49,8 @@ describe("DappConnections active state", () => {
       accounts: ["0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"],
     } as const;
 
-    expect(dappConnections.getConnectionState(firstScope, "eip155:1")).toEqual(firstState);
-    expect(dappConnections.getConnectionState(secondScope, "eip155:1")).toEqual(secondState);
+    expect(dappConnections.getConnectionState(firstScope)).toEqual(firstState);
+    expect(dappConnections.getConnectionState(secondScope)).toEqual(secondState);
     expect(stateChanges).toEqual([
       {
         scope: firstScope,
@@ -73,11 +73,11 @@ describe("DappConnections active state", () => {
     const { dappConnections, setWalletStatus, stateChanges } = createDappConnections({
       permissions: [{ ...scope, accountIds: [EIP155_ACCOUNT_A] }],
     });
-    expect(dappConnections.openConnection(scope, "eip155:1").accounts).toHaveLength(1);
+    expect(dappConnections.openConnection(scope).accounts).toHaveLength(1);
 
     setWalletStatus("locked");
-    expect(dappConnections.getConnectionState(scope, "eip155:1").accounts).toEqual([]);
-    expect(dappConnections.openConnection(scope, "eip155:1").accounts).toEqual([]);
+    expect(dappConnections.getConnectionState(scope).accounts).toEqual([]);
+    expect(dappConnections.openConnection(scope).accounts).toEqual([]);
     expect(stateChanges).toEqual([]);
 
     dappConnections.refreshAccountsForOpenConnections();
@@ -100,7 +100,7 @@ describe("DappConnections active state", () => {
       permissions: [permission],
     });
 
-    expect(dappConnections.openConnection(scope, "eip155:1")).toEqual({
+    expect(dappConnections.openConnection(scope)).toEqual({
       chainRef: "eip155:1",
       accounts: [ADDRESS],
     });
@@ -110,10 +110,10 @@ describe("DappConnections active state", () => {
       chainRef: "eip155:10",
       accounts: [ADDRESS],
     } as const;
-    expect(dappConnections.getConnectionState(scope, "eip155:1")).toEqual(selectedState);
+    expect(dappConnections.getConnectionState(scope)).toEqual(selectedState);
 
     dappConnections.closeConnection(scope);
-    expect(dappConnections.openConnection(scope, "eip155:1")).toEqual(selectedState);
+    expect(dappConnections.openConnection(scope)).toEqual(selectedState);
     expect(stateChanges).toEqual([
       {
         scope,

@@ -1,11 +1,7 @@
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
+import type { DappScope } from "../permissions/scope.js";
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
-
-export type DappConnectionScope = Readonly<{
-  origin: string;
-  namespace: Namespace;
-}>;
 
 export type DappNetworkSelectionRecord = Readonly<{
   origin: string;
@@ -20,7 +16,5 @@ export interface DappNetworkSelectionsReader {
 export const dappNetworkSelectionWrites: KeyedPersistenceType<
   "dappNetworkSelection",
   DappNetworkSelectionRecord,
-  DappConnectionScope
-> = defineKeyedPersistenceType<"dappNetworkSelection", DappNetworkSelectionRecord, DappConnectionScope>(
-  "dappNetworkSelection",
-);
+  DappScope
+> = defineKeyedPersistenceType<"dappNetworkSelection", DappNetworkSelectionRecord, DappScope>("dappNetworkSelection");

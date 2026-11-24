@@ -40,10 +40,12 @@ export const createDappConnections = (
   const permissions = new Permissions({
     bootstrap: { records: input.permissions ?? [] },
     accounts,
+    publishChanged: () => undefined,
   });
 
   const dappConnections = new DappConnections({
     bootstrap: { networkSelections: input.networkSelections ?? [] },
+    defaultChainRefs: { eip155: "eip155:1" },
     accounts,
     networks: createNetworks(),
     permissions,

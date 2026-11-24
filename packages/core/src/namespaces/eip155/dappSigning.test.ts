@@ -15,6 +15,7 @@ it("approves only signed typed-data fields and rejects inconsistent request data
   const permissions = new Permissions({
     accounts,
     bootstrap: { records: [{ origin, namespace: "eip155", accountIds: [ACCOUNT_ID] }] },
+    publishChanged: () => undefined,
   });
   const approvals = new Approvals({
     time: { now: () => 1, schedule: () => () => {} },

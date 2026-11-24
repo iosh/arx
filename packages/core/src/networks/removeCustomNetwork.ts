@@ -1,5 +1,6 @@
-import type { DappConnectionsUpdate } from "../dappConnections/DappConnections.js";
+import type { DappConnections } from "../dappConnections/DappConnections.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
+import { commitUpdates } from "../persistence/preparedUpdate.js";
 import type { TransactionsReader } from "../transactions/persistence.js";
 import type { ChainRef } from "./chainRef.js";
 import { NetworkHasPendingTransactionsError } from "./errors.js";
@@ -13,7 +14,7 @@ type CustomNetworkRemovalOptions = Readonly<{
   mutations: CoreMutationQueue;
   networks: Pick<Networks, "prepareRemoveCustom">;
   transactions: Pick<TransactionsReader, "listPending">;
-  prepareDappNetworkRemoval(chainRef: ChainRef): DappConnectionsUpdate;
+  dappConnections: Pick<DappConnections, "prepareRemoveNetworkReferences">;
 }>;
 
 export const createCustomNetworkRemoval = (options: CustomNetworkRemovalOptions): CustomNetworkRemoval => ({
@@ -25,14 +26,9 @@ export const createCustomNetworkRemoval = (options: CustomNetworkRemovalOptions)
         throw new NetworkHasPendingTransactionsError(chainRef);
       }
 
-      const dappConnectionsUpdate = options.prepareDappNetworkRemoval(chainRef);
+      const dappConnectionsUpdate = options.dappConnections.prepareRemoveNetworkReferences(chainRef);
 
-      await commit([...networkRemoval.persistenceChanges, ...dappConnectionsUpdate.persistenceChanges]);
-
-      networkRemoval.activate();
-      dappConnectionsUpdate.activate();
-      networkRemoval.publish();
-      dappConnectionsUpdate.publish();
+      await commitUpdates(commit, [networkRemoval, dappConnectionsUpdate]);
     });
   },
 });

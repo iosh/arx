@@ -1,24 +1,15 @@
 import type { Accounts } from "../accounts/Accounts.js";
-import type { ChainRef } from "../networks/chainRef.js";
+import type { Namespace } from "../namespaces/types.js";
+import { type ChainRef, splitChainRef } from "../networks/chainRef.js";
 import { ChainNamespaceMismatchError, NetworkNotFoundError } from "../networks/errors.js";
 import type { NetworksReader } from "../networks/types.js";
 import type { PermissionsReader } from "../permissions/Permissions.js";
+import { type DappScope, dappScopeKey } from "../permissions/scope.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
-import type { PersistenceChange } from "../persistence/persistenceTypes.js";
+import { commitUpdates, type PreparedUpdate } from "../persistence/preparedUpdate.js";
 import type { WalletStatusReader } from "../wallet/Wallet.js";
 import type { DappConnectionsBootstrap } from "./bootstrap.js";
-import {
-  type DappConnectionScope,
-  type DappNetworkSelectionRecord,
-  dappNetworkSelectionWrites,
-} from "./persistence.js";
-import { dappConnectionScopeKey } from "./scope.js";
-
-export type DappConnectionsUpdate = Readonly<{
-  persistenceChanges: readonly PersistenceChange[];
-  activate(): void;
-  publish(): void;
-}>;
+import { type DappNetworkSelectionRecord, dappNetworkSelectionWrites } from "./persistence.js";
 
 export type DappConnectionState = Readonly<{
   chainRef: ChainRef;
@@ -26,7 +17,7 @@ export type DappConnectionState = Readonly<{
 }>;
 
 export type DappConnectionStateChanged = Readonly<{
-  scope: DappConnectionScope;
+  scope: DappScope;
   state: DappConnectionState;
   changedFields: Readonly<{
     chainRef: boolean;
@@ -36,6 +27,8 @@ export type DappConnectionStateChanged = Readonly<{
 
 export type DappConnectionsOptions = Readonly<{
   bootstrap: DappConnectionsBootstrap;
+  /** Defaults must be builtin networks so deleting a custom network always has a fallback. */
+  defaultChainRefs: Readonly<Record<Namespace, ChainRef>>;
   accounts: Pick<Accounts, "getAddress">;
   networks: Pick<NetworksReader, "get">;
   permissions: PermissionsReader;
@@ -45,7 +38,7 @@ export type DappConnectionsOptions = Readonly<{
 }>;
 
 type ActiveConnection = Readonly<{
-  scope: DappConnectionScope;
+  scope: DappScope;
   state: DappConnectionState;
 }>;
 
@@ -60,6 +53,7 @@ const compareStateChanges = (left: DappConnectionStateChanged, right: DappConnec
 
 /** Owns persisted dapp network selections and the transient state of open dapp connections. */
 export class DappConnections {
+  readonly #defaultChainRefs: DappConnectionsOptions["defaultChainRefs"];
   readonly #accounts: Pick<Accounts, "getAddress">;
   readonly #networks: Pick<NetworksReader, "get">;
   readonly #permissions: PermissionsReader;
@@ -70,6 +64,7 @@ export class DappConnections {
   #activeConnections = new Map<string, ActiveConnection>();
 
   constructor(options: DappConnectionsOptions) {
+    this.#defaultChainRefs = options.defaultChainRefs;
     this.#accounts = options.accounts;
     this.#networks = options.networks;
     this.#permissions = options.permissions;
@@ -78,12 +73,12 @@ export class DappConnections {
     this.#publishStateChanged = options.publishStateChanged;
 
     this.#networkSelections = new Map(
-      options.bootstrap.networkSelections.map((selection) => [dappConnectionScopeKey(selection), selection]),
+      options.bootstrap.networkSelections.map((selection) => [dappScopeKey(selection), selection]),
     );
   }
 
-  getNetworkSelection(scope: DappConnectionScope): DappNetworkSelectionRecord | null {
-    return this.#networkSelections.get(dappConnectionScopeKey(scope)) ?? null;
+  getNetworkSelection(scope: DappScope): DappNetworkSelectionRecord | null {
+    return this.#networkSelections.get(dappScopeKey(scope)) ?? null;
   }
 
   listNetworkSelections(): readonly DappNetworkSelectionRecord[] {
@@ -94,31 +89,35 @@ export class DappConnections {
     return this.listNetworkSelections().filter((selection) => selection.chainRef === chainRef);
   }
 
-  openConnection(scope: DappConnectionScope, initialChainRef: ChainRef): DappConnectionState {
-    const key = dappConnectionScopeKey(scope);
+  openConnection(scope: DappScope): DappConnectionState {
+    const key = dappScopeKey(scope);
     const active = this.#activeConnections.get(key);
     if (active) return this.#createConnectionState(scope, active.state.chainRef);
 
-    const state = this.getConnectionState(scope, initialChainRef);
+    const state = this.getConnectionState(scope);
     this.#activeConnections.set(key, { scope, state });
     return state;
   }
 
-  getConnectionState(scope: DappConnectionScope, initialChainRef: ChainRef): DappConnectionState {
-    const active = this.#activeConnections.get(dappConnectionScopeKey(scope));
+  getConnectionState(scope: DappScope): DappConnectionState {
+    const active = this.#activeConnections.get(dappScopeKey(scope));
     if (active) return this.#createConnectionState(scope, active.state.chainRef);
 
-    return this.#createConnectionState(scope, this.getNetworkSelection(scope)?.chainRef ?? initialChainRef);
+    return this.#createConnectionState(
+      scope,
+      this.getNetworkSelection(scope)?.chainRef ?? this.#defaultChainRefs[scope.namespace],
+    );
   }
 
-  isConnectionOpen(scope: DappConnectionScope): boolean {
-    return this.#activeConnections.has(dappConnectionScopeKey(scope));
+  isConnectionOpen(scope: DappScope): boolean {
+    return this.#activeConnections.has(dappScopeKey(scope));
   }
 
-  closeConnection(scope: DappConnectionScope): void {
-    this.#activeConnections.delete(dappConnectionScopeKey(scope));
+  closeConnection(scope: DappScope): void {
+    this.#activeConnections.delete(dappScopeKey(scope));
   }
 
+  /** Complete commands call this after changing accounts, permissions, or the wallet session. */
   refreshAccountsForOpenConnections(): void {
     const changes: DappConnectionStateChanged[] = [];
 
@@ -131,24 +130,17 @@ export class DappConnections {
   }
 
   async selectNetwork(selection: DappNetworkSelectionRecord): Promise<void> {
-    await this.#mutations.run(async (commit) => {
-      const update = this.prepareSelectNetwork(selection);
-      if (!update) return;
-
-      await commit(update.persistenceChanges);
-      update.activate();
-      update.publish();
-    });
+    await this.#mutations.run((commit) => commitUpdates(commit, [this.prepareSelectNetwork(selection)]));
   }
 
-  prepareSelectNetwork(selection: DappNetworkSelectionRecord): DappConnectionsUpdate | null {
+  prepareSelectNetwork(selection: DappNetworkSelectionRecord): PreparedUpdate | null {
     const current = this.getNetworkSelection(selection);
     if (current?.chainRef === selection.chainRef) return null;
 
     this.#requireNetwork(selection);
 
     const networkSelections = new Map(this.#networkSelections);
-    networkSelections.set(dappConnectionScopeKey(selection), selection);
+    networkSelections.set(dappScopeKey(selection), selection);
     let stateChanges: readonly DappConnectionStateChanged[] = [];
 
     return {
@@ -162,12 +154,13 @@ export class DappConnections {
     };
   }
 
-  prepareRemoveNetworkReferences(chainRef: ChainRef, replacementChainRef: ChainRef): DappConnectionsUpdate {
+  prepareRemoveNetworkReferences(chainRef: ChainRef): PreparedUpdate {
+    const replacementChainRef = this.#defaultChainRefs[splitChainRef(chainRef).namespace];
     const removedSelections = this.listNetworkSelectionsByChainRef(chainRef);
-    const removedSelectionScopeKeys = new Set(removedSelections.map(dappConnectionScopeKey));
+    const removedSelectionScopeKeys = new Set(removedSelections.map(dappScopeKey));
     const remainingSelections = new Map(this.#networkSelections);
     for (const selection of removedSelections) {
-      remainingSelections.delete(dappConnectionScopeKey(selection));
+      remainingSelections.delete(dappScopeKey(selection));
     }
     let stateChanges: readonly DappConnectionStateChanged[] = [];
 
@@ -177,6 +170,7 @@ export class DappConnections {
         this.#networkSelections = remainingSelections;
         const changes: DappConnectionStateChanged[] = [];
 
+        // Connections can open while the network command is committing, even without persisted site selections.
         for (const [key, active] of this.#activeConnections) {
           if (active.state.chainRef !== chainRef && !removedSelectionScopeKeys.has(key)) continue;
 
@@ -193,8 +187,8 @@ export class DappConnections {
     };
   }
 
-  #replaceOpenConnectionState(scope: DappConnectionScope, chainRef: ChainRef): DappConnectionStateChanged | null {
-    const key = dappConnectionScopeKey(scope);
+  #replaceOpenConnectionState(scope: DappScope, chainRef: ChainRef): DappConnectionStateChanged | null {
+    const key = dappScopeKey(scope);
     const active = this.#activeConnections.get(key);
     if (!active) return null;
 
@@ -217,7 +211,7 @@ export class DappConnections {
     for (const change of [...changes].sort(compareStateChanges)) this.#publishStateChanged(change);
   }
 
-  #createConnectionState(scope: DappConnectionScope, chainRef: ChainRef): DappConnectionState {
+  #createConnectionState(scope: DappScope, chainRef: ChainRef): DappConnectionState {
     const permission = this.#permissions.get(scope);
     const accounts =
       this.#wallet.getStatus() === "unlocked" && permission

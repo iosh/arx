@@ -44,8 +44,8 @@ export type AccountSelectionRecord = Readonly<{
 }>;
 
 export interface AccountsReader {
-  listGroups(): Promise<AccountGroupRecord[]>;
-  listRecords(): Promise<AccountMemberRecord[]>;
+  listGroups(): Promise<readonly AccountGroupRecord[]>;
+  listRecords(): Promise<readonly AccountMemberRecord[]>;
   getSelection(): Promise<AccountSelectionRecord | null>;
 }
 

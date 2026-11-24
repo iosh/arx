@@ -10,7 +10,6 @@ import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import { decodeNoParams, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
-import type { DappConnectionScope } from "../../dappConnections/persistence.js";
 import type { DappNamespace } from "../../dappConnections/routeDappRequest.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { Networks } from "../../networks/Networks.js";
@@ -18,6 +17,7 @@ import type { DappAuthorization } from "../../permissions/createDappAuthorizatio
 import { buildEip2255Permissions } from "../../permissions/eip2255.js";
 import { PermissionAccountAccessUnavailableError } from "../../permissions/errors.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
+import type { DappScope } from "../../permissions/scope.js";
 import type { Transactions } from "../../transactions/Transactions.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
@@ -30,10 +30,7 @@ import { createEip155SendRawTransactionMethod } from "./eth_sendRawTransaction.j
 
 type CreateEip155DappNamespaceOptions = Readonly<{
   chainJsonRpc: ChainJsonRpc;
-  dappConnections: Pick<
-    DappConnections,
-    "openConnection" | "getConnectionState" | "selectNetwork" | "prepareRemoveNetworkReferences"
-  >;
+  dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
   dappAuthorization: Readonly<{
     requestAccountAccess: DappAuthorization["requestAccountAccess"];
     permissions: Pick<DappAuthorization["permissions"], "revoke">;
@@ -84,12 +81,10 @@ const decodeAccountPermissionRequest = (params: unknown): undefined => {
   return undefined;
 };
 
-const eip155ConnectionScope = (origin: string): DappConnectionScope => ({
+const eip155ConnectionScope = (origin: string): DappScope => ({
   origin,
   namespace: EIP155_NAMESPACE,
 });
-
-const ETHEREUM_CHAIN_REF = "eip155:1" satisfies ChainRef;
 
 const isAccountAccessUnavailable = (error: unknown): boolean =>
   error instanceof PermissionAccountAccessUnavailableError ||
@@ -100,7 +95,7 @@ const isAccountAccessUnavailable = (error: unknown): boolean =>
 
 export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOptions): DappNamespace => {
   const getConnectionState = (origin: string) =>
-    options.dappConnections.getConnectionState(eip155ConnectionScope(origin), ETHEREUM_CHAIN_REF);
+    options.dappConnections.getConnectionState(eip155ConnectionScope(origin));
 
   const getAccounts = (origin: string): readonly string[] => getConnectionState(origin).accounts;
 
@@ -110,7 +105,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
       accountAddresses: getAccounts(origin),
     });
 
-  const requestAccountAccess = async (scope: DappConnectionScope, chainRef: ChainRef): Promise<void> => {
+  const requestAccountAccess = async (scope: DappScope, chainRef: ChainRef): Promise<void> => {
     try {
       await options.dappAuthorization.requestAccountAccess({ scope, chainRef });
     } catch (error) {
@@ -139,11 +134,6 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
   });
 
   return {
-    openConnection: (origin) =>
-      options.dappConnections.openConnection(eip155ConnectionScope(origin), ETHEREUM_CHAIN_REF),
-    getConnectionState,
-    prepareRemoveNetworkReferences: (chainRef) =>
-      options.dappConnections.prepareRemoveNetworkReferences(chainRef, ETHEREUM_CHAIN_REF),
     namespaceMethods: new Map([
       [
         "eth_chainId",

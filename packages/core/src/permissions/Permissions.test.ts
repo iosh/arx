@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AccountId } from "../accounts/accountId.js";
 import type { AccountMember } from "../accounts/types.js";
 import type { Namespace } from "../namespaces/types.js";
-import { Permissions } from "./Permissions.js";
+import { Permissions, type PermissionsChanged } from "./Permissions.js";
 import type { PermissionRecord } from "./persistence.js";
 
 const EIP155_ACCOUNT_A = "eip155:0000000000000000000000000000000000000001";
@@ -25,23 +25,26 @@ const permission = (
   accountIds: [AccountId, ...AccountId[]],
 ): PermissionRecord => ({ origin, namespace, accountIds });
 
-const createPermissions = (options: { records?: readonly PermissionRecord[] }): Permissions => {
+const createPermissions = (options: { records?: readonly PermissionRecord[] }) => {
   const records = options.records ?? [];
   const accountsById = new Map(accounts.map((entry) => [entry.accountId, entry]));
 
-  return new Permissions({
+  const changes: PermissionsChanged[] = [];
+  const permissions = new Permissions({
     bootstrap: { records },
     accounts: {
       getMember: (accountId) => accountsById.get(accountId) ?? null,
     },
+    publishChanged: (change) => changes.push(change),
   });
+  return { permissions, changes };
 };
 
 describe("Permissions", () => {
   it("builds exact ordered replacements and ignores unchanged account lists", () => {
     const initial = permission("https://dapp.example", "eip155", [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B]);
     const reordered = permission(initial.origin, initial.namespace, [EIP155_ACCOUNT_B, EIP155_ACCOUNT_A]);
-    const permissions = createPermissions({ records: [initial] });
+    const { permissions, changes } = createPermissions({ records: [initial] });
 
     expect(permissions.prepareSetAccounts(initial)).toBeNull();
 
@@ -50,27 +53,36 @@ describe("Permissions", () => {
     expect(permissions.get(initial)).toEqual(initial);
     expect(update.persistenceChanges).toEqual([{ persistenceType: "permission", operation: "put", value: reordered }]);
 
-    permissions.applyCommittedUpdate(update);
+    update.activate();
+    update.publish();
     expect(permissions.get(initial)).toEqual(reordered);
+    expect(changes).toEqual([
+      { type: "permissionsChanged", scopes: [{ origin: initial.origin, namespace: initial.namespace }] },
+    ]);
   });
 
   it("builds scope and origin revocation drafts", () => {
     const first = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A]);
     const second = permission("https://c.example", "eip155", [EIP155_ACCOUNT_B]);
     const third = permission("https://b.example", "eip155", [EIP155_ACCOUNT_B]);
-    const permissions = createPermissions({ records: [third, second, first] });
+    const { permissions, changes } = createPermissions({ records: [third, second, first] });
 
     expect(permissions.prepareRevoke({ origin: "https://missing.example", namespace: "eip155" })).toBeNull();
 
     const scopeUpdate = permissions.prepareRevoke(second);
     if (!scopeUpdate) throw new Error("Expected a permission revocation draft");
-    permissions.applyCommittedUpdate(scopeUpdate);
+    scopeUpdate.activate();
+    scopeUpdate.publish();
     expect(permissions.list()).toEqual([first, third]);
 
     const originUpdate = permissions.prepareRevokeOrigin(first.origin);
     if (!originUpdate) throw new Error("Expected an origin revocation draft");
-    expect(originUpdate.changedScopes).toEqual([{ origin: first.origin, namespace: first.namespace }]);
-    permissions.applyCommittedUpdate(originUpdate);
+    originUpdate.activate();
+    originUpdate.publish();
+    expect(changes[1]).toEqual({
+      type: "permissionsChanged",
+      scopes: [{ origin: first.origin, namespace: first.namespace }],
+    });
     expect(permissions.list()).toEqual([third]);
     expect(permissions.prepareRevokeOrigin(first.origin)).toBeNull();
   });
@@ -79,18 +91,24 @@ describe("Permissions", () => {
     const retained = permission("https://a.example", "eip155", [EIP155_ACCOUNT_A, EIP155_ACCOUNT_B]);
     const removed = permission("https://b.example", "eip155", [EIP155_ACCOUNT_A]);
     const unrelated = permission("https://c.example", "eip155", [EIP155_ACCOUNT_B]);
-    const permissions = createPermissions({ records: [unrelated, removed, retained] });
+    const { permissions, changes } = createPermissions({ records: [unrelated, removed, retained] });
 
     expect(permissions.prepareRemoveAccountReferences([])).toBeNull();
     expect(permissions.prepareRemoveAccountReferences([MISSING_ACCOUNT])).toBeNull();
 
     const update = permissions.prepareRemoveAccountReferences([EIP155_ACCOUNT_A]);
     if (!update) throw new Error("Expected an account-reference removal draft");
-    expect(update.changedScopes).toEqual([
-      { origin: retained.origin, namespace: retained.namespace },
-      { origin: removed.origin, namespace: removed.namespace },
+    update.activate();
+    update.publish();
+    expect(changes).toEqual([
+      {
+        type: "permissionsChanged",
+        scopes: [
+          { origin: retained.origin, namespace: retained.namespace },
+          { origin: removed.origin, namespace: removed.namespace },
+        ],
+      },
     ]);
-    permissions.applyCommittedUpdate(update);
     expect(permissions.list()).toEqual([{ ...retained, accountIds: [EIP155_ACCOUNT_B] }, unrelated]);
   });
 });

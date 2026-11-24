@@ -4,32 +4,28 @@ import { Approvals } from "../approvals/Approvals.js";
 import { createAssets } from "../assets/Assets.js";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
 import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
-import {
-  type DappConnectionState,
-  type DappConnectionStateChanged,
-  DappConnections,
-} from "../dappConnections/DappConnections.js";
+import { type DappConnectionStateChanged, DappConnections } from "../dappConnections/DappConnections.js";
 import type { DappConnectionScopeInput, DappConnectionsApi } from "../dappConnections/DappConnectionsApi.js";
 import { RpcUnsupportedMethodError } from "../dappConnections/errors.js";
-import type { DappConnectionScope } from "../dappConnections/persistence.js";
 import { type DappNamespaces, routeDappRequest } from "../dappConnections/routeDappRequest.js";
 import { Keyring } from "../keyring/Keyring.js";
 import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import { createEip155AssetsAdapter } from "../namespaces/eip155/assets.js";
-import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
+import { EIP155_DEFAULT_CHAIN_REF, EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
 import { createEip155Rpc } from "../namespaces/eip155/rpc.js";
-import { isSupportedNamespace, SUPPORTED_NAMESPACES } from "../namespaces/types.js";
-import { splitChainRef } from "../networks/chainRef.js";
+import { isSupportedNamespace, type Namespace, SUPPORTED_NAMESPACES } from "../namespaces/types.js";
+import type { ChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
 import type { NetworksNamespaceAdapters } from "../networks/namespaceAdapter.js";
 import { createCustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import { createDappAuthorization } from "../permissions/createDappAuthorization.js";
 import { Permissions } from "../permissions/Permissions.js";
+import type { DappScope } from "../permissions/scope.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
 import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAdapter.js";
@@ -51,7 +47,11 @@ const keyringAdapters = {
   [EIP155_NAMESPACE]: eip155KeyringAdapter,
 } as const satisfies KeyringNamespaceAdapters;
 
-const parseDappConnectionScope = ({ origin, namespace }: DappConnectionScopeInput): DappConnectionScope => {
+const defaultChainRefs: Readonly<Record<Namespace, ChainRef>> = {
+  [EIP155_NAMESPACE]: EIP155_DEFAULT_CHAIN_REF,
+};
+
+const parseDappConnectionScope = ({ origin, namespace }: DappConnectionScopeInput): DappScope => {
   if (!isSupportedNamespace(namespace)) {
     throw new RpcUnsupportedMethodError({ message: `Namespace "${namespace}" has no dapp implementation.` });
   }
@@ -104,9 +104,11 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const permissions = new Permissions({
     bootstrap: bootstrap.permissions,
     accounts,
+    publishChanged: publishWalletEvent,
   });
   const dappConnections = new DappConnections({
     bootstrap: bootstrap.dappConnections,
+    defaultChainRefs,
     accounts,
     networks,
     permissions,
@@ -169,22 +171,14 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     dappConnections,
     autoLock,
     publishStatusChanged: publishWalletEvent,
-    publishKeyringChanged: publishWalletEvent,
-    publishAccountsChanged: publishWalletEvent,
-    publishPermissionsChanged: publishWalletEvent,
   });
-  const getConnectionState = (scope: DappConnectionScope): DappConnectionState =>
-    dappNamespaces[scope.namespace].getConnectionState(scope.origin);
-
   const dappAuthorization = createDappAuthorization({
     mutations,
     wallet: walletStatusReader,
     accounts,
     permissions,
     dappConnections,
-    getConnectionState,
     approvals,
-    publishPermissionsChanged: publishWalletEvent,
   });
 
   const dappNamespaces = {
@@ -204,8 +198,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     mutations,
     networks,
     transactions: input.persistence.readers.transactions,
-    prepareDappNetworkRemoval: (chainRef) =>
-      dappNamespaces[splitChainRef(chainRef).namespace].prepareRemoveNetworkReferences(chainRef),
+    dappConnections,
   });
   const walletApi = createWalletApi({
     subscribe: (listener) => {
@@ -229,13 +222,13 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const dappConnectionsApi: DappConnectionsApi = {
     openConnection: (input) => {
       const scope = parseDappConnectionScope(input);
-      return dappNamespaces[scope.namespace].openConnection(scope.origin);
+      return dappConnections.openConnection(scope);
     },
-    getConnectionState: (input) => getConnectionState(parseDappConnectionScope(input)),
+    getConnectionState: (input) => dappConnections.getConnectionState(parseDappConnectionScope(input)),
     closeConnection: (input) => dappAuthorization.closeConnection(parseDappConnectionScope(input)),
     request: async ({ scope: inputScope, method, params }) => {
       const scope = parseDappConnectionScope(inputScope);
-      const { chainRef } = getConnectionState(scope);
+      const { chainRef } = dappConnections.getConnectionState(scope);
       return routeDappRequest({
         namespace: scope.namespace,
         namespaceRequests: dappNamespaces[scope.namespace],

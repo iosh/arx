@@ -36,6 +36,7 @@ const createHarness = () => {
   const permissions = new Permissions({
     accounts,
     bootstrap: { records: [{ origin: ORIGIN, namespace: "eip155", accountIds: [ACCOUNT_ID] }] },
+    publishChanged: () => undefined,
   });
   const approvals = new Approvals({
     time: {

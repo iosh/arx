@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  type ChainJsonRpcHttpProtocolError,
-  type ChainJsonRpcHttpTransportError,
-  createJsonRpcHttpTransport,
-} from "./JsonRpcHttpTransport.js";
+import type { ChainJsonRpcResponseError } from "./errors.js";
+import { type ChainJsonRpcHttpTransportError, createJsonRpcHttpTransport } from "./JsonRpcHttpTransport.js";
 
 const endpoint = "https://rpc.example";
 
@@ -48,10 +45,10 @@ describe("JsonRpcHttpTransport", () => {
     });
     const transport = createJsonRpcHttpTransport({ fetch });
     const expected = {
-      code: "chain_json_rpc.http_protocol",
+      code: "chain_json_rpc.response_error",
       rpcCode: -32000,
       message: "rejected",
-    } satisfies Partial<ChainJsonRpcHttpProtocolError>;
+    } satisfies Partial<ChainJsonRpcResponseError>;
 
     await expect(transport.request({ endpoint, method: "eth_call" })).rejects.toMatchObject(expected);
   });

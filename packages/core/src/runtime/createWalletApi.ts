@@ -5,7 +5,6 @@ import type { Assets } from "../assets/Assets.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
 import { KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
-import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Networks } from "../networks/Networks.js";
 import type { CustomNetworkRemoval } from "../networks/removeCustomNetwork.js";
 import type { DappAuthorization } from "../permissions/createDappAuthorization.js";
@@ -23,7 +22,6 @@ type CreateWalletApiOptions = Readonly<{
   networks: Networks;
   assets: Assets;
   customNetworkRemoval: CustomNetworkRemoval;
-  eip155Rpc: Eip155Rpc;
   permissions: DappAuthorization["permissions"];
   approvals: Pick<Approvals, "get" | "list" | "approve" | "reject">;
   transactions: Transactions;
@@ -38,7 +36,6 @@ export const createWalletApi = ({
   networks,
   assets,
   customNetworkRemoval,
-  eip155Rpc,
   permissions,
   approvals,
   transactions,
@@ -98,6 +95,7 @@ export const createWalletApi = ({
     list: async () => networks.list(),
     listByNamespace: async (namespace) => networks.listByNamespace(namespace),
     getRpcConfiguration: async (chainRef) => networks.getRpcConfiguration(chainRef),
+    queryChainRef: async (input) => networks.queryChainRef(input),
     addCustom: async (input) => networks.addCustom(input),
     updateCustom: async (input) => networks.updateCustom(input),
     updateBlockExplorers: async (input) => networks.updateBlockExplorers(input),
@@ -107,7 +105,6 @@ export const createWalletApi = ({
   },
 
   assets,
-  eip155: eip155Rpc,
 
   permissions: {
     get: async (scope) => permissions.get(scope),

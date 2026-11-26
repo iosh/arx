@@ -1,5 +1,6 @@
-import { ArxBaseError, type JsonValue, toJsonSafe } from "../errors.js";
+import { ArxBaseError, toJsonSafe } from "../errors.js";
 import type { RpcEndpoint } from "../networks/types.js";
+import { ChainJsonRpcResponseError } from "./errors.js";
 import type { JsonRpcParams } from "./types.js";
 
 export type JsonRpcHttpRequest = Readonly<{
@@ -12,26 +13,6 @@ export type JsonRpcHttpRequest = Readonly<{
 export type JsonRpcHttpTransport = Readonly<{
   request<TResult = unknown>(request: JsonRpcHttpRequest): Promise<TResult>;
 }>;
-
-export class ChainJsonRpcHttpProtocolError extends ArxBaseError {
-  static readonly code = "chain_json_rpc.http_protocol";
-
-  readonly rpcCode: number;
-  readonly rpcData?: JsonValue;
-
-  constructor(input: { rpcCode: number; message: string; data?: unknown }) {
-    const rpcData = toJsonSafe(input.data);
-    super(input.message, {
-      code: ChainJsonRpcHttpProtocolError.code,
-      details: {
-        rpcCode: input.rpcCode,
-        ...(rpcData !== undefined ? { rpcData } : {}),
-      },
-    });
-    this.rpcCode = input.rpcCode;
-    if (rpcData !== undefined) this.rpcData = rpcData;
-  }
-}
 
 export class ChainJsonRpcHttpTransportError extends ArxBaseError {
   static readonly code = "chain_json_rpc.http_transport";
@@ -108,10 +89,10 @@ export const createJsonRpcHttpTransport = (options: { fetch?: typeof globalThis.
         if (envelope.error && typeof envelope.error === "object" && !Array.isArray(envelope.error)) {
           const rpcError = envelope.error as { code?: unknown; message?: unknown; data?: unknown };
           if (typeof rpcError.code === "number" && typeof rpcError.message === "string") {
-            throw new ChainJsonRpcHttpProtocolError({
+            throw new ChainJsonRpcResponseError({
               rpcCode: rpcError.code,
               message: rpcError.message,
-              data: rpcError.data,
+              data: toJsonSafe(rpcError.data),
             });
           }
         }
@@ -123,7 +104,7 @@ export const createJsonRpcHttpTransport = (options: { fetch?: typeof globalThis.
         }
         return envelope.result as TResult;
       } catch (error) {
-        if (error instanceof ChainJsonRpcHttpProtocolError || error instanceof ChainJsonRpcHttpTransportError) {
+        if (error instanceof ChainJsonRpcResponseError || error instanceof ChainJsonRpcHttpTransportError) {
           throw error;
         }
         throw new ChainJsonRpcHttpTransportError(

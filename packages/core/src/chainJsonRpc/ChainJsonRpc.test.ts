@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createChainJsonRpc } from "./ChainJsonRpc.js";
-import { ChainJsonRpcOutcomeUnknownError } from "./errors.js";
-import { ChainJsonRpcHttpProtocolError, ChainJsonRpcHttpTransportError } from "./JsonRpcHttpTransport.js";
+import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "./errors.js";
+import { ChainJsonRpcHttpTransportError } from "./JsonRpcHttpTransport.js";
 
 const endpointA = "https://a.example";
 const endpointB = "https://b.example";
@@ -36,10 +36,9 @@ describe("ChainJsonRpc", () => {
   });
 
   it("does not retry an explicit JSON-RPC error", async () => {
-    const endpoint = "https://uninstalled.example";
     const transport = {
       request: vi.fn().mockRejectedValue(
-        new ChainJsonRpcHttpProtocolError({
+        new ChainJsonRpcResponseError({
           rpcCode: -32000,
           message: "rejected",
           data: { reason: "insufficient funds" },
@@ -48,7 +47,7 @@ describe("ChainJsonRpc", () => {
     };
     const rpc = createChainJsonRpc({ endpoints, transport });
 
-    await expect(rpc.request({ endpoint, method: "eth_call", replay: "allowed" })).rejects.toMatchObject({
+    await expect(rpc.request({ chainRef: "eip155:1", method: "eth_call", replay: "allowed" })).rejects.toMatchObject({
       code: "chain_json_rpc.response_error",
       rpcCode: -32000,
       rpcData: { reason: "insufficient funds" },

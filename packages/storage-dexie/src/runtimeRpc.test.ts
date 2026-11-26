@@ -48,11 +48,15 @@ describe("CoreRuntime EIP-155 RPC", () => {
     const { runtime, persistence } = await open(databaseName);
     expect(fetch).not.toHaveBeenCalled();
 
-    await expect(runtime.wallet.eip155.eth_chainId([], { endpoint: "https://base.example" })).resolves.toBe("0x2105");
-    expect(await runtime.wallet.networks.get("eip155:8453")).toBeNull();
+    const chainRef = await runtime.wallet.networks.queryChainRef({
+      namespace: "eip155",
+      endpoint: "https://base.example",
+    });
+    expect(chainRef).toBe("eip155:8453");
+    expect(await runtime.wallet.networks.get(chainRef)).toBeNull();
     await runtime.wallet.networks.addCustom({
       definition: {
-        chainRef: "eip155:8453",
+        chainRef,
         name: "Base",
         nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
       },
@@ -96,7 +100,9 @@ describe("CoreRuntime EIP-155 RPC", () => {
       endpoints: ["https://base-active.example"],
       defaultEndpoints: ["https://base.example", "https://base-backup.example"],
     });
-    await expect(restored.wallet.eip155.eth_chainId([], { chainRef: "eip155:8453" })).resolves.toBe("0x2105");
+    const scope = { origin: removedSite.origin, namespace: removedSite.namespace };
+    restored.dappConnections.openConnection(scope);
+    await expect(restored.dappConnections.request({ scope, method: "eth_blockNumber" })).resolves.toBe("0x1234");
     expect(fetch).toHaveBeenCalledOnce();
     expect(String(fetch.mock.calls[0]?.[0])).toBe("https://base-active.example");
     await expect(restored.wallet.networks.clearRpcOverride("eip155:8453")).resolves.toEqual({

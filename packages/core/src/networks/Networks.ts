@@ -7,9 +7,7 @@ import type { ChainRef } from "./chainRef.js";
 import { parseChainRef, splitChainRef } from "./chainRef.js";
 import { cloneChainDefinition, isSameChainDefinition } from "./definition.js";
 import {
-  BuiltinNetworkConflictError,
-  BuiltinNetworkImmutableError,
-  CustomNetworkAlreadyExistsError,
+  NetworkAlreadyExistsError,
   NetworkBlockExplorerExistsError,
   NetworkConfigurationChangedError,
   NetworkNotFoundError,
@@ -30,6 +28,7 @@ import type {
   NetworksReader,
   NetworkUrlUpdate,
   NonEmptyRpcEndpoints,
+  RpcEndpoint,
 } from "./types.js";
 
 type InstalledNetwork = Readonly<{
@@ -47,6 +46,12 @@ type NetworksOptions = Readonly<{
 
 const isSameRpcEndpoints = (left: NonEmptyRpcEndpoints, right: NonEmptyRpcEndpoints): boolean =>
   left.length === right.length && left.every((endpoint, index) => endpoint === right[index]);
+
+const assertHttpRpcEndpoint = (endpoint: RpcEndpoint): void => {
+  if (!URL.canParse(endpoint)) throw new NetworkRpcEndpointInvalidError(endpoint);
+  const { protocol } = new URL(endpoint);
+  if (protocol !== "http:" && protocol !== "https:") throw new NetworkRpcEndpointInvalidError(endpoint);
+};
 
 const createInstalledCustomNetwork = (input: CustomNetworkInput, namespace: Namespace): InstalledNetwork => ({
   network: {
@@ -136,6 +141,11 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
 
   getRpcEndpoints(chainRef: ChainRef): NonEmptyRpcEndpoints {
     return this.getRpcConfiguration(chainRef).endpoints;
+  }
+
+  async queryChainRef({ namespace, endpoint }: { namespace: Namespace; endpoint: RpcEndpoint }): Promise<ChainRef> {
+    assertHttpRpcEndpoint(endpoint);
+    return this.readRpcChainRef(namespace, endpoint);
   }
 
   async addCustom(input: CustomNetworkInput): Promise<void> {
@@ -331,29 +341,21 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
     };
   }
 
-  private async validateRpcConfiguration(expectedChainRef: ChainRef, endpoints: NonEmptyRpcEndpoints): Promise<void> {
-    for (const endpoint of endpoints) {
-      if (!URL.canParse(endpoint)) throw new NetworkRpcEndpointInvalidError(endpoint);
-      const protocol = new URL(endpoint).protocol;
-      if (protocol !== "http:" && protocol !== "https:") throw new NetworkRpcEndpointInvalidError(endpoint);
-    }
+  private readRpcChainRef(namespace: Namespace, endpoint: RpcEndpoint): Promise<ChainRef> {
+    return this.#adapters[namespace].queryChainRef(endpoint).catch((cause) => {
+      throw new NetworkRpcEndpointReadError({ endpoint, cause });
+    });
+  }
 
-    const adapter = this.#adapters[splitChainRef(expectedChainRef).namespace];
+  private async validateRpcConfiguration(expectedChainRef: ChainRef, endpoints: NonEmptyRpcEndpoints): Promise<void> {
+    for (const endpoint of endpoints) assertHttpRpcEndpoint(endpoint);
+    const { namespace } = splitChainRef(expectedChainRef);
 
     await Promise.all(
       endpoints.map(async (endpoint) => {
-        let reportedChainRef: ChainRef;
-        try {
-          reportedChainRef = await adapter.queryChainRef(endpoint);
-        } catch (cause) {
-          throw new NetworkRpcEndpointReadError({ endpoint, cause });
-        }
-        if (reportedChainRef !== expectedChainRef) {
-          throw new NetworkRpcEndpointMismatchError({
-            endpoint,
-            expectedChainRef,
-            actualChainRef: reportedChainRef,
-          });
+        const actualChainRef = await this.readRpcChainRef(namespace, endpoint);
+        if (actualChainRef !== expectedChainRef) {
+          throw new NetworkRpcEndpointMismatchError({ endpoint, expectedChainRef, actualChainRef });
         }
       }),
     );
@@ -377,13 +379,11 @@ export class Networks implements NetworksReader, NetworkRpcEndpointsReader {
 
   private requireCustomNetwork(chainRef: ChainRef): InstalledNetwork {
     const installed = this.requireInstalledNetwork(chainRef);
-    if (installed.network.source === "builtin") throw new BuiltinNetworkImmutableError(chainRef);
+    if (installed.network.source === "builtin") throw new Error(`Builtin network "${chainRef}" cannot be changed.`);
     return installed;
   }
 
   private assertCustomNetworkCanBeAdded(chainRef: ChainRef): void {
-    const installed = this.#networks.get(chainRef);
-    if (installed?.network.source === "builtin") throw new BuiltinNetworkConflictError(chainRef);
-    if (installed) throw new CustomNetworkAlreadyExistsError(chainRef);
+    if (this.#networks.has(chainRef)) throw new NetworkAlreadyExistsError(chainRef);
   }
 }

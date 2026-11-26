@@ -10,11 +10,8 @@ export {
   validateChainDefinition,
 } from "./definition.js";
 export {
-  BuiltinNetworkConflictError,
-  BuiltinNetworkImmutableError,
   ChainNamespaceMismatchError,
-  CustomNetworkAlreadyExistsError,
-  InvalidChainRefError,
+  NetworkAlreadyExistsError,
   NetworkBlockExplorerExistsError,
   NetworkConfigurationChangedError,
   NetworkHasPendingTransactionsError,

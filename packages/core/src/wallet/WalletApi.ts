@@ -4,7 +4,6 @@ import type { AccountGroup, AccountPreview, AccountsChanged } from "../accounts/
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
 import type { Assets } from "../assets/Assets.js";
 import type { KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
-import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type {
@@ -14,6 +13,7 @@ import type {
   NetworkRpcConfiguration,
   NetworksChanged,
   NetworkUrlUpdate,
+  RpcEndpoint,
 } from "../networks/types.js";
 import type { Permission, PermissionsChanged } from "../permissions/Permissions.js";
 import type { DappScope } from "../permissions/scope.js";
@@ -99,6 +99,8 @@ export type WalletNetworksApi = Readonly<{
   list(): Promise<readonly Network[]>;
   listByNamespace(namespace: Namespace): Promise<readonly Network[]>;
   getRpcConfiguration(chainRef: ChainRef): Promise<NetworkRpcConfiguration>;
+  /** Reads the chain reference reported by this endpoint using the given namespace's RPC protocol. */
+  queryChainRef(input: { namespace: Namespace; endpoint: RpcEndpoint }): Promise<ChainRef>;
   addCustom(input: CustomNetworkInput): Promise<void>;
   updateCustom(input: CustomNetworkUpdate): Promise<Network>;
   updateBlockExplorers(input: { chainRef: ChainRef; update: NetworkUrlUpdate }): Promise<Network>;
@@ -158,7 +160,6 @@ export type WalletApi = Readonly<{
   accounts: WalletAccountsApi;
   networks: WalletNetworksApi;
   assets: Assets;
-  eip155: Eip155Rpc;
   permissions: WalletPermissionsApi;
   approvals: WalletApprovalsApi;
   transactions: WalletTransactionsApi;

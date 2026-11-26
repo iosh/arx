@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Plus, RefreshCw, X } from "lucide-react";
-import { useId, useRef } from "react";
+import { useId } from "react";
 import { Controller, useFieldArray } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/ui/components/PageHeader";
@@ -10,12 +10,11 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/ui/components/ui
 import { Spinner } from "@/ui/components/ui/spinner";
 import { isHttpUrl } from "@/ui/utils/url";
 import { NetworkFormInput } from "./NetworkFormInput";
-import { chainIdPattern, useAddEvmNetworkForm } from "./useAddEvmNetworkForm";
+import { useAddEvmNetworkForm } from "./useAddEvmNetworkForm";
 
 export function AddEvmNetworkPage() {
   const { t } = useTranslation("wallet");
   const id = useId();
-  const rpcUrlOnFocus = useRef("");
   const network = useAddEvmNetworkForm();
   const { form, pending } = network;
   const { fields: rpcFields, append, remove } = useFieldArray({ control: form.control, name: "nodes" });
@@ -50,16 +49,6 @@ export function AddEvmNetworkPage() {
                   <InputGroup className="bg-card">
                     <InputGroupInput
                       {...input}
-                      onFocus={(event) => {
-                        rpcUrlOnFocus.current = event.currentTarget.value.trim();
-                      }}
-                      onBlur={(event) => {
-                        const endpoint = event.currentTarget.value.trim();
-                        void input.onBlur(event);
-                        if (isHttpUrl(endpoint) && endpoint !== rpcUrlOnFocus.current) {
-                          network.startLoading({ rpcUrl: endpoint, index });
-                        }
-                      }}
                       id={inputId}
                       type="url"
                       dir="ltr"
@@ -124,11 +113,7 @@ export function AddEvmNetworkPage() {
               <Controller
                 control={form.control}
                 name="chainId"
-                rules={{
-                  required: t("chainIdInvalid"),
-                  pattern: { value: chainIdPattern, message: t("chainIdInvalid") },
-                  validate: network.validateChainId,
-                }}
+                rules={{ validate: network.validateChainId }}
                 render={({ field }) => (
                   <InputGroupInput
                     {...field}

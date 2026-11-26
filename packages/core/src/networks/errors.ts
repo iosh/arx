@@ -2,19 +2,6 @@ import { ArxBaseError } from "../errors.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { ChainRef } from "./chainRef.js";
 
-export type InvalidChainRefRule = "type" | "namespace:reference" | "single_colon" | "namespace" | "reference";
-
-export class InvalidChainRefError extends ArxBaseError {
-  static readonly code = "network.invalid_chain_ref";
-
-  constructor(rule: InvalidChainRefRule) {
-    super("Invalid wallet chain reference.", {
-      code: InvalidChainRefError.code,
-      details: { rule },
-    });
-  }
-}
-
 export class ChainNamespaceMismatchError extends ArxBaseError {
   static readonly code = "network.chain_namespace_mismatch";
 
@@ -37,34 +24,12 @@ export class NetworkNotFoundError extends ArxBaseError {
   }
 }
 
-export class BuiltinNetworkConflictError extends ArxBaseError {
-  static readonly code = "network.builtin_conflict";
+export class NetworkAlreadyExistsError extends ArxBaseError {
+  static readonly code = "network.already_exists";
 
   constructor(chainRef: ChainRef) {
-    super(`Custom network "${chainRef}" conflicts with a builtin network.`, {
-      code: BuiltinNetworkConflictError.code,
-      details: { chainRef },
-    });
-  }
-}
-
-export class CustomNetworkAlreadyExistsError extends ArxBaseError {
-  static readonly code = "network.custom_already_exists";
-
-  constructor(chainRef: ChainRef) {
-    super(`Custom network "${chainRef}" already exists.`, {
-      code: CustomNetworkAlreadyExistsError.code,
-      details: { chainRef },
-    });
-  }
-}
-
-export class BuiltinNetworkImmutableError extends ArxBaseError {
-  static readonly code = "network.builtin_immutable";
-
-  constructor(chainRef: ChainRef) {
-    super(`Builtin network "${chainRef}" cannot be changed.`, {
-      code: BuiltinNetworkImmutableError.code,
+    super(`Network "${chainRef}" already exists.`, {
+      code: NetworkAlreadyExistsError.code,
       details: { chainRef },
     });
   }

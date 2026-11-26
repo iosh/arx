@@ -1,20 +1,20 @@
+import type { ChainRef } from "../networks/chainRef.js";
 import type { NetworkRpcEndpointsReader } from "../networks/types.js";
-import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "./errors.js";
+import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcUnavailableError } from "./errors.js";
 import {
-  ChainJsonRpcHttpProtocolError,
   ChainJsonRpcHttpTransportError,
   createJsonRpcHttpTransport,
   type JsonRpcHttpTransport,
 } from "./JsonRpcHttpTransport.js";
-import type { ChainJsonRpcTarget, JsonRpcParams } from "./types.js";
+import type { JsonRpcParams } from "./types.js";
 
-export type ChainJsonRpcRequest = ChainJsonRpcTarget &
-  Readonly<{
-    method: string;
-    params?: JsonRpcParams;
-    timeoutMs?: number;
-    replay: "allowed" | "forbidden";
-  }>;
+export type ChainJsonRpcRequest = Readonly<{
+  chainRef: ChainRef;
+  method: string;
+  params?: JsonRpcParams;
+  timeoutMs?: number;
+  replay: "allowed" | "forbidden";
+}>;
 
 export type ChainJsonRpc = Readonly<{
   request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult>;
@@ -37,8 +37,7 @@ export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc =
   return {
     async request<TResult = unknown>(input: ChainJsonRpcRequest): Promise<TResult> {
       const deadline = Date.now() + (input.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
-      const endpoints =
-        input.endpoint !== undefined ? [input.endpoint] : options.endpoints.getRpcEndpoints(input.chainRef);
+      const endpoints = options.endpoints.getRpcEndpoints(input.chainRef);
       let lastTransportError: ChainJsonRpcHttpTransportError | undefined;
 
       for (const endpoint of endpoints) {
@@ -53,13 +52,6 @@ export const createChainJsonRpc = (options: ChainJsonRpcOptions): ChainJsonRpc =
             timeoutMs,
           });
         } catch (error) {
-          if (error instanceof ChainJsonRpcHttpProtocolError) {
-            throw new ChainJsonRpcResponseError({
-              rpcCode: error.rpcCode,
-              message: error.message,
-              data: error.rpcData,
-            });
-          }
           if (!(error instanceof ChainJsonRpcHttpTransportError)) throw error;
           if (input.replay === "forbidden") {
             throw new ChainJsonRpcOutcomeUnknownError(error);

@@ -1,5 +1,4 @@
 import { isSupportedNamespace, type Namespace } from "../namespaces/types.js";
-import { InvalidChainRefError } from "./errors.js";
 
 const CHAIN_REFERENCE_PATTERN = /^[-_a-zA-Z0-9]{1,32}$/;
 
@@ -21,25 +20,13 @@ export const splitChainRef = (chainRef: ChainRef): ParsedChainRef => {
 };
 
 export const parseChainRef = (value: unknown): ParsedChainRef => {
-  if (typeof value !== "string") {
-    throw new InvalidChainRefError("type");
-  }
+  if (typeof value !== "string") throw new Error("A wallet chain reference must be a string.");
 
   const separatorIndex = value.indexOf(":");
-  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
-    throw new InvalidChainRefError("namespace:reference");
-  }
-  if (value.indexOf(":", separatorIndex + 1) !== -1) {
-    throw new InvalidChainRefError("single_colon");
-  }
-
   const namespace = value.slice(0, separatorIndex);
   const reference = value.slice(separatorIndex + 1);
-  if (!isSupportedNamespace(namespace)) {
-    throw new InvalidChainRefError("namespace");
-  }
-  if (!CHAIN_REFERENCE_PATTERN.test(reference)) {
-    throw new InvalidChainRefError("reference");
+  if (separatorIndex <= 0 || !isSupportedNamespace(namespace) || !CHAIN_REFERENCE_PATTERN.test(reference)) {
+    throw new Error("Invalid wallet chain reference.");
   }
 
   return { namespace, reference };

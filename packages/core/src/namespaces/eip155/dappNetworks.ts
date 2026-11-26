@@ -4,8 +4,7 @@ import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError, RpcUnrecognizedChainError } from "../../dappConnections/errors.js";
 import {
-  BuiltinNetworkConflictError,
-  CustomNetworkAlreadyExistsError,
+  NetworkAlreadyExistsError,
   NetworkNotFoundError,
   NetworkRpcEndpointInvalidError,
   NetworkRpcEndpointMismatchError,
@@ -96,9 +95,7 @@ export const createEip155DappNetworkHandlers = (
       try {
         await options.networks.addCustom(params);
       } catch (error) {
-        if (error instanceof CustomNetworkAlreadyExistsError || error instanceof BuiltinNetworkConflictError) {
-          return null;
-        }
+        if (error instanceof NetworkAlreadyExistsError) return null;
         if (
           error instanceof NetworkRpcEndpointInvalidError ||
           error instanceof NetworkRpcEndpointMismatchError ||

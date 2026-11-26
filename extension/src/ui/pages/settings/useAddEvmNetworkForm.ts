@@ -1,10 +1,5 @@
-import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "@arx/core/chain-json-rpc";
-import { chainRefFromChainId, MAX_EIP155_CHAIN_ID } from "@arx/core/namespaces";
-import {
-  BuiltinNetworkConflictError,
-  CustomNetworkAlreadyExistsError,
-  type CustomNetworkInput,
-} from "@arx/core/networks";
+import { chainIdFromChainRef, chainRefFromChainId, EIP155_NAMESPACE, MAX_EIP155_CHAIN_ID } from "@arx/core/namespaces";
+import { type CustomNetworkInput, NetworkAlreadyExistsError } from "@arx/core/networks";
 import { isWalletApiError } from "@arx/wallet-api/client";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
@@ -38,7 +33,7 @@ type LoadedNetwork = {
 };
 
 const metadataFields = ["name", "symbol", "decimals", "explorer"] as const;
-export const chainIdPattern = /^[1-9][0-9]{0,31}$/;
+const chainIdPattern = /^[1-9][0-9]{0,31}$/;
 
 const isSupportedChainId = (value: string): boolean =>
   chainIdPattern.test(value) && BigInt(value) <= MAX_EIP155_CHAIN_ID;
@@ -78,20 +73,21 @@ export function useAddEvmNetworkForm() {
   }
 
   async function loadNetwork(source: LoadSource): Promise<LoadedNetwork> {
-    let loadedChainId: string;
+    let chainIdValue: bigint;
     if ("rpcUrl" in source) {
-      const result = await wallet.eip155.eth_chainId([], { endpoint: source.rpcUrl });
-      loadedChainId = `${BigInt(result)}`;
+      const chainRef = await wallet.networks.queryChainRef({ namespace: EIP155_NAMESPACE, endpoint: source.rpcUrl });
+      chainIdValue = chainIdFromChainRef(chainRef);
     } else {
-      loadedChainId = source.chainId;
+      chainIdValue = BigInt(source.chainId);
     }
+    const loadedChainId = chainIdValue.toString();
     const installed = networks?.some((network) => network.chainRef === `eip155:${loadedChainId}`);
-    if (!isSupportedChainId(loadedChainId) || loadedChainId === confirmedChainId || installed) {
+    if (loadedChainId === confirmedChainId || installed) {
       return { chainId: loadedChainId };
     }
 
     try {
-      const metadata = await getEip155NetworkMetadata(BigInt(loadedChainId));
+      const metadata = await getEip155NetworkMetadata(chainIdValue);
       return { chainId: loadedChainId, metadata };
     } catch (metadataError) {
       return { chainId: loadedChainId, metadata: null, metadataError };
@@ -100,7 +96,7 @@ export function useAddEvmNetworkForm() {
 
   function applyLoadedNetwork(result: LoadedNetwork) {
     form.setValue("chainId", result.chainId, { shouldValidate: true });
-    if (!isSupportedChainId(result.chainId) || result.chainId === confirmedChainId) return;
+    if (result.chainId === confirmedChainId) return;
     for (const name of [...metadataFields, "isTestnet"] as const) form.resetField(name);
     form.clearErrors("nodes");
     if (result.metadata) {
@@ -113,14 +109,14 @@ export function useAddEvmNetworkForm() {
   }
 
   function handleLoadError(error: Error, source: LoadSource) {
-    if (
-      "rpcUrl" in source &&
-      (isWalletApiError(error, ChainJsonRpcResponseError) || isWalletApiError(error, ChainJsonRpcUnavailableError))
-    ) {
-      form.setError(`nodes.${source.index}.url`, { type: "rpc", message: t("rpcReadFailed") });
-    } else {
-      reportError(error);
+    if ("rpcUrl" in source) {
+      const rpcError = getNetworkRpcError(error, form.getValues("name"), t);
+      if (rpcError) {
+        form.setError(`nodes.${source.index}.url`, { type: "rpc", message: rpcError.message });
+        return;
+      }
     }
+    reportError(error);
   }
 
   function startLoading(source: LoadSource) {
@@ -135,6 +131,12 @@ export function useAddEvmNetworkForm() {
   function confirmChainId() {
     const value = form.getValues("chainId");
     if (isSupportedChainId(value) && value !== confirmedChainId) startLoading({ chainId: value });
+  }
+
+  function validateChainId(value: string) {
+    if (!isSupportedChainId(value)) return t("chainIdInvalid");
+    const network = networks?.find((candidate) => candidate.chainRef === `eip155:${value}`);
+    return network ? t("chainIdUsedByNetwork", { chainId: value, networkName: network.name }) : true;
   }
 
   function readFromFirstRpc() {
@@ -168,10 +170,7 @@ export function useAddEvmNetworkForm() {
         void navigate({ to: "/wallet/settings/networks", replace: true, ignoreBlocker: true });
       },
       onError: (error) => {
-        if (
-          isWalletApiError(error, CustomNetworkAlreadyExistsError) ||
-          isWalletApiError(error, BuiltinNetworkConflictError)
-        ) {
+        if (isWalletApiError(error, NetworkAlreadyExistsError)) {
           form.setError(
             "chainId",
             { type: "duplicate", message: t("chainIdAlreadyUsed", { chainId: values.chainId }) },
@@ -198,16 +197,9 @@ export function useAddEvmNetworkForm() {
     metadataReadOnly,
     existingNetwork,
     metadataMessage,
-    startLoading,
     confirmChainId,
     readFromFirstRpc,
-    validateChainId: (value: string) => {
-      if (chainIdPattern.test(value) && BigInt(value) > MAX_EIP155_CHAIN_ID) {
-        return t("chainIdInvalid");
-      }
-      const network = networks?.find((candidate) => candidate.chainRef === `eip155:${value}`);
-      return network ? t("chainIdUsedByNetwork", { chainId: value, networkName: network.name }) : true;
-    },
+    validateChainId,
     submit: (event: FormEvent<HTMLFormElement>) => {
       if (metadataReadOnly) {
         event.preventDefault();

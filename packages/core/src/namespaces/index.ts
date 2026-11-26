@@ -6,7 +6,6 @@ export {
 } from "./eip155/chainId.js";
 export { EIP155_NAMESPACE } from "./eip155/constants.js";
 export { Eip155InvalidChainIdError } from "./eip155/errors.js";
-export type { Eip155ChainIdOptions, Eip155Rpc } from "./eip155/rpc.js";
 export type {
   Eip155PersonalMessage,
   Eip155SignRequest,

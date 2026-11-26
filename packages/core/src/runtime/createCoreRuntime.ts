@@ -17,7 +17,6 @@ import { EIP155_DEFAULT_CHAIN_REF, EIP155_NAMESPACE } from "../namespaces/eip155
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
 import { createEip155NetworksAdapter } from "../namespaces/eip155/networks.js";
-import { createEip155Rpc } from "../namespaces/eip155/rpc.js";
 import { isSupportedNamespace, type Namespace, SUPPORTED_NAMESPACES } from "../namespaces/types.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import { Networks } from "../networks/Networks.js";
@@ -134,7 +133,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     endpoints: networks,
     transport: jsonRpcHttpTransport,
   });
-  const eip155Rpc = createEip155Rpc(chainJsonRpc);
   const assets = createAssets({
     accounts,
     networks,
@@ -219,7 +217,6 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     networks,
     customNetworkRemoval,
     assets,
-    eip155Rpc,
     permissions: dappAuthorization.permissions,
     approvals,
     transactions,

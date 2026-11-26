@@ -5,7 +5,7 @@ import type { PersistenceWriter } from "../persistence/corePersistence.js";
 import { PersistenceCommitError } from "../persistence/errors.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import {
-  CustomNetworkAlreadyExistsError,
+  NetworkAlreadyExistsError,
   NetworkConfigurationChangedError,
   NetworkRpcEndpointMismatchError,
   NetworkRpcEndpointReadError,
@@ -93,7 +93,7 @@ describe("Networks", () => {
   it("admits only one of two concurrent additions of the same chain", async () => {
     const { networks, commit, changes } = createFixture();
     await expect(Promise.all([networks.addCustom(custom), networks.addCustom(custom)])).rejects.toBeInstanceOf(
-      CustomNetworkAlreadyExistsError,
+      NetworkAlreadyExistsError,
     );
     expect(networks.get(custom.definition.chainRef)).toMatchObject(custom.definition);
     expect(commit).toHaveBeenCalledOnce();
@@ -203,17 +203,24 @@ describe("Networks", () => {
     expect(mismatch.changes).toEqual([]);
   });
 
-  it.each(["unavailable", "invalid response"])("rejects an %s RPC without installing the network", async (failure) => {
-    const unavailable = createFixture();
-    if (failure === "unavailable") {
-      unavailable.request.mockRejectedValue(new ChainJsonRpcHttpTransportError("RPC request failed."));
+  it.each([
+    "unavailable endpoint",
+    "decimal chain ID",
+  ])("reports the same error in preview and save for %s without installing the network", async (failure) => {
+    const { networks, request, commit, changes } = createFixture();
+    if (failure === "unavailable endpoint") {
+      request.mockRejectedValue(new ChainJsonRpcHttpTransportError("RPC request failed."));
     } else {
-      unavailable.request.mockResolvedValue(null);
+      request.mockResolvedValue("8453");
     }
-    await expect(unavailable.networks.addCustom(custom)).rejects.toBeInstanceOf(NetworkRpcEndpointReadError);
-    expect(unavailable.networks.get("eip155:8453")).toBeNull();
-    expect(unavailable.commit).not.toHaveBeenCalled();
-    expect(unavailable.changes).toEqual([]);
+
+    const endpoint = custom.defaultRpcEndpoints[0];
+    const error = { code: NetworkRpcEndpointReadError.code, details: { endpoint } };
+    await expect(networks.queryChainRef({ namespace: "eip155", endpoint })).rejects.toMatchObject(error);
+    await expect(networks.addCustom({ ...custom, defaultRpcEndpoints: [endpoint] })).rejects.toMatchObject(error);
+    expect(networks.get("eip155:8453")).toBeNull();
+    expect(commit).not.toHaveBeenCalled();
+    expect(changes).toEqual([]);
   });
 
   it("does not install or publish a network when persistence fails", async () => {

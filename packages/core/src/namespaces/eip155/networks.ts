@@ -11,10 +11,11 @@ export const createEip155NetworksAdapter = (options: {
   namespace: EIP155_NAMESPACE,
   builtinNetworks: EIP155_BUILTIN_NETWORK_SEEDS,
   queryChainRef: async (endpoint) => {
-    const chainId = await options.transport.request<Hex.Hex>({
+    const chainId = await options.transport.request({
       endpoint,
       method: "eth_chainId",
     });
+    if (typeof chainId !== "string") throw new Hex.HexInvalidNumberError();
     return chainRefFromChainId(Hex.toBigInt(chainId));
   },
 });

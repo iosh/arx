@@ -1,4 +1,4 @@
-import type { Address } from "@arx/core/accounts";
+import type { AccountPreview } from "@arx/core/accounts";
 import { cn } from "cn";
 import { Eye, EyeOff } from "lucide-react";
 import { type ComponentProps, useState } from "react";
@@ -50,33 +50,22 @@ export function PrivateKeyInput({
   );
 }
 
-export function PrivateKeyAddressPreview({
-  addresses,
-  className,
-}: {
-  addresses: readonly Address[];
-  className?: string;
-}) {
+export function PrivateKeyAddressPreview({ account, className }: { account: AccountPreview; className?: string }) {
   const { t } = useTranslation(["onboarding", "common"]);
-
+  const { Icon, labelKey, GroupedAddress } = getNamespaceUi(account.namespace);
   return (
     <section
       aria-label={t("privateKeyAddress")}
       className={cn("flex flex-col gap-3 rounded-lg bg-background p-4", className)}
     >
       <h2 className="text-xs font-medium text-muted-foreground">{t("privateKeyAddress")}</h2>
-      {addresses.map((address) => {
-        const { Icon, labelKey, GroupedAddress } = getNamespaceUi(address.namespace);
-        return (
-          <div key={address.address} className="flex flex-col gap-3">
-            <div className="flex items-center gap-2.5">
-              <Icon />
-              <span className="text-sm font-semibold">{t(labelKey)}</span>
-            </div>
-            <GroupedAddress address={address.address} />
-          </div>
-        );
-      })}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2.5">
+          <Icon />
+          <span className="text-sm font-semibold">{t(labelKey)}</span>
+        </div>
+        <GroupedAddress address={account.defaultAddress} />
+      </div>
     </section>
   );
 }

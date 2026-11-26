@@ -29,22 +29,6 @@ const applyChange = async (context: DexiePersistenceContext, change: Persistence
       }
       return;
 
-    case "hdKeyring":
-      if (change.operation === "put") {
-        await context.db.hdKeyrings.put(change.value);
-      } else {
-        await context.db.hdKeyrings.delete(change.key);
-      }
-      return;
-
-    case "account":
-      if (change.operation === "put") {
-        await context.db.accounts.put(change.value);
-      } else {
-        await context.db.accounts.delete(change.key);
-      }
-      return;
-
     case "accountGroup":
       if (change.operation === "put") {
         await context.db.accountGroups.put(change.value);
@@ -115,8 +99,6 @@ export const createPersistenceWriter = (context: DexiePersistenceContext): Persi
           context.db.encryptedVault,
           context.db.settings,
           context.db.keySources,
-          context.db.hdKeyrings,
-          context.db.accounts,
           context.db.accountGroups,
           context.db.accountSelection,
           context.db.permissions,

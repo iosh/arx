@@ -2,7 +2,7 @@ import { Hex, Solidity, TypedData } from "ox";
 import { z } from "zod";
 import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError } from "../../dappConnections/errors.js";
-import * as EvmAddress from "./address.js";
+import { parseDappAddress } from "./rpcHex.js";
 import type { Eip155TypedData, Eip155TypedDataField, Eip155TypedDataValue } from "./signingRequest.js";
 
 const TYPED_DATA_FIELD_SCHEMA = z.strictObject({
@@ -22,8 +22,8 @@ export const decodeSignTypedDataV4Params = (params: unknown, method: string) => 
     throw invalidDappParams(method, "expected exactly an address and typed data payload.");
   }
 
-  const address = params[0];
-  if (typeof address !== "string" || !EvmAddress.isValid(address)) {
+  const address = parseDappAddress(params[0]);
+  if (address === null) {
     throw invalidDappParams(method, "expected a valid EIP-155 account address.");
   }
 
@@ -32,21 +32,17 @@ export const decodeSignTypedDataV4Params = (params: unknown, method: string) => 
 
 function decodeTypedData(value: unknown, method: string) {
   const parsed = TYPED_DATA_SCHEMA.parse(parseTypedDataJson(value, method));
-  const decodedDomainChainId = decodeDomainChainId(parsed.domain.chainId, method);
-
   try {
-    const typedData = projectTypedDataForSigning(
-      withDecimalChainId(parsed, decodedDomainChainId),
-      decodedDomainChainId,
-      method,
-    );
-    const domainChainId = Object.hasOwn(typedData.domain, "chainId") ? decodedDomainChainId : undefined;
+    const signedData = projectTypedDataForSigning(parsed, method);
+    const domainChainId = decodeDomainChainId(signedData.domain.chainId, method);
+
     const digest = TypedData.getSignPayload({
-      types: typedData.types,
-      primaryType: typedData.primaryType,
-      domain: domainForSigning(typedData.domain, domainChainId),
-      message: typedData.message,
+      ...signedData,
+      domain: domainForSigning(signedData.domain, domainChainId),
     });
+
+    // Approval data crosses a JSON channel; signing uses bigint, while display uses decimal text.
+    const typedData = withDecimalChainId(signedData, domainChainId);
     return { typedData, domainChainId, digest };
   } catch (error) {
     if (error instanceof RpcInvalidParamsError) throw error;
@@ -116,11 +112,7 @@ const isTypedDataRecord = (value: Eip155TypedDataValue): value is Readonly<Recor
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 // Properties outside the EIP-712 type graph are not signed, so omit them from the approval payload.
-function projectTypedDataForSigning(
-  typedData: Eip155TypedData,
-  domainChainId: bigint | undefined,
-  method: string,
-): Eip155TypedData {
+function projectTypedDataForSigning(typedData: Eip155TypedData, method: string): Eip155TypedData {
   const { types } = typedData;
   const fieldsFor = (type: string): readonly Eip155TypedDataField[] | undefined =>
     Object.hasOwn(types, type) ? types[type] : undefined;
@@ -158,14 +150,17 @@ function projectTypedDataForSigning(
   const messageFields = fieldsFor(typedData.primaryType);
   if (!messageFields) throw invalidTypedData(method);
 
-  const domainFields =
-    fieldsFor("EIP712Domain") ?? TypedData.extractEip712DomainTypes(domainForSigning(typedData.domain, domainChainId));
+  const domainFields = fieldsFor("EIP712Domain");
+  if (!domainFields) {
+    throw invalidDappParams(method, "types.EIP712Domain must explicitly declare the signed domain fields.");
+  }
 
   return {
     types,
     primaryType: typedData.primaryType,
     domain: projectFields(typedData.domain, domainFields),
-    message: projectFields(typedData.message, messageFields),
+    // Ox omits the message hash when the primary type is EIP712Domain.
+    message: typedData.primaryType === "EIP712Domain" ? {} : projectFields(typedData.message, messageFields),
   };
 }
 

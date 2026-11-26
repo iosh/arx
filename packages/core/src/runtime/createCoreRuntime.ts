@@ -32,8 +32,10 @@ import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAda
 import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
 import { createTransactions } from "../transactions/Transactions.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
+import { createAccountKeys } from "../wallet/accountKeys.js";
 import type { WalletApiEvent } from "../wallet/WalletApi.js";
 import { WalletCoordinator } from "../wallet/WalletCoordinator.js";
+import { getWalletStatus } from "../wallet/walletStatus.js";
 import type { CoreRuntime, CreateCoreRuntimeInput } from "./coreRuntime.js";
 import { createWalletApi } from "./createWalletApi.js";
 import { loadCoreBootstrap } from "./loadCoreBootstrap.js";
@@ -82,13 +84,19 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const eip155NetworksAdapter = createEip155NetworksAdapter({ transport: jsonRpcHttpTransport });
   const networkAdapters = { [EIP155_NAMESPACE]: eip155NetworksAdapter } satisfies NetworksNamespaceAdapters;
 
-  const walletStatusReader = { getStatus: () => walletCoordinator.getStatus() };
   const keyring = new Keyring({
     bootstrap: bootstrap.keyring,
     namespaceAdapters: keyringAdapters,
     mutations,
     publishChanged: publishWalletEvent,
   });
+  const autoLock = new AutoLockController({
+    durationMs: bootstrap.wallet.autoLockDurationMs,
+    time: systemTime,
+  });
+  const walletStatusReader = {
+    getStatus: () => getWalletStatus(keyring.getSoftwareKeyStatus(), autoLock.isExpired()),
+  };
   const accounts = new Accounts({
     adapters: accountAdapters,
     bootstrap: bootstrap.accounts,
@@ -120,12 +128,8 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     time: systemTime,
     publishChanged: publishWalletEvent,
   });
-  const autoLock = new AutoLockController({
-    durationMs: bootstrap.wallet.autoLockDurationMs,
-    time: systemTime,
-  });
-
-  const eip155AccountSigning = createEip155AccountSigning({ keyring, accounts, wallet: walletStatusReader });
+  const accountKeys = createAccountKeys({ keyring, accounts, wallet: walletStatusReader });
+  const eip155AccountSigning = createEip155AccountSigning(accountKeys);
   const chainJsonRpc = createChainJsonRpc({
     endpoints: networks,
     transport: jsonRpcHttpTransport,
@@ -166,6 +170,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     time: systemTime,
     keyring,
     accounts,
+    accountKeys,
     permissions,
     approvals,
     dappConnections,

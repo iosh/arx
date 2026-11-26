@@ -7,7 +7,6 @@ import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { useCopyToClipboard } from "@/ui/hooks/useCopyToClipboard";
 import { getNamespaceUi } from "@/ui/namespaces";
-import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useMnemonicSource } from "@/ui/wallet/keyring/useMnemonicSources";
 
@@ -27,14 +26,12 @@ export function ReceivePage({
       candidate.accountGroupId === accountGroupId && candidate.members.some((member) => member.accountId === accountId),
   );
   const { data: source } = useMnemonicSource(account);
-  const { data: addresses, isFetching: readingAddresses } = useAccountAddresses(account);
-  const address = addresses?.find((candidate) => candidate.accountId === accountId);
   const member = account?.members.find((candidate) => candidate.accountId === accountId);
+  const address = member?.defaultAddress;
   const namespaceUi = member && getNamespaceUi(member.namespace);
   const name = account ? getAccountName(account, t) : undefined;
   const subtitle = source && name ? `${source.name} · ${name}` : name;
-  const unavailable =
-    accounts && !account ? t("accountUnavailable") : addresses && !address ? t("addressUnavailable") : undefined;
+  const unavailable = accounts && !account ? t("accountUnavailable") : undefined;
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -60,12 +57,12 @@ export function ReceivePage({
             )}
           </div>
           <div
-            aria-busy={readingAccounts || readingAddresses}
+            aria-busy={readingAccounts}
             className="flex size-49 shrink-0 items-center justify-center bg-white text-center text-sm text-neutral-600"
           >
             {address ? (
               <QRCodeSVG
-                value={address.address}
+                value={address}
                 size={196}
                 level="M"
                 marginSize={4}
@@ -78,10 +75,10 @@ export function ReceivePage({
             )}
           </div>
           <div className="flex min-h-10.75 items-center justify-center">
-            {address && namespaceUi && <namespaceUi.GroupedAddress address={address.address} />}
+            {address && namespaceUi && <namespaceUi.GroupedAddress address={address} />}
           </div>
           {address ? (
-            <CopyAddressButton key={address.address} address={address.address} />
+            <CopyAddressButton key={address} address={address} />
           ) : (
             <Button type="button" variant="secondary" className="h-10 w-full" disabled>
               <Copy aria-hidden="true" />

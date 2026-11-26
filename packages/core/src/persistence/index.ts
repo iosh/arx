@@ -2,11 +2,8 @@ export type {
   AccountGroupRecord,
   AccountGroupSource,
   AccountMemberRecord,
-  AccountOrigin,
   AccountSelectionRecord,
   AccountsReader,
-  HdAccountOrigin,
-  PrivateKeyAccountOrigin,
 } from "../accounts/persistence.js";
 export type {
   DappNetworkSelectionRecord,
@@ -14,15 +11,10 @@ export type {
 } from "../dappConnections/persistence.js";
 export type {
   BackupStatus,
-  Bip39KeySourceRecord,
-  HdKeyringId,
-  HdKeyringRecord,
-  HdKeyringsReader,
   KeySourceId,
-  KeySourceRecord,
   KeySourcesReader,
-  PrivateKeySourceRecord,
 } from "../keyring/persistence.js";
+export type { KeySource } from "../keyring/types.js";
 export type {
   CustomNetworkRecord,
   CustomNetworksReader,

@@ -3,9 +3,9 @@ import "fake-indexeddb/auto";
 import type { ChainRef } from "@arx/core/networks";
 import {
   type AccountGroupRecord,
-  type AccountMemberRecord,
   type CustomNetworkRecord,
   type DappNetworkSelectionRecord,
+  type KeySource,
   type NetworkRpcOverrideRecord,
   PersistenceCommitError,
   persistenceTypes,
@@ -90,33 +90,34 @@ afterEach(async () => {
 });
 
 describe("Dexie persistence boundary", () => {
-  it("rolls back a written group when its member write fails", async () => {
+  it("rolls back the source when its grouped account write fails", async () => {
     const context = createDexiePersistenceContext(createDatabaseName());
     databaseConnections.push(context.db);
     await context.ready;
     const group: AccountGroupRecord = {
       accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d",
       source: { type: "private-key", keySourceId: "source-1" },
+      members: [{ accountId: ACCOUNT_A }],
       hidden: false,
       createdAt: 1,
     };
-    const member: AccountMemberRecord = {
-      accountId: ACCOUNT_A,
-      accountGroupId: group.accountGroupId,
-      origin: { type: "private-key", keySourceId: "source-1" },
+    const source: KeySource = {
+      keySourceId: "source-1",
+      type: "private-key",
+      createdAt: 1,
     };
-    vi.spyOn(context.db.accounts, "put").mockRejectedValueOnce(
+    vi.spyOn(context.db.accountGroups, "put").mockRejectedValueOnce(
       new DOMException("Quota exceeded", "QuotaExceededError"),
     );
 
     const writing = createPersistenceWriter(context).commit([
+      persistenceTypes.keySource.put(source),
       persistenceTypes.accountGroup.put(group),
-      persistenceTypes.account.put(member),
     ]);
     await expect(writing).rejects.toBeInstanceOf(PersistenceCommitError);
     const reader = createAccountsReader(context);
     expect(await reader.listGroups()).toEqual([]);
-    expect(await reader.listRecords()).toEqual([]);
+    expect(await context.db.keySources.toArray()).toEqual([]);
   });
 
   it("updates a custom network under its chain identity and preserves its RPC override", async () => {

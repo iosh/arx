@@ -15,27 +15,18 @@ export type WalletStatusChanged = Readonly<{
   status: WalletStatus;
 }>;
 
-export type Bip39SourceAdded = Readonly<{
+export type KeySourceAdded = Readonly<{
   keySourceId: KeySourceId;
   accountGroupId: AccountGroupId;
 }>;
 
-export type Bip39WalletInitializationResult =
-  | (Bip39SourceAdded & Readonly<{ status: "initialized" }>)
+export type WalletInitializationResult =
+  | (KeySourceAdded & Readonly<{ status: "initialized" }>)
   | Readonly<{ status: "already-initialized" }>;
-
-export type PrivateKeySourceAdded = Readonly<{
-  keySourceId: KeySourceId;
-  accountGroupId: AccountGroupId;
-}>;
 
 export type ImportPrivateKeySourceResult =
-  | (PrivateKeySourceAdded & Readonly<{ status: "added" }>)
+  | (KeySourceAdded & Readonly<{ status: "added" }>)
   | Readonly<{ status: "duplicate"; account: AccountGroup }>;
-
-export type PrivateKeyWalletInitializationResult =
-  | (PrivateKeySourceAdded & Readonly<{ status: "initialized" }>)
-  | Readonly<{ status: "already-initialized" }>;
 
 export type CreateFromMnemonicInput = Readonly<{
   password: string;
@@ -60,7 +51,7 @@ export type AddMnemonicSourceInput = Readonly<{
 export type AddMnemonicAndMoveAccountInput = AddMnemonicSourceInput & Readonly<{ accountId: AccountId }>;
 
 export type AddMnemonicSourceResult =
-  | (Bip39SourceAdded & Readonly<{ status: "added" }>)
+  | (KeySourceAdded & Readonly<{ status: "added" }>)
   | Readonly<{
       status: "move-available";
       account: AccountGroup;

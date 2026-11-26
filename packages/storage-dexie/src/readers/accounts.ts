@@ -9,12 +9,6 @@ export const createAccountsReader = (context: DexiePersistenceContext): Accounts
       return await context.db.accountGroups.toArray();
     });
   },
-  listRecords() {
-    return context.read(async () => {
-      await context.ready;
-      return await context.db.accounts.toArray();
-    });
-  },
 
   getSelection() {
     return context.read(async () => {

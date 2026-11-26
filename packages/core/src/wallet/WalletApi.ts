@@ -1,6 +1,6 @@
 import type { AccountGroupId } from "../accounts/accountGroupId.js";
 import type { AccountId } from "../accounts/accountId.js";
-import type { AccountGroup, AccountsChanged, Address } from "../accounts/types.js";
+import type { AccountGroup, AccountPreview, AccountsChanged } from "../accounts/types.js";
 import type { Approval, ApprovalDecision, ApprovalId, ApprovalsChanged } from "../approvals/types.js";
 import type { Assets } from "../assets/Assets.js";
 import type { KeyringChanged, KeySource, KeySourceId } from "../keyring/types.js";
@@ -30,17 +30,16 @@ import type {
   AddMnemonicAndMoveAccountInput,
   AddMnemonicSourceInput,
   AddMnemonicSourceResult,
-  Bip39SourceAdded,
-  Bip39WalletInitializationResult,
   CreateFromMnemonicInput,
   CreateFromPrivateKeyInput,
   HdAccountGroupCreationResult,
   ImportPrivateKeySourceResult,
+  KeySourceAdded,
   MovePrivateKeyAccountInput,
   PrivateKeySourceInput,
-  PrivateKeyWalletInitializationResult,
   RestoreFromMnemonicInput,
   SetAccountGroupHiddenResult,
+  WalletInitializationResult,
   WalletStatus,
   WalletStatusChanged,
 } from "./Wallet.js";
@@ -64,7 +63,7 @@ export type WalletKeySourcesApi = Readonly<{
    * Adds the source and moves its existing private-key first account atomically.
    * Repeating a completed move returns its existing IDs without changing state.
    */
-  addMnemonicAndMoveAccount(input: AddMnemonicAndMoveAccountInput): Promise<Bip39SourceAdded>;
+  addMnemonicAndMoveAccount(input: AddMnemonicAndMoveAccountInput): Promise<KeySourceAdded>;
   /** Saves and selects the account atomically; duplicates, including hidden accounts, leave state unchanged. */
   importPrivateKey(input: PrivateKeySourceInput): Promise<ImportPrivateKeySourceResult>;
   renameMnemonic(input: { keySourceId: KeySourceId; name: string }): Promise<void>;
@@ -79,15 +78,8 @@ export type WalletAccountsApi = Readonly<{
   getGroup(accountGroupId: AccountGroupId): Promise<AccountGroup>;
   getSelectedGroup(): Promise<AccountGroup>;
   listGroups(): Promise<readonly AccountGroup[]>;
-  getGroupAddresses(input: { accountGroupId: AccountGroupId }): Promise<readonly Address[]>;
-  /** Projects a public member identity; current EVM addresses do not require a saved group. */
-  getMemberAddresses(input: { accountId: AccountId }): Promise<readonly Address[]>;
   /** Returns null if the private key is invalid for the requested namespace. */
-  fromPrivateKey(input: { privateKey: string; namespace: Namespace }): Promise<{
-    accountId: AccountId;
-    namespace: Namespace;
-    addresses: readonly Address[];
-  } | null>;
+  previewPrivateKeyAccount(input: { privateKey: string; namespace: Namespace }): Promise<AccountPreview | null>;
   create(input: { keySourceId: KeySourceId }): Promise<HdAccountGroupCreationResult>;
   move(input: MovePrivateKeyAccountInput): Promise<AccountGroup>;
   /** Requires an unlocked wallet. Returns null for an incorrect password; derives or returns only this account's key. */
@@ -146,16 +138,17 @@ export type WalletApi = Readonly<{
   subscribe(listener: (event: WalletApiEvent) => void): () => void;
 
   getStatus(): Promise<WalletStatus>;
-  createFromMnemonic(input: CreateFromMnemonicInput): Promise<Bip39WalletInitializationResult>;
-  restoreFromMnemonic(input: RestoreFromMnemonicInput): Promise<Bip39WalletInitializationResult>;
-  createFromPrivateKey(input: CreateFromPrivateKeyInput): Promise<PrivateKeyWalletInitializationResult>;
+  createFromMnemonic(input: CreateFromMnemonicInput): Promise<WalletInitializationResult>;
+  restoreFromMnemonic(input: RestoreFromMnemonicInput): Promise<WalletInitializationResult>;
+  createFromPrivateKey(input: CreateFromPrivateKeyInput): Promise<WalletInitializationResult>;
   /**
    * Returns false if the password does not match.
    * An already unlocked wallet returns true without checking the password.
    */
   unlock(input: { password: string }): Promise<boolean>;
   lock(): Promise<void>;
-  changePassword(input: { currentPassword: string; newPassword: string }): Promise<void>;
+  /** Returns false when the current password does not match; success does not renew the session. */
+  changePassword(input: { currentPassword: string; newPassword: string }): Promise<boolean>;
   getAutoLockDuration(): Promise<number>;
   setAutoLockDuration(input: { durationMs: number }): Promise<void>;
   /** Notifies the wallet of authenticated first-party UI input; expired sessions stay locked. */

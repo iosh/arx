@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { Accounts } from "../../accounts/Accounts.js";
 import {
   AccountHiddenSelectionError,
   AccountNamespaceMismatchError,
@@ -16,32 +15,31 @@ import type { Networks } from "../../networks/Networks.js";
 import type { DappAuthorization } from "../../permissions/createDappAuthorization.js";
 import { buildEip2255Permissions } from "../../permissions/eip2255.js";
 import { PermissionAccountAccessUnavailableError } from "../../permissions/errors.js";
-import type { PermissionsReader } from "../../permissions/Permissions.js";
 import type { DappScope } from "../../permissions/scope.js";
 import type { Transactions } from "../../transactions/Transactions.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
+import type { AuthorizedAccountDependencies } from "./dappAccount.js";
 import { createEip155DappNetworkHandlers } from "./dappNetworks.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
 import { createEip155DappTransactionHandlers } from "./dappTransactions.js";
 import { createEip155SendRawTransactionMethod } from "./eth_sendRawTransaction.js";
 
-type CreateEip155DappNamespaceOptions = Readonly<{
-  chainJsonRpc: ChainJsonRpc;
-  dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
-  dappAuthorization: Readonly<{
-    requestAccountAccess: DappAuthorization["requestAccountAccess"];
-    permissions: Pick<DappAuthorization["permissions"], "revoke">;
+type CreateEip155DappNamespaceOptions = AuthorizedAccountDependencies &
+  Readonly<{
+    chainJsonRpc: ChainJsonRpc;
+    dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
+    dappAuthorization: Readonly<{
+      requestAccountAccess: DappAuthorization["requestAccountAccess"];
+      permissions: Pick<DappAuthorization["permissions"], "revoke">;
+    }>;
+    approvals: Pick<Approvals, "request">;
+    accountSigning: Eip155AccountSigning;
+    networks: Pick<Networks, "get" | "addCustom">;
+    transactions: Pick<Transactions, "prepare" | "submit">;
   }>;
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
-  permissions: Pick<PermissionsReader, "get">;
-  approvals: Pick<Approvals, "request">;
-  accountSigning: Eip155AccountSigning;
-  networks: Pick<Networks, "get" | "addCustom">;
-  transactions: Pick<Transactions, "prepare" | "submit">;
-}>;
 
 const EIP155_ACCOUNT_PERMISSION_PARAMS_SCHEMA = z.tuple([
   z.strictObject({

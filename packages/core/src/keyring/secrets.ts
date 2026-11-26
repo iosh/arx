@@ -1,4 +1,4 @@
-import type { KeySourceId } from "./persistence.js";
+import type { KeySourceId } from "./types.js";
 
 export type Bip39KeySourceSecret = Readonly<{
   keySourceId: KeySourceId;
@@ -9,6 +9,7 @@ export type Bip39KeySourceSecret = Readonly<{
 export type PrivateKeySourceSecret = Readonly<{
   keySourceId: KeySourceId;
   type: "private-key";
+  /** Key bytes serialized as lowercase hexadecimal without a namespace-specific prefix. */
   privateKey: string;
 }>;
 

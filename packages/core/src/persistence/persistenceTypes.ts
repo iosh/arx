@@ -1,6 +1,6 @@
-import { accountGroupWrites, accountSelectionWrites, accountWrites } from "../accounts/persistence.js";
+import { accountGroupWrites, accountSelectionWrites } from "../accounts/persistence.js";
 import { dappNetworkSelectionWrites } from "../dappConnections/persistence.js";
-import { hdKeyringWrites, keySourceWrites } from "../keyring/persistence.js";
+import { keySourceWrites } from "../keyring/persistence.js";
 import { customNetworkWrites, networkRpcOverrideWrites } from "../networks/persistence.js";
 import { permissionWrites } from "../permissions/persistence.js";
 import { settingWrites } from "../settings/persistence.js";
@@ -12,8 +12,6 @@ export type PersistenceTypes = Readonly<{
   encryptedVault: typeof encryptedVaultWrites;
   setting: typeof settingWrites;
   keySource: typeof keySourceWrites;
-  hdKeyring: typeof hdKeyringWrites;
-  account: typeof accountWrites;
   accountGroup: typeof accountGroupWrites;
   accountSelection: typeof accountSelectionWrites;
   permission: typeof permissionWrites;
@@ -27,8 +25,6 @@ export const persistenceTypes: PersistenceTypes = {
   encryptedVault: encryptedVaultWrites,
   setting: settingWrites,
   keySource: keySourceWrites,
-  hdKeyring: hdKeyringWrites,
-  account: accountWrites,
   accountGroup: accountGroupWrites,
   accountSelection: accountSelectionWrites,
   permission: permissionWrites,

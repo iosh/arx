@@ -1,26 +1,14 @@
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
-import type { HdKeyring, HdKeyringId, KeySource, KeySourceId } from "./types.js";
+import type { KeySource, KeySourceId } from "./types.js";
 
-export type { BackupStatus, HdKeyringId, KeySourceId } from "./types.js";
-
-export type Bip39KeySourceRecord = Extract<KeySource, { type: "bip39" }>;
-
-export type PrivateKeySourceRecord = Extract<KeySource, { type: "private-key" }>;
-
-export type KeySourceRecord = KeySource;
-
-export type HdKeyringRecord = HdKeyring;
+export type { BackupStatus, KeySourceId } from "./types.js";
 
 export interface KeySourcesReader {
-  listAll(): Promise<readonly KeySourceRecord[]>;
+  listAll(): Promise<readonly KeySource[]>;
 }
 
-export interface HdKeyringsReader {
-  listAll(): Promise<readonly HdKeyringRecord[]>;
-}
-
-export const keySourceWrites: KeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId> =
-  defineKeyedPersistenceType<"keySource", KeySourceRecord, KeySourceId>("keySource");
-
-export const hdKeyringWrites: KeyedPersistenceType<"hdKeyring", HdKeyringRecord, HdKeyringId> =
-  defineKeyedPersistenceType<"hdKeyring", HdKeyringRecord, HdKeyringId>("hdKeyring");
+export const keySourceWrites: KeyedPersistenceType<"keySource", KeySource, KeySourceId> = defineKeyedPersistenceType<
+  "keySource",
+  KeySource,
+  KeySourceId
+>("keySource");

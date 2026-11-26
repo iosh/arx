@@ -8,23 +8,21 @@ import type { AccountsBootstrap } from "./bootstrap.js";
 import type { AccountGroupRecord, AccountMemberRecord } from "./persistence.js";
 import type { AccountsChanged } from "./types.js";
 
+const member: AccountMemberRecord = {
+  accountId: "eip155:9858effd232b4033e47d90003d41ec34ecaeda94",
+};
 const group: AccountGroupRecord = {
   accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d",
   source: { type: "private-key", keySourceId: "source-1" },
+  members: [member],
   alias: "Daily",
   hidden: false,
   createdAt: 1,
-};
-const member: AccountMemberRecord = {
-  accountId: "eip155:9858effd232b4033e47d90003d41ec34ecaeda94",
-  accountGroupId: group.accountGroupId,
-  origin: { type: "private-key", keySourceId: "source-1" },
 };
 
 const createAccounts = (
   bootstrap: AccountsBootstrap = {
     groups: [group],
-    records: [member],
     selection: { accountGroupId: group.accountGroupId },
   },
 ) => {
@@ -76,23 +74,21 @@ describe("Accounts", () => {
     const visibleGroupId = "56128651-0451-4057-801e-3b3d5b9fe409";
     const accountIds = [member.accountId, "eip155:6fac4d18c912343bf86fa7049364dd4e424ab9c0"] as const;
     const { accounts } = createAccounts({
-      groups: accountIds.map((_, accountIndex) => ({
-        ...group,
-        accountGroupId: accountIndex === 0 ? group.accountGroupId : visibleGroupId,
-        source: { type: "bip39", keySourceId: "source-1", accountIndex },
-        hidden: accountIndex === 0,
-      })),
-      records: accountIds.map((accountId, derivationIndex) => ({
-        accountId,
-        accountGroupId: derivationIndex === 0 ? group.accountGroupId : visibleGroupId,
-        origin: { type: "hd", hdKeyringId: "hd-1", derivationIndex },
-      })),
+      groups: accountIds.map(
+        (accountId, accountIndex): AccountGroupRecord => ({
+          ...group,
+          accountGroupId: accountIndex === 0 ? group.accountGroupId : visibleGroupId,
+          source: { type: "bip39", keySourceId: "source-1", accountIndex },
+          members: [{ accountId }],
+          hidden: accountIndex === 0,
+        }),
+      ),
       selection: { accountGroupId: visibleGroupId },
     });
 
     expect(accounts.listSelectableAddresses("eip155:1").map(({ accountId }) => accountId)).toEqual([accountIds[1]]);
-    expect(
-      accounts.getGroupAddresses({ accountGroupId: group.accountGroupId }).map(({ accountId }) => accountId),
-    ).toEqual([member.accountId]);
+    expect(accounts.getGroup(group.accountGroupId)?.members.map(({ accountId }) => accountId)).toEqual([
+      member.accountId,
+    ]);
   });
 });

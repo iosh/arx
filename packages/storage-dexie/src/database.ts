@@ -2,12 +2,10 @@ import { PersistenceCommitError, PersistenceReadError } from "@arx/core/persiste
 import { Dexie, type Table } from "dexie";
 import type {
   AccountGroupRow,
-  AccountRow,
   AccountSelectionRow,
   CustomNetworkRow,
   DappNetworkSelectionRow,
   EncryptedVaultRow,
-  HdKeyringRow,
   KeySourceRow,
   NetworkRpcOverrideRow,
   PermissionRow,
@@ -24,8 +22,6 @@ export class ArxPersistenceDatabase extends Dexie {
   encryptedVault!: Table<EncryptedVaultRow, string>;
   settings!: Table<SettingsRow, string>;
   keySources!: Table<KeySourceRow, string>;
-  hdKeyrings!: Table<HdKeyringRow, string>;
-  accounts!: Table<AccountRow, string>;
   accountGroups!: Table<AccountGroupRow, string>;
   accountSelection!: Table<AccountSelectionRow, string>;
   permissions!: Table<PermissionRow, [string, string]>;
@@ -40,8 +36,6 @@ export class ArxPersistenceDatabase extends Dexie {
       encryptedVault: "&key",
       settings: "&key",
       keySources: "&keySourceId",
-      hdKeyrings: "&hdKeyringId",
-      accounts: "&accountId",
       accountGroups: "&accountGroupId",
       accountSelection: "&key",
       permissions: "[origin+namespace]",

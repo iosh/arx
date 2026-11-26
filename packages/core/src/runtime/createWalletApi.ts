@@ -1,10 +1,9 @@
 import type { Accounts } from "../accounts/Accounts.js";
-import type { AccountId } from "../accounts/accountId.js";
 import { AccountGroupNotFoundError } from "../accounts/errors.js";
 import type { Approvals } from "../approvals/Approvals.js";
 import type { Assets } from "../assets/Assets.js";
 import { generateBip39Mnemonic } from "../keyring/bip39.js";
-import { KeyringInvalidPrivateKeyError, KeySourceNotFoundError } from "../keyring/errors.js";
+import { KeySourceNotFoundError } from "../keyring/errors.js";
 import type { Keyring } from "../keyring/Keyring.js";
 import type { Eip155Rpc } from "../namespaces/eip155/rpc.js";
 import type { Networks } from "../networks/Networks.js";
@@ -82,17 +81,9 @@ export const createWalletApi = ({
     },
     getSelectedGroup: async () => accounts.getSelectedGroup(),
     listGroups: async () => accounts.listGroups(),
-    getGroupAddresses: async (input) => accounts.getGroupAddresses(input),
-    getMemberAddresses: async (input) => accounts.getMemberAddresses(input),
-    fromPrivateKey: async ({ privateKey, namespace }) => {
-      let accountId: AccountId;
-      try {
-        accountId = keyring.accountIdFromPrivateKey({ privateKey, namespace });
-      } catch (error) {
-        if (error instanceof KeyringInvalidPrivateKeyError) return null;
-        throw error;
-      }
-      return { accountId, namespace, addresses: accounts.getMemberAddresses({ accountId }) };
+    previewPrivateKeyAccount: async (input) => {
+      const accountId = keyring.previewPrivateKeyAccount(input);
+      return accountId === null ? null : accounts.getPublicIdentity(accountId);
     },
     create: async (input) => coordinator.createHdAccountGroup(input),
     move: async (input) => coordinator.movePrivateKeyAccount(input),

@@ -13,7 +13,7 @@ const account = (accountId: AccountId, namespace: Namespace): AccountMember => (
   accountId,
   accountGroupId: `group-${accountId}`,
   namespace,
-  origin: { type: "hd", hdKeyringId: `keyring-${namespace}`, derivationIndex: 0 },
+  defaultAddress: `0x${accountId.slice(accountId.indexOf(":") + 1)}`,
   hidden: false,
 });
 

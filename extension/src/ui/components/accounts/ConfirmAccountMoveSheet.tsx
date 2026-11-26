@@ -8,7 +8,6 @@ import { Button } from "@/ui/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/ui/components/ui/sheet";
 import { Toaster } from "@/ui/components/ui/sonner";
 import { getNamespaceUi } from "@/ui/namespaces";
-import { useMemberAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 
 export function ConfirmAccountMoveSheet({
   account,
@@ -34,7 +33,6 @@ export function ConfirmAccountMoveSheet({
   const { t } = useTranslation(["wallet", "common"]);
   const accountName = getAccountName(account, t);
   const namespaceLabel = account.members.map((member) => t(getNamespaceUi(member.namespace).labelKey)).join(" · ");
-  const { data: addresses } = useMemberAddresses(accountId);
 
   return (
     <Sheet
@@ -76,11 +74,13 @@ export function ConfirmAccountMoveSheet({
               <span className="text-xs font-medium text-muted-foreground">{`${namespaceLabel} · ${t("privateKeyImport")}`}</span>
             </div>
           </div>
-          {addresses?.map((address) => (
-            <p key={address.address} dir="ltr" className="break-all text-xs leading-4.5">
-              {address.address}
-            </p>
-          ))}
+          {account.members
+            .filter((member) => member.accountId === accountId)
+            .map((member) => (
+              <p key={member.accountId} dir="ltr" className="break-all text-xs leading-4.5">
+                {member.defaultAddress}
+              </p>
+            ))}
         </div>
         <div className="flex items-start gap-2 px-1 text-sm">
           <span className="shrink-0 font-medium text-muted-foreground">{t("moveTargetWallet")}</span>
@@ -94,7 +94,7 @@ export function ConfirmAccountMoveSheet({
           <Button variant="outline" className="flex-1" disabled={isPending} onClick={onCancel}>
             {t("cancel")}
           </Button>
-          <Button className="flex-1" disabled={isPending || !addresses} loading={isPending} onClick={onConfirm}>
+          <Button className="flex-1" disabled={isPending} loading={isPending} onClick={onConfirm}>
             {t("moveAccount")}
           </Button>
         </div>

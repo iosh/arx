@@ -31,7 +31,7 @@ const group = (accountGroupId: string, addressSuffix: number): AccountGroup => {
         accountId: `eip155:${addressSuffix.toString(16).padStart(40, "0")}`,
         accountGroupId,
         namespace: "eip155",
-        origin: { type: "private-key", keySourceId },
+        defaultAddress: `0x${addressSuffix.toString(16).padStart(40, "0")}`,
         hidden: false,
       },
     ],

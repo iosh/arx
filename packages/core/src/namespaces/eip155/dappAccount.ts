@@ -3,10 +3,11 @@ import type { AccountAddress } from "../../accounts/types.js";
 import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import type { PermissionsReader } from "../../permissions/Permissions.js";
+import { accountIdFromAddress } from "./accounts.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
-type AuthorizedAccountDependencies = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
+export type AuthorizedAccountDependencies = Readonly<{
+  accounts: Pick<Accounts, "getMember" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
 }>;
 
@@ -14,10 +15,7 @@ export const getAuthorizedAccount = (
   dependencies: AuthorizedAccountDependencies,
   input: Readonly<{ origin: string; chainRef: ChainRef; address: string }>,
 ): AccountAddress => {
-  const accountId = dependencies.accounts.accountIdFromAddress({
-    namespace: EIP155_NAMESPACE,
-    address: input.address,
-  });
+  const accountId = accountIdFromAddress(input.address);
   const permission = dependencies.permissions.get({
     origin: input.origin,
     namespace: EIP155_NAMESPACE,

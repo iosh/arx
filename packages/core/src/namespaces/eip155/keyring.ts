@@ -1,87 +1,52 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { HDKey } from "@scure/bip32";
-import { type AccountId, formatAccountId } from "../../accounts/accountId.js";
-import { KeyringInvalidPrivateKeyError } from "../../keyring/errors.js";
+import { HARDENED_OFFSET, HDKey } from "@scure/bip32";
 import type { KeyringNamespaceAdapter } from "../../keyring/namespaceAdapter.js";
+import { accountIdFromAddress } from "./accounts.js";
 import { EIP155_NAMESPACE } from "./constants.js";
-import { Eip155SigningAccountMismatchError } from "./errors.js";
 
-const DERIVATION_PREFIX = "m/44'/60'/0'/0";
+export type Eip155DigestSignature = Readonly<{ r: bigint; s: bigint; yParity: number }>;
 
-export type Eip155DigestSignature = Readonly<{
-  r: bigint;
-  s: bigint;
-  yParity: number;
-  bytes: Uint8Array;
-}>;
-
-const deriveHdPrivateKeyBytes = (params: { seed: Uint8Array; derivationIndex: number }): Uint8Array => {
-  const root = HDKey.fromMasterSeed(params.seed);
-  const node = root.derive(`${DERIVATION_PREFIX}/${params.derivationIndex}`);
-
-  return node.privateKey as Uint8Array;
-};
-
-const privateKeyBytes = (value: string): Uint8Array => {
-  const hex = value.startsWith("0x") ? value.slice(2) : value;
-  if (!secp256k1.utils.isValidPrivateKey(hex)) {
-    throw new KeyringInvalidPrivateKeyError(EIP155_NAMESPACE);
+const derivePrivateKey = ({ seed, accountIndex }: { seed: Uint8Array; accountIndex: number }): Uint8Array => {
+  let node = HDKey.fromMasterSeed(seed);
+  try {
+    // BIP44 m/44'/60'/0'/0/index. Wipe each parent instead of retaining intermediate private keys.
+    for (const index of [44 + HARDENED_OFFSET, 60 + HARDENED_OFFSET, HARDENED_OFFSET, 0, accountIndex]) {
+      const parent = node;
+      node = parent.deriveChild(index);
+      parent.wipePrivateData();
+    }
+    const privateKey = node.privateKey;
+    if (!privateKey) throw new Error("BIP44 derivation did not produce a private key.");
+    return privateKey.slice();
+  } finally {
+    node.wipePrivateData();
   }
-
-  return hexToBytes(hex);
-};
-
-const accountIdFromPrivateKeyBytes = (privateKey: Uint8Array): AccountId => {
-  const publicKey = secp256k1.getPublicKey(privateKey, false);
-  const address = bytesToHex(keccak_256(publicKey.subarray(1)).slice(-20));
-
-  return formatAccountId({ namespace: EIP155_NAMESPACE, payload: address });
-};
-
-const signDigest = (privateKey: Uint8Array, digest: Uint8Array): Eip155DigestSignature => {
-  const signature = secp256k1.sign(digest, privateKey, { lowS: true });
-  return {
-    r: signature.r,
-    s: signature.s,
-    yParity: signature.recovery,
-    bytes: signature.toCompactRawBytes(),
-  };
-};
-
-const signAccountDigest = (
-  privateKey: Uint8Array,
-  requestedAccountId: AccountId,
-  digest: Uint8Array,
-): Eip155DigestSignature => {
-  const actualAccountId = accountIdFromPrivateKeyBytes(privateKey);
-  if (actualAccountId !== requestedAccountId) {
-    throw new Eip155SigningAccountMismatchError(requestedAccountId, actualAccountId);
-  }
-
-  return signDigest(privateKey, digest);
 };
 
 export const eip155KeyringAdapter: KeyringNamespaceAdapter<"eip155"> = {
   namespace: EIP155_NAMESPACE,
-  deriveHdAccountId: (params) => accountIdFromPrivateKeyBytes(deriveHdPrivateKeyBytes(params)),
-  deriveHdPrivateKey: (params) => {
-    const privateKey = deriveHdPrivateKeyBytes(params);
-    return `0x${bytesToHex(privateKey)}`;
+  parsePrivateKey(input) {
+    const hex = input.startsWith("0x") ? input.slice(2) : input;
+    return secp256k1.utils.isValidPrivateKey(hex) ? hexToBytes(hex) : null;
   },
-  accountIdFromPrivateKey: (privateKey) => accountIdFromPrivateKeyBytes(privateKeyBytes(privateKey)),
+  formatPrivateKey: (privateKey) => `0x${bytesToHex(privateKey)}`,
+  accountIdFromPrivateKey(privateKey) {
+    const publicKey = secp256k1.getPublicKey(privateKey, false);
+    const address = bytesToHex(keccak_256(publicKey.subarray(1)).slice(-20));
+    return accountIdFromAddress(`0x${address}`);
+  },
+  derivePrivateKey,
 };
 
-export const signEip155HdDigest = (params: {
-  accountId: AccountId;
-  seed: Uint8Array;
-  derivationIndex: number;
+export const signEip155Digest = ({
+  privateKey,
+  digest,
+}: {
+  privateKey: Uint8Array;
   digest: Uint8Array;
-}): Eip155DigestSignature => signAccountDigest(deriveHdPrivateKeyBytes(params), params.accountId, params.digest);
-
-export const signEip155PrivateKeyDigest = (params: {
-  accountId: AccountId;
-  privateKey: string;
-  digest: Uint8Array;
-}): Eip155DigestSignature => signAccountDigest(privateKeyBytes(params.privateKey), params.accountId, params.digest);
+}): Eip155DigestSignature => {
+  const signature = secp256k1.sign(digest, privateKey, { lowS: true });
+  return { r: signature.r, s: signature.s, yParity: signature.recovery };
+};

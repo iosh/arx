@@ -1,12 +1,10 @@
 import type {
   AccountGroupRecord,
-  AccountMemberRecord,
   AccountSelectionRecord,
   CustomNetworkRecord,
   DappNetworkSelectionRecord,
   EncryptedVaultRecord,
-  HdKeyringRecord,
-  KeySourceRecord,
+  KeySource,
   NetworkRpcOverrideRecord,
   PermissionRecord,
   SettingRecord,
@@ -21,9 +19,7 @@ export type EncryptedVaultRow = EncryptedVaultRecord & {
 
 export type SettingsRow = SettingRecord;
 
-export type KeySourceRow = KeySourceRecord;
-export type HdKeyringRow = HdKeyringRecord;
-export type AccountRow = AccountMemberRecord;
+export type KeySourceRow = KeySource;
 export type AccountGroupRow = AccountGroupRecord;
 export const ACCOUNT_SELECTION_ROW_KEY = "accountSelection" as const;
 export type AccountSelectionRow = AccountSelectionRecord & { key: typeof ACCOUNT_SELECTION_ROW_KEY };

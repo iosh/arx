@@ -1,4 +1,3 @@
-import { AccountRemovalSelectionUnavailableError } from "@arx/core/accounts";
 import { type KeySourceId, KeySourceNotFoundError } from "@arx/core/keyring";
 import { WalletLastKeySourceRemovalError } from "@arx/core/wallet";
 import { isWalletApiError } from "@arx/wallet-api/client";
@@ -34,10 +33,7 @@ export function useKeySourceRemoval() {
           void navigate({ to: "/wallet/accounts", replace: true });
         },
         onError: (error) => {
-          if (
-            isWalletApiError(error, WalletLastKeySourceRemovalError) ||
-            isWalletApiError(error, AccountRemovalSelectionUnavailableError)
-          ) {
+          if (isWalletApiError(error, WalletLastKeySourceRemovalError)) {
             toast.error(t("lastAccountRemoval"), {
               toasterId: "key-source-removal",
               duration: Infinity,

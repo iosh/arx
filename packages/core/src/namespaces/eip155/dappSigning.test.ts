@@ -5,7 +5,7 @@ import { Permissions } from "../../permissions/Permissions.js";
 import { ACCOUNT_ID, ADDRESS, createAccounts, PRIVATE_KEY } from "./__tests__/fixtures.js";
 import { chainRefFromChainId } from "./chainId.js";
 import { createEip155DappSigningHandlers } from "./dappSigning.js";
-import { signEip155PrivateKeyDigest } from "./keyring.js";
+import { signEip155Digest } from "./keyring.js";
 
 it("approves only signed typed-data fields and rejects inconsistent request data", async () => {
   const chainId = 4_294_967_297n;
@@ -29,7 +29,12 @@ it("approves only signed typed-data fields and rejects inconsistent request data
     accountSigning: {
       signDigest: async (input) => {
         signedDigest = input.digest;
-        return signEip155PrivateKeyDigest({ ...input, privateKey: PRIVATE_KEY });
+        const privateKey = Hex.toBytes(`0x${PRIVATE_KEY}`);
+        try {
+          return signEip155Digest({ ...input, privateKey });
+        } finally {
+          privateKey.fill(0);
+        }
       },
     },
   });
@@ -81,4 +86,47 @@ it("approves only signed typed-data fields and rejects inconsistent request data
     ]),
   ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
   expect(approvals.list()).toEqual([]);
+  const { EIP712Domain: _domainFields, ...withoutDomainTypes } = typedData.types;
+  await expect(request([ADDRESS, { ...typedData, types: withoutDomainTypes }])).rejects.toMatchObject({
+    code: "global.rpc.invalid_params",
+  });
+  expect(approvals.list()).toEqual([]);
+
+  const emptyDomainTypes = { ...typedData.types, EIP712Domain: [] };
+  const domainless = request([
+    ADDRESS,
+    { ...typedData, types: emptyDomainTypes, domain: { chainId: `${chainId + 1n}` } },
+  ]);
+  const [domainlessApproval] = approvals.list();
+  assert(domainlessApproval?.type === "sign" && domainlessApproval.request.type === "typedData");
+  expect(domainlessApproval.request.typedData.domain).toEqual({});
+  approvals.approve({ approvalId: domainlessApproval.approvalId, type: "sign" });
+  await domainless;
+  expect(signedDigest).toEqual(
+    Hex.toBytes(
+      TypedData.getSignPayload({
+        types: emptyDomainTypes,
+        primaryType: "Message",
+        domain: {},
+        message: { details: [{ contents: "hello" }] },
+      }),
+    ),
+  );
+
+  const domainOnlyData = {
+    types: { EIP712Domain: [{ name: "name", type: "string" }] },
+    primaryType: "EIP712Domain",
+    domain: { name: "Signed domain" },
+  } as const;
+  const domainOnlyDigest = Hex.toBytes(TypedData.getSignPayload(domainOnlyData));
+
+  for (const message of [{ name: "Unsigned message" }, {}]) {
+    const domainOnly = request([ADDRESS, { ...domainOnlyData, message }]);
+    const [domainOnlyApproval] = approvals.list();
+    assert(domainOnlyApproval?.type === "sign" && domainOnlyApproval.request.type === "typedData");
+    expect(domainOnlyApproval.request.typedData).toEqual({ ...domainOnlyData, message: {} });
+    approvals.approve({ approvalId: domainOnlyApproval.approvalId, type: "sign" });
+    await domainOnly;
+    expect(signedDigest).toEqual(domainOnlyDigest);
+  }
 });

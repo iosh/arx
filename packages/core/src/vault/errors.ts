@@ -1,26 +1,5 @@
 import { ArxBaseError } from "../errors.js";
 
-export class VaultIncorrectPasswordError extends ArxBaseError {
-  static readonly code = "vault.incorrect_password";
-
-  constructor() {
-    super("Vault password is incorrect.", {
-      code: VaultIncorrectPasswordError.code,
-    });
-  }
-}
-
-export class VaultPasswordTooShortError extends ArxBaseError {
-  static readonly code = "vault.password_too_short";
-
-  constructor(minimumLength: number, actualLength: number) {
-    super(`Vault password must contain at least ${minimumLength} characters.`, {
-      code: VaultPasswordTooShortError.code,
-      details: { minimumLength, actualLength },
-    });
-  }
-}
-
 export class VaultRecordDecodeError extends ArxBaseError {
   static readonly code = "vault.record_decode_failed";
 

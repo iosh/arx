@@ -1,4 +1,4 @@
-import type { HdKeyringsReader, KeySourcesReader } from "@arx/core/persistence";
+import type { KeySourcesReader } from "@arx/core/persistence";
 import type { DexiePersistenceContext } from "../database.js";
 
 export const createKeySourcesReader = (context: DexiePersistenceContext): KeySourcesReader => ({
@@ -6,15 +6,6 @@ export const createKeySourcesReader = (context: DexiePersistenceContext): KeySou
     return context.read(async () => {
       await context.ready;
       return await context.db.keySources.toArray();
-    });
-  },
-});
-
-export const createHdKeyringsReader = (context: DexiePersistenceContext): HdKeyringsReader => ({
-  listAll() {
-    return context.read(async () => {
-      await context.ready;
-      return await context.db.hdKeyrings.toArray();
     });
   },
 });

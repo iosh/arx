@@ -1,5 +1,4 @@
 import type { CoreTime } from "../runtime/time.js";
-import { AutoLockDurationOutOfRangeError } from "./errors.js";
 
 export const DEFAULT_AUTO_LOCK_DURATION_MS = 15 * 60_000;
 export const MIN_AUTO_LOCK_DURATION_MS = 60_000;
@@ -11,7 +10,7 @@ export const assertAutoLockDuration = (durationMs: number): void => {
     durationMs < MIN_AUTO_LOCK_DURATION_MS ||
     durationMs > MAX_AUTO_LOCK_DURATION_MS
   ) {
-    throw new AutoLockDurationOutOfRangeError(durationMs);
+    throw new Error("Auto-lock duration is outside the supported range.");
   }
 };
 

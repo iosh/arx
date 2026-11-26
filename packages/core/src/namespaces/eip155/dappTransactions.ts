@@ -1,9 +1,7 @@
-import type { Accounts } from "../../accounts/Accounts.js";
 import { AccountNotFoundError } from "../../accounts/errors.js";
 import type { Approvals } from "../../approvals/Approvals.js";
 import { type DappRequestMethod, defineDappMethod, invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError, RpcJsonRpcResponseError, RpcUnauthorizedError } from "../../dappConnections/errors.js";
-import type { PermissionsReader } from "../../permissions/Permissions.js";
 import {
   Eip155FeeModelUnsupportedError,
   Eip155PriorityFeeExceedsMaxFeeError,
@@ -14,15 +12,14 @@ import type { PreparedTransaction } from "../../transactions/preparedTransaction
 import type { Transactions } from "../../transactions/Transactions.js";
 import type { TransactionSubmission } from "../../transactions/types.js";
 import { EIP155_NAMESPACE } from "./constants.js";
-import { getAuthorizedAccount } from "./dappAccount.js";
+import { type AuthorizedAccountDependencies, getAuthorizedAccount } from "./dappAccount.js";
 import { decodeSendTransactionParams } from "./transactionRequest.js";
 
-type CreateEip155DappTransactionHandlersOptions = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
-  permissions: Pick<PermissionsReader, "get">;
-  approvals: Pick<Approvals, "request">;
-  transactions: Pick<Transactions, "prepare" | "submit">;
-}>;
+type CreateEip155DappTransactionHandlersOptions = AuthorizedAccountDependencies &
+  Readonly<{
+    approvals: Pick<Approvals, "request">;
+    transactions: Pick<Transactions, "prepare" | "submit">;
+  }>;
 
 export const createEip155DappTransactionHandlers = (
   options: CreateEip155DappTransactionHandlersOptions,

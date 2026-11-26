@@ -1,34 +1,22 @@
 import { Hex, Signature } from "ox";
-import type { Accounts } from "../../accounts/Accounts.js";
 import type { Approvals } from "../../approvals/Approvals.js";
 import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError, RpcUnauthorizedError } from "../../dappConnections/errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
-import type { PermissionsReader } from "../../permissions/Permissions.js";
-import { type Eip155AccountSigning, isAccountSigningUnavailableError } from "./accountSigning.js";
+import { isAccountSigningUnavailableError } from "../../wallet/accountKeys.js";
+import type { Eip155AccountSigning } from "./accountSigning.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
-import { getAuthorizedAccount } from "./dappAccount.js";
+import { type AuthorizedAccountDependencies, getAuthorizedAccount } from "./dappAccount.js";
 import { decodePersonalSignParams, personalMessageDigest } from "./personalSign.js";
-import type { Eip155PersonalMessage, Eip155SignRequest, Eip155TypedData } from "./signingRequest.js";
+import type { Eip155SignPayload, Eip155SignRequest } from "./signingRequest.js";
 import { decodeSignTypedDataV4Params } from "./typedData.js";
 
-type Eip155SignPayload =
-  | Readonly<{
-      type: "personalMessage";
-      message: Eip155PersonalMessage;
-    }>
-  | Readonly<{
-      type: "typedData";
-      typedData: Eip155TypedData;
-    }>;
-
-type CreateEip155DappSigningHandlersOptions = Readonly<{
-  accounts: Pick<Accounts, "accountIdFromAddress" | "getMember" | "getAddress">;
-  permissions: Pick<PermissionsReader, "get">;
-  approvals: Pick<Approvals, "request">;
-  accountSigning: Eip155AccountSigning;
-}>;
+type CreateEip155DappSigningHandlersOptions = AuthorizedAccountDependencies &
+  Readonly<{
+    approvals: Pick<Approvals, "request">;
+    accountSigning: Eip155AccountSigning;
+  }>;
 
 export const createEip155DappSigningHandlers = (
   options: CreateEip155DappSigningHandlersOptions,

@@ -10,7 +10,7 @@ import { OnboardingStepLayout } from "@/ui/components/OnboardingStepLayout";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { getNamespaceUi } from "@/ui/namespaces";
-import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
+import { usePrivateKeyAccountPreview } from "@/ui/wallet/accounts/usePrivateKeyAccountPreview";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useCreatePrivateKeyWallet } from "@/ui/wallet/useWalletMutations";
 import { CreatePasswordForm } from "./CreatePasswordForm";
@@ -25,7 +25,7 @@ export function ImportPrivateKeyPage() {
   );
 }
 
-type PrivateKeyAccount = NonNullable<Awaited<ReturnType<WalletClient["accounts"]["fromPrivateKey"]>>>;
+type PrivateKeyAccount = NonNullable<Awaited<ReturnType<WalletClient["accounts"]["previewPrivateKeyAccount"]>>>;
 
 function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => void }) {
   const { status } = useWallet();
@@ -40,7 +40,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
     formState: { isSubmitting: pending },
   } = useForm({ defaultValues: { privateKey: "" } });
   const privateKey = useWatch({ control, name: "privateKey" }).trim();
-  const { account, invalid } = useAccountFromPrivateKey({ privateKey, namespace: EIP155_NAMESPACE });
+  const { account, invalid } = usePrivateKeyAccountPreview({ privateKey, namespace: EIP155_NAMESPACE });
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
 
@@ -82,7 +82,7 @@ function PrivateKeyForm({ password, onBack }: { password: string; onBack: () => 
               )}
             </FieldDescription>
           </Field>
-          {account && <PrivateKeyAddressPreview addresses={account.addresses} />}
+          {account && <PrivateKeyAddressPreview account={account} />}
           <Button
             type="submit"
             size="lg"

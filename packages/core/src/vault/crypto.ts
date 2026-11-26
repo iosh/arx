@@ -1,13 +1,8 @@
 import { gcm } from "@noble/ciphers/aes.js";
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { randomBytes } from "@noble/hashes/utils.js";
-import * as Base64 from "ox/Base64";
-import {
-  VaultCryptoOperationError,
-  VaultIncorrectPasswordError,
-  VaultPasswordTooShortError,
-  VaultRecordDecodeError,
-} from "./errors.js";
+import { base64 } from "@scure/base";
+import { VaultCryptoOperationError, VaultRecordDecodeError } from "./errors.js";
 import { getVaultPasswordLength, VAULT_PASSWORD_MIN_LENGTH } from "./passwordPolicy.js";
 import type { EncryptedVaultRecord } from "./persistence.js";
 
@@ -43,9 +38,9 @@ export type VaultUnlockDraft = Readonly<{
 const decodeRecord = (record: EncryptedVaultRecord) => {
   try {
     return {
-      salt: Base64.toBytes(record.salt),
-      iv: Base64.toBytes(record.iv),
-      ciphertext: Base64.toBytes(record.ciphertext),
+      salt: base64.decode(record.salt),
+      iv: base64.decode(record.iv),
+      ciphertext: base64.decode(record.ciphertext),
     };
   } catch (cause) {
     throw new VaultRecordDecodeError(cause);
@@ -71,7 +66,7 @@ const deriveEncryptionKey = async (password: string, salt: Uint8Array): Promise<
 const assertNewVaultPassword = (password: string): void => {
   const actualLength = getVaultPasswordLength(password);
   if (actualLength < VAULT_PASSWORD_MIN_LENGTH) {
-    throw new VaultPasswordTooShortError(VAULT_PASSWORD_MIN_LENGTH, actualLength);
+    throw new Error("Vault password is below the required minimum length.");
   }
 };
 
@@ -83,35 +78,28 @@ const encrypt = (encryptionKey: Uint8Array, iv: Uint8Array, plaintext: Uint8Arra
   }
 };
 
-const createUnlockedVaultWithSalt = async (params: {
-  password: string;
-  plaintext: Uint8Array;
-  salt: Uint8Array;
-}): Promise<UnlockedVault> => {
-  const encryptionKey = await deriveEncryptionKey(params.password, params.salt);
-  const iv = createRandomBytes(IV_BYTES);
-  const ciphertext = encrypt(encryptionKey, iv, params.plaintext);
-  return {
-    record: {
-      salt: Base64.fromBytes(params.salt),
-      iv: Base64.fromBytes(iv),
-      ciphertext: Base64.fromBytes(ciphertext),
-    },
-    encryptionKey,
-  };
-};
-
 export const createUnlockedVault = async (params: {
   password: string;
   plaintext: Uint8Array;
 }): Promise<UnlockedVault> => {
   assertNewVaultPassword(params.password);
-
-  return await createUnlockedVaultWithSalt({
-    password: params.password,
-    plaintext: params.plaintext,
-    salt: createRandomBytes(SALT_BYTES),
-  });
+  const salt = createRandomBytes(SALT_BYTES);
+  const encryptionKey = await deriveEncryptionKey(params.password, salt);
+  try {
+    const iv = createRandomBytes(IV_BYTES);
+    const ciphertext = encrypt(encryptionKey, iv, params.plaintext);
+    return {
+      record: {
+        salt: base64.encode(salt),
+        iv: base64.encode(iv),
+        ciphertext: base64.encode(ciphertext),
+      },
+      encryptionKey,
+    };
+  } catch (error) {
+    encryptionKey.fill(0);
+    throw error;
+  }
 };
 
 /** Returns null when the record cannot be authenticated with the supplied password. */
@@ -137,33 +125,15 @@ export const unlockVaultRecord = async (
   };
 };
 
-export const replaceVaultPlaintext = async (unlocked: UnlockedVault, plaintext: Uint8Array): Promise<UnlockedVault> => {
+export const replaceVaultPlaintext = (unlocked: UnlockedVault, plaintext: Uint8Array): UnlockedVault => {
   const iv = createRandomBytes(IV_BYTES);
   const ciphertext = encrypt(unlocked.encryptionKey, iv, plaintext);
   return {
     record: {
       salt: unlocked.record.salt,
-      iv: Base64.fromBytes(iv),
-      ciphertext: Base64.fromBytes(ciphertext),
+      iv: base64.encode(iv),
+      ciphertext: base64.encode(ciphertext),
     },
     encryptionKey: unlocked.encryptionKey,
   };
-};
-
-export const changeVaultPassword = async (params: {
-  unlocked: UnlockedVault;
-  currentPassword: string;
-  newPassword: string;
-}): Promise<UnlockedVault> => {
-  const current = await unlockVaultRecord(params.unlocked.record, params.currentPassword);
-  if (current === null) throw new VaultIncorrectPasswordError();
-  try {
-    return await createUnlockedVault({
-      password: params.newPassword,
-      plaintext: current.plaintext,
-    });
-  } finally {
-    current.plaintext.fill(0);
-    current.unlocked.encryptionKey.fill(0);
-  }
 };

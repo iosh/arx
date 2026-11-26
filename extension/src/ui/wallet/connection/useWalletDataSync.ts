@@ -1,6 +1,5 @@
 import type { WalletClient } from "@arx/wallet-api/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { refreshAccountAddresses } from "../accounts/useAccountAddresses";
 import { refreshAccounts } from "../accounts/useAccounts";
 import { useAssetBalances } from "../assets/useAssetBalances";
 import { refreshMnemonicSources } from "../keyring/useMnemonicSources";
@@ -17,7 +16,6 @@ export function useWalletDataSync(wallet: WalletClient) {
     switch (event.type) {
       case "accountsChanged":
         refreshAccounts(queryClient);
-        refreshAccountAddresses(queryClient, event.accountGroupIds);
         break;
       case "keyringChanged":
         refreshMnemonicSources(queryClient);

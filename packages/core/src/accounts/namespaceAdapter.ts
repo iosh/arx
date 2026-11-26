@@ -3,7 +3,6 @@ import type { AccountId } from "./accountId.js";
 
 export type AccountsNamespaceAdapter = Readonly<{
   namespace: Namespace;
-  accountIdFromAddress(input: { address: string }): AccountId;
   addressForAccountId(input: { accountId: AccountId }): Readonly<{
     canonicalAddress: string;
     displayAddress: string;

@@ -5,7 +5,6 @@ export function findAccountHideReplacement(
   account: AccountGroupRecord,
   accounts: readonly AccountGroupRecord[],
 ): AccountGroupRecord | null {
-  if (account.source.type !== "bip39") return null;
   const { keySourceId } = account.source;
   return (
     accounts.find(

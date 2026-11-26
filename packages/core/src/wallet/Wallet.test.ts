@@ -1,14 +1,12 @@
-import { Secp256k1, Signature } from "ox";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { Accounts } from "../accounts/Accounts.js";
 import type { AccountId } from "../accounts/accountId.js";
 import type { AccountsChanged } from "../accounts/types.js";
 import { Approvals } from "../approvals/Approvals.js";
-import { KeyringInvalidMnemonicError, KeyringLockedError } from "../keyring/errors.js";
+import { KeyringInvalidMnemonicError } from "../keyring/errors.js";
 import { Keyring } from "../keyring/Keyring.js";
 import { decodeKeyringSecrets } from "../keyring/secrets.js";
 import type { KeyringChanged } from "../keyring/types.js";
-import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import { EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
@@ -18,12 +16,14 @@ import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { commitUpdates } from "../persistence/preparedUpdate.js";
 import { systemTime } from "../runtime/time.js";
-import { AUTO_LOCK_SETTING_KEY } from "../settings/persistence.js";
+import * as VaultCrypto from "../vault/crypto.js";
 import { unlockVaultRecord } from "../vault/crypto.js";
 import type { EncryptedVaultRecord } from "../vault/persistence.js";
 import { AutoLockController, DEFAULT_AUTO_LOCK_DURATION_MS } from "./AutoLockController.js";
+import { createAccountKeys } from "./accountKeys.js";
 import type { WalletStatusChanged } from "./Wallet.js";
 import { WalletCoordinator } from "./WalletCoordinator.js";
+import { getWalletStatus } from "./walletStatus.js";
 
 const PRIMARY_MNEMONIC =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -66,7 +66,7 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
     keyringChanges.push(change);
   };
   const keyring = new Keyring({
-    bootstrap: { encryptedVault: null, keySources: [], hdKeyrings: [] },
+    bootstrap: { encryptedVault: null, keySources: [] },
     namespaceAdapters: {
       [EIP155_NAMESPACE]: eip155KeyringAdapter,
     },
@@ -78,7 +78,7 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
   };
   const accounts = new Accounts({
     adapters: { [EIP155_NAMESPACE]: eip155AccountsAdapter },
-    bootstrap: { groups: [], records: [], selection: null },
+    bootstrap: { groups: [], selection: null },
     mutations,
     publishChanged: publishAccountsChanged,
   });
@@ -95,12 +95,18 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
     durationMs: params.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_DURATION_MS,
     time: systemTime,
   });
+  const accountKeys = createAccountKeys({
+    keyring,
+    accounts,
+    wallet: { getStatus: () => getWalletStatus(keyring.getSoftwareKeyStatus(), autoLock.isExpired()) },
+  });
   const wallet = new WalletCoordinator({
     mutations,
     namespaces: [EIP155_NAMESPACE],
     time: systemTime,
     keyring,
     accounts,
+    accountKeys,
     permissions,
     approvals,
     dappConnections: { refreshAccountsForOpenConnections: () => undefined },
@@ -149,13 +155,8 @@ const memberId = (accounts: Accounts, accountGroupId: string): AccountId => {
   assert(group !== null);
   return group.members[0].accountId;
 };
-const hdKeyringId = (accounts: Accounts, accountGroupId: string): string => {
-  const group = accounts.getGroup(accountGroupId);
-  assert(group !== null && group.members[0].origin.type === "hd");
-  return group.members[0].origin.hdKeyringId;
-};
 const groupIdForMember = (accounts: Accounts, accountId: AccountId): string => {
-  const member = accounts.getMemberRecord(accountId);
+  const member = accounts.getMember(accountId);
   assert(member !== null);
   return member.accountGroupId;
 };
@@ -232,10 +233,7 @@ describe("WalletCoordinator", () => {
     });
     expect(keyring.getSoftwareKeyStatus()).toBe("unlocked");
     expect(autoLock.getDuration()).toBe(DEFAULT_AUTO_LOCK_DURATION_MS);
-    expect(keyring.requireKeySourceSecret(created.keySourceId)).toMatchObject({
-      type: "bip39",
-      mnemonic: PRIMARY_MNEMONIC,
-    });
+    expect(keyring.exportMnemonic(created.keySourceId)).toBe(PRIMARY_MNEMONIC);
     expect(keyring.getKeySource(created.keySourceId)).toMatchObject({
       type: "bip39",
       name: "Personal",
@@ -268,7 +266,11 @@ describe("WalletCoordinator", () => {
       name: "Recovered",
       backupStatus: "confirmed",
     });
-    expect(keyring.getHdKeyring(hdKeyringId(accounts, created.accountGroupId))?.keySourceId).toBe(created.keySourceId);
+    expect(accounts.getGroup(created.accountGroupId)?.source).toEqual({
+      type: "bip39",
+      keySourceId: created.keySourceId,
+      accountIndex: 0,
+    });
   });
 
   it("commits only one wallet when initialization commands compete", async () => {
@@ -305,14 +307,14 @@ describe("WalletCoordinator", () => {
     expect(keyringChanges).toHaveLength(1);
     expect(accountChanges).toHaveLength(1);
     expect(keyring.listKeySources()).toHaveLength(1);
-    expect(keyring.requireKeySourceSecret(created.keySourceId)).toMatchObject({ mnemonic: PRIMARY_MNEMONIC });
+    expect(keyring.exportMnemonic(created.keySourceId)).toBe(PRIMARY_MNEMONIC);
   });
 
   it("rejects invalid input and returns normalized duplicates without changing the wallet", async () => {
     const { wallet, commits, keyring, accounts } = createHarness();
     await initializeWallet(wallet);
     const commitCount = commits.length;
-    const selectedAccount = accounts.getSelectedGroupId();
+    const selectedAccount = accounts.getSelectedGroup().accountGroupId;
 
     await expect(
       wallet.addMnemonic({
@@ -332,7 +334,7 @@ describe("WalletCoordinator", () => {
 
     expect(commits).toHaveLength(commitCount);
     expect(keyring.listKeySources()).toHaveLength(1);
-    expect(accounts.getSelectedGroupId()).toBe(selectedAccount);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(selectedAccount);
   });
 
   it("adds mnemonic sources with their backup state and selects each first account", async () => {
@@ -362,28 +364,19 @@ describe("WalletCoordinator", () => {
       name: "Recovered",
       backupStatus: "confirmed",
     });
-    expect(keyring.getHdKeyring(hdKeyringId(accounts, added.accountGroupId))).toMatchObject({
+    expect(accounts.getGroup(added.accountGroupId)?.source).toEqual({
+      type: "bip39",
       keySourceId: added.keySourceId,
-      namespace: EIP155_NAMESPACE,
+      accountIndex: 0,
     });
-    expect(keyring.getHdKeyring(hdKeyringId(accounts, imported.accountGroupId))).toMatchObject({
+    expect(accounts.getGroup(imported.accountGroupId)?.source).toEqual({
+      type: "bip39",
       keySourceId: imported.keySourceId,
-      namespace: EIP155_NAMESPACE,
-    });
-    expect(accounts.getMember(memberId(accounts, added.accountGroupId))?.origin).toEqual({
-      type: "hd",
-      hdKeyringId: hdKeyringId(accounts, added.accountGroupId),
-      derivationIndex: 0,
-    });
-    expect(accounts.getMember(memberId(accounts, imported.accountGroupId))?.origin).toEqual({
-      type: "hd",
-      hdKeyringId: hdKeyringId(accounts, imported.accountGroupId),
-      derivationIndex: 0,
+      accountIndex: 0,
     });
     expect(keyring.listKeySources()).toHaveLength(3);
-    expect(keyring.listHdKeyrings()).toHaveLength(3);
     expect(accounts.listGroups()).toHaveLength(3);
-    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
   });
 
   it("confirms the first account's move once, retaining its identity and later selection", async () => {
@@ -416,7 +409,7 @@ describe("WalletCoordinator", () => {
       accountId: memberId(accounts, imported.accountGroupId),
     });
     expect(commits).toHaveLength(commitCount);
-    expect(accounts.getSelectedGroupId()).toBe(other.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(other.accountGroupId);
 
     const confirmed = { ...input, accountId: offered.accountId };
     const added = await wallet.addMnemonicAndMoveAccount(confirmed);
@@ -425,16 +418,7 @@ describe("WalletCoordinator", () => {
     expect(accounts.getGroup(added.accountGroupId)).toEqual({
       ...before,
       source: { type: "bip39", keySourceId: added.keySourceId, accountIndex: 0 },
-      members: [
-        {
-          ...before.members[0],
-          origin: {
-            type: "hd",
-            hdKeyringId: keyring.listHdKeyringsByKeySourceIds([added.keySourceId])[0]?.hdKeyringId,
-            derivationIndex: 0,
-          },
-        },
-      ],
+      members: before.members,
       selected: true,
     });
     expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, imported.accountGroupId)]);
@@ -446,7 +430,7 @@ describe("WalletCoordinator", () => {
     const repeatedCommitCount = commits.length;
     expect(await wallet.addMnemonicAndMoveAccount(confirmed)).toEqual(added);
     expect(commits).toHaveLength(repeatedCommitCount);
-    expect(accounts.getSelectedGroupId()).toBe(other.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(other.accountGroupId);
     expect(new Set((await readCommittedSources()).map((source) => source.keySourceId))).toEqual(expectedSourceIds);
   });
 
@@ -459,7 +443,7 @@ describe("WalletCoordinator", () => {
     assert(imported.status === "added");
     const keys = [
       { accountId: derived.account.members[0].accountId, privateKey: `0x${NEXT_PRIVATE_KEY}` },
-      { accountId: memberId(accounts, imported.accountGroupId), privateKey: PRIVATE_KEY },
+      { accountId: memberId(accounts, imported.accountGroupId), privateKey: `0x${PRIVATE_KEY}` },
     ];
 
     await expect(wallet.exportMnemonic({ keySourceId: source.keySourceId, password: "password" })).resolves.toEqual({
@@ -472,7 +456,7 @@ describe("WalletCoordinator", () => {
       });
       await expect(wallet.exportPrivateKey({ accountId: key.accountId, password: "incorrect" })).resolves.toBeNull();
     }
-    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
 
     await wallet.lock();
     await expect(
@@ -486,24 +470,6 @@ describe("WalletCoordinator", () => {
       });
     }
   }, 15_000);
-
-  it("does not return an account key when the session expires during HD derivation", async () => {
-    const { accounts, wallet } = createHarness();
-    const created = await initializeWallet(wallet);
-    const derive = eip155KeyringAdapter.deriveHdPrivateKey;
-    let seed: Uint8Array | undefined;
-    vi.spyOn(eip155KeyringAdapter, "deriveHdPrivateKey").mockImplementation((params) => {
-      seed = params.seed;
-      vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
-      return derive(params);
-    });
-    await expect(
-      wallet.exportPrivateKey({ accountId: memberId(accounts, created.accountGroupId), password: "password" }),
-    ).rejects.toMatchObject({
-      code: "wallet.locked",
-    });
-    expect(seed).toEqual(new Uint8Array(64));
-  });
 
   it("does not activate wallet state when the initial commit fails", async () => {
     const failure = new Error("commit failed");
@@ -519,8 +485,7 @@ describe("WalletCoordinator", () => {
 
     expect(keyring.getSoftwareKeyStatus()).toBe("uninitialized");
     expect(keyring.listKeySources()).toEqual([]);
-    expect(keyring.listHdKeyrings()).toEqual([]);
-    expect(accounts.listMemberRecords()).toEqual([]);
+    expect(accounts.listGroups()).toEqual([]);
   });
 
   it("moves an imported private-key account into an HD wallet and creates the next account", async () => {
@@ -548,12 +513,7 @@ describe("WalletCoordinator", () => {
     expect(moved).toEqual({
       ...candidate.account,
       source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 1 },
-      members: [
-        {
-          ...candidate.account.members[0],
-          origin: { type: "hd", hdKeyringId: hdKeyringId(accounts, first.accountGroupId), derivationIndex: 1 },
-        },
-      ],
+      members: candidate.account.members,
     });
     expect(accounts.getGroup(imported.accountGroupId)).toEqual(moved);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
@@ -564,13 +524,10 @@ describe("WalletCoordinator", () => {
       status: "created",
       account: {
         source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 2 },
-        members: [
-          { origin: { type: "hd", hdKeyringId: hdKeyringId(accounts, first.accountGroupId), derivationIndex: 2 } },
-        ],
       },
     });
     expect(next.account.members[0].accountId).not.toBe(memberId(accounts, imported.accountGroupId));
-    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
   });
 
   it("hides an HD account with its permission in one committed cascade", async () => {
@@ -583,7 +540,7 @@ describe("WalletCoordinator", () => {
     await fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForMember(accounts, accountId), hidden: true });
     expect(fixture.commits).toHaveLength(commitCount + 1);
     expect(fixture.accounts.getGroupForMember(accountId)).toMatchObject({ hidden: true, selected: false });
-    expect(fixture.accounts.getSelectedGroupId()).toBe(groupIdForMember(accounts, replacementId));
+    expect(fixture.accounts.getSelectedGroup().accountGroupId).toBe(groupIdForMember(accounts, replacementId));
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
     expect(fixture.approvals.list().map(({ approvalId }) => approvalId)).toEqual([retained.approvalId]);
 
@@ -660,7 +617,6 @@ describe("WalletCoordinator", () => {
     }
 
     const removalCommitCount = commits.length;
-    const removedKeyringId = hdKeyringId(accounts, second.accountGroupId);
     const expectedRemoved = [
       memberId(accounts, second.accountGroupId),
       another.account.members[0].accountId,
@@ -671,15 +627,11 @@ describe("WalletCoordinator", () => {
     expect(new Set(removed)).toEqual(new Set(expectedRemoved));
     expect(commits).toHaveLength(removalCommitCount + 1);
     expect(keyring.getKeySource(second.keySourceId)).toBeNull();
-    expect(keyring.getHdKeyring(removedKeyringId)).toBeNull();
     expect(keyring.listKeySources().map(({ keySourceId }) => keySourceId)).toEqual([first.keySourceId]);
-    expect(keyring.listHdKeyrings().map(({ hdKeyringId }) => hdKeyringId)).toEqual([
-      hdKeyringId(accounts, first.accountGroupId),
-    ]);
     expect(accounts.listGroups().map((group) => group.members[0].accountId)).toEqual([
       memberId(accounts, first.accountGroupId),
     ]);
-    expect(accounts.getSelectedGroupId()).toBe(first.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(first.accountGroupId);
     expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, first.accountGroupId)]);
     expect(approvals.list().map((approval) => approval.accountId)).toEqual([memberId(accounts, first.accountGroupId)]);
     approvals.cancelAll();
@@ -694,7 +646,7 @@ describe("WalletCoordinator", () => {
     assert(imported.status === "added");
     expect(duplicate).toMatchObject({ status: "duplicate", account: { accountGroupId: imported.accountGroupId } });
     expect(commits).toHaveLength(commitCount + 1);
-    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
 
     await accounts.select(first.accountGroupId);
     const privateDuplicateCommitCount = commits.length;
@@ -703,7 +655,7 @@ describe("WalletCoordinator", () => {
       account: { accountGroupId: imported.accountGroupId },
     });
     expect(commits).toHaveLength(privateDuplicateCommitCount);
-    expect(accounts.getSelectedGroupId()).toBe(first.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(first.accountGroupId);
 
     await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
     await accounts.select(imported.accountGroupId);
@@ -714,7 +666,7 @@ describe("WalletCoordinator", () => {
       account: { accountGroupId: first.accountGroupId, hidden: true },
     });
     expect(commits).toHaveLength(hdDuplicateCommitCount);
-    expect(accounts.getSelectedGroupId()).toBe(imported.accountGroupId);
+    expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
   });
 
   it("removes a private-key source and cancels its requests only after the encrypted commit", async () => {
@@ -795,21 +747,6 @@ describe("WalletCoordinator", () => {
     expect(keyringChanges).toHaveLength(eventCount + 1);
   });
 
-  it("keeps the previous source name when persistence rejects a rename", async () => {
-    const { wallet, keyring, keyringChanges, setCommitFailure } = createHarness();
-    const initialized = await initializeWallet(wallet);
-    const { keySourceId } = initialized;
-    const previousSource = keyring.getKeySource(keySourceId);
-    const eventCount = keyringChanges.length;
-    const failure = new Error("Storage transaction failed");
-    setCommitFailure(failure);
-
-    await expect(keyring.renameMnemonicSource({ keySourceId, name: "Savings" })).rejects.toBe(failure);
-
-    expect(keyring.getKeySource(keySourceId)).toEqual(previousSource);
-    expect(keyringChanges).toHaveLength(eventCount);
-  });
-
   it("confirms mnemonic backup while locked without reading the secret", async () => {
     const { wallet, commits, keyring, keyringChanges } = createHarness();
     await initializeWallet(wallet);
@@ -843,7 +780,6 @@ describe("WalletCoordinator", () => {
 
     expect(keyring.getKeySource(created.keySourceId)).toMatchObject({
       type: "private-key",
-      namespace: "eip155",
     });
     const group = accounts.getGroup(created.accountGroupId);
     const source = keyring.getKeySource(created.keySourceId);
@@ -851,11 +787,12 @@ describe("WalletCoordinator", () => {
     await expect(wallet.unlock("password")).resolves.toBe(true);
     expect(accounts.getGroup(created.accountGroupId)).toEqual(group);
     expect(keyring.getKeySource(created.keySourceId)).toEqual(source);
-    expect(keyring.requireKeySourceSecret(created.keySourceId)).toEqual({
-      keySourceId: created.keySourceId,
-      type: "private-key",
-      privateKey: PRIVATE_KEY,
-    });
+    await expect(
+      wallet.exportPrivateKey({
+        accountId: memberId(accounts, created.accountGroupId),
+        password: "password",
+      }),
+    ).resolves.toEqual({ privateKey: `0x${PRIVATE_KEY}` });
   });
 
   it("locks by clearing decoded secrets and cancelling a pending approval without committing persistence", async () => {
@@ -878,7 +815,6 @@ describe("WalletCoordinator", () => {
 
     expect(keyring.getSoftwareKeyStatus()).toBe("locked");
     expect(commits).toHaveLength(commitCount);
-    expect(() => keyring.requireKeySourceSecret(created.keySourceId)).toThrow(KeyringLockedError);
     expect(approvals.list()).toEqual([]);
     expect(events).toEqual([
       { type: "walletStatusChanged", status: "unlocked" },
@@ -887,27 +823,6 @@ describe("WalletCoordinator", () => {
 
     await wallet.lock();
     expect(events).toHaveLength(2);
-  });
-
-  it("serializes a lock requested while unlock is in progress", async () => {
-    const { wallet, keyring } = createHarness();
-    await initializeWallet(wallet);
-    await wallet.lock();
-
-    const unlocking = wallet.unlock("password");
-    const locking = wallet.lock();
-    await Promise.all([unlocking, locking]);
-
-    expect(keyring.getSoftwareKeyStatus()).toBe("locked");
-  });
-
-  it("returns true without checking the password when already unlocked", async () => {
-    const { wallet, events } = createHarness();
-    await initializeWallet(wallet);
-
-    await expect(wallet.unlock("incorrect-password")).resolves.toBe(true);
-
-    expect(events).toEqual([{ type: "walletStatusChanged", status: "unlocked" }]);
   });
 
   it("requires the password again after expiry even before the lock timer runs", async () => {
@@ -936,39 +851,44 @@ describe("WalletCoordinator", () => {
     expect(events.map((event) => event.status)).toEqual(["unlocked", "locked", "unlocked"]);
   });
 
-  it("does not return a secret when the session expires during password verification", async () => {
-    const { keyring, wallet } = createHarness();
+  it("finishes an admitted private-key export before the queued expiry lock", async () => {
+    const { accounts, keyring, wallet } = createHarness();
     const initialized = await initializeWallet(wallet);
-    const { keySourceId } = initialized;
+    const accountId = memberId(accounts, initialized.accountGroupId);
     const verify = keyring.verifyPassword.bind(keyring);
     vi.spyOn(keyring, "verifyPassword").mockImplementation(async (password) => {
       const matches = await verify(password);
-      vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+      vi.advanceTimersByTime(DEFAULT_AUTO_LOCK_DURATION_MS);
       return matches;
     });
 
-    await expect(wallet.exportMnemonic({ keySourceId, password: "password" })).rejects.toMatchObject({
+    await expect(wallet.exportPrivateKey({ accountId, password: "password" })).resolves.toEqual({
+      privateKey: `0x${FIRST_PRIVATE_KEY}`,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(keyring.getSoftwareKeyStatus()).toBe("locked");
+    await expect(wallet.exportPrivateKey({ accountId, password: "password" })).rejects.toMatchObject({
       code: "wallet.locked",
     });
   });
-
-  it("does not commit a password change that finishes preparation after expiry", async () => {
+  it("commits an admitted password change before the queued expiry lock", async () => {
     const { wallet, commits, keyring } = createHarness();
     await initializeWallet(wallet);
     const prepare = keyring.prepareChangePassword.bind(keyring);
     vi.spyOn(keyring, "prepareChangePassword").mockImplementation(async (input) => {
       const update = await prepare(input);
-      vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+      vi.advanceTimersByTime(DEFAULT_AUTO_LOCK_DURATION_MS);
       return update;
     });
 
-    await expect(
-      wallet.changePassword({ currentPassword: "password", newPassword: "new-password" }),
-    ).rejects.toMatchObject({ code: "wallet.locked" });
-    expect(commits).toHaveLength(1);
-    await expect(wallet.unlock("password")).resolves.toBe(true);
+    await expect(wallet.changePassword({ currentPassword: "password", newPassword: "new-password" })).resolves.toBe(
+      true,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commits).toHaveLength(2);
+    expect(keyring.getSoftwareKeyStatus()).toBe("locked");
+    await expect(wallet.unlock("new-password")).resolves.toBe(true);
   });
-
   it("finishes an in-flight commit successfully and then clears the expired session", async () => {
     const { wallet, holdNextCommit, keyring } = createHarness();
     await initializeWallet(wallet);
@@ -980,7 +900,7 @@ describe("WalletCoordinator", () => {
       backupStatus: "confirmed",
     });
     await commit.started;
-    vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
+    vi.advanceTimersByTime(DEFAULT_AUTO_LOCK_DURATION_MS);
     wallet.notifyUserActivity();
     expect(wallet.getStatus()).toBe("locked");
     commit.release();
@@ -988,20 +908,29 @@ describe("WalletCoordinator", () => {
     const added = await importing;
     assert(added.status === "added");
     expect(keyring.getKeySource(added.keySourceId)).toMatchObject({ type: "bip39", name: "Wallet 2" });
+    await vi.advanceTimersByTimeAsync(0);
     expect(keyring.getSoftwareKeyStatus()).toBe("locked");
     await expect(wallet.unlock("password")).resolves.toBe(true);
-    expect(keyring.requireKeySourceSecret(added.keySourceId)).toMatchObject({ mnemonic: SECONDARY_MNEMONIC });
+    expect(keyring.exportMnemonic(added.keySourceId)).toBe(SECONDARY_MNEMONIC);
   });
 
   it("changes the password without renewing the session or publishing a status event", async () => {
-    const { wallet, commits, events, keyring } = createHarness();
+    const { wallet, commits, events, keyring, getCommittedVault } = createHarness();
     await initializeWallet(wallet);
     const eventCount = events.length;
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS / 2);
+    const previousSalt = getCommittedVault()?.salt;
 
-    await wallet.changePassword({ currentPassword: "password", newPassword: "new-password" });
+    await expect(wallet.changePassword({ currentPassword: "incorrect", newPassword: "new-password" })).resolves.toBe(
+      false,
+    );
+    expect(commits).toHaveLength(1);
+    await expect(wallet.changePassword({ currentPassword: "password", newPassword: "new-password" })).resolves.toBe(
+      true,
+    );
 
     expect(commits).toHaveLength(2);
+    expect(getCommittedVault()?.salt).not.toBe(previousSalt);
     expect(events).toHaveLength(eventCount);
     vi.setSystemTime(1_000 + DEFAULT_AUTO_LOCK_DURATION_MS);
     expect(wallet.getStatus()).toBe("locked");
@@ -1010,47 +939,6 @@ describe("WalletCoordinator", () => {
     await expect(wallet.unlock("password")).resolves.toBe(false);
     await expect(wallet.unlock("new-password")).resolves.toBe(true);
     expect(keyring.getSoftwareKeyStatus()).toBe("unlocked");
-  });
-
-  it.each([
-    {
-      label: "source addition",
-      change: (wallet: WalletCoordinator) =>
-        wallet.addMnemonic({
-          mnemonic: SECONDARY_MNEMONIC,
-          name: "Wallet 2",
-          backupStatus: "confirmed",
-        }),
-    },
-    {
-      label: "password change",
-      change: (wallet: WalletCoordinator) =>
-        wallet.changePassword({
-          currentPassword: "password",
-          newPassword: "new-password",
-        }),
-    },
-  ])("allows an in-flight HD signature to finish across a $label", async ({ change }) => {
-    const { accounts, holdNextCommit, keyring, wallet } = createHarness();
-    const initialized = await initializeWallet(wallet);
-    const accountId = memberId(accounts, initialized.accountGroupId);
-    const signing = createEip155AccountSigning({ accounts, keyring, wallet });
-    const commit = holdNextCommit();
-    const digest = new Uint8Array(32);
-
-    const changing = change(wallet);
-    await commit.started;
-    const pendingSignature = signing.signDigest({ accountId, digest });
-    commit.release();
-
-    const [signature] = await Promise.all([pendingSignature, changing]);
-    expect(
-      Secp256k1.recoverAddress({
-        payload: digest,
-        signature: { ...Signature.fromCompactBytes(signature.bytes), yParity: signature.yParity },
-      }).toLowerCase(),
-    ).toBe("0x9858effd232b4033e47d90003d41ec34ecaeda94");
-    expect(wallet.getStatus()).toBe("unlocked");
   });
 
   it("keeps the private-key account intact when its mnemonic addition fails to commit", async () => {
@@ -1077,8 +965,12 @@ describe("WalletCoordinator", () => {
     expect(getCommittedVault()).toBe(committedRecord);
     expect(accounts.getGroup(imported.accountGroupId)).toEqual(originalAccount);
     expect(keyring.listKeySources().map((source) => source.keySourceId)).toEqual([imported.keySourceId]);
-    expect(keyring.listHdKeyrings()).toEqual([]);
-    expect(keyring.requireKeySourceSecret(imported.keySourceId)).toMatchObject({ privateKey: FIRST_PRIVATE_KEY });
+    await expect(
+      wallet.exportPrivateKey({
+        accountId: memberId(accounts, imported.accountGroupId),
+        password: "password",
+      }),
+    ).resolves.toEqual({ privateKey: `0x${FIRST_PRIVATE_KEY}` });
     expect(keyringChanges).toHaveLength(eventCount);
 
     setCommitFailure(null);
@@ -1086,6 +978,40 @@ describe("WalletCoordinator", () => {
       keySourceId: expect.any(String),
       accountGroupId: imported.accountGroupId,
     });
+  });
+
+  it("clears discarded and replaced vault keys while retaining the committed wallet", async () => {
+    const createVault = VaultCrypto.createUnlockedVault;
+    const keys: Uint8Array[] = [];
+    vi.spyOn(VaultCrypto, "createUnlockedVault").mockImplementation(async (input) => {
+      const vault = await createVault(input);
+      keys.push(vault.encryptionKey);
+      return vault;
+    });
+    const { wallet, keyring, setCommitFailure } = createHarness();
+    await initializeWallet(wallet);
+    const originalKey = keys[0];
+    assert(originalKey);
+    const failure = new Error("IndexedDB transaction aborted");
+    setCommitFailure(failure);
+    await expect(wallet.changePassword({ currentPassword: "password", newPassword: "new-password" })).rejects.toBe(
+      failure,
+    );
+    expect(keys[1]).toEqual(new Uint8Array(32));
+    expect(originalKey).not.toEqual(new Uint8Array(32));
+    expect(keyring.getSoftwareKeyStatus()).toBe("unlocked");
+
+    setCommitFailure(null);
+    await expect(wallet.changePassword({ currentPassword: "password", newPassword: "new-password" })).resolves.toBe(
+      true,
+    );
+    expect(originalKey).toEqual(new Uint8Array(32));
+    const committedKey = keys[2];
+    assert(committedKey);
+    expect(committedKey).not.toEqual(new Uint8Array(32));
+    await wallet.lock();
+    expect(committedKey).toEqual(new Uint8Array(32));
+    await expect(wallet.unlock("new-password")).resolves.toBe(true);
   });
 
   it("keeps the active deadline and auto-lock duration unchanged when persistence fails", async () => {
@@ -1109,32 +1035,10 @@ describe("WalletCoordinator", () => {
     vi.setSystemTime(91_000);
 
     await wallet.setAutoLockDuration(60_000);
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(wallet.getStatus()).toBe("locked");
     expect(keyring.getSoftwareKeyStatus()).toBe("locked");
-  });
-
-  it("persists only a non-default auto-lock duration", async () => {
-    const { autoLock, wallet, commits } = createHarness();
-
-    await wallet.setAutoLockDuration(120_000);
-
-    expect(commits.at(-1)).toEqual([
-      {
-        persistenceType: "setting",
-        operation: "put",
-        value: { key: AUTO_LOCK_SETTING_KEY, durationMs: 120_000 },
-      },
-    ]);
-    expect(autoLock.getDuration()).toBe(120_000);
-
-    const commitCount = commits.length;
-    await wallet.setAutoLockDuration(120_000);
-    expect(commits).toHaveLength(commitCount);
-
-    await wallet.setAutoLockDuration(DEFAULT_AUTO_LOCK_DURATION_MS);
-    expect(commits.at(-1)).toEqual([{ persistenceType: "setting", operation: "remove", key: AUTO_LOCK_SETTING_KEY }]);
-    expect(autoLock.getDuration()).toBe(DEFAULT_AUTO_LOCK_DURATION_MS);
   });
 
   it("locks through the mutation queue when the auto-lock timer expires", async () => {

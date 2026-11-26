@@ -18,26 +18,16 @@ export const createAccounts = () =>
         {
           accountGroupId: "group-1",
           source: { type: "private-key", keySourceId: KEY_SOURCE_ID },
+          members: [{ accountId: ACCOUNT_ID }],
           hidden: false,
           createdAt: 1,
         },
         {
           accountGroupId: "group-2",
           source: { type: "private-key", keySourceId: "source-2" },
+          members: [{ accountId: "eip155:7e5f4552091a69125d5dfcb7b8c2659029395bdf" }],
           hidden: false,
           createdAt: 2,
-        },
-      ],
-      records: [
-        {
-          accountId: ACCOUNT_ID,
-          accountGroupId: "group-1",
-          origin: { type: "private-key", keySourceId: KEY_SOURCE_ID },
-        },
-        {
-          accountId: "eip155:7e5f4552091a69125d5dfcb7b8c2659029395bdf",
-          accountGroupId: "group-2",
-          origin: { type: "private-key", keySourceId: "source-2" },
         },
       ],
       selection: { accountGroupId: "group-2" },

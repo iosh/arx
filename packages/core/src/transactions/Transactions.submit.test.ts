@@ -1,3 +1,4 @@
+import { Hex } from "ox";
 import { assert, describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
@@ -10,7 +11,7 @@ import {
   PRIVATE_KEY,
 } from "../namespaces/eip155/__tests__/fixtures.js";
 import type { Eip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
-import { signEip155PrivateKeyDigest } from "../namespaces/eip155/keyring.js";
+import { signEip155Digest } from "../namespaces/eip155/keyring.js";
 import type { PersistenceWriter } from "../persistence/corePersistence.js";
 import { PersistenceCommitError } from "../persistence/errors.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
@@ -75,9 +76,14 @@ const createFixture = (target: Transaction | null = null) => {
     list: async () => ({ transactions: [] }),
     listPending,
   };
-  const signDigest = vi.fn<Eip155AccountSigning["signDigest"]>(async (input) =>
-    signEip155PrivateKeyDigest({ ...input, privateKey: PRIVATE_KEY }),
-  );
+  const signDigest = vi.fn<Eip155AccountSigning["signDigest"]>(async (input) => {
+    const privateKey = Hex.toBytes(`0x${PRIVATE_KEY}`);
+    try {
+      return signEip155Digest({ ...input, privateKey });
+    } finally {
+      privateKey.fill(0);
+    }
+  });
   const adapter = createEip155TransactionsAdapter({
     chainJsonRpc,
     pendingTransactionsReader: reader,

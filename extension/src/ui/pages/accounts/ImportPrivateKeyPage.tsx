@@ -10,7 +10,7 @@ import { PageHeader } from "@/ui/components/PageHeader";
 import { Button } from "@/ui/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/ui/components/ui/field";
 import { getNamespaceUi } from "@/ui/namespaces";
-import { useAccountFromPrivateKey } from "@/ui/wallet/accounts/useAccountFromPrivateKey";
+import { usePrivateKeyAccountPreview } from "@/ui/wallet/accounts/usePrivateKeyAccountPreview";
 import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
@@ -27,7 +27,7 @@ export function ImportPrivateKeyPage() {
     formState: { isSubmitting: pending },
   } = useForm({ defaultValues: { privateKey: "" } });
   const privateKey = useWatch({ control, name: "privateKey" }).trim();
-  const { account, invalid } = useAccountFromPrivateKey({ privateKey, namespace: EIP155_NAMESPACE });
+  const { account, invalid } = usePrivateKeyAccountPreview({ privateKey, namespace: EIP155_NAMESPACE });
   const {
     mutateAsync: importPrivateKey,
     data: importResult,
@@ -93,10 +93,7 @@ export function ImportPrivateKeyPage() {
             </FieldDescription>
           </Field>
           {account && (
-            <PrivateKeyAddressPreview
-              addresses={account.addresses}
-              className="rounded-2xl bg-card text-card-foreground"
-            />
+            <PrivateKeyAddressPreview account={account} className="rounded-2xl bg-card text-card-foreground" />
           )}
         </div>
         <footer className="shrink-0 px-3.5 pt-2 pb-3.5">

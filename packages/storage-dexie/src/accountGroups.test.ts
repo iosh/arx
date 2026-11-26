@@ -64,7 +64,7 @@ describe("CoreRuntime persistence", () => {
       alias: "Daily",
       createdAt: before.createdAt,
       source: { type: "bip39", keySourceId: moved.keySourceId, accountIndex: 0 },
-      members: [{ accountId, origin: { type: "hd", derivationIndex: 0 } }],
+      members: [{ accountId, defaultAddress: before.members[0].defaultAddress }],
       selected: true,
     });
     expect(await reopened.runtime.wallet.permissions.get(grant)).toEqual(grant);

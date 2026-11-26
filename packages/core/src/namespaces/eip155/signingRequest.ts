@@ -25,18 +25,14 @@ export type Eip155TypedData = Readonly<{
   message: Readonly<Record<string, Eip155TypedDataValue>>;
 }>;
 
-type Eip155SignRequestBase = Readonly<{
-  account: AccountAddress;
-}>;
+export type Eip155SignPayload =
+  | Readonly<{
+      type: "personalMessage";
+      message: Eip155PersonalMessage;
+    }>
+  | Readonly<{
+      type: "typedData";
+      typedData: Eip155TypedData;
+    }>;
 
-export type Eip155SignRequest =
-  | (Eip155SignRequestBase &
-      Readonly<{
-        type: "personalMessage";
-        message: Eip155PersonalMessage;
-      }>)
-  | (Eip155SignRequestBase &
-      Readonly<{
-        type: "typedData";
-        typedData: Eip155TypedData;
-      }>);
+export type Eip155SignRequest = Eip155SignPayload & Readonly<{ account: AccountAddress }>;

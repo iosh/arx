@@ -1,8 +1,15 @@
-import { Hex } from "ox";
+import { Address, Hex } from "ox";
 import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 import { chainRefFromChainId } from "./chainId.js";
 import { Eip155InvalidChainIdError } from "./errors.js";
+
+/** Preserves dapp input tolerance: an optional lowercase 0x prefix, any address case, and no surrounding whitespace. */
+export const parseDappAddress = (value: unknown): Address.Address | null => {
+  if (typeof value !== "string") return null;
+  const address = (value.startsWith("0x") ? value : `0x${value}`).toLowerCase();
+  return Address.validate(address, { strict: false }) ? address : null;
+};
 
 export const decodeHexNumber = (value: unknown, method: string, field: string): Hex.Hex => {
   if (typeof value !== "string") {

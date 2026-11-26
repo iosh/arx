@@ -16,7 +16,6 @@ import {
 } from "@/ui/components/ui/dropdown-menu";
 import { getNamespaceUi } from "@/ui/namespaces";
 import { groupAccountsBySource } from "@/ui/wallet/accounts/groupAccountsBySource";
-import { useAccountAddresses } from "@/ui/wallet/accounts/useAccountAddresses";
 import { useVisibleAccounts } from "@/ui/wallet/accounts/useAccounts";
 import { useSelectAccount } from "@/ui/wallet/accounts/useSelectAccount";
 import { useMnemonicSource, useMnemonicSources } from "@/ui/wallet/keyring/useMnemonicSources";
@@ -140,7 +139,6 @@ function AccountSwitchItem({
 }) {
   const { t } = useTranslation("wallet");
   const accountName = getAccountName(account, t);
-  const { data: addresses } = useAccountAddresses(account);
 
   return (
     <DropdownMenuRadioItem
@@ -164,9 +162,9 @@ function AccountSwitchItem({
           )}
         </span>
         <span className="min-h-4 text-xs leading-4 font-normal text-muted-foreground">
-          {addresses?.map((address) => {
-            const { CompactAddress } = getNamespaceUi(address.namespace);
-            return <CompactAddress key={address.address} address={address.address} />;
+          {account.members.map((member) => {
+            const { CompactAddress } = getNamespaceUi(member.namespace);
+            return <CompactAddress key={member.accountId} address={member.defaultAddress} />;
           })}
         </span>
       </span>

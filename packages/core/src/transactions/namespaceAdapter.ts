@@ -33,7 +33,7 @@ export type TransactionsNamespaceAdapter = Readonly<{
     target: Transaction;
     type: TransactionReplacementType;
     from: string;
-  }): Promise<Omit<PreparedTransaction, "initiator" | "replacesTransactionId">>;
+  }): Promise<Omit<PreparedTransaction, "initiator" | "replacesTransactionId" | "replacementType">>;
   withSigningInput<T>(prepared: PreparedTransaction, use: (input: TransactionSigningInput) => Promise<T>): Promise<T>;
   sign(input: TransactionSigningInput): Promise<SignedTransaction>;
   broadcast(signed: SignedTransaction): Promise<TransactionBroadcastOutcome>;

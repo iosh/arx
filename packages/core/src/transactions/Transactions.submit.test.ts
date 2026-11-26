@@ -1,4 +1,4 @@
-import { Hex } from "ox";
+import { Hash, Hex } from "ox";
 import { assert, describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../chainJsonRpc/errors.js";
@@ -30,7 +30,7 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
   chainRef: CHAIN_REF,
   accountId: ACCOUNT_ID,
   initiator: { type: "wallet" },
-  ...(replacesTransactionId === undefined ? {} : { replacesTransactionId }),
+  ...(replacesTransactionId === undefined ? {} : { replacesTransactionId, replacementType: "speed-up" }),
   transaction: {
     from: ADDRESS,
     to: null,
@@ -46,6 +46,7 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
 const replacementTarget: Transaction = {
   ...prepared("0x1"),
   transactionId: "transaction-target",
+  hash: TRANSACTION_HASH,
   transaction: { ...prepared("0x1").transaction, nonce: "0x1" },
   state: { status: "pending" },
   createdAt: 1,
@@ -56,15 +57,20 @@ const pendingReplacement: PendingTransactionRecord = {
   ...replacementTarget,
   transactionId: "transaction-replacement",
   replacesTransactionId: replacementTarget.transactionId,
+  replacementType: "speed-up",
+  hash: Hash.keccak256("0xcafebabe"),
   state: { status: "pending" },
   recovery: { rawTransaction: "0xcafebabe" },
 };
 
 const createFixture = (target: Transaction | null = null) => {
   const accounts = createAccounts();
-  const request = vi.fn(async ({ method }: ChainJsonRpcRequest): Promise<unknown> => {
+  const request = vi.fn(async ({ method, params }: ChainJsonRpcRequest): Promise<unknown> => {
     if (method === "eth_getTransactionCount") return "0x1";
-    if (method === "eth_sendRawTransaction") return TRANSACTION_HASH;
+    if (method === "eth_sendRawTransaction") {
+      assert(Array.isArray(params) && Hex.validate(params[0]));
+      return Hash.keccak256(params[0]);
+    }
     throw new Error(`Unexpected RPC method: ${method}`);
   });
   const chainJsonRpc: ChainJsonRpc = {
@@ -107,13 +113,15 @@ const createFixture = (target: Transaction | null = null) => {
 };
 
 const committedRecord = (commit: ReturnType<typeof createFixture>["commit"], call = 0) => {
-  const change = commit.mock.calls[call]?.[0][0];
+  const changes = commit.mock.calls[call]?.[0];
+  assert(changes?.length === 1);
+  const change = changes[0];
   assert(change?.persistenceType === "transaction" && change.operation === "put");
   return change.value;
 };
 
 describe("Transactions.submit", () => {
-  it("waits for the recovery artifact commit before broadcasting those exact bytes", async () => {
+  it("commits the hash and signed bytes before broadcasting those exact bytes", async () => {
     const fixture = createFixture();
     const persistence = Promise.withResolvers<void>();
     fixture.commit.mockReturnValueOnce(persistence.promise);
@@ -121,21 +129,24 @@ describe("Transactions.submit", () => {
     const pending = fixture.transactions.submit(prepared("0x1"));
     try {
       await vi.waitFor(() => expect(fixture.commit).toHaveBeenCalledOnce());
+      const record = committedRecord(fixture.commit);
+      assert(record.recovery);
+      expect(record.hash).toBe(Hash.keccak256(record.recovery.rawTransaction));
       expect(fixture.request).not.toHaveBeenCalled();
       expect(fixture.publishChanged).not.toHaveBeenCalled();
     } finally {
       persistence.resolve();
     }
     const submission = await pending;
+    const record = committedRecord(fixture.commit);
+    assert(record.recovery);
 
     expect(submission).toMatchObject({
       status: "pending",
-      transactionHash: TRANSACTION_HASH,
-      transaction: { chainRef: CHAIN_REF, accountId: ACCOUNT_ID, state: { status: "pending" } },
+      transactionHash: record.hash,
+      transaction: { chainRef: CHAIN_REF, accountId: ACCOUNT_ID, hash: record.hash, state: { status: "pending" } },
     });
     expect(submission.transaction).not.toHaveProperty("recovery");
-    const record = committedRecord(fixture.commit);
-    assert(record.recovery);
     expect(fixture.request).toHaveBeenCalledWith({
       chainRef: CHAIN_REF,
       method: "eth_sendRawTransaction",
@@ -160,8 +171,12 @@ describe("Transactions.submit", () => {
     expect(fixture.monitor.track).not.toHaveBeenCalled();
   });
 
-  it("persists an explicit broadcast rejection as failed and removes recovery material", async () => {
-    const fixture = createFixture();
+  it("keeps a rejected cancellation as a separate failed record with its hash and replacement details", async () => {
+    const fixture = createFixture(replacementTarget);
+    const replacement = await fixture.transactions.prepareReplacement({
+      transactionId: replacementTarget.transactionId,
+      type: "cancel",
+    });
     fixture.request.mockRejectedValueOnce(
       new ChainJsonRpcResponseError({
         rpcCode: -32_000,
@@ -170,11 +185,19 @@ describe("Transactions.submit", () => {
       }),
     );
 
-    const submission = await fixture.transactions.submit(prepared("0x1"));
+    const submission = await fixture.transactions.submit(replacement);
+    const pending = committedRecord(fixture.commit);
+    const failed = committedRecord(fixture.commit, 1);
 
+    expect(pending.transactionId).not.toBe(replacementTarget.transactionId);
     expect(submission).toMatchObject({
       status: "failed",
       transaction: {
+        transactionId: pending.transactionId,
+        hash: pending.hash,
+        replacesTransactionId: replacementTarget.transactionId,
+        replacementType: "cancel",
+        transaction: { nonce: replacementTarget.transaction.nonce },
         state: {
           status: "failed",
           failure: { type: "broadcast", code: -32_000, message: "insufficient funds", data: { available: "0x0" } },
@@ -182,7 +205,8 @@ describe("Transactions.submit", () => {
       },
     });
     expect(fixture.commit).toHaveBeenCalledTimes(2);
-    expect(committedRecord(fixture.commit, 1)).toEqual(submission.transaction);
+    expect(failed).not.toHaveProperty("recovery");
+    expect(failed).toEqual(submission.transaction);
     expect(fixture.monitor.stop).toHaveBeenCalledWith(submission.transaction.transactionId);
     expect(fixture.monitor.track).not.toHaveBeenCalled();
   });
@@ -193,9 +217,14 @@ describe("Transactions.submit", () => {
 
     const submission = await fixture.transactions.submit(prepared("0x1"));
 
-    expect(submission).toMatchObject({ status: "pending", transaction: { state: { status: "pending" } } });
+    const record = committedRecord(fixture.commit);
+    expect(submission).toMatchObject({
+      status: "pending",
+      transactionHash: record.hash,
+      transaction: { hash: record.hash, state: { status: "pending" } },
+    });
     expect(fixture.commit).toHaveBeenCalledOnce();
-    expect(fixture.monitor.track).toHaveBeenCalledWith(committedRecord(fixture.commit));
+    expect(fixture.monitor.track).toHaveBeenCalledWith(record);
     expect(fixture.monitor.stop).not.toHaveBeenCalled();
   });
 

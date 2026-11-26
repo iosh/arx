@@ -1,3 +1,4 @@
+import * as Hash from "ox/Hash";
 import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcUnavailableError } from "../../chainJsonRpc/errors.js";
@@ -24,6 +25,7 @@ const pendingRecord: Eip155PendingTransactionRecord = {
   chainRef: CHAIN_REF,
   accountId: "eip155:0000000000000000000000000000000000000001",
   initiator: { type: "wallet" },
+  hash: Hash.keccak256(RAW_TRANSACTION),
   transaction: pendingTransaction,
   state: { status: "pending" },
   recovery: { rawTransaction: RAW_TRANSACTION },
@@ -35,6 +37,8 @@ const replacementRecord: Eip155PendingTransactionRecord = {
   ...pendingRecord,
   transactionId: "transaction-2",
   replacesTransactionId: pendingRecord.transactionId,
+  replacementType: "speed-up",
+  hash: Hash.keccak256("0xcafebabe"),
   transaction: {
     ...pendingTransaction,
     gasPrice: "0x2",
@@ -47,6 +51,7 @@ const replacementRecord: Eip155PendingTransactionRecord = {
 const unrelatedRecord: Eip155PendingTransactionRecord = {
   ...pendingRecord,
   transactionId: "transaction-3",
+  hash: Hash.keccak256("0xfeedface"),
   transaction: {
     ...pendingTransaction,
     nonce: "0x2",
@@ -98,11 +103,9 @@ describe("EIP-155 transaction monitoring", () => {
   });
 
   it("marks the known same-nonce winner and local losers without changing another nonce group", async () => {
-    let receiptChecks = 0;
-    const { chainJsonRpc, request } = createRpc(({ method }) => {
+    const { chainJsonRpc, request } = createRpc(({ method, params }) => {
       if (method !== "eth_getTransactionReceipt") throw new Error(`Unexpected RPC method: ${method}`);
-      receiptChecks += 1;
-      return receiptChecks === 2 ? receipt("0x1") : null;
+      return Array.isArray(params) && params[0] === replacementRecord.hash ? receipt("0x1") : null;
     });
     const monitor = createEip155TransactionMonitor({
       chainJsonRpc,
@@ -125,14 +128,15 @@ describe("EIP-155 transaction monitoring", () => {
         },
       ],
     });
-    expect(request.mock.calls.map(([input]) => input.method)).toEqual([
-      "eth_getTransactionReceipt",
-      "eth_getTransactionReceipt",
-      "eth_getTransactionReceipt",
+    expect(request.mock.calls.map(([input]) => input.params)).toEqual([
+      [pendingRecord.hash],
+      [replacementRecord.hash],
+      [unrelatedRecord.hash],
     ]);
   });
 
-  it("rebroadcasts only the pending replacement leaf during recovery", async () => {
+  it("recovers only the pending replacement and derives its hash from older records", async () => {
+    const { hash, replacementType: _replacementType, ...olderReplacement } = replacementRecord;
     const { chainJsonRpc, request } = createRpc(({ method }) => {
       if (method === "eth_getTransactionReceipt") return null;
       if (method === "eth_getTransactionByHash") return null;
@@ -143,20 +147,21 @@ describe("EIP-155 transaction monitoring", () => {
 
     await expect(
       monitor.recoverPending(
-        [pendingRecord, replacementRecord],
+        [pendingRecord, olderReplacement],
         [pendingRecord.transactionId, replacementRecord.transactionId],
       ),
     ).resolves.toEqual({ status: "checked", terminalChanges: [] });
     expect(broadcast).toHaveBeenCalledOnce();
     expect(broadcast).toHaveBeenCalledWith({
       chainRef: CHAIN_REF,
+      hash,
       transaction: replacementRecord.transaction,
       recovery: replacementRecord.recovery,
     });
-    expect(request.mock.calls.map(([input]) => input.method)).toEqual([
-      "eth_getTransactionReceipt",
-      "eth_getTransactionReceipt",
-      "eth_getTransactionByHash",
+    expect(request.mock.calls.map(([{ method, params }]) => [method, params])).toEqual([
+      ["eth_getTransactionReceipt", [pendingRecord.hash]],
+      ["eth_getTransactionReceipt", [hash]],
+      ["eth_getTransactionByHash", [hash]],
     ]);
   });
 });

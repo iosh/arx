@@ -1,4 +1,5 @@
 import { defineKeyedPersistenceType, type KeyedPersistenceType } from "../persistence/definition.js";
+import { pendingTransactionHash } from "./eip155/transactionHash.js";
 import type * as Eip155 from "./eip155/types.js";
 import type { Transaction, TransactionId, TransactionPage, TransactionQuery } from "./types.js";
 
@@ -30,18 +31,23 @@ export type PendingTransactionRecord = Eip155PendingTransactionRecord;
 export const isPendingTransactionRecord = (record: TransactionRecord): record is PendingTransactionRecord =>
   record.state.status === "pending";
 
-export const transactionRecordToTransaction = (record: TransactionRecord): Transaction => ({
-  transactionId: record.transactionId,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  accountId: record.accountId,
-  initiator: record.initiator,
-  ...(record.replacesTransactionId === undefined ? {} : { replacesTransactionId: record.replacesTransactionId }),
-  transaction: record.transaction,
-  state: record.state,
-  createdAt: record.createdAt,
-  updatedAt: record.updatedAt,
-});
+export const transactionRecordToTransaction = (record: TransactionRecord): Transaction => {
+  const hash = isPendingTransactionRecord(record) ? pendingTransactionHash(record) : record.hash;
+  return {
+    transactionId: record.transactionId,
+    namespace: record.namespace,
+    chainRef: record.chainRef,
+    accountId: record.accountId,
+    initiator: record.initiator,
+    ...(record.replacesTransactionId === undefined ? {} : { replacesTransactionId: record.replacesTransactionId }),
+    ...(record.replacementType === undefined ? {} : { replacementType: record.replacementType }),
+    ...(hash === undefined ? {} : { hash }),
+    transaction: record.transaction,
+    state: record.state,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+};
 
 export interface TransactionsReader {
   get(transactionId: TransactionId): Promise<Transaction | null>;

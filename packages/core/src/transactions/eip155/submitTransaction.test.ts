@@ -15,7 +15,6 @@ const CHAIN_REF = "eip155:1";
 const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
 const ACCESS_LIST = [
   {
     address: TO,
@@ -25,6 +24,7 @@ const ACCESS_LIST = [
 
 const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef"): Eip155.SignedTransaction => ({
   chainRef: CHAIN_REF,
+  hash: Hash.keccak256(rawTransaction),
   transaction: {
     from: FROM,
     to: null,
@@ -143,7 +143,6 @@ describe("EIP-155 transaction submission", () => {
 
   it("signs and broadcasts an EIP-1559 transaction without replaying the raw submission", async () => {
     const { chainJsonRpc, request } = createRpc(({ method }) => {
-      if (method === "eth_sendRawTransaction") return TRANSACTION_HASH;
       throw new Error(`Unexpected RPC method: ${method}`);
     });
     const { signing } = createSigning();
@@ -165,9 +164,11 @@ describe("EIP-155 transaction submission", () => {
       },
     });
 
+    const hash = Hash.keccak256(signed.recovery.rawTransaction);
+    request.mockResolvedValueOnce(hash);
     await expect(submitter.broadcast(signed)).resolves.toEqual({
       status: "accepted",
-      transactionHash: TRANSACTION_HASH,
+      transactionHash: hash,
     });
 
     expect(TxEnvelopeEip1559.deserialize(signed.recovery.rawTransaction as TxEnvelopeEip1559.Serialized)).toMatchObject(
@@ -188,7 +189,7 @@ describe("EIP-155 transaction submission", () => {
     });
   });
 
-  it("derives the EIP-155 hash when raw broadcast outcome is unknown", async () => {
+  it("returns the signed hash when raw broadcast outcome is unknown", async () => {
     const { chainJsonRpc } = createRpc(() => {
       throw new ChainJsonRpcOutcomeUnknownError();
     });

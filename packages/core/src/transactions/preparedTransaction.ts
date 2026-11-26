@@ -1,7 +1,7 @@
 import type { AccountId } from "../accounts/accountId.js";
 import type { ChainRef } from "../networks/chainRef.js";
 import type * as Eip155 from "./eip155/types.js";
-import type { TransactionId, TransactionInitiator } from "./types.js";
+import type { TransactionId, TransactionInitiator, TransactionReplacementType } from "./types.js";
 
 export type Eip155PrepareTransactionInput = Readonly<{
   namespace: "eip155";
@@ -21,6 +21,7 @@ export type Eip155PreparedTransaction = Readonly<{
   accountId: AccountId;
   initiator: TransactionInitiator;
   replacesTransactionId?: TransactionId;
+  replacementType?: TransactionReplacementType;
   transaction: Eip155.PreparedTransaction;
 }>;
 

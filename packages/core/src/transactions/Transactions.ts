@@ -88,6 +88,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
       ...prepared,
       initiator: { type: "wallet" },
       replacesTransactionId: target.transactionId,
+      replacementType: input.type,
     };
   },
 
@@ -120,6 +121,8 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
           ...(prepared.replacesTransactionId === undefined
             ? {}
             : { replacesTransactionId: prepared.replacesTransactionId }),
+          ...(prepared.replacementType === undefined ? {} : { replacementType: prepared.replacementType }),
+          hash: signed.hash,
           transaction: signed.transaction,
           state: { status: "pending" },
           recovery: signed.recovery,

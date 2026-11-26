@@ -3,7 +3,7 @@ import type { Hex } from "ox/Hex";
 import type { AccountId } from "../../accounts/accountId.js";
 import type { JsonValue } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
-import type { TransactionId, TransactionInitiator } from "../types.js";
+import type { TransactionId, TransactionInitiator, TransactionReplacementType } from "../types.js";
 
 type TransactionRequestFields = Readonly<{
   to?: string | null | undefined;
@@ -90,6 +90,7 @@ export type SigningInput = Readonly<{
 
 export type SignedTransaction = Readonly<{
   chainRef: ChainRef;
+  hash: Hex;
   transaction: SignableTransaction;
   recovery: TransactionRecovery;
 }>;
@@ -142,6 +143,9 @@ export type Transaction = Readonly<{
   accountId: AccountId;
   initiator: TransactionInitiator;
   replacesTransactionId?: TransactionId;
+  replacementType?: TransactionReplacementType;
+  /** May be absent for transactions that reached a terminal state before hash persistence. */
+  hash?: Hex;
   transaction: SignableTransaction;
   state: TransactionState;
   createdAt: number;

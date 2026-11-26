@@ -1,3 +1,4 @@
+import * as Hash from "ox/Hash";
 import { describe, expect, it, vi } from "vitest";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
@@ -22,6 +23,7 @@ const pendingRecord: PendingTransactionRecord = {
   chainRef: "eip155:1",
   accountId: "eip155:0000000000000000000000000000000000000001",
   initiator: { type: "wallet" },
+  hash: Hash.keccak256("0xdeadbeef"),
   transaction: pendingTransaction,
   state: { status: "pending" },
   recovery: { rawTransaction: "0xdeadbeef" },
@@ -33,6 +35,8 @@ const replacementRecord: PendingTransactionRecord = {
   ...pendingRecord,
   transactionId: "transaction-2",
   replacesTransactionId: pendingRecord.transactionId,
+  replacementType: "speed-up",
+  hash: Hash.keccak256("0xcafebabe"),
   transaction: {
     ...pendingTransaction,
     gasPrice: "0x2",
@@ -115,6 +119,7 @@ const createHarness = (input?: {
 
 describe("TransactionMonitor", () => {
   it("recovers one chain batch and commits its terminal changes atomically", async () => {
+    const { hash: originalHash, ...olderPendingRecord } = pendingRecord;
     const confirmation = {
       blockHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       blockNumber: "0x1" as const,
@@ -129,27 +134,27 @@ describe("TransactionMonitor", () => {
           terminalChanges: [
             {
               transactionId: pendingRecord.transactionId,
-              state: { status: "confirmed", confirmation },
+              state: {
+                status: "replaced",
+                replacement: { type: "local", transactionId: replacementRecord.transactionId },
+              },
             },
             {
               transactionId: replacementRecord.transactionId,
-              state: {
-                status: "replaced",
-                replacement: { type: "local", transactionId: pendingRecord.transactionId },
-              },
+              state: { status: "confirmed", confirmation },
             },
           ],
         },
       ],
     });
 
-    harness.monitor.restore([pendingRecord, replacementRecord]);
+    harness.monitor.restore([olderPendingRecord, replacementRecord]);
     expect(harness.scheduled.map(({ delayMs }) => delayMs)).toEqual([0]);
 
     harness.scheduled[0]?.task();
     await flush();
     expect(harness.recoverPending).toHaveBeenCalledWith(
-      [pendingRecord, replacementRecord],
+      [olderPendingRecord, replacementRecord],
       [pendingRecord.transactionId, replacementRecord.transactionId],
     );
     expect(harness.commits).toEqual([]);
@@ -159,9 +164,18 @@ describe("TransactionMonitor", () => {
     harness.scheduled[2]?.task();
     await flush();
 
-    expect(harness.inspectPending).toHaveBeenCalledWith([pendingRecord, replacementRecord]);
-    expect(harness.commits).toHaveLength(1);
-    expect(harness.commits[0]?.map(({ state }) => state.status)).toEqual(["confirmed", "replaced"]);
+    expect(harness.inspectPending).toHaveBeenCalledWith([olderPendingRecord, replacementRecord]);
+    expect(harness.commits).toMatchObject([
+      [
+        { transactionId: pendingRecord.transactionId, hash: originalHash, state: { status: "replaced" } },
+        {
+          transactionId: replacementRecord.transactionId,
+          hash: replacementRecord.hash,
+          replacementType: "speed-up",
+          state: { status: "confirmed" },
+        },
+      ],
+    ]);
     expect(harness.commits[0]?.every((record) => !("recovery" in record))).toBe(true);
     expect(harness.events).toEqual([[pendingRecord.transactionId, replacementRecord.transactionId]]);
   });

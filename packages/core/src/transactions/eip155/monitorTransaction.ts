@@ -1,4 +1,3 @@
-import * as Hash from "ox/Hash";
 import type { Hex } from "ox/Hex";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../../chainJsonRpc/errors.js";
@@ -6,6 +5,7 @@ import * as HexQuantity from "../../utils/hex.js";
 import type { PendingTransactionInspection, TerminalTransactionChange } from "../namespaceAdapter.js";
 import type { Eip155PendingTransactionRecord } from "../persistence.js";
 import type { TransactionId } from "../types.js";
+import { pendingTransactionHash } from "./transactionHash.js";
 import type * as Eip155 from "./types.js";
 
 type TransactionReceipt = Readonly<{
@@ -19,8 +19,6 @@ type TransactionReceipt = Readonly<{
 }>;
 
 type NetworkTransaction = Readonly<{ hash: Hex }>;
-
-const transactionHash = (record: Eip155PendingTransactionRecord): Hex => Hash.keccak256(record.recovery.rawTransaction);
 
 const isChainJsonRpcFailure = (error: unknown): boolean =>
   error instanceof ChainJsonRpcResponseError || error instanceof ChainJsonRpcUnavailableError;
@@ -77,7 +75,7 @@ const inspectGroup = async (
     const receipt = await chainJsonRpc.request<TransactionReceipt | null>({
       chainRef: record.chainRef,
       method: "eth_getTransactionReceipt",
-      params: [transactionHash(record)],
+      params: [pendingTransactionHash(record)],
       replay: "allowed",
     });
     if (receipt) return terminalChangesForWinner(records, record, terminalStateFromReceipt(receipt));
@@ -103,16 +101,18 @@ const recoverGroup = async (
       continue;
     }
 
+    const hash = pendingTransactionHash(record);
     const visible = await params.chainJsonRpc.request<NetworkTransaction | null>({
       chainRef: record.chainRef,
       method: "eth_getTransactionByHash",
-      params: [transactionHash(record)],
+      params: [hash],
       replay: "allowed",
     });
     if (visible) continue;
 
     await params.broadcast({
       chainRef: record.chainRef,
+      hash,
       transaction: record.transaction,
       recovery: record.recovery,
     });

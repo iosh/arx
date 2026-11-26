@@ -133,6 +133,7 @@ describe("Transactions", () => {
       accountId: target.accountId,
       initiator: { type: "wallet" },
       replacesTransactionId: target.transactionId,
+      replacementType: "speed-up",
       transaction: {
         from: ADDRESS,
         to: target.transaction.to,

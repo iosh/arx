@@ -200,15 +200,34 @@ describe("Dexie transaction history", () => {
     expect(page.transactions.map((record) => record.transactionId)).toEqual(["match"]);
   });
 
-  it("keeps recovery artifacts in internal pending reads and out of public reads", async () => {
+  it("returns hashes and replacement details in history without exposing recovery bytes", async () => {
     const persistence = createTestPersistence();
-    const pending = transaction("pending", 100);
-    assert(pending.state.status === "pending");
-    const { recovery: _recovery, ...publicTransaction } = pending;
-    await persistence.writer.commit([persistenceTypes.transaction.put(pending)]);
+    const original = transaction("original", 100);
+    const replacement = {
+      ...original,
+      transactionId: "replacement",
+      replacesTransactionId: original.transactionId,
+      replacementType: "speed-up",
+      hash: "0x6fe2683bd1d27cbb7a05c570693bea39e0c082ed16722e5ecadcfb7cfdbd20db",
+      transaction: { ...original.transaction, gasPrice: "0x2", type: "legacy" },
+      state: { status: "pending" },
+      recovery: { rawTransaction: "0xcafebabe" },
+      createdAt: 101,
+      updatedAt: 101,
+    } satisfies TransactionRecord;
+    await persistence.writer.commit([original, replacement].map(persistenceTypes.transaction.put));
 
-    expect(await persistence.readers.transactions.get(pending.transactionId)).toEqual(publicTransaction);
-    expect(await persistence.readers.transactions.list({ limit: 10 })).toEqual({ transactions: [publicTransaction] });
-    expect(await persistence.readers.transactions.listPending()).toEqual([pending]);
+    const { recovery: _originalRecovery, ...publicOriginal } = original;
+    const { recovery: _replacementRecovery, ...publicReplacement } = replacement;
+    expect(await persistence.readers.transactions.get(replacement.transactionId)).toEqual(publicReplacement);
+    expect(await persistence.readers.transactions.list({ limit: 10 })).toEqual({
+      transactions: [
+        publicReplacement,
+        { ...publicOriginal, hash: "0xd4fd4e189132273036449fc9e11198c739161b4c0116a9a2dccdfa1c492006f1" },
+      ],
+    });
+    expect(await persistence.readers.transactions.listPending()).toEqual(
+      expect.arrayContaining([original, replacement]),
+    );
   });
 });

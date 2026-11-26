@@ -61,6 +61,7 @@ const signEip155Transaction = async (
 
     return {
       chainRef: input.chainRef,
+      hash: Hash.keccak256(rawTransaction),
       transaction,
       recovery: { rawTransaction },
     };
@@ -81,19 +82,19 @@ export const createEip155TransactionSubmitter = (params: {
 
   async broadcast(signed) {
     try {
-      const transactionHash = await params.chainJsonRpc.request<Hex>({
+      await params.chainJsonRpc.request({
         chainRef: signed.chainRef,
         method: "eth_sendRawTransaction",
         params: [signed.recovery.rawTransaction],
         replay: "forbidden",
       });
 
-      return { status: "accepted", transactionHash };
+      return { status: "accepted", transactionHash: signed.hash };
     } catch (error) {
       if (error instanceof ChainJsonRpcOutcomeUnknownError) {
         return {
           status: "unknown",
-          transactionHash: Hash.keccak256(signed.recovery.rawTransaction),
+          transactionHash: signed.hash,
         };
       }
       if (error instanceof ChainJsonRpcResponseError) {

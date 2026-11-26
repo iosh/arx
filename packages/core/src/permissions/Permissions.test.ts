@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountId } from "../accounts/accountId.js";
-import type { AccountMember } from "../accounts/types.js";
+import type { Account } from "../accounts/types.js";
 import type { Namespace } from "../namespaces/types.js";
 import { Permissions, type PermissionsChanged } from "./Permissions.js";
 import type { PermissionRecord } from "./persistence.js";
@@ -9,7 +9,7 @@ const EIP155_ACCOUNT_A = "eip155:0000000000000000000000000000000000000001";
 const EIP155_ACCOUNT_B = "eip155:0000000000000000000000000000000000000002";
 const MISSING_ACCOUNT = "eip155:0000000000000000000000000000000000000004";
 
-const account = (accountId: AccountId, namespace: Namespace): AccountMember => ({
+const account = (accountId: AccountId, namespace: Namespace): Account => ({
   accountId,
   accountGroupId: `group-${accountId}`,
   namespace,
@@ -33,7 +33,7 @@ const createPermissions = (options: { records?: readonly PermissionRecord[] }) =
   const permissions = new Permissions({
     bootstrap: { records },
     accounts: {
-      getMember: (accountId) => accountsById.get(accountId) ?? null,
+      getAccount: (accountId) => accountsById.get(accountId) ?? null,
     },
     publishChanged: (change) => changes.push(change),
   });

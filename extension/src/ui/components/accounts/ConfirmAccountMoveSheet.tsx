@@ -10,7 +10,7 @@ import { Toaster } from "@/ui/components/ui/sonner";
 import { getNamespaceUi } from "@/ui/namespaces";
 
 export function ConfirmAccountMoveSheet({
-  account,
+  accountGroup,
   accountId,
   walletName,
   description,
@@ -20,7 +20,7 @@ export function ConfirmAccountMoveSheet({
   onConfirm,
   returnFocusRef,
 }: {
-  account: AccountGroup;
+  accountGroup: AccountGroup;
   accountId: AccountId;
   walletName: string;
   description?: string;
@@ -31,8 +31,10 @@ export function ConfirmAccountMoveSheet({
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
   const { t } = useTranslation(["wallet", "common"]);
-  const accountName = getAccountName(account, t);
-  const namespaceLabel = account.members.map((member) => t(getNamespaceUi(member.namespace).labelKey)).join(" · ");
+  const accountName = getAccountName(accountGroup, t);
+  const namespaceLabel = accountGroup.accounts
+    .map((account) => t(getNamespaceUi(account.namespace).labelKey))
+    .join(" · ");
 
   return (
     <Sheet
@@ -68,17 +70,17 @@ export function ConfirmAccountMoveSheet({
         </SheetDescription>
         <div className="grid grid-rows-[auto_minmax(1.125rem,auto)] gap-2.5 rounded-xl bg-secondary p-3">
           <div className="flex items-center gap-2.5">
-            <AccountIdenticon seed={account.accountGroupId} size={32} />
+            <AccountIdenticon seed={accountGroup.accountGroupId} size={32} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-semibold wrap-anywhere">{accountName}</span>
               <span className="text-xs font-medium text-muted-foreground">{`${namespaceLabel} · ${t("privateKeyImport")}`}</span>
             </div>
           </div>
-          {account.members
-            .filter((member) => member.accountId === accountId)
-            .map((member) => (
-              <p key={member.accountId} dir="ltr" className="break-all text-xs leading-4.5">
-                {member.defaultAddress}
+          {accountGroup.accounts
+            .filter((account) => account.accountId === accountId)
+            .map((account) => (
+              <p key={account.accountId} dir="ltr" className="break-all text-xs leading-4.5">
+                {account.defaultAddress}
               </p>
             ))}
         </div>

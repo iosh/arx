@@ -1,7 +1,7 @@
 export type {
   AccountGroupRecord,
   AccountGroupSource,
-  AccountMemberRecord,
+  AccountRecord,
   AccountSelectionRecord,
   AccountsReader,
 } from "../accounts/persistence.js";

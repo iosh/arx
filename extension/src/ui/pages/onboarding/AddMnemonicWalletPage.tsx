@@ -151,11 +151,11 @@ function MnemonicAccountMoveSheet({
 
   return (
     <ConfirmAccountMoveSheet
-      account={move.account}
+      accountGroup={move.accountGroup}
       accountId={move.accountId}
       walletName={move.walletName}
       description={t("firstAccountMoveDescription", {
-        accountName: getAccountName(move.account, t),
+        accountName: getAccountName(move.accountGroup, t),
         walletName: move.walletName,
       })}
       className="inset-x-auto top-1/2 bottom-auto left-1/2 w-[calc(100%-3rem)] max-w-onboarding -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 sm:p-8"

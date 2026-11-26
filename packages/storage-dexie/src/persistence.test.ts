@@ -97,7 +97,7 @@ describe("Dexie persistence boundary", () => {
     const group: AccountGroupRecord = {
       accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d",
       source: { type: "private-key", keySourceId: "source-1" },
-      members: [{ accountId: ACCOUNT_A }],
+      accounts: [{ accountId: ACCOUNT_A }],
       hidden: false,
       createdAt: 1,
     };

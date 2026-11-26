@@ -25,7 +25,8 @@ export function HiddenAccountsPage({ keySourceId }: { keySourceId: KeySourceId }
     restoring.mutate(
       { accountGroupId, hidden: false },
       {
-        onSuccess: ({ account }) => toast.success(t("accountRestored", { accountName: getAccountName(account, t) })),
+        onSuccess: ({ accountGroup }) =>
+          toast.success(t("accountRestored", { accountName: getAccountName(accountGroup, t) })),
       },
     );
   }

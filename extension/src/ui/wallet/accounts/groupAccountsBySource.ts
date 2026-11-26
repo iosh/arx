@@ -3,12 +3,12 @@ import type { KeySource, KeySourceId } from "@arx/core/keyring";
 
 type MnemonicSource = Extract<KeySource, { type: "bip39" }>;
 
-export function getWalletAccounts(accounts: readonly AccountGroup[], keySourceId: KeySourceId) {
-  return accounts.filter((account) => account.source.type === "bip39" && account.source.keySourceId === keySourceId);
+export function getWalletAccounts(accountGroups: readonly AccountGroup[], keySourceId: KeySourceId) {
+  return accountGroups.filter((group) => group.source.type === "bip39" && group.source.keySourceId === keySourceId);
 }
 
 export function groupAccountsBySource(
-  accounts: readonly AccountGroup[],
+  accountGroups: readonly AccountGroup[],
   wallets: readonly MnemonicSource[] | undefined,
 ) {
   const walletGroups =
@@ -18,16 +18,16 @@ export function groupAccountsBySource(
         id: source.keySourceId,
         createdAt: source.createdAt,
         source,
-        accounts: getWalletAccounts(accounts, source.keySourceId),
+        accountGroups: getWalletAccounts(accountGroups, source.keySourceId),
       }))
-      .filter((group) => group.accounts.length > 0) ?? [];
-  const privateKeyGroups = accounts
-    .filter((account) => account.source.type === "private-key")
-    .map((account) => ({
+      .filter((group) => group.accountGroups.length > 0) ?? [];
+  const privateKeyGroups = accountGroups
+    .filter((group) => group.source.type === "private-key")
+    .map((accountGroup) => ({
       type: "private-key" as const,
-      id: account.accountGroupId,
-      createdAt: account.createdAt,
-      account,
+      id: accountGroup.accountGroupId,
+      createdAt: accountGroup.createdAt,
+      accountGroup,
     }));
   return [...walletGroups, ...privateKeyGroups].sort(
     (left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id),

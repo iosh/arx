@@ -56,7 +56,7 @@ const createFixture = async (kind: "bip39" | "private-key") => {
       const group = accounts.prepareAddGroup({
         accountGroupId: "group-0",
         source: { type: "private-key", keySourceId: addition.keySourceId },
-        members: [{ accountId }],
+        accounts: [{ accountId }],
         createdAt: 1,
       });
       await commitUpdates(commit, [addition.update, group.update]);
@@ -69,13 +69,17 @@ const createFixture = async (kind: "bip39" | "private-key") => {
         createdAt: 1,
       });
       for (let accountIndex = 0; accountIndex <= 3; accountIndex++) {
-        const members = keyring.deriveBip39AccountIds({ mnemonic: MNEMONIC, namespaces: ["eip155"], accountIndex });
-        accountId = members[0].accountId;
+        const derivedAccounts = keyring.deriveBip39AccountIds({
+          mnemonic: MNEMONIC,
+          namespaces: ["eip155"],
+          accountIndex,
+        });
+        accountId = derivedAccounts[0].accountId;
         const source: AccountGroupSource = { type: "bip39", keySourceId: addition.keySourceId, accountIndex };
         const group = accounts.prepareAddGroup({
           accountGroupId: `group-${accountIndex}`,
           source,
-          members,
+          accounts: derivedAccounts,
           createdAt: accountIndex + 1,
         });
         await commitUpdates(commit, [accountIndex === 0 ? addition.update : null, group.update]);

@@ -33,10 +33,9 @@ export function ImportPrivateKeyPage() {
     data: importResult,
     reset: resetImport,
   } = useWalletMutation({ mutationFn: wallet.keySources.importPrivateKey, gcTime: 0 });
-  const duplicateAccount = importResult?.status === "duplicate" ? importResult.account : undefined;
+  const duplicateGroup = importResult?.status === "duplicate" ? importResult.accountGroup : undefined;
   let fieldError: string | undefined;
-  if (duplicateAccount)
-    fieldError = t("privateKeyAlreadyImported", { accountName: getAccountName(duplicateAccount, t) });
+  if (duplicateGroup) fieldError = t("privateKeyAlreadyImported", { accountName: getAccountName(duplicateGroup, t) });
   else if (invalid) fieldError = t("onboarding:privateKeyIncorrect");
 
   useBlocker({ shouldBlockFn: () => pending, enableBeforeUnload: false });
@@ -63,7 +62,7 @@ export function ImportPrivateKeyPage() {
         backDisabled={pending}
       />
       <form
-        onSubmit={account && !duplicateAccount ? handleSubmit(() => importAccount(account)) : undefined}
+        onSubmit={account && !duplicateGroup ? handleSubmit(() => importAccount(account)) : undefined}
         autoComplete="off"
         aria-busy={pending}
         className="flex min-h-0 flex-1 flex-col"
@@ -100,7 +99,7 @@ export function ImportPrivateKeyPage() {
           <Button
             type="submit"
             className="w-full aria-busy:opacity-70"
-            disabled={!account || Boolean(duplicateAccount) || pending}
+            disabled={!account || Boolean(duplicateGroup) || pending}
             loading={pending}
           >
             {t("onboarding:importPrivateKeyAction")}

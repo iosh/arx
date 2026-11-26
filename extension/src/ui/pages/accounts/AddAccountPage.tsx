@@ -127,7 +127,7 @@ export function AddAccountPage() {
       </div>
       {candidate && (
         <ConfirmAccountMoveSheet
-          account={candidate.account}
+          accountGroup={candidate.accountGroup}
           accountId={candidate.accountId}
           walletName={candidate.target.walletName}
           isPending={creation.isPending}

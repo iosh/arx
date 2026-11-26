@@ -18,12 +18,12 @@ export const createAccountKeys = ({
   keyring,
   wallet,
 }: {
-  accounts: Pick<Accounts, "getGroupForMember">;
+  accounts: Pick<Accounts, "getGroupForAccount">;
   keyring: Pick<Keyring, "withPrivateKey" | "exportPrivateKey">;
   wallet: WalletStatusReader;
 }): AccountKeys => {
   const sourceFor = (accountId: AccountId) => {
-    const group = accounts.getGroupForMember(accountId);
+    const group = accounts.getGroupForAccount(accountId);
     if (!group) throw new AccountNotFoundError(accountId);
     return group.source;
   };

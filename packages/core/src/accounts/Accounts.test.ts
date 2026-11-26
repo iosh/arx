@@ -5,16 +5,16 @@ import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
 import { Accounts } from "./Accounts.js";
 import type { AccountsBootstrap } from "./bootstrap.js";
-import type { AccountGroupRecord, AccountMemberRecord } from "./persistence.js";
+import type { AccountGroupRecord, AccountRecord } from "./persistence.js";
 import type { AccountsChanged } from "./types.js";
 
-const member: AccountMemberRecord = {
+const account: AccountRecord = {
   accountId: "eip155:9858effd232b4033e47d90003d41ec34ecaeda94",
 };
 const group: AccountGroupRecord = {
   accountGroupId: "95fe9605-6848-47b8-ae46-a842cf29dd7d",
   source: { type: "private-key", keySourceId: "source-1" },
-  members: [member],
+  accounts: [account],
   alias: "Daily",
   hidden: false,
   createdAt: 1,
@@ -49,7 +49,7 @@ describe("Accounts", () => {
       {
         type: "accountsChanged",
         accountGroupIds: [group.accountGroupId],
-        accountIds: [member.accountId],
+        accountIds: [account.accountId],
         namespaces: ["eip155"],
       },
     ]);
@@ -72,14 +72,14 @@ describe("Accounts", () => {
 
   it("keeps hidden identities queryable while excluding them from account access choices", () => {
     const visibleGroupId = "56128651-0451-4057-801e-3b3d5b9fe409";
-    const accountIds = [member.accountId, "eip155:6fac4d18c912343bf86fa7049364dd4e424ab9c0"] as const;
+    const accountIds = [account.accountId, "eip155:6fac4d18c912343bf86fa7049364dd4e424ab9c0"] as const;
     const { accounts } = createAccounts({
       groups: accountIds.map(
         (accountId, accountIndex): AccountGroupRecord => ({
           ...group,
           accountGroupId: accountIndex === 0 ? group.accountGroupId : visibleGroupId,
           source: { type: "bip39", keySourceId: "source-1", accountIndex },
-          members: [{ accountId }],
+          accounts: [{ accountId }],
           hidden: accountIndex === 0,
         }),
       ),
@@ -87,8 +87,8 @@ describe("Accounts", () => {
     });
 
     expect(accounts.listSelectableAddresses("eip155:1").map(({ accountId }) => accountId)).toEqual([accountIds[1]]);
-    expect(accounts.getGroup(group.accountGroupId)?.members.map(({ accountId }) => accountId)).toEqual([
-      member.accountId,
+    expect(accounts.getGroup(group.accountGroupId)?.accounts.map(({ accountId }) => accountId)).toEqual([
+      account.accountId,
     ]);
   });
 });

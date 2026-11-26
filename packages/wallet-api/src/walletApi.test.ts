@@ -26,7 +26,7 @@ const group = (accountGroupId: string, addressSuffix: number): AccountGroup => {
     hidden: false,
     createdAt: 1,
     selected: false,
-    members: [
+    accounts: [
       {
         accountId: `eip155:${addressSuffix.toString(16).padStart(40, "0")}`,
         accountGroupId,

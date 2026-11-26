@@ -17,13 +17,13 @@ import { useHomeNetworkFilter } from "./useHomeNetworkFilter";
 export function HomePage() {
   const router = useRouter();
   const { t } = useTranslation("wallet");
-  const { data: account } = useSelectedAccount();
+  const { data: accountGroup } = useSelectedAccount();
   const { data: networks = [] } = useNetworks();
-  const { data: source } = usePendingMnemonicSource(account);
+  const { data: source } = usePendingMnemonicSource(accountGroup);
   const { chainRef, setChainRef } = useHomeNetworkFilter();
 
-  const name = account ? getAccountName(account, t) : null;
-  const accountId = account?.members[0].accountId;
+  const name = accountGroup ? getAccountName(accountGroup, t) : null;
+  const accountId = accountGroup?.accounts[0].accountId;
   const selectedNetwork = networks.find((network) => network.chainRef === chainRef);
   const filteredNetworks = selectedNetwork ? [selectedNetwork] : networks;
   useBalancePolling(accountId, selectedNetwork?.chainRef);
@@ -31,16 +31,19 @@ export function HomePage() {
   return (
     <main className="flex h-full flex-col gap-2.5 px-3.5 font-sans">
       <title>{name ? `${name} · ARX` : "ARX"}</title>
-      <HomeHeader account={account} />
+      <HomeHeader accountGroup={accountGroup} />
       <section className="shrink-0 overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_var(--shadow)]">
         <div className="px-4 pt-3 pb-4">
           <BalanceStatus accountId={accountId} networks={filteredNetworks} networkName={selectedNetwork?.name} />
           <div className="mt-3 grid w-full grid-cols-2 gap-2.5">
-            {account ? (
+            {accountGroup ? (
               <Button asChild variant="secondary" className="h-10">
                 <Link
                   to="/wallet/receive/$accountGroupId/$accountId"
-                  params={{ accountGroupId: account.accountGroupId, accountId: account.members[0].accountId }}
+                  params={{
+                    accountGroupId: accountGroup.accountGroupId,
+                    accountId: accountGroup.accounts[0].accountId,
+                  }}
                 >
                   <ArrowDownLeft aria-hidden="true" />
                   {t("receive")}

@@ -1,2 +1,2 @@
-/** Stable identity of a user account, independent of its source and namespace members. */
+/** Stable identity of an account group, independent of its source and the accounts it contains. */
 export type AccountGroupId = string;

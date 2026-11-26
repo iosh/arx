@@ -15,13 +15,13 @@ export type AccountGroupSource =
 export type AccountGroupRecord = Readonly<{
   accountGroupId: AccountGroupId;
   source: AccountGroupSource;
-  members: readonly [AccountMemberRecord, ...AccountMemberRecord[]];
+  accounts: readonly [AccountRecord, ...AccountRecord[]];
   alias?: string;
   hidden: boolean;
   createdAt: number;
 }>;
 
-export type AccountMemberRecord = Readonly<{
+export type AccountRecord = Readonly<{
   accountId: AccountId;
 }>;
 

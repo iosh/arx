@@ -57,20 +57,20 @@ export type WalletKeySourcesApi = Readonly<{
   generateMnemonic(): Promise<{ mnemonic: string }>;
   get(keySourceId: KeySourceId): Promise<KeySource>;
   list(): Promise<readonly KeySource[]>;
-  /** Saves the source and selects its first account atomically; other outcomes leave state unchanged. */
+  /** Saves the source and selects its first account group atomically; other outcomes leave state unchanged. */
   addMnemonic(input: AddMnemonicSourceInput): Promise<AddMnemonicSourceResult>;
   /**
-   * Adds the source and moves its existing private-key first account atomically.
+   * Adds the source and moves the matching private-key group in the same commit.
    * Repeating a completed move returns its existing IDs without changing state.
    */
   addMnemonicAndMoveAccount(input: AddMnemonicAndMoveAccountInput): Promise<KeySourceAdded>;
-  /** Saves and selects the account atomically; duplicates, including hidden accounts, leave state unchanged. */
+  /** Saves and selects the account group atomically; duplicates, including hidden accounts, leave state unchanged. */
   importPrivateKey(input: PrivateKeySourceInput): Promise<ImportPrivateKeySourceResult>;
   renameMnemonic(input: { keySourceId: KeySourceId; name: string }): Promise<void>;
   confirmMnemonicBackup(input: { keySourceId: KeySourceId }): Promise<void>;
   /** Requires an unlocked wallet. Returns null if the password does not match. */
   exportMnemonic(input: { keySourceId: KeySourceId; password: string }): Promise<{ mnemonic: string } | null>;
-  /** Removes the source and its accounts atomically, cancels their pending approvals, and returns removed member IDs. */
+  /** Removes the source and its groups atomically, cancels their pending approvals, and returns removed account IDs. */
   remove(input: { keySourceId: KeySourceId }): Promise<readonly AccountId[]>;
 }>;
 
@@ -86,7 +86,7 @@ export type WalletAccountsApi = Readonly<{
   exportPrivateKey(input: { accountId: AccountId; password: string }): Promise<{ privateKey: string } | null>;
   rename(input: { accountGroupId: AccountGroupId; alias?: string }): Promise<void>;
   /**
-   * Keeps one visible group per recovery source and cancels all hidden members' pending sign/transaction approvals.
+   * Keeps one visible group per recovery source and cancels pending sign and transaction approvals for hidden accounts.
    * Restoring preserves selection and does not restore dapp grants.
    */
   setHidden(input: { accountGroupId: AccountGroupId; hidden: boolean }): Promise<SetAccountGroupHiddenResult>;

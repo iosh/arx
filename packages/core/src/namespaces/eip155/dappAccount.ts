@@ -7,7 +7,7 @@ import { accountIdFromAddress } from "./accounts.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 
 export type AuthorizedAccountDependencies = Readonly<{
-  accounts: Pick<Accounts, "getMember" | "getAddress">;
+  accounts: Pick<Accounts, "getAccount" | "getAddress">;
   permissions: Pick<PermissionsReader, "get">;
 }>;
 
@@ -20,7 +20,7 @@ export const getAuthorizedAccount = (
     origin: input.origin,
     namespace: EIP155_NAMESPACE,
   });
-  const account = dependencies.accounts.getMember(accountId);
+  const account = dependencies.accounts.getAccount(accountId);
 
   if (!permission?.accountIds.includes(accountId) || !account || account.hidden) {
     throw new RpcUnauthorizedError();

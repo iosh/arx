@@ -10,18 +10,18 @@ import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 export function showAccountHiddenToast(
-  { account: group, replacementAccount: replacementGroup }: SetAccountGroupHiddenResult,
+  { accountGroup, replacementGroup }: SetAccountGroupHiddenResult,
   t: TFunction<"wallet">,
 ) {
-  const accountName = getAccountName(group, t);
+  const accountName = getAccountName(accountGroup, t);
   const message = replacementGroup
     ? t("accountHiddenAndSelected", { accountName, replacementName: getAccountName(replacementGroup, t) })
     : t("accountHidden", { accountName });
-  const toastId = `hidden-account:${group.accountGroupId}`;
+  const toastId = `hidden-account:${accountGroup.accountGroupId}`;
   toast.success(message, {
     id: toastId,
     icon: <EyeOff aria-hidden="true" className="size-3.75" />,
-    action: <UndoAccountHideButton accountGroupId={group.accountGroupId} toastId={toastId} message={message} />,
+    action: <UndoAccountHideButton accountGroupId={accountGroup.accountGroupId} toastId={toastId} message={message} />,
   });
 }
 
@@ -51,8 +51,8 @@ function UndoAccountHideButton({
         restoring.mutate(
           { accountGroupId, hidden: false },
           {
-            onSuccess: ({ account: group }) => {
-              toast.success(t("accountRestored", { accountName: getAccountName(group, t) }));
+            onSuccess: ({ accountGroup }) => {
+              toast.success(t("accountRestored", { accountName: getAccountName(accountGroup, t) }));
             },
             onSettled: () => toast.dismiss(toastId),
           },

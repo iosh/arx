@@ -16,12 +16,12 @@ import { useAccountCreation } from "./useAccountCreation";
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("wallet");
-  const { data: accounts } = useAccounts();
+  const { data: accountGroups } = useAccounts();
   const { data: wallets } = useMnemonicSources();
   const creation = useAccountCreation();
   const { candidate } = creation;
 
-  const sections = accounts && groupAccountsBySource(accounts, wallets);
+  const sections = accountGroups && groupAccountsBySource(accountGroups, wallets);
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -47,13 +47,13 @@ export function AccountsPage() {
           if (section.type === "private-key") {
             return (
               <section key={section.id} className="shrink-0 rounded-2xl bg-card py-1 text-card-foreground">
-                <AccountRows accounts={[section.account]} />
+                <AccountRows accountGroups={[section.accountGroup]} />
               </section>
             );
           }
-          const { id, source, accounts } = section;
-          const visibleAccounts = accounts.filter((account) => !account.hidden);
-          const hiddenCount = accounts.length - visibleAccounts.length;
+          const { id, source, accountGroups } = section;
+          const visibleGroups = accountGroups.filter((group) => !group.hidden);
+          const hiddenCount = accountGroups.length - visibleGroups.length;
           return (
             <section
               key={id}
@@ -72,7 +72,7 @@ export function AccountsPage() {
                   <ChevronRight aria-hidden="true" className="ml-auto size-3.75 shrink-0 text-placeholder" />
                 </Link>
               </h2>
-              <AccountRows accounts={visibleAccounts} />
+              <AccountRows accountGroups={visibleGroups} />
               <Button
                 type="button"
                 variant="ghost"
@@ -109,7 +109,7 @@ export function AccountsPage() {
       </div>
       {candidate && (
         <ConfirmAccountMoveSheet
-          account={candidate.account}
+          accountGroup={candidate.accountGroup}
           accountId={candidate.accountId}
           walletName={candidate.target.walletName}
           isPending={creation.isPending}
@@ -122,27 +122,27 @@ export function AccountsPage() {
   );
 }
 
-function AccountRows({ accounts }: { accounts: readonly AccountGroup[] }) {
+function AccountRows({ accountGroups }: { accountGroups: readonly AccountGroup[] }) {
   const { t } = useTranslation("wallet");
 
   return (
     <ul>
-      {accounts.map((account) => (
-        <li key={account.accountGroupId}>
+      {accountGroups.map((group) => (
+        <li key={group.accountGroupId}>
           <Link
             to="/wallet/accounts/$accountGroupId"
-            params={{ accountGroupId: account.accountGroupId }}
+            params={{ accountGroupId: group.accountGroupId }}
             className="flex h-14 items-center gap-3 rounded-xl px-4 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
-            <AccountIdenticon seed={account.accountGroupId} size={32} />
+            <AccountIdenticon seed={group.accountGroupId} size={32} />
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold">{getAccountName(account, t)}</span>
-              {account.source.type === "private-key" && (
+              <span className="truncate text-sm font-semibold">{getAccountName(group, t)}</span>
+              {group.source.type === "private-key" && (
                 <span className="shrink-0 rounded bg-secondary px-1.5 py-px text-xs font-medium text-muted-foreground">
                   {t("privateKey")}
                 </span>
               )}
-              {account.selected && (
+              {group.selected && (
                 <span className="shrink-0 rounded bg-brand-subtle px-1.5 py-px text-xs font-semibold text-brand">
                   {t("currentAccount")}
                 </span>

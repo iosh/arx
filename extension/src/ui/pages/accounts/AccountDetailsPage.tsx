@@ -26,18 +26,18 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
   const reportError = useWalletError();
   const hiding = useWalletMutation({ mutationFn: wallet.accounts.setHidden, gcTime: 0 });
   const removal = useKeySourceRemoval();
-  const { data: accounts } = useVisibleAccounts();
-  const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
-  const { data: source } = useMnemonicSource(account);
-  const name = account ? getAccountName(account, t) : t("accountDetails");
-  const unavailable = Boolean(accounts && !account);
-  const canHide = Boolean(account && accounts && findAccountHideReplacement(account, accounts));
-  const privateKeySourceId = account?.source.type === "private-key" ? account.source.keySourceId : undefined;
-  const exportPrivateKeyLink = account?.members.map((member) => (
+  const { data: accountGroups } = useVisibleAccounts();
+  const group = accountGroups?.find((candidate) => candidate.accountGroupId === accountGroupId);
+  const { data: source } = useMnemonicSource(group);
+  const name = group ? getAccountName(group, t) : t("accountDetails");
+  const unavailable = Boolean(accountGroups && !group);
+  const canHide = Boolean(group && accountGroups && findAccountHideReplacement(group, accountGroups));
+  const privateKeySourceId = group?.source.type === "private-key" ? group.source.keySourceId : undefined;
+  const exportPrivateKeyLink = group?.accounts.map((account) => (
     <Link
-      key={member.accountId}
+      key={account.accountId}
       to="/wallet/accounts/$accountGroupId/export-private-key/$accountId"
-      params={{ accountGroupId, accountId: member.accountId }}
+      params={{ accountGroupId, accountId: account.accountId }}
       disabled={hiding.isPending || removal.isPending}
       className="flex h-12 items-center justify-between gap-2 px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-disabled:pointer-events-none aria-disabled:opacity-45"
     >
@@ -75,26 +75,24 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
         backLabel={t("backToAccounts")}
         backDisabled={hiding.isPending || removal.isPending}
         icon={
-          <span className="size-7 shrink-0">
-            {account && <AccountIdenticon seed={account.accountGroupId} size={28} />}
-          </span>
+          <span className="size-7 shrink-0">{group && <AccountIdenticon seed={group.accountGroupId} size={28} />}</span>
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pt-1 pb-3.5">
         {unavailable ? (
           <div className="flex min-h-14 items-center px-4 text-sm text-muted-foreground">{t("accountUnavailable")}</div>
         ) : (
-          <AccountAddressCard account={account} receivable />
+          <AccountAddressCard accountGroup={group} receivable />
         )}
         {!unavailable && (
           <div className="min-h-26 shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
             <RenameSheet
               label={t("accountNameLabel")}
-              name={account ? name : undefined}
-              disabled={!account}
+              name={group ? name : undefined}
+              disabled={!group}
               onRename={(alias) => wallet.accounts.rename({ accountGroupId, alias })}
             />
-            {account?.source.type === "private-key" ? (
+            {group?.source.type === "private-key" ? (
               <div className="flex h-12 items-center justify-between gap-2 px-4 text-sm">
                 <span className="font-medium">{t("accountSource")}</span>
                 <span className="text-muted-foreground">{t("privateKeyImport")}</span>
@@ -112,16 +110,16 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
             ) : (
               <div className="flex h-12 items-center gap-2 px-4 text-sm">
                 <span className="shrink-0 font-medium">
-                  {t(account?.source.type === "bip39" ? "parentWallet" : "accountSource")}
+                  {t(group?.source.type === "bip39" ? "parentWallet" : "accountSource")}
                 </span>
                 <span className="ml-auto text-muted-foreground">
-                  {account && source === null && t("walletUnavailable")}
+                  {group && source === null && t("walletUnavailable")}
                 </span>
               </div>
             )}
           </div>
         )}
-        {account && (
+        {group && (
           <>
             {privateKeySourceId && (
               <RemoveKeySourceSheet
@@ -129,13 +127,13 @@ export function AccountDetailsPage({ accountGroupId }: { accountGroupId: Account
                 title={t("removeAccountTitle", { accountName: name })}
                 description={t("removeAccountDescription")}
                 backupLabel={t("confirmPrivateKeyBackup")}
-                canRemove={accounts?.some((candidate) => candidate.accountGroupId !== accountGroupId)}
+                canRemove={accountGroups?.some((candidate) => candidate.accountGroupId !== accountGroupId)}
                 isPending={removal.isPending}
                 leadingAction={exportPrivateKeyLink}
                 onConfirm={() => removal.removeKeySource(privateKeySourceId, name)}
               />
             )}
-            {account.source.type === "bip39" && (
+            {group.source.type === "bip39" && (
               <>
                 <div className="shrink-0 overflow-hidden rounded-2xl bg-card py-1 text-card-foreground">
                   {exportPrivateKeyLink}

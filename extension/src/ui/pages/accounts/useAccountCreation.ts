@@ -8,7 +8,7 @@ import { useWallet } from "@/ui/wallet/connection/WalletContext";
 import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 
 type CreationTarget = Readonly<{ keySourceId: KeySourceId; walletName: string }>;
-type MoveCandidate = Readonly<{ account: AccountGroup; accountId: AccountId; target: CreationTarget }>;
+type MoveCandidate = Readonly<{ accountGroup: AccountGroup; accountId: AccountId; target: CreationTarget }>;
 
 export function useAccountCreation(onComplete?: () => void) {
   const { client: wallet } = useWallet();
@@ -23,7 +23,7 @@ export function useAccountCreation(onComplete?: () => void) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const candidate: MoveCandidate | null =
     creation.isSuccess && creation.data.status === "move-available"
-      ? { account: creation.data.account, accountId: creation.data.accountId, target: creation.variables }
+      ? { accountGroup: creation.data.accountGroup, accountId: creation.data.accountId, target: creation.variables }
       : null;
 
   function complete() {
@@ -49,10 +49,10 @@ export function useAccountCreation(onComplete?: () => void) {
     moving.mutate(
       { accountId, keySourceId: target.keySourceId },
       {
-        onSuccess: (movedAccount) => {
+        onSuccess: (movedGroup) => {
           toast.success(
             t("accountMoved", {
-              accountName: getAccountName(movedAccount, t),
+              accountName: getAccountName(movedGroup, t),
               walletName: target.walletName,
             }),
           );

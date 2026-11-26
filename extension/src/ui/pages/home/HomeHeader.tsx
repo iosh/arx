@@ -14,14 +14,14 @@ import {
 import { useLockWallet } from "@/ui/wallet/useWalletMutations";
 import { AccountSwitcher } from "./AccountSwitcher";
 
-export function HomeHeader({ account }: { account: AccountGroup | undefined }) {
+export function HomeHeader({ accountGroup }: { accountGroup: AccountGroup | undefined }) {
   const { t } = useTranslation("wallet");
   const [menuOpen, setMenuOpen] = useState(false);
   const { mutate: lockWallet, isPending: isLocking } = useLockWallet();
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-1.5 py-1">
-      <AccountSwitcher selectedAccount={account} />
+      <AccountSwitcher selectedGroup={accountGroup} />
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button

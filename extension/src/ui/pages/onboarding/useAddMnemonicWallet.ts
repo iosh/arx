@@ -18,7 +18,7 @@ type AdditionOptions = {
   returnFocusElement?: HTMLElement | null | undefined;
 };
 
-type MoveCandidate = Readonly<{ account: AccountGroup; accountId: AccountId; input: AddMnemonicSourceInput }>;
+type MoveCandidate = Readonly<{ accountGroup: AccountGroup; accountId: AccountId; input: AddMnemonicSourceInput }>;
 
 export function useAddMnemonicWallet({ onAdded }: AddMnemonicWalletContext) {
   const { client: wallet } = useWallet();
@@ -64,7 +64,7 @@ export function useAddMnemonicWallet({ onAdded }: AddMnemonicWalletContext) {
 
   const candidate: MoveCandidate | null =
     addition.isSuccess && addition.data.status === "move-available"
-      ? { account: addition.data.account, accountId: addition.data.accountId, input: addition.variables }
+      ? { accountGroup: addition.data.accountGroup, accountId: addition.data.accountId, input: addition.variables }
       : null;
 
   function confirmMove({ accountId, input }: MoveCandidate) {
@@ -84,7 +84,7 @@ export function useAddMnemonicWallet({ onAdded }: AddMnemonicWalletContext) {
 
   const move = candidate
     ? {
-        account: candidate.account,
+        accountGroup: candidate.accountGroup,
         accountId: candidate.accountId,
         walletName: candidate.input.name,
         isPending: confirmation.isPending,

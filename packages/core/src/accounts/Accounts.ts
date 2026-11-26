@@ -16,18 +16,18 @@ import {
 } from "./errors.js";
 import type { AccountsNamespaceAdapters } from "./namespaceAdapter.js";
 import { type AccountGroupRecord, accountGroupWrites, accountSelectionWrites } from "./persistence.js";
-import type { AccountAddress, AccountGroup, AccountMember, AccountPreview, AccountsChanged } from "./types.js";
+import type { Account, AccountAddress, AccountGroup, AccountPreview, AccountsChanged } from "./types.js";
 
-type PreparedAccountGroup = Readonly<{ update: PreparedUpdate; account: AccountGroup }>;
+type PreparedAccountGroup = Readonly<{ update: PreparedUpdate; accountGroup: AccountGroup }>;
 
 const sortGroups = (groups: Iterable<AccountGroupRecord>): AccountGroupRecord[] =>
   [...groups].sort(
     (left, right) => left.createdAt - right.createdAt || left.accountGroupId.localeCompare(right.accountGroupId),
   );
 
-const indexMembers = (groups: Iterable<AccountGroupRecord>): ReadonlyMap<AccountId, AccountGroupId> =>
+const indexAccounts = (groups: Iterable<AccountGroupRecord>): ReadonlyMap<AccountId, AccountGroupId> =>
   new Map(
-    [...groups].flatMap((group) => group.members.map((member) => [member.accountId, group.accountGroupId] as const)),
+    [...groups].flatMap((group) => group.accounts.map((account) => [account.accountId, group.accountGroupId] as const)),
   );
 
 type AccountsOptions = Readonly<{
@@ -37,7 +37,7 @@ type AccountsOptions = Readonly<{
   publishChanged(change: AccountsChanged): void;
 }>;
 
-/** Owns account groups, their namespace members, and the wallet's sole account selection. */
+/** Owns account groups, their accounts, and the wallet's selected group. */
 export class Accounts {
   readonly #adapters: AccountsNamespaceAdapters;
   readonly #mutations: CoreMutationQueue;
@@ -51,13 +51,13 @@ export class Accounts {
     this.#mutations = options.mutations;
     this.#publishChanged = options.publishChanged;
     this.#groups = new Map(options.bootstrap.groups.map((group) => [group.accountGroupId, group]));
-    this.#groupIdsByAccountId = indexMembers(this.#groups.values());
+    this.#groupIdsByAccountId = indexAccounts(this.#groups.values());
     this.#selection = options.bootstrap.selection?.accountGroupId ?? null;
   }
 
-  getMember(accountId: AccountId): AccountMember | null {
+  getAccount(accountId: AccountId): Account | null {
     const groupId = this.#groupIdsByAccountId.get(accountId);
-    return groupId === undefined ? null : this.toMember(accountId, this.requireGroupRecord(groupId));
+    return groupId === undefined ? null : this.toAccount(accountId, this.requireGroupRecord(groupId));
   }
 
   getGroup(accountGroupId: AccountGroupId): AccountGroup | null {
@@ -65,7 +65,7 @@ export class Accounts {
     return group ? this.toGroup(group) : null;
   }
 
-  getGroupForMember(accountId: AccountId): AccountGroup | null {
+  getGroupForAccount(accountId: AccountId): AccountGroup | null {
     const groupId = this.#groupIdsByAccountId.get(accountId);
     return groupId === undefined ? null : this.getGroup(groupId);
   }
@@ -114,9 +114,9 @@ export class Accounts {
     const { namespace } = splitChainRef(chainRef);
     return sortGroups(this.#groups.values())
       .filter((group) => !group.hidden)
-      .flatMap((group) => group.members)
-      .filter((member) => getAccountIdNamespace(member.accountId) === namespace)
-      .map((member) => this.getAddress({ chainRef, accountId: member.accountId }));
+      .flatMap((group) => group.accounts)
+      .filter((account) => getAccountIdNamespace(account.accountId) === namespace)
+      .map((account) => this.getAddress({ chainRef, accountId: account.accountId }));
   }
 
   rename(input: { accountGroupId: AccountGroupId; alias?: string }): Promise<void> {
@@ -137,15 +137,15 @@ export class Accounts {
     });
   }
 
-  /** The complete wallet command verifies that the new source controls every retained member. */
+  /** The wallet command verifies that the new source controls every retained account. */
   prepareMoveGroup(
     accountGroupId: AccountGroupId,
     source: AccountGroupRecord["source"],
-    members: AccountGroupRecord["members"],
+    accounts: AccountGroupRecord["accounts"],
     { selectAsCurrent = false }: { selectAsCurrent?: boolean } = {},
   ): PreparedAccountGroup {
     return this.prepareGroupUpdate({
-      group: { ...this.requireGroupRecord(accountGroupId), source, members },
+      group: { ...this.requireGroupRecord(accountGroupId), source, accounts },
       nextSelection: selectAsCurrent ? accountGroupId : this.#selection,
     });
   }
@@ -156,11 +156,11 @@ export class Accounts {
     hidden: boolean,
   ): Readonly<{
     update: PreparedUpdate | null;
-    account: AccountGroup;
-    replacementAccount: AccountGroup | null;
+    accountGroup: AccountGroup;
+    replacementGroup: AccountGroup | null;
   }> {
     const current = this.requireGroupRecord(accountGroupId);
-    if (current.hidden === hidden) return { update: null, account: this.toGroup(current), replacementAccount: null };
+    if (current.hidden === hidden) return { update: null, accountGroup: this.toGroup(current), replacementGroup: null };
     let replacement: AccountGroupRecord | null = null;
     if (hidden) {
       const candidate = findAccountHideReplacement(current, sortGroups(this.#groups.values()));
@@ -174,7 +174,7 @@ export class Accounts {
     });
     return {
       ...preparation,
-      replacementAccount: replacement ? this.toGroup(replacement, replacement.accountGroupId) : null,
+      replacementGroup: replacement ? this.toGroup(replacement, replacement.accountGroupId) : null,
     };
   }
 
@@ -204,7 +204,7 @@ export class Accounts {
       );
       if (nextSelection !== null) changedGroupIds.push(nextSelection);
     }
-    const removedAccountIds = removed.flatMap((group) => group.members.map((member) => member.accountId));
+    const removedAccountIds = removed.flatMap((group) => group.accounts.map((account) => account.accountId));
     return {
       update: this.prepareUpdate({
         nextGroups,
@@ -246,8 +246,8 @@ export class Accounts {
     group: AccountGroupRecord;
     nextSelection: AccountGroupId | null;
   }): PreparedAccountGroup {
-    for (const member of group.members) {
-      const currentGroupId = this.#groupIdsByAccountId.get(member.accountId);
+    for (const account of group.accounts) {
+      const currentGroupId = this.#groupIdsByAccountId.get(account.accountId);
       if (currentGroupId !== undefined && currentGroupId !== group.accountGroupId) {
         throw new Error("Account identity already belongs to another group.");
       }
@@ -268,7 +268,7 @@ export class Accounts {
         persistenceChanges,
         changedGroupIds,
       }),
-      account: this.toGroup(group, nextSelection),
+      accountGroup: this.toGroup(group, nextSelection),
     };
   }
 
@@ -285,14 +285,14 @@ export class Accounts {
     changedGroupIds: readonly AccountGroupId[];
     removedAccountIds?: readonly AccountId[];
   }): PreparedUpdate {
-    const nextIndex = indexMembers(nextGroups.values());
+    const nextIndex = indexAccounts(nextGroups.values());
     const changedAccountGroupIds = uniqueSortedStrings(changedGroupIds);
     const changed = new Set(changedAccountGroupIds);
     const changedAccountIds = uniqueSortedStrings([
       ...removedAccountIds,
       ...[...nextGroups.values()]
         .filter((group) => changed.has(group.accountGroupId))
-        .flatMap((group) => group.members.map((member) => member.accountId)),
+        .flatMap((group) => group.accounts.map((account) => account.accountId)),
     ]);
     const event: AccountsChanged = {
       type: "accountsChanged",
@@ -317,18 +317,18 @@ export class Accounts {
     return group;
   }
 
-  private toMember(accountId: AccountId, group: AccountGroupRecord): AccountMember {
+  private toAccount(accountId: AccountId, group: AccountGroupRecord): Account {
     return { ...this.getPublicIdentity(accountId), accountGroupId: group.accountGroupId, hidden: group.hidden };
   }
 
   private toGroup(group: AccountGroupRecord, selection = this.#selection): AccountGroup {
-    const [first, ...rest] = group.members;
-    const members: [AccountMember, ...AccountMember[]] = [
-      this.toMember(first.accountId, group),
-      ...rest.map((member) => this.toMember(member.accountId, group)),
+    const [first, ...rest] = group.accounts;
+    const accounts: [Account, ...Account[]] = [
+      this.toAccount(first.accountId, group),
+      ...rest.map((account) => this.toAccount(account.accountId, group)),
     ];
-    members.sort((left, right) => left.accountId.localeCompare(right.accountId));
-    return { ...group, members, selected: selection === group.accountGroupId };
+    accounts.sort((left, right) => left.accountId.localeCompare(right.accountId));
+    return { ...group, accounts, selected: selection === group.accountGroupId };
   }
 
   private commitUpdate(prepare: () => PreparedUpdate | null): Promise<void> {

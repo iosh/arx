@@ -130,7 +130,7 @@ describe("CoreRuntime EIP-155 RPC", () => {
       privateKey: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     });
     assert(created.status === "initialized");
-    const [account] = (await wallet.accounts.getGroup(created.accountGroupId)).members;
+    const [account] = (await wallet.accounts.getGroup(created.accountGroupId)).accounts;
     const address = "0xfcad0b19bb29d4674531d6f115237e16afce377c";
     const scope = { origin: "https://signing.example", namespace: "eip155" } as const;
     runtime.dappConnections.openConnection(scope);

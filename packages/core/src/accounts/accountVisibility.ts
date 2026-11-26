@@ -1,15 +1,15 @@
 import type { AccountGroupRecord } from "./persistence.js";
 
-/** Finds the first other visible account from the same recovery source, in the supplied order. */
+/** Finds the first other visible group from the same recovery source, in the supplied order. */
 export function findAccountHideReplacement(
-  account: AccountGroupRecord,
-  accounts: readonly AccountGroupRecord[],
+  group: AccountGroupRecord,
+  groups: readonly AccountGroupRecord[],
 ): AccountGroupRecord | null {
-  const { keySourceId } = account.source;
+  const { keySourceId } = group.source;
   return (
-    accounts.find(
+    groups.find(
       (candidate) =>
-        candidate.accountGroupId !== account.accountGroupId &&
+        candidate.accountGroupId !== group.accountGroupId &&
         !candidate.hidden &&
         candidate.source.type === "bip39" &&
         candidate.source.keySourceId === keySourceId,

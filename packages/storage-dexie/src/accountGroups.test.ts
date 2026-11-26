@@ -44,7 +44,7 @@ describe("CoreRuntime persistence", () => {
     assert(imported.status === "initialized");
     await wallet.accounts.rename({ accountGroupId: imported.accountGroupId, alias: "Daily" });
     const before = await wallet.accounts.getGroup(imported.accountGroupId);
-    const accountId = before.members[0].accountId;
+    const accountId = before.accounts[0].accountId;
     const grant = { origin: "https://account-groups.example", namespace: "eip155", accountIds: [accountId] } as const;
     await wallet.permissions.setAccounts(grant);
 
@@ -64,7 +64,7 @@ describe("CoreRuntime persistence", () => {
       alias: "Daily",
       createdAt: before.createdAt,
       source: { type: "bip39", keySourceId: moved.keySourceId, accountIndex: 0 },
-      members: [{ accountId, defaultAddress: before.members[0].defaultAddress }],
+      accounts: [{ accountId, defaultAddress: before.accounts[0].defaultAddress }],
       selected: true,
     });
     expect(await reopened.runtime.wallet.permissions.get(grant)).toEqual(grant);
@@ -84,7 +84,7 @@ describe("CoreRuntime persistence", () => {
     const second = await wallet.accounts.create({ keySourceId: created.keySourceId });
     assert(second.status === "created");
     const scope = { origin: "https://hidden-accounts.example", namespace: "eip155" } as const;
-    await wallet.permissions.setAccounts({ ...scope, accountIds: [first.members[0].accountId] });
+    await wallet.permissions.setAccounts({ ...scope, accountIds: [first.accounts[0].accountId] });
 
     await wallet.accounts.setHidden({ accountGroupId: first.accountGroupId, hidden: true });
     await wallet.lock();
@@ -94,20 +94,20 @@ describe("CoreRuntime persistence", () => {
     const restoredWallet = reopened.runtime.wallet;
     expect(await restoredWallet.accounts.getGroup(first.accountGroupId)).toMatchObject({
       hidden: true,
-      members: [{ accountId: first.members[0].accountId, hidden: true }],
+      accounts: [{ accountId: first.accounts[0].accountId, hidden: true }],
     });
-    expect((await restoredWallet.accounts.getSelectedGroup()).accountGroupId).toBe(second.account.accountGroupId);
+    expect((await restoredWallet.accounts.getSelectedGroup()).accountGroupId).toBe(second.accountGroup.accountGroupId);
     expect(await restoredWallet.permissions.get(scope)).toBeNull();
     await expect(restoredWallet.accounts.select({ accountGroupId: first.accountGroupId })).rejects.toMatchObject({
       code: "account.hidden_not_selectable",
     });
     await expect(
-      restoredWallet.accounts.setHidden({ accountGroupId: second.account.accountGroupId, hidden: true }),
+      restoredWallet.accounts.setHidden({ accountGroupId: second.accountGroup.accountGroupId, hidden: true }),
     ).rejects.toMatchObject({ code: "account.last_visible_hide_unsupported" });
 
     await restoredWallet.accounts.setHidden({ accountGroupId: first.accountGroupId, hidden: false });
     expect((await restoredWallet.accounts.getGroup(first.accountGroupId)).hidden).toBe(false);
-    expect((await restoredWallet.accounts.getSelectedGroup()).accountGroupId).toBe(second.account.accountGroupId);
+    expect((await restoredWallet.accounts.getSelectedGroup()).accountGroupId).toBe(second.accountGroup.accountGroupId);
     expect(await restoredWallet.permissions.get(scope)).toBeNull();
   }, 15_000);
 
@@ -122,7 +122,7 @@ describe("CoreRuntime persistence", () => {
     });
     assert(created.status === "initialized");
     const group = await runtime.wallet.accounts.getGroup(created.accountGroupId);
-    await runtime.wallet.permissions.setAccounts({ ...scope, accountIds: [group.members[0].accountId] });
+    await runtime.wallet.permissions.setAccounts({ ...scope, accountIds: [group.accounts[0].accountId] });
     expect(runtime.dappConnections.openConnection(scope)).toEqual({
       chainRef: "eip155:1",
       accounts: ["0x9858effd232b4033e47d90003d41ec34ecaeda94"],
@@ -176,10 +176,10 @@ describe("CoreRuntime commands", () => {
 
     const added = await wallet.accounts.create({ keySourceId: created.keySourceId });
     assert(added.status === "created");
-    expect(added.account.source).toEqual({ type: "bip39", keySourceId: created.keySourceId, accountIndex: 1 });
+    expect(added.accountGroup.source).toEqual({ type: "bip39", keySourceId: created.keySourceId, accountIndex: 1 });
   }, 15_000);
 
-  it("uses the current group when confirming a member's move after deletion and reimport", async () => {
+  it("uses the current group when confirming an account move after deletion and reimport", async () => {
     const { runtime } = await openRuntime(`arx-account-group-runtime-${nextDatabaseId++}`);
     const wallet = runtime.wallet;
     const created = await wallet.createFromMnemonic({ password: "password", mnemonic: MNEMONIC, name: "Personal" });
@@ -199,7 +199,7 @@ describe("CoreRuntime commands", () => {
     expect(moved).toMatchObject({
       accountGroupId: reimported.accountGroupId,
       source: { type: "bip39", keySourceId: created.keySourceId, accountIndex: 1 },
-      members: [{ accountId }],
+      accounts: [{ accountId }],
     });
     expect(await wallet.accounts.getGroup(reimported.accountGroupId)).toEqual(moved);
   }, 15_000);

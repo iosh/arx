@@ -18,7 +18,7 @@ import { useWalletMutation } from "@/ui/wallet/useWalletMutation";
 import { AccountAddressCard } from "./AccountAddressCard";
 
 type ExportTarget = Readonly<{
-  account: AccountGroup;
+  accountGroup: AccountGroup;
   accountId: AccountId;
 }>;
 
@@ -30,13 +30,14 @@ export function ExportPrivateKeyPage({
   accountId: string;
 }) {
   const { t } = useTranslation("wallet");
-  const { data: accounts } = useVisibleAccounts();
-  const account = accounts?.find((candidate) => candidate.accountGroupId === accountGroupId);
+  const { data: accountGroups } = useVisibleAccounts();
+  const accountGroup = accountGroups?.find((candidate) => candidate.accountGroupId === accountGroupId);
 
-  const member = account?.members.find((candidate) => candidate.accountId === accountId);
-  const target: ExportTarget | undefined = account && member ? { account, accountId: member.accountId } : undefined;
+  const account = accountGroup?.accounts.find((candidate) => candidate.accountId === accountId);
+  const target: ExportTarget | undefined =
+    accountGroup && account ? { accountGroup, accountId: account.accountId } : undefined;
 
-  if (!accounts || target) return <ExportPrivateKeyFlow target={target} accountGroupId={accountGroupId} />;
+  if (!accountGroups || target) return <ExportPrivateKeyFlow target={target} accountGroupId={accountGroupId} />;
 
   return (
     <main className="flex h-full flex-col font-sans">
@@ -117,7 +118,7 @@ function ExportPrivateKeyFlow({
       <title>{`${t("exportPrivateKey")} · ARX`}</title>
       <PageHeader
         title={t("exportPrivateKey")}
-        subtitle={target ? getAccountName(target.account, t) : undefined}
+        subtitle={target ? getAccountName(target.accountGroup, t) : undefined}
         subtitleSpace
         backTo="/wallet/accounts/$accountGroupId"
         backLabel={t("backToAccountDetails")}
@@ -135,7 +136,7 @@ function ExportPrivateKeyFlow({
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <p>{t("privateKeyWarning")}</p>
           </div>
-          <AccountAddressCard account={target?.account} memberId={target?.accountId} copyable={false} />
+          <AccountAddressCard accountGroup={target?.accountGroup} accountId={target?.accountId} copyable={false} />
           {privateKey === null ? (
             <Field className="gap-2">
               <FieldLabel htmlFor={id} className="px-1 text-xs text-muted-foreground">

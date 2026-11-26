@@ -26,7 +26,7 @@ export type PermissionsChanged = Readonly<{
 
 type PermissionsOptions = Readonly<{
   bootstrap: PermissionsBootstrap;
-  accounts: Pick<Accounts, "getMember">;
+  accounts: Pick<Accounts, "getAccount">;
   publishChanged(change: PermissionsChanged): void;
 }>;
 
@@ -46,7 +46,7 @@ const accountIdsEqual = (left: readonly AccountId[], right: readonly AccountId[]
  * revocation and disconnection also cancel affected approvals after committing.
  */
 export class Permissions implements PermissionsReader {
-  readonly #accounts: Pick<Accounts, "getMember">;
+  readonly #accounts: Pick<Accounts, "getAccount">;
   readonly #publishChanged: PermissionsOptions["publishChanged"];
   #records: ReadonlyMap<string, PermissionRecord>;
 
@@ -157,7 +157,7 @@ export class Permissions implements PermissionsReader {
 
   #requireVisibleAccounts(permission: Permission): void {
     for (const accountId of permission.accountIds) {
-      const account = this.#accounts.getMember(accountId);
+      const account = this.#accounts.getAccount(accountId);
       if (!account) throw new AccountNotFoundError(accountId);
 
       if (account.namespace !== permission.namespace) {

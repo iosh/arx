@@ -4,24 +4,24 @@ import type { AccountGroupId } from "./accountGroupId.js";
 import type { AccountId } from "./accountId.js";
 import type { AccountGroupRecord } from "./persistence.js";
 
-export type AccountMember = Readonly<{
+export type Account = Readonly<{
   accountId: AccountId;
   accountGroupId: AccountGroupId;
   namespace: Namespace;
   /** Display address for this namespace's default network; derived from the public identity, never persisted. */
   defaultAddress: string;
-  /** Projected from the group's visibility; never persisted on the member. */
+  /** Projected from the group's visibility. */
   hidden: boolean;
 }>;
 
-export type AccountGroup = Omit<AccountGroupRecord, "members"> &
+export type AccountGroup = Omit<AccountGroupRecord, "accounts"> &
   Readonly<{
-    members: readonly [AccountMember, ...AccountMember[]];
+    accounts: readonly [Account, ...Account[]];
     selected: boolean;
   }>;
 
 /** Public identity preview before an account group is saved. */
-export type AccountPreview = Pick<AccountMember, "accountId" | "namespace" | "defaultAddress">;
+export type AccountPreview = Pick<Account, "accountId" | "namespace" | "defaultAddress">;
 
 export type AccountAddress = Readonly<{
   accountId: AccountId;

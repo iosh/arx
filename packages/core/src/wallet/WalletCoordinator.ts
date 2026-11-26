@@ -110,7 +110,7 @@ export class WalletCoordinator {
       const creation = this.#accounts.prepareAddGroup({
         accountGroupId,
         source: { type: "private-key", keySourceId: addition.keySourceId },
-        members: [{ accountId: addition.accountId }],
+        accounts: [{ accountId: addition.accountId }],
         createdAt,
       });
       await this.commitKeyringUpdate(commit, addition.update, [creation.update]);
@@ -164,8 +164,8 @@ export class WalletCoordinator {
       this.assertUnlocked();
       const existingSource = this.#keyring.findMnemonicSource(mnemonic);
       if (existingSource) return { status: "duplicate", walletName: existingSource.name };
-      const members = this.deriveFirstAccountIds(mnemonic);
-      const candidate = this.findMoveCandidate(members);
+      const derivedAccounts = this.deriveFirstGroupAccounts(mnemonic);
+      const candidate = this.findMoveCandidate(derivedAccounts);
       if (candidate) return { status: "move-available", ...candidate };
       const createdAt = this.#time.now();
       const addition = this.#keyring.prepareAddBip39Source({ ...params, mnemonic, createdAt });
@@ -174,7 +174,7 @@ export class WalletCoordinator {
         {
           accountGroupId,
           source: { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 },
-          members,
+          accounts: derivedAccounts,
           createdAt,
         },
         { selectAsCurrent: true },
@@ -188,13 +188,13 @@ export class WalletCoordinator {
     const mnemonic = parseBip39Mnemonic(params.mnemonic);
     return this.#mutations.run(async (commit) => {
       this.assertUnlocked();
-      const group = this.#accounts.getGroupForMember(params.accountId);
+      const group = this.#accounts.getGroupForAccount(params.accountId);
       if (!group) throw new AccountNotFoundError(params.accountId);
-      const members = this.deriveFirstAccountIds(mnemonic);
-      this.assertGroupMembersAreDerived(group, members);
+      const derivedAccounts = this.deriveFirstGroupAccounts(mnemonic);
+      this.assertGroupAccountsAreDerived(group, derivedAccounts);
       const existingSource = this.#keyring.findMnemonicSource(mnemonic);
       if (existingSource) return this.getCompletedMnemonicMove(group, existingSource.keySourceId);
-      if (group.source.type !== "private-key") throw new WalletAccountMoveConflictError(group.members[0].accountId);
+      if (group.source.type !== "private-key") throw new WalletAccountMoveConflictError(group.accounts[0].accountId);
       const addition = this.#keyring.prepareAddBip39Source({
         ...params,
         mnemonic,
@@ -204,7 +204,7 @@ export class WalletCoordinator {
       const move = this.#accounts.prepareMoveGroup(
         group.accountGroupId,
         { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 },
-        members,
+        derivedAccounts,
         { selectAsCurrent: true },
       );
       await this.commitKeyringUpdate(commit, addition.update, [move.update]);
@@ -217,14 +217,14 @@ export class WalletCoordinator {
       this.assertUnlocked();
       const createdAt = this.#time.now();
       const addition = this.#keyring.prepareAddPrivateKeySource({ ...params, createdAt });
-      const existingGroup = this.#accounts.getGroupForMember(addition.accountId);
-      if (existingGroup) return { status: "duplicate", account: existingGroup };
+      const existingGroup = this.#accounts.getGroupForAccount(addition.accountId);
+      if (existingGroup) return { status: "duplicate", accountGroup: existingGroup };
       const accountGroupId = crypto.randomUUID();
       const creation = this.#accounts.prepareAddGroup(
         {
           accountGroupId,
           source: { type: "private-key", keySourceId: addition.keySourceId },
-          members: [{ accountId: addition.accountId }],
+          accounts: [{ accountId: addition.accountId }],
           createdAt,
         },
         { selectAsCurrent: true },
@@ -263,7 +263,7 @@ export class WalletCoordinator {
   async exportPrivateKey(params: { accountId: AccountId; password: string }): Promise<{ privateKey: string } | null> {
     return this.#mutations.run(async () => {
       this.assertUnlocked();
-      if (!this.#accounts.getMember(params.accountId)) throw new AccountNotFoundError(params.accountId);
+      if (!this.#accounts.getAccount(params.accountId)) throw new AccountNotFoundError(params.accountId);
       if (!(await this.#keyring.verifyPassword(params.password))) return null;
       return { privateKey: this.#accountKeys.exportPrivateKey(params.accountId) };
     });
@@ -272,37 +272,37 @@ export class WalletCoordinator {
   async createHdAccountGroup(params: { keySourceId: KeySourceId }): Promise<HdAccountGroupCreationResult> {
     return this.#mutations.run(async (commit) => {
       this.assertUnlocked();
-      const { accountIndex, members } = this.deriveNextGroupMembers(params.keySourceId);
-      const candidate = this.findMoveCandidate(members);
+      const { accountIndex, accounts } = this.deriveNextGroupAccounts(params.keySourceId);
+      const candidate = this.findMoveCandidate(accounts);
       if (candidate) return { status: "move-available", ...candidate };
       const creation = this.#accounts.prepareAddGroup({
         accountGroupId: crypto.randomUUID(),
         source: { type: "bip39", keySourceId: params.keySourceId, accountIndex },
-        members,
+        accounts,
         createdAt: this.#time.now(),
       });
       await commitUpdates(commit, [creation.update]);
-      return { status: "created", account: creation.account };
+      return { status: "created", accountGroup: creation.accountGroup };
     });
   }
 
   async movePrivateKeyAccount({ accountId, keySourceId }: MovePrivateKeyAccountInput): Promise<AccountGroup> {
     return this.#mutations.run(async (commit) => {
       this.assertUnlocked();
-      const group = this.#accounts.getGroupForMember(accountId);
+      const group = this.#accounts.getGroupForAccount(accountId);
       if (!group) throw new AccountNotFoundError(accountId);
       if (group.source.type === "bip39" && group.source.keySourceId === keySourceId) return group;
-      if (group.source.type !== "private-key") throw new WalletAccountMoveConflictError(group.members[0].accountId);
-      const { accountIndex, members } = this.deriveNextGroupMembers(keySourceId);
-      this.assertGroupMembersAreDerived(group, members);
+      if (group.source.type !== "private-key") throw new WalletAccountMoveConflictError(group.accounts[0].accountId);
+      const { accountIndex, accounts } = this.deriveNextGroupAccounts(keySourceId);
+      this.assertGroupAccountsAreDerived(group, accounts);
       const move = this.#accounts.prepareMoveGroup(
         group.accountGroupId,
         { type: "bip39", keySourceId, accountIndex },
-        members,
+        accounts,
       );
       const keyringUpdate = this.#keyring.prepareRemoveKeySource(group.source.keySourceId);
       await this.commitKeyringUpdate(commit, keyringUpdate, [move.update]);
-      return move.account;
+      return move.accountGroup;
     });
   }
 
@@ -311,12 +311,15 @@ export class WalletCoordinator {
     hidden: boolean;
   }): Promise<SetAccountGroupHiddenResult> {
     return this.#mutations.run(async (commit) => {
-      const visibility = this.#accounts.prepareSetGroupHidden(params.accountGroupId, params.hidden);
-      const result = { account: visibility.account, replacementAccount: visibility.replacementAccount };
-      if (!visibility.update) return result;
-      const accountIds = visibility.account.members.map((member) => member.accountId);
+      const { accountGroup, replacementGroup, update } = this.#accounts.prepareSetGroupHidden(
+        params.accountGroupId,
+        params.hidden,
+      );
+      const result = { accountGroup, replacementGroup };
+      if (!update) return result;
+      const accountIds = accountGroup.accounts.map((account) => account.accountId);
       const permissionUpdate = params.hidden ? this.#permissions.prepareRemoveAccountReferences(accountIds) : null;
-      await commitUpdates(commit, [visibility.update, permissionUpdate]);
+      await commitUpdates(commit, [update, permissionUpdate]);
       if (params.hidden) this.#approvals.cancelByAccounts(accountIds);
       this.#dappConnections.refreshAccountsForOpenConnections();
       return result;
@@ -330,7 +333,7 @@ export class WalletCoordinator {
     const mnemonic = parseBip39Mnemonic(params.mnemonic);
     return this.#mutations.run(async (commit) => {
       if (this.#keyring.getSoftwareKeyStatus() !== "uninitialized") return { status: "already-initialized" };
-      const members = this.deriveFirstAccountIds(mnemonic);
+      const derivedAccounts = this.deriveFirstGroupAccounts(mnemonic);
       const createdAt = this.#time.now();
       const addition = await this.#keyring.prepareInitializeBip39Source({
         ...params,
@@ -342,7 +345,7 @@ export class WalletCoordinator {
       const creation = this.#accounts.prepareAddGroup({
         accountGroupId,
         source: { type: "bip39", keySourceId: addition.keySourceId, accountIndex: 0 },
-        members,
+        accounts: derivedAccounts,
         createdAt,
       });
       await this.commitKeyringUpdate(commit, addition.update, [creation.update]);
@@ -359,43 +362,43 @@ export class WalletCoordinator {
     this.#publishStatusChanged({ type: "walletStatusChanged", status: "unlocked" });
   }
 
-  private deriveFirstAccountIds(mnemonic: string): AccountGroupRecord["members"] {
+  private deriveFirstGroupAccounts(mnemonic: string): AccountGroupRecord["accounts"] {
     return this.#keyring.deriveBip39AccountIds({ mnemonic, namespaces: this.#namespaces, accountIndex: 0 });
   }
 
-  private deriveNextGroupMembers(
+  private deriveNextGroupAccounts(
     keySourceId: KeySourceId,
-  ): Readonly<{ accountIndex: number; members: AccountGroupRecord["members"] }> {
+  ): Readonly<{ accountIndex: number; accounts: AccountGroupRecord["accounts"] }> {
     const source = this.#keyring.getKeySource(keySourceId);
     if (!source) throw new KeySourceNotFoundError(keySourceId);
     if (source.type !== "bip39") throw new Error("HD account creation requires a BIP39 source.");
     const accountIndex = this.#accounts.nextAccountIndex(keySourceId);
-    const members = this.#keyring.deriveHdAccountIds({ keySourceId, namespaces: this.#namespaces, accountIndex });
-    return { accountIndex, members };
+    const accounts = this.#keyring.deriveHdAccountIds({ keySourceId, namespaces: this.#namespaces, accountIndex });
+    return { accountIndex, accounts };
   }
 
   private findMoveCandidate(
     derivedIds: readonly { accountId: AccountId }[],
-  ): Readonly<{ account: AccountGroup; accountId: AccountId }> | null {
-    let candidate: Readonly<{ account: AccountGroup; accountId: AccountId }> | null = null;
+  ): Readonly<{ accountGroup: AccountGroup; accountId: AccountId }> | null {
+    let candidate: Readonly<{ accountGroup: AccountGroup; accountId: AccountId }> | null = null;
     for (const { accountId } of derivedIds) {
-      const group = this.#accounts.getGroupForMember(accountId);
+      const group = this.#accounts.getGroupForAccount(accountId);
       if (!group) continue;
       if (
         group.source.type !== "private-key" ||
-        (candidate !== null && candidate.account.accountGroupId !== group.accountGroupId)
+        (candidate !== null && candidate.accountGroup.accountGroupId !== group.accountGroupId)
       ) {
         throw new Error("Derived identities already belong to incompatible account groups.");
       }
-      candidate = { account: group, accountId };
+      candidate = { accountGroup: group, accountId };
     }
     return candidate;
   }
 
-  private assertGroupMembersAreDerived(group: AccountGroup, derivedIds: readonly { accountId: AccountId }[]): void {
-    for (const member of group.members) {
-      if (!derivedIds.some((derived) => derived.accountId === member.accountId))
-        throw new WalletAccountMoveConflictError(member.accountId);
+  private assertGroupAccountsAreDerived(group: AccountGroup, derivedIds: readonly { accountId: AccountId }[]): void {
+    for (const account of group.accounts) {
+      if (!derivedIds.some((derived) => derived.accountId === account.accountId))
+        throw new WalletAccountMoveConflictError(account.accountId);
     }
   }
 
@@ -413,7 +416,7 @@ export class WalletCoordinator {
 
   private getCompletedMnemonicMove(group: AccountGroup, keySourceId: KeySourceId): KeySourceAdded {
     if (group.source.type !== "bip39" || group.source.keySourceId !== keySourceId || group.source.accountIndex !== 0) {
-      throw new WalletAccountMoveConflictError(group.members[0].accountId);
+      throw new WalletAccountMoveConflictError(group.accounts[0].accountId);
     }
     return { keySourceId, accountGroupId: group.accountGroupId };
   }

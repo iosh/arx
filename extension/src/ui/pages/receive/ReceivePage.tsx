@@ -20,18 +20,19 @@ export function ReceivePage({
   from: "home" | "account";
 }) {
   const { t } = useTranslation(["wallet", "common"]);
-  const { data: accounts, isFetching: readingAccounts } = useVisibleAccounts();
-  const account = accounts?.find(
+  const { data: accountGroups, isFetching: readingAccounts } = useVisibleAccounts();
+  const accountGroup = accountGroups?.find(
     (candidate) =>
-      candidate.accountGroupId === accountGroupId && candidate.members.some((member) => member.accountId === accountId),
+      candidate.accountGroupId === accountGroupId &&
+      candidate.accounts.some((account) => account.accountId === accountId),
   );
-  const { data: source } = useMnemonicSource(account);
-  const member = account?.members.find((candidate) => candidate.accountId === accountId);
-  const address = member?.defaultAddress;
-  const namespaceUi = member && getNamespaceUi(member.namespace);
-  const name = account ? getAccountName(account, t) : undefined;
+  const { data: source } = useMnemonicSource(accountGroup);
+  const account = accountGroup?.accounts.find((candidate) => candidate.accountId === accountId);
+  const address = account?.defaultAddress;
+  const namespaceUi = account && getNamespaceUi(account.namespace);
+  const name = accountGroup ? getAccountName(accountGroup, t) : undefined;
   const subtitle = source && name ? `${source.name} · ${name}` : name;
-  const unavailable = accounts && !account ? t("accountUnavailable") : undefined;
+  const unavailable = accountGroups && !accountGroup ? t("accountUnavailable") : undefined;
 
   return (
     <main className="flex h-full flex-col font-sans">

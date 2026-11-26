@@ -150,15 +150,15 @@ const createHarness = (params: { rejectCommit?: Error; autoLockDurationMs?: numb
   };
 };
 
-const memberId = (accounts: Accounts, accountGroupId: string): AccountId => {
+const firstAccountId = (accounts: Accounts, accountGroupId: string): AccountId => {
   const group = accounts.getGroup(accountGroupId);
   assert(group !== null);
-  return group.members[0].accountId;
+  return group.accounts[0].accountId;
 };
-const groupIdForMember = (accounts: Accounts, accountId: AccountId): string => {
-  const member = accounts.getMember(accountId);
-  assert(member !== null);
-  return member.accountGroupId;
+const groupIdForAccount = (accounts: Accounts, accountId: AccountId): string => {
+  const account = accounts.getAccount(accountId);
+  assert(account !== null);
+  return account.accountGroupId;
 };
 
 const initializeWallet = async (wallet: WalletCoordinator) => {
@@ -191,16 +191,16 @@ const createWalletWithTwoAuthorizedAccounts = async () => {
   const harness = createHarness();
   const created = await initializeWallet(harness.wallet);
   const accounts = harness.accounts;
-  const { account: group } = await harness.wallet.createHdAccountGroup({ keySourceId: created.keySourceId });
+  const { accountGroup: group } = await harness.wallet.createHdAccountGroup({ keySourceId: created.keySourceId });
   const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
   await harness.grantPermission({
     ...scope,
-    accountIds: [memberId(accounts, created.accountGroupId), group.members[0].accountId],
+    accountIds: [firstAccountId(accounts, created.accountGroupId), group.accounts[0].accountId],
   });
   return {
     ...harness,
-    accountId: memberId(accounts, created.accountGroupId),
-    replacementId: group.members[0].accountId,
+    accountId: firstAccountId(accounts, created.accountGroupId),
+    replacementId: group.accounts[0].accountId,
     scope,
     requestSign: (accountId: AccountId) => requestAccountSign(harness, accountId),
   };
@@ -245,7 +245,7 @@ describe("WalletCoordinator", () => {
       {
         type: "accountsChanged",
         accountGroupIds: [created.accountGroupId],
-        accountIds: [memberId(accounts, created.accountGroupId)],
+        accountIds: [firstAccountId(accounts, created.accountGroupId)],
         namespaces: ["eip155"],
       },
     ]);
@@ -392,7 +392,7 @@ describe("WalletCoordinator", () => {
     await accounts.rename({ accountGroupId: imported.accountGroupId, alias: "Daily" });
     await accounts.select(other.accountGroupId);
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await grantPermission({ ...scope, accountIds: [memberId(accounts, imported.accountGroupId)] });
+    await grantPermission({ ...scope, accountIds: [firstAccountId(accounts, imported.accountGroupId)] });
     const before = accounts.getGroup(imported.accountGroupId);
     const commitCount = commits.length;
     const input = {
@@ -405,8 +405,8 @@ describe("WalletCoordinator", () => {
     assert(offered.status === "move-available");
     expect(offered).toEqual({
       status: "move-available",
-      account: before,
-      accountId: memberId(accounts, imported.accountGroupId),
+      accountGroup: before,
+      accountId: firstAccountId(accounts, imported.accountGroupId),
     });
     expect(commits).toHaveLength(commitCount);
     expect(accounts.getSelectedGroup().accountGroupId).toBe(other.accountGroupId);
@@ -418,10 +418,10 @@ describe("WalletCoordinator", () => {
     expect(accounts.getGroup(added.accountGroupId)).toEqual({
       ...before,
       source: { type: "bip39", keySourceId: added.keySourceId, accountIndex: 0 },
-      members: before.members,
+      accounts: before.accounts,
       selected: true,
     });
-    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, imported.accountGroupId)]);
+    expect(permissions.get(scope)?.accountIds).toEqual([firstAccountId(accounts, imported.accountGroupId)]);
     const expectedSourceIds = new Set([other.keySourceId, added.keySourceId]);
     expect(new Set(keyring.listKeySources().map(({ keySourceId }) => keySourceId))).toEqual(expectedSourceIds);
     expect(accounts.nextAccountIndex(added.keySourceId)).toBe(1);
@@ -442,8 +442,8 @@ describe("WalletCoordinator", () => {
     const imported = await wallet.importPrivateKey({ privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE });
     assert(imported.status === "added");
     const keys = [
-      { accountId: derived.account.members[0].accountId, privateKey: `0x${NEXT_PRIVATE_KEY}` },
-      { accountId: memberId(accounts, imported.accountGroupId), privateKey: `0x${PRIVATE_KEY}` },
+      { accountId: derived.accountGroup.accounts[0].accountId, privateKey: `0x${NEXT_PRIVATE_KEY}` },
+      { accountId: firstAccountId(accounts, imported.accountGroupId), privateKey: `0x${PRIVATE_KEY}` },
     ];
 
     await expect(wallet.exportMnemonic({ keySourceId: source.keySourceId, password: "password" })).resolves.toEqual({
@@ -502,8 +502,8 @@ describe("WalletCoordinator", () => {
     assert(candidate.status === "move-available");
     expect(candidate).toEqual({
       status: "move-available",
-      account: accounts.getGroup(imported.accountGroupId),
-      accountId: memberId(accounts, imported.accountGroupId),
+      accountGroup: accounts.getGroup(imported.accountGroupId),
+      accountId: firstAccountId(accounts, imported.accountGroupId),
     });
 
     const moved = await wallet.movePrivateKeyAccount({
@@ -511,9 +511,9 @@ describe("WalletCoordinator", () => {
       keySourceId: first.keySourceId,
     });
     expect(moved).toEqual({
-      ...candidate.account,
+      ...candidate.accountGroup,
       source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 1 },
-      members: candidate.account.members,
+      accounts: candidate.accountGroup.accounts,
     });
     expect(accounts.getGroup(imported.accountGroupId)).toEqual(moved);
     expect(keyring.getKeySource(imported.keySourceId)).toBeNull();
@@ -522,11 +522,11 @@ describe("WalletCoordinator", () => {
     const next = await wallet.createHdAccountGroup({ keySourceId: first.keySourceId });
     expect(next).toMatchObject({
       status: "created",
-      account: {
+      accountGroup: {
         source: { type: "bip39", keySourceId: first.keySourceId, accountIndex: 2 },
       },
     });
-    expect(next.account.members[0].accountId).not.toBe(memberId(accounts, imported.accountGroupId));
+    expect(next.accountGroup.accounts[0].accountId).not.toBe(firstAccountId(accounts, imported.accountGroupId));
     expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
   });
 
@@ -537,15 +537,18 @@ describe("WalletCoordinator", () => {
     const retained = requestSign(replacementId);
     const commitCount = fixture.commits.length;
 
-    await fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForMember(accounts, accountId), hidden: true });
+    await fixture.wallet.setAccountGroupHidden({
+      accountGroupId: groupIdForAccount(accounts, accountId),
+      hidden: true,
+    });
     expect(fixture.commits).toHaveLength(commitCount + 1);
-    expect(fixture.accounts.getGroupForMember(accountId)).toMatchObject({ hidden: true, selected: false });
-    expect(fixture.accounts.getSelectedGroup().accountGroupId).toBe(groupIdForMember(accounts, replacementId));
+    expect(fixture.accounts.getGroupForAccount(accountId)).toMatchObject({ hidden: true, selected: false });
+    expect(fixture.accounts.getSelectedGroup().accountGroupId).toBe(groupIdForAccount(accounts, replacementId));
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
     expect(fixture.approvals.list().map(({ approvalId }) => approvalId)).toEqual([retained.approvalId]);
 
     await fixture.wallet.setAccountGroupHidden({
-      accountGroupId: groupIdForMember(accounts, accountId),
+      accountGroupId: groupIdForAccount(accounts, accountId),
       hidden: false,
     });
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([replacementId]);
@@ -558,16 +561,16 @@ describe("WalletCoordinator", () => {
     const failure = new Error("commit failed");
     fixture.setCommitFailure(failure);
     await expect(
-      fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForMember(accounts, accountId), hidden: true }),
+      fixture.wallet.setAccountGroupHidden({ accountGroupId: groupIdForAccount(accounts, accountId), hidden: true }),
     ).rejects.toBe(failure);
-    expect(fixture.accounts.getGroupForMember(accountId)).toMatchObject({ hidden: false, selected: true });
+    expect(fixture.accounts.getGroupForAccount(accountId)).toMatchObject({ hidden: false, selected: true });
     expect(fixture.permissions.get(scope)?.accountIds).toEqual([accountId, replacementId]);
     expect(fixture.approvals.list().map((approval) => approval.approvalId)).toEqual([pending.approvalId]);
 
     fixture.setCommitFailure(null);
     const commit = fixture.holdNextCommit();
     const hiding = fixture.wallet.setAccountGroupHidden({
-      accountGroupId: groupIdForMember(accounts, accountId),
+      accountGroupId: groupIdForAccount(accounts, accountId),
       hidden: true,
     });
     await commit.started;
@@ -596,31 +599,31 @@ describe("WalletCoordinator", () => {
     const another = await wallet.createHdAccountGroup({ keySourceId: second.keySourceId });
     const hidden = await wallet.createHdAccountGroup({ keySourceId: second.keySourceId });
     await wallet.setAccountGroupHidden({
-      accountGroupId: groupIdForMember(accounts, hidden.account.members[0].accountId),
+      accountGroupId: groupIdForAccount(accounts, hidden.accountGroup.accounts[0].accountId),
       hidden: true,
     });
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
     await grantPermission({
       ...scope,
       accountIds: [
-        memberId(accounts, first.accountGroupId),
-        memberId(accounts, second.accountGroupId),
-        another.account.members[0].accountId,
+        firstAccountId(accounts, first.accountGroupId),
+        firstAccountId(accounts, second.accountGroupId),
+        another.accountGroup.accounts[0].accountId,
       ],
     });
     for (const accountId of [
-      memberId(accounts, first.accountGroupId),
-      memberId(accounts, second.accountGroupId),
-      another.account.members[0].accountId,
+      firstAccountId(accounts, first.accountGroupId),
+      firstAccountId(accounts, second.accountGroupId),
+      another.accountGroup.accounts[0].accountId,
     ]) {
       requestAccountSign(harness, accountId);
     }
 
     const removalCommitCount = commits.length;
     const expectedRemoved = [
-      memberId(accounts, second.accountGroupId),
-      another.account.members[0].accountId,
-      hidden.account.members[0].accountId,
+      firstAccountId(accounts, second.accountGroupId),
+      another.accountGroup.accounts[0].accountId,
+      hidden.accountGroup.accounts[0].accountId,
     ];
     const removed = await wallet.removeKeySource({ keySourceId: second.keySourceId });
 
@@ -628,12 +631,14 @@ describe("WalletCoordinator", () => {
     expect(commits).toHaveLength(removalCommitCount + 1);
     expect(keyring.getKeySource(second.keySourceId)).toBeNull();
     expect(keyring.listKeySources().map(({ keySourceId }) => keySourceId)).toEqual([first.keySourceId]);
-    expect(accounts.listGroups().map((group) => group.members[0].accountId)).toEqual([
-      memberId(accounts, first.accountGroupId),
+    expect(accounts.listGroups().map((group) => group.accounts[0].accountId)).toEqual([
+      firstAccountId(accounts, first.accountGroupId),
     ]);
     expect(accounts.getSelectedGroup().accountGroupId).toBe(first.accountGroupId);
-    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, first.accountGroupId)]);
-    expect(approvals.list().map((approval) => approval.accountId)).toEqual([memberId(accounts, first.accountGroupId)]);
+    expect(permissions.get(scope)?.accountIds).toEqual([firstAccountId(accounts, first.accountGroupId)]);
+    expect(approvals.list().map((approval) => approval.accountId)).toEqual([
+      firstAccountId(accounts, first.accountGroupId),
+    ]);
     approvals.cancelAll();
   });
 
@@ -644,7 +649,7 @@ describe("WalletCoordinator", () => {
     const input = { privateKey: PRIVATE_KEY, namespace: EIP155_NAMESPACE } as const;
     const [imported, duplicate] = await Promise.all([wallet.importPrivateKey(input), wallet.importPrivateKey(input)]);
     assert(imported.status === "added");
-    expect(duplicate).toMatchObject({ status: "duplicate", account: { accountGroupId: imported.accountGroupId } });
+    expect(duplicate).toMatchObject({ status: "duplicate", accountGroup: { accountGroupId: imported.accountGroupId } });
     expect(commits).toHaveLength(commitCount + 1);
     expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
 
@@ -652,7 +657,7 @@ describe("WalletCoordinator", () => {
     const privateDuplicateCommitCount = commits.length;
     await expect(wallet.importPrivateKey({ ...input, privateKey: `0x${PRIVATE_KEY}` })).resolves.toMatchObject({
       status: "duplicate",
-      account: { accountGroupId: imported.accountGroupId },
+      accountGroup: { accountGroupId: imported.accountGroupId },
     });
     expect(commits).toHaveLength(privateDuplicateCommitCount);
     expect(accounts.getSelectedGroup().accountGroupId).toBe(first.accountGroupId);
@@ -663,7 +668,7 @@ describe("WalletCoordinator", () => {
     const hdDuplicateCommitCount = commits.length;
     await expect(wallet.importPrivateKey({ ...input, privateKey: FIRST_PRIVATE_KEY })).resolves.toMatchObject({
       status: "duplicate",
-      account: { accountGroupId: first.accountGroupId, hidden: true },
+      accountGroup: { accountGroupId: first.accountGroupId, hidden: true },
     });
     expect(commits).toHaveLength(hdDuplicateCommitCount);
     expect(accounts.getSelectedGroup().accountGroupId).toBe(imported.accountGroupId);
@@ -690,23 +695,23 @@ describe("WalletCoordinator", () => {
     });
     assert(imported.status === "added");
     const scope = { origin: "https://dapp.example", namespace: EIP155_NAMESPACE } as const;
-    await grantPermission({ ...scope, accountIds: [memberId(accounts, imported.accountGroupId)] });
-    const pending = requestAccountSign(harness, memberId(accounts, imported.accountGroupId));
+    await grantPermission({ ...scope, accountIds: [firstAccountId(accounts, imported.accountGroupId)] });
+    const pending = requestAccountSign(harness, firstAccountId(accounts, imported.accountGroupId));
     const failure = new Error("commit failed");
     setCommitFailure(failure);
     await expect(wallet.removeKeySource({ keySourceId: imported.keySourceId })).rejects.toBe(failure);
     expect(keyring.getKeySource(imported.keySourceId)).not.toBeNull();
     expect(accounts.getGroup(imported.accountGroupId)).toMatchObject({ selected: true });
-    expect(permissions.get(scope)?.accountIds).toEqual([memberId(accounts, imported.accountGroupId)]);
+    expect(permissions.get(scope)?.accountIds).toEqual([firstAccountId(accounts, imported.accountGroupId)]);
     expect(approvals.list().map((approval) => approval.approvalId)).toEqual([pending.approvalId]);
 
     setCommitFailure(null);
     const commitCount = commits.length;
     const commit = holdNextCommit();
-    const removedAccountId = memberId(accounts, imported.accountGroupId);
+    const removedAccountId = firstAccountId(accounts, imported.accountGroupId);
     const removing = wallet.removeKeySource({ keySourceId: imported.keySourceId });
     await commit.started;
-    requestAccountSign(harness, memberId(accounts, imported.accountGroupId));
+    requestAccountSign(harness, firstAccountId(accounts, imported.accountGroupId));
     commit.release();
     expect(await removing).toEqual([removedAccountId]);
 
@@ -789,7 +794,7 @@ describe("WalletCoordinator", () => {
     expect(keyring.getKeySource(created.keySourceId)).toEqual(source);
     await expect(
       wallet.exportPrivateKey({
-        accountId: memberId(accounts, created.accountGroupId),
+        accountId: firstAccountId(accounts, created.accountGroupId),
         password: "password",
       }),
     ).resolves.toEqual({ privateKey: `0x${PRIVATE_KEY}` });
@@ -799,7 +804,7 @@ describe("WalletCoordinator", () => {
     const { accounts, approvals, wallet, commits, events, keyring } = createHarness();
     const created = await initializeWallet(wallet);
     const selectableAccounts = [
-      accounts.getAddress({ accountId: memberId(accounts, created.accountGroupId), chainRef: "eip155:1" }),
+      accounts.getAddress({ accountId: firstAccountId(accounts, created.accountGroupId), chainRef: "eip155:1" }),
     ] as const;
     const pendingApproval = approvals.request({
       type: "accountAccess",
@@ -854,7 +859,7 @@ describe("WalletCoordinator", () => {
   it("finishes an admitted private-key export before the queued expiry lock", async () => {
     const { accounts, keyring, wallet } = createHarness();
     const initialized = await initializeWallet(wallet);
-    const accountId = memberId(accounts, initialized.accountGroupId);
+    const accountId = firstAccountId(accounts, initialized.accountGroupId);
     const verify = keyring.verifyPassword.bind(keyring);
     vi.spyOn(keyring, "verifyPassword").mockImplementation(async (password) => {
       const matches = await verify(password);
@@ -956,7 +961,7 @@ describe("WalletCoordinator", () => {
       mnemonic: PRIMARY_MNEMONIC,
       name: "Recovered",
       backupStatus: "confirmed",
-      accountId: memberId(accounts, imported.accountGroupId),
+      accountId: firstAccountId(accounts, imported.accountGroupId),
     } as const;
     const failure = new Error("commit failed");
     setCommitFailure(failure);
@@ -967,7 +972,7 @@ describe("WalletCoordinator", () => {
     expect(keyring.listKeySources().map((source) => source.keySourceId)).toEqual([imported.keySourceId]);
     await expect(
       wallet.exportPrivateKey({
-        accountId: memberId(accounts, imported.accountGroupId),
+        accountId: firstAccountId(accounts, imported.accountGroupId),
         password: "password",
       }),
     ).resolves.toEqual({ privateKey: `0x${FIRST_PRIVATE_KEY}` });

@@ -1,6 +1,6 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { type AccountId, getAccountIdNamespace } from "../accounts/accountId.js";
-import type { AccountGroupSource, AccountMemberRecord } from "../accounts/persistence.js";
+import type { AccountGroupSource, AccountRecord } from "../accounts/persistence.js";
 import type { Namespace } from "../namespaces/types.js";
 import type { CoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { PersistenceChange } from "../persistence/persistenceTypes.js";
@@ -112,9 +112,9 @@ export class Keyring {
     mnemonic: string;
     namespaces: readonly [Namespace, ...Namespace[]];
     accountIndex: number;
-  }): readonly [AccountMemberRecord, ...AccountMemberRecord[]] {
+  }): readonly [AccountRecord, ...AccountRecord[]] {
     const seed = deriveBip39Seed(params.mnemonic);
-    const derive = (namespace: Namespace): AccountMemberRecord => {
+    const derive = (namespace: Namespace): AccountRecord => {
       const adapter = this.#namespaceAdapters[namespace];
       const privateKey = adapter.derivePrivateKey({ seed, accountIndex: params.accountIndex });
       try {
@@ -135,7 +135,7 @@ export class Keyring {
     keySourceId: KeySourceId;
     namespaces: readonly [Namespace, ...Namespace[]];
     accountIndex: number;
-  }): readonly [AccountMemberRecord, ...AccountMemberRecord[]] {
+  }): readonly [AccountRecord, ...AccountRecord[]] {
     const secret = this.requireKeySourceSecret(params.keySourceId);
     if (secret.type !== "bip39") throw new Error("HD account derivation requires a BIP39 source.");
     return this.deriveBip39AccountIds({ ...params, mnemonic: secret.mnemonic });

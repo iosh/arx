@@ -1,4 +1,4 @@
-import type { AccountGroup, AccountGroupId, AccountId, AccountMember } from "@arx/core/accounts";
+import type { Account, AccountGroup, AccountGroupId, AccountId } from "@arx/core/accounts";
 import { Link } from "@tanstack/react-router";
 import { Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -7,13 +7,13 @@ import { useCopyToClipboard } from "@/ui/hooks/useCopyToClipboard";
 import { getNamespaceUi } from "@/ui/namespaces";
 
 export function AccountAddressCard({
-  account,
-  memberId,
+  accountGroup,
+  accountId,
   copyable = true,
   receivable = false,
 }: {
-  account: AccountGroup | undefined;
-  memberId?: AccountId;
+  accountGroup: AccountGroup | undefined;
+  accountId?: AccountId;
   copyable?: boolean;
   receivable?: boolean;
 }) {
@@ -24,13 +24,13 @@ export function AccountAddressCard({
       aria-label={t("accountAddress")}
       className="min-h-17 shrink-0 rounded-2xl bg-card py-1 text-card-foreground shadow-[0_1px_3px_var(--shadow)]"
     >
-      {account?.members
-        .filter((member) => memberId === undefined || member.accountId === memberId)
-        .map((member) => (
+      {accountGroup?.accounts
+        .filter((account) => accountId === undefined || account.accountId === accountId)
+        .map((account) => (
           <AddressRow
-            key={member.accountId}
-            accountGroupId={account.accountGroupId}
-            member={member}
+            key={account.accountId}
+            accountGroupId={accountGroup.accountGroupId}
+            account={account}
             copyable={copyable}
             receivable={receivable}
           />
@@ -41,17 +41,17 @@ export function AccountAddressCard({
 
 function AddressRow({
   accountGroupId,
-  member,
+  account,
   copyable,
   receivable,
 }: {
   accountGroupId: AccountGroupId;
-  member: AccountMember;
+  account: Account;
   copyable: boolean;
   receivable: boolean;
 }) {
   const { t } = useTranslation(["wallet", "common"]);
-  const { Icon, labelKey } = getNamespaceUi(member.namespace);
+  const { Icon, labelKey } = getNamespaceUi(account.namespace);
   const { copy, isCopying, copied, copyFailed } = useCopyToClipboard();
   const details = (
     <>
@@ -59,7 +59,7 @@ function AddressRow({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-sm font-semibold">{t(labelKey)}</span>
         <p dir="ltr" className="min-h-4 break-all text-xs font-medium text-muted-foreground">
-          {member.defaultAddress}
+          {account.defaultAddress}
         </p>
       </div>
     </>
@@ -71,7 +71,7 @@ function AddressRow({
         {receivable ? (
           <Link
             to="/wallet/accounts/$accountGroupId/receive/$accountId"
-            params={{ accountGroupId, accountId: member.accountId }}
+            params={{ accountGroupId, accountId: account.accountId }}
             aria-label={t("showAddressQrCode")}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -90,7 +90,7 @@ function AddressRow({
             aria-busy={isCopying}
             title={t(copied ? "addressCopied" : "copyAddress")}
             disabled={isCopying}
-            onClick={() => copy(member.defaultAddress)}
+            onClick={() => copy(account.defaultAddress)}
           >
             {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
           </Button>

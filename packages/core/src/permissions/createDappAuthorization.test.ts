@@ -84,7 +84,6 @@ const approval = (
             value: "0x0",
             data: "0x",
             gas: "0x5208",
-            nonce: "0x0",
             type: "legacy",
             gasPrice: "0x1",
           },

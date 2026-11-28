@@ -10,13 +10,11 @@ const baseRequest = {
     decimals: 18,
   },
   rpcUrls: ["https://mainnet.base.org", "https://mainnet.base.org"],
-  blockExplorerUrls: ["https://basescan.org"],
-  iconUrls: ["https://base.org/icon.png"],
 };
 
 describe("EIP-3085 chain import", () => {
   it("projects wallet_addEthereumChain params to a custom network input", () => {
-    const input = decodeAddEthereumChainParams([baseRequest], "wallet_addEthereumChain");
+    const input = decodeAddEthereumChainParams([{ ...baseRequest, blockExplorerUrls: ["https://basescan.org"] }]);
 
     expect(input.definition).toEqual({
       chainRef: "eip155:8453",
@@ -27,25 +25,20 @@ describe("EIP-3085 chain import", () => {
     expect(input.defaultRpcEndpoints).toEqual(["https://mainnet.base.org"]);
   });
 
+  it("omits block explorers when the dapp supplies no eligible URL", () => {
+    for (const metadata of [{}, { blockExplorerUrls: null }, { blockExplorerUrls: ["ipfs://base-explorer"] }]) {
+      const input = decodeAddEthereumChainParams([{ ...baseRequest, ...metadata }]);
+
+      expect(input.definition).not.toHaveProperty("blockExplorers");
+    }
+  });
+
   it("allows only HTTPS or loopback HTTP RPC endpoints", () => {
     for (const rpcUrl of ["http://mainnet.base.org", "wss://mainnet.base.org"]) {
-      expect(() =>
-        decodeAddEthereumChainParams(
-          [
-            {
-              ...baseRequest,
-              rpcUrls: [rpcUrl],
-            },
-          ],
-          "wallet_addEthereumChain",
-        ),
-      ).toThrow();
+      expect(() => decodeAddEthereumChainParams([{ ...baseRequest, rpcUrls: [rpcUrl] }])).toThrow();
     }
 
-    const input = decodeAddEthereumChainParams(
-      [{ ...baseRequest, rpcUrls: ["http://localhost:8545"] }],
-      "wallet_addEthereumChain",
-    );
+    const input = decodeAddEthereumChainParams([{ ...baseRequest, rpcUrls: ["http://localhost:8545"] }]);
 
     expect(input.defaultRpcEndpoints).toEqual(["http://localhost:8545"]);
   });

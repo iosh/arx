@@ -23,66 +23,73 @@ afterEach(async () => {
 });
 
 describe("CoreRuntime EIP-155 RPC", () => {
-  it("reports an uncertain raw broadcast without replaying it", async () => {
+  it("rejects malformed raw transactions and reports an uncertain broadcast without replaying it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetch);
     const { runtime } = await open();
     const scope = { origin: "https://rpc.example", namespace: "eip155" } as const;
     runtime.dappConnections.openConnection(scope);
+    const sendRawTransaction = (rawTransaction: string) =>
+      runtime.dappConnections.request({ scope, method: "eth_sendRawTransaction", params: [rawTransaction] });
 
-    await expect(
-      runtime.dappConnections.request({ scope, method: "eth_sendRawTransaction", params: ["0x01"] }),
-    ).rejects.toMatchObject({ code: "global.rpc.outcome_unknown" });
+    for (const rawTransaction of ["0x", "0x1"]) {
+      await expect(sendRawTransaction(rawTransaction)).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(sendRawTransaction("0x01")).rejects.toMatchObject({ code: "global.rpc.outcome_unknown" });
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("persists network edits and removes RPC overrides and site references across runtime reloads", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>(async (endpoint, init) => {
-      const request = JSON.parse((init as RequestInit).body as string) as { id: number; method: string };
-      const base = String(endpoint).startsWith("https://base");
-      const result = request.method === "eth_chainId" ? (base ? "0x2105" : "0x1") : "0x1234";
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }));
+  it("adds an approved dapp network, restores its RPC override, and removes its saved references", async () => {
+    const chainRef = "eip155:8453";
+    const defaultEndpoint = "https://base.example";
+    const overrideEndpoint = "https://base-active.example";
+    const explorerUrls = ["https://basescan.org", "https://base.blockscout.com"];
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_endpoint, init) => {
+      const { id, method } = JSON.parse(String(init?.body)) as { id: number; method: string };
+      if (method !== "eth_chainId" && method !== "eth_blockNumber") throw new Error(`Unexpected RPC method ${method}`);
+      const result = method === "eth_chainId" ? "0x2105" : "0x1234";
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }));
     });
     vi.stubGlobal("fetch", fetch);
     const databaseName = `arx-rpc-runtime-${databaseId++}`;
     const { runtime, persistence } = await open(databaseName);
+    const scope = { origin: "https://base-site.example", namespace: "eip155" } as const;
+    runtime.dappConnections.openConnection(scope);
+
+    const request = runtime.dappConnections.request({
+      scope,
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: "0x2105",
+          chainName: "Base",
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["http://base.example", defaultEndpoint, "https://base-backup.example"],
+          blockExplorerUrls: ["http://base.example", ...explorerUrls],
+          iconUrls: ["ipfs://base-icon"],
+        },
+      ],
+    });
+    const [approval] = await runtime.wallet.approvals.list();
+    assert(approval?.type === "addNetwork");
     expect(fetch).not.toHaveBeenCalled();
 
-    const chainRef = await runtime.wallet.networks.queryChainRef({
-      namespace: "eip155",
-      endpoint: "https://base.example",
+    await runtime.wallet.approvals.approve({ approvalId: approval.approvalId, type: "addNetwork" });
+    await expect(request).resolves.toBeNull();
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([defaultEndpoint]);
+    const [network] = await persistence.readers.customNetworks.listAll();
+    expect(network).toMatchObject({
+      definition: { chainRef, blockExplorers: explorerUrls.map((url) => ({ url })) },
     });
-    expect(chainRef).toBe("eip155:8453");
-    expect(await runtime.wallet.networks.get(chainRef)).toBeNull();
-    await runtime.wallet.networks.addCustom({
-      definition: {
-        chainRef,
-        name: "Base",
-        nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
-      },
-      defaultRpcEndpoints: ["https://base.example", "https://base-backup.example"],
-    });
+    expect(network?.definition).not.toHaveProperty("iconUrl");
+
     await runtime.wallet.networks.updateRpcEndpoints({
-      chainRef: "eip155:8453",
-      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-active.example" },
+      chainRef,
+      update: { type: "replace", index: 0, expectedUrl: defaultEndpoint, url: overrideEndpoint },
     });
-    await runtime.wallet.networks.updateRpcEndpoints({
-      chainRef: "eip155:8453",
-      update: { type: "remove", index: 1, expectedUrl: "https://base-backup.example" },
-    });
-    await runtime.wallet.networks.updateCustom({
-      chainRef: "eip155:8453",
-      changes: { name: "Base Mainnet" },
-    });
-    await runtime.wallet.networks.updateBlockExplorers({
-      chainRef: "eip155:8453",
-      update: { type: "add", url: "https://basescan.org" },
-    });
-    await runtime.wallet.networks.updateBlockExplorers({
-      chainRef: "eip155:8453",
-      update: { type: "add", url: "https://base.blockscout.com" },
-    });
-    const removedSite = { origin: "https://base-site.example", namespace: "eip155", chainRef: "eip155:8453" } as const;
+    await runtime.wallet.networks.updateCustom({ chainRef, changes: { name: "Base Mainnet" } });
+    const removedSite = { ...scope, chainRef } as const;
     const otherSite = { origin: "https://other-site.example", namespace: "eip155", chainRef: "eip155:10" } as const;
     await persistence.writer.commit([removedSite, otherSite].map(persistenceTypes.dappNetworkSelection.put));
     await runtime.wallet.lock();
@@ -91,43 +98,24 @@ describe("CoreRuntime EIP-155 RPC", () => {
     fetch.mockClear();
     const { runtime: restored, persistence: restoredPersistence } = await open(databaseName);
     expect(fetch).not.toHaveBeenCalled();
-    await expect(restored.wallet.networks.get("eip155:8453")).resolves.toMatchObject({
-      name: "Base Mainnet",
-      blockExplorers: [{ url: "https://basescan.org" }, { url: "https://base.blockscout.com" }],
-    });
-    await expect(restored.wallet.networks.getRpcConfiguration("eip155:8453")).resolves.toMatchObject({
+    await expect(restored.wallet.networks.get(chainRef)).resolves.toMatchObject({ name: "Base Mainnet" });
+    await expect(restored.wallet.networks.getRpcConfiguration(chainRef)).resolves.toEqual({
       source: "override",
-      endpoints: ["https://base-active.example"],
-      defaultEndpoints: ["https://base.example", "https://base-backup.example"],
+      endpoints: [overrideEndpoint],
+      defaultEndpoints: [defaultEndpoint],
     });
-    const scope = { origin: removedSite.origin, namespace: removedSite.namespace };
     restored.dappConnections.openConnection(scope);
     await expect(restored.dappConnections.request({ scope, method: "eth_blockNumber" })).resolves.toBe("0x1234");
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(String(fetch.mock.calls[0]?.[0])).toBe("https://base-active.example");
-    await expect(restored.wallet.networks.clearRpcOverride("eip155:8453")).resolves.toEqual({
-      source: "default",
-      endpoints: ["https://base.example", "https://base-backup.example"],
-    });
-    expect(fetch).toHaveBeenCalledOnce();
-    await restored.wallet.networks.updateRpcEndpoints({
-      chainRef: "eip155:8453",
-      update: { type: "replace", index: 0, expectedUrl: "https://base.example", url: "https://base-active.example" },
-    });
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([overrideEndpoint]);
 
-    fetch.mockClear();
-    await restored.wallet.networks.removeCustom("eip155:8453");
-    await restored.wallet.lock();
-    await restoredPersistence.close();
-
-    const afterRemoval = await open(databaseName);
-    expect(fetch).not.toHaveBeenCalled();
-    await expect(afterRemoval.runtime.wallet.networks.get("eip155:8453")).resolves.toBeNull();
-    await expect(afterRemoval.persistence.readers.networkRpcOverrides.listAll()).resolves.toEqual([]);
-    await expect(afterRemoval.persistence.readers.dappNetworkSelections.listAll()).resolves.toEqual([otherSite]);
+    await restored.wallet.networks.removeCustom(chainRef);
+    const { customNetworks, networkRpcOverrides, dappNetworkSelections } = restoredPersistence.readers;
+    await expect(customNetworks.listAll()).resolves.toEqual([]);
+    await expect(networkRpcOverrides.listAll()).resolves.toEqual([]);
+    await expect(dappNetworkSelections.listAll()).resolves.toEqual([otherSite]);
   });
 
-  it("signs empty personal data only after dapp authorization and approval", async () => {
+  it("rejects incomplete personal message bytes and signs empty data only after authorization and approval", async () => {
     const { runtime } = await open();
     const wallet = runtime.wallet;
     const created = await wallet.createFromPrivateKey({
@@ -144,9 +132,13 @@ describe("CoreRuntime EIP-155 RPC", () => {
     await expect(runtime.dappConnections.request({ scope, method: "personal_sign", params })).rejects.toMatchObject({
       code: "global.rpc.unauthorized",
     });
-    expect(await wallet.approvals.list()).toEqual([]);
 
     await wallet.permissions.setAccounts({ ...scope, accountIds: [account.accountId] });
+    await expect(
+      runtime.dappConnections.request({ scope, method: "personal_sign", params: ["0xa", address] }),
+    ).rejects.toMatchObject({ code: "global.rpc.invalid_params" });
+    expect(await wallet.approvals.list()).toEqual([]);
+
     const dappSignature = runtime.dappConnections.request({ scope, method: "personal_sign", params });
     const [approval] = await wallet.approvals.list();
     assert(approval?.type === "sign" && approval.request.type === "personalMessage");

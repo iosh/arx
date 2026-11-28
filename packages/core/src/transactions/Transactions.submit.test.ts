@@ -24,20 +24,21 @@ import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import type { CoreTime } from "../runtime/time.js";
 import { WalletLockedError } from "../wallet/errors.js";
 import { createEip155TransactionsAdapter } from "./eip155/adapter.js";
+import { TransactionMonitor } from "./eip155/TransactionMonitor.js";
 import {
   type PendingTransactionRecord,
   type TransactionsReader,
   transactionRecordToTransaction,
 } from "./persistence.js";
 import type { PreparedTransaction } from "./preparedTransaction.js";
-import { TransactionMonitor } from "./TransactionMonitor.js";
 import { createTransactions, type TransactionsChanged } from "./Transactions.js";
 import type { Transaction, TransactionId } from "./types.js";
 
 const CHAIN_REF = "eip155:1";
+const BLOCK_NUMBER = "0x10";
 const TRANSACTION_HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId): PreparedTransaction => ({
+const prepared = (replacesTransactionId?: TransactionId): PreparedTransaction => ({
   namespace: "eip155",
   chainRef: CHAIN_REF,
   accountId: ACCOUNT_ID,
@@ -49,17 +50,23 @@ const prepared = (nonce?: `0x${string}`, replacesTransactionId?: TransactionId):
     value: "0x0",
     data: "0x",
     gas: "0x5208",
-    ...(nonce === undefined ? {} : { nonce }),
     type: "legacy",
     gasPrice: "0x1",
   },
 });
 
 const replacementTarget: Transaction = {
-  ...prepared("0x1"),
+  ...prepared(),
   transactionId: "transaction-target",
   hash: TRANSACTION_HASH,
-  transaction: { ...prepared("0x1").transaction, nonce: "0x1" },
+  transaction: {
+    ...prepared().transaction,
+    nonce: "0x1",
+    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    value: "0x123",
+    data: "0xabcd",
+    gas: "0x10000",
+  },
   state: { status: "pending" },
   createdAt: 1,
   updatedAt: 1,
@@ -82,6 +89,10 @@ const createFixture = (target: Transaction | null = null) => {
   const receipt = vi.fn<(hash: Hex.Hex) => Promise<unknown>>(async () => null);
   const request = vi.fn(async ({ method, params }: JsonRpcHttpRequest): Promise<unknown> => {
     if (method === "eth_getTransactionCount") return "0x1";
+    if (method === "eth_blockNumber") return BLOCK_NUMBER;
+    if (method === "eth_getCode") return "0x";
+    if (method === "eth_gasPrice") return "0x30";
+    if (method === "eth_estimateGas") return "0x88b8";
     if (method === "eth_sendRawTransaction") {
       assert(Array.isArray(params) && Hex.validate(params[0]));
       return broadcast(params[0]);
@@ -127,7 +138,14 @@ const createFixture = (target: Transaction | null = null) => {
   const time = { now: () => 100, schedule };
   const mutations = createCoreMutationQueue({ commit });
   const adapters = { eip155: adapter };
-  const monitor = new TransactionMonitor({ adapters, mutations, time, publishChanged });
+  const monitor = new TransactionMonitor({
+    chainJsonRpc,
+    transactions: reader,
+    broadcast: adapter.broadcast,
+    mutations,
+    time,
+    publishChanged,
+  });
   const transactions = createTransactions({
     readers: { transactions: reader },
     accounts,
@@ -173,13 +191,13 @@ describe("Transactions.submit", () => {
       await write(changes);
     });
 
-    const pending = fixture.transactions.submit(prepared("0x1"));
+    const pending = fixture.transactions.submit(prepared());
     try {
       await vi.waitFor(() => expect(fixture.commit).toHaveBeenCalledOnce());
       const record = committedRecord(fixture.commit);
       assert(record.recovery);
       expect(record.hash).toBe(Hash.keccak256(record.recovery.rawTransaction));
-      expect(fixture.request).not.toHaveBeenCalled();
+      expect(fixture.broadcast).not.toHaveBeenCalled();
       expect(fixture.publishChanged).not.toHaveBeenCalled();
     } finally {
       persistence.resolve();
@@ -206,8 +224,8 @@ describe("Transactions.submit", () => {
     const failure = new PersistenceCommitError(new Error("IndexedDB transaction aborted"));
     fixture.commit.mockRejectedValueOnce(failure);
 
-    await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toBe(failure);
-    expect(fixture.request).not.toHaveBeenCalled();
+    await expect(fixture.transactions.submit(prepared())).rejects.toBe(failure);
+    expect(fixture.broadcast).not.toHaveBeenCalled();
     expect(fixture.publishChanged).not.toHaveBeenCalled();
     expect(fixture.schedule).not.toHaveBeenCalled();
   });
@@ -260,6 +278,20 @@ describe("Transactions.submit", () => {
       transactionId: replacementTarget.transactionId,
       type: "cancel",
     });
+    expect(replacement.transaction).toMatchObject({
+      to: ADDRESS,
+      value: "0x0",
+      data: "0x",
+      gas: "0x88b8",
+      gasPrice: "0x30",
+    });
+    expect(replacement.transaction).not.toHaveProperty("nonce");
+    expect(fixture.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "eth_estimateGas",
+        params: [expect.objectContaining({ to: ADDRESS, value: "0x0", data: "0x", nonce: "0x1" })],
+      }),
+    );
     fixture.broadcast.mockRejectedValueOnce(
       new ChainJsonRpcResponseError({
         rpcCode: -32_000,
@@ -299,7 +331,7 @@ describe("Transactions.submit", () => {
     const endpoints = fixture.networks.getRpcEndpoints(CHAIN_REF);
     expect(endpoints.length).toBeGreaterThan(1);
 
-    const submission = await fixture.transactions.submit(prepared("0x1"));
+    const submission = await fixture.transactions.submit(prepared());
 
     const record = committedRecord(fixture.commit);
     expect(submission).toMatchObject({
@@ -337,17 +369,17 @@ describe("Transactions.submit", () => {
     const fixture = createFixture();
     fixture.signDigest.mockRejectedValueOnce(new WalletLockedError());
 
-    await expect(fixture.transactions.submit(prepared("0x1"))).rejects.toMatchObject({
+    await expect(fixture.transactions.submit(prepared())).rejects.toMatchObject({
       code: "eip155.transaction.signing_unavailable",
     });
     expect(fixture.commit).not.toHaveBeenCalled();
-    expect(fixture.request).not.toHaveBeenCalled();
+    expect(fixture.broadcast).not.toHaveBeenCalled();
   });
 
   it("rejects a replacement whose target was removed", async () => {
     const fixture = createFixture();
 
-    await expect(fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId))).rejects.toMatchObject({
+    await expect(fixture.transactions.submit(prepared(replacementTarget.transactionId))).rejects.toMatchObject({
       code: "transaction.not_found",
     });
     expect(fixture.signDigest).not.toHaveBeenCalled();
@@ -359,7 +391,7 @@ describe("Transactions.submit", () => {
     const pendingRead = Promise.withResolvers<readonly PendingTransactionRecord[]>();
     fixture.listPending.mockReturnValueOnce(pendingRead.promise);
 
-    const submission = fixture.transactions.submit(prepared("0x1", replacementTarget.transactionId));
+    const submission = fixture.transactions.submit(prepared(replacementTarget.transactionId));
     await vi.waitFor(() => expect(fixture.listPending).toHaveBeenCalled());
     fixture.listPending.mockResolvedValue([pendingReplacement]);
     pendingRead.resolve([]);
@@ -370,6 +402,36 @@ describe("Transactions.submit", () => {
     });
     expect(fixture.signDigest).not.toHaveBeenCalled();
     expect(fixture.commit).not.toHaveBeenCalled();
-    expect(fixture.request).not.toHaveBeenCalled();
+    expect(fixture.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("checks for delegated account code again before signing a cancellation", async () => {
+    const fixture = createFixture(replacementTarget);
+    const replacement = await fixture.transactions.prepareReplacement({
+      transactionId: replacementTarget.transactionId,
+      type: "cancel",
+    });
+    const respond = fixture.request.getMockImplementation();
+    assert(respond);
+    // A reorg replaced the transaction that used the preceding nonce with a delegation.
+    fixture.request.mockClear();
+    fixture.request.mockImplementation((input) =>
+      input.method === "eth_getCode"
+        ? Promise.resolve("0xef0100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        : respond(input),
+    );
+
+    await expect(fixture.transactions.submit(replacement)).rejects.toMatchObject({
+      code: "eip155.transaction.cancellation_unavailable",
+      details: { reason: "account_has_code" },
+    });
+    expect(fixture.request).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "eth_getTransactionCount", params: [ADDRESS, BLOCK_NUMBER] }),
+    );
+    expect(fixture.request).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "eth_getCode", params: [ADDRESS, BLOCK_NUMBER] }),
+    );
+    expect(fixture.signDigest).not.toHaveBeenCalled();
+    expect(fixture.commit).not.toHaveBeenCalled();
   });
 });

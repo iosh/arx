@@ -1,26 +1,26 @@
+import * as Hex from "ox/Hex";
 import { z } from "zod";
 import { ChainJsonRpcHttpTransportError } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
-import { type DappRequestMethod, defineDappMethod, invalidDappParams } from "../../dappConnections/defineDappMethod.js";
+import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcOutcomeUnknownError } from "../../dappConnections/errors.js";
 import type { BroadcastEip155RawTransaction } from "./broadcastRawTransaction.js";
-import { decodeHexBytes } from "./rpcHex.js";
 
-const SEND_RAW_TRANSACTION_PARAMS_SCHEMA = z.tuple([z.string()]);
-
-const decodeSendRawTransactionParams = (params: unknown, method: string) => {
-  const [rawTransaction] = SEND_RAW_TRANSACTION_PARAMS_SCHEMA.parse(params);
-  const encoded = decodeHexBytes(rawTransaction, method, "rawTransaction");
-  if (encoded === "0x") {
-    throw invalidDappParams(method, "rawTransaction must not be empty.");
-  }
-  return encoded;
-};
+const sendRawTransactionParams = z.tuple([
+  z
+    .string()
+    .toLowerCase()
+    .refine(
+      (value) => value !== "0x" && Hex.validate(value, { strict: true, even: true }),
+      "Expected non-empty hexadecimal transaction bytes with a 0x prefix.",
+    )
+    .transform((value) => value as Hex.Hex),
+]);
 
 export const createEip155SendRawTransactionMethod = (
   broadcastRawTransaction: BroadcastEip155RawTransaction,
 ): DappRequestMethod =>
   defineDappMethod({
-    decode: decodeSendRawTransactionParams,
+    decode: (params) => sendRawTransactionParams.parse(params)[0],
     execute: async ({ chainRef, params: rawTransaction }) => {
       try {
         return await broadcastRawTransaction({ chainRef, rawTransaction });

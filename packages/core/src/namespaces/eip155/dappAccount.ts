@@ -1,3 +1,4 @@
+import type { Address } from "ox/Address";
 import type { Accounts } from "../../accounts/Accounts.js";
 import type { AccountAddress } from "../../accounts/types.js";
 import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
@@ -13,7 +14,7 @@ export type AuthorizedAccountDependencies = Readonly<{
 
 export const getAuthorizedAccount = (
   dependencies: AuthorizedAccountDependencies,
-  input: Readonly<{ origin: string; chainRef: ChainRef; address: string }>,
+  input: Readonly<{ origin: string; chainRef: ChainRef; address: Address }>,
 ): AccountAddress => {
   const accountId = accountIdFromAddress(input.address);
   const permission = dependencies.permissions.get({

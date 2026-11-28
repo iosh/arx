@@ -4,7 +4,7 @@ import type { AccountsNamespaceAdapter } from "../../accounts/namespaceAdapter.j
 import { EIP155_NAMESPACE } from "./constants.js";
 
 /** The address has already been decoded at the dapp boundary or derived from a key. */
-export const accountIdFromAddress = (address: string): AccountId =>
+export const accountIdFromAddress = (address: Address.Address): AccountId =>
   formatAccountId({ namespace: EIP155_NAMESPACE, payload: address.slice(2).toLowerCase() });
 
 const addressForAccountId = ({ accountId }: { accountId: AccountId }) => {

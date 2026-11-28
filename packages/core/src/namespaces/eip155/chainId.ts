@@ -7,8 +7,10 @@ export type Eip155ChainRef = `${typeof EIP155_NAMESPACE}:${string}`;
 // Ox's legacy serialization evaluates chainId * 2 + 35 + v - 27 with v up to 28 using numbers.
 export const MAX_EIP155_CHAIN_ID = (BigInt(Number.MAX_SAFE_INTEGER) - 63n) / 2n;
 
+export const isSupportedEip155ChainId = (chainId: bigint): boolean => chainId >= 1n && chainId <= MAX_EIP155_CHAIN_ID;
+
 export const assertEip155ChainId = (chainId: bigint): void => {
-  if (chainId < 1n || chainId > MAX_EIP155_CHAIN_ID) {
+  if (!isSupportedEip155ChainId(chainId)) {
     throw new Eip155InvalidChainIdError({ value: `${chainId}` });
   }
 };

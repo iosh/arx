@@ -1,4 +1,4 @@
-import { Hex, Signature } from "ox";
+import { type Address, Hex, Signature } from "ox";
 import type { Approvals } from "../../approvals/Approvals.js";
 import { type DappRequestMethod, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError, RpcUnauthorizedError } from "../../dappConnections/errors.js";
@@ -27,7 +27,7 @@ export const createEip155DappSigningHandlers = (
   const approveAndSign = async (input: {
     origin: string;
     chainRef: ChainRef;
-    address: string;
+    address: Address.Address;
     payload: Eip155SignPayload;
     digest: Hex.Hex;
   }): Promise<Hex.Hex> => {

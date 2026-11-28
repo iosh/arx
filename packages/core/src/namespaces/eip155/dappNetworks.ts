@@ -11,9 +11,10 @@ import {
   NetworkRpcEndpointReadError,
 } from "../../networks/errors.js";
 import type { Networks } from "../../networks/Networks.js";
+import { chainIdFromChainRef, chainRefFromChainId, type Eip155ChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
+import { chainIdParam } from "./dappChainId.js";
 import { decodeAddEthereumChainParams } from "./eip3085.js";
-import { decodeChainId } from "./rpcHex.js";
 
 type CreateEip155DappNetworkHandlersOptions = Readonly<{
   networks: Pick<Networks, "get" | "addCustom">;
@@ -21,20 +22,14 @@ type CreateEip155DappNetworkHandlersOptions = Readonly<{
   approvals: Pick<Approvals, "request">;
 }>;
 
-const SWITCH_ETHEREUM_CHAIN_PARAMS_SCHEMA = z.tuple([
-  z.object({
-    chainId: z.string(),
-  }),
-]);
+const SWITCH_ETHEREUM_CHAIN_PARAMS_SCHEMA = z.tuple(
+  [z.object({ chainId: chainIdParam })],
+  "Expected a single parameter object.",
+);
 
-const decodeSwitchEthereumChainParams = (params: unknown, method: string) => {
-  const [request] = SWITCH_ETHEREUM_CHAIN_PARAMS_SCHEMA.parse(params);
-  return decodeChainId(request.chainId, method);
-};
-
-const unrecognizedChain = (chainId: string, chainRef: string): RpcUnrecognizedChainError =>
+const unrecognizedChain = (chainRef: Eip155ChainRef): RpcUnrecognizedChainError =>
   new RpcUnrecognizedChainError({
-    message: `Unrecognized chain ID "${chainId}".`,
+    message: `Unrecognized chain ID "0x${chainIdFromChainRef(chainRef).toString(16)}".`,
     details: { chainRef },
   });
 
@@ -45,16 +40,19 @@ export const createEip155DappNetworkHandlers = (
   addEthereumChain: DappRequestMethod;
 }> => ({
   switchEthereumChain: defineDappMethod({
-    decode: decodeSwitchEthereumChainParams,
-    execute: async ({ origin, chainRef, params }) => {
-      if (params.chainRef === chainRef) return null;
+    decode: (params) => {
+      const [{ chainId }] = SWITCH_ETHEREUM_CHAIN_PARAMS_SCHEMA.parse(params);
+      return chainRefFromChainId(chainId);
+    },
+    execute: async ({ origin, chainRef, params: targetChainRef }) => {
+      if (targetChainRef === chainRef) return null;
 
       const currentNetwork = options.networks.get(chainRef);
       if (!currentNetwork) {
         throw new Error("The active EIP-155 network is unavailable.");
       }
-      const targetNetwork = options.networks.get(params.chainRef);
-      if (!targetNetwork) throw unrecognizedChain(params.chainId, params.chainRef);
+      const targetNetwork = options.networks.get(targetChainRef);
+      if (!targetNetwork) throw unrecognizedChain(targetChainRef);
 
       const approval = options.approvals.request<"switchNetwork">({
         type: "switchNetwork",
@@ -68,10 +66,10 @@ export const createEip155DappNetworkHandlers = (
         await options.dappConnections.selectNetwork({
           origin,
           namespace: EIP155_NAMESPACE,
-          chainRef: params.chainRef,
+          chainRef: targetChainRef,
         });
       } catch (error) {
-        if (error instanceof NetworkNotFoundError) throw unrecognizedChain(params.chainId, params.chainRef);
+        if (error instanceof NetworkNotFoundError) throw unrecognizedChain(targetChainRef);
         throw error;
       }
       return null;

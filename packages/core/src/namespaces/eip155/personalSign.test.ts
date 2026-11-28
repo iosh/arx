@@ -11,16 +11,11 @@ it("preserves personal-sign bytes and reversed parameter order", () => {
       message: { format: "utf8", value: "hello" },
       digest: "0x50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750",
     },
-    {
-      input: "0x1234",
+    ...["0x1234", "0X1234", "1234"].map((input) => ({
+      input,
       message: { format: "hex", value: "0x1234" },
       digest: "0x456d81ecedeaa272a18e100870c4def2ef78a70e3e077ba40e0a92114b5865c5",
-    },
-    {
-      input: "1234",
-      message: { format: "hex", value: "0x1234" },
-      digest: "0x456d81ecedeaa272a18e100870c4def2ef78a70e3e077ba40e0a92114b5865c5",
-    },
+    })),
   ] as const;
   for (const example of cases) {
     for (const params of [
@@ -32,6 +27,13 @@ it("preserves personal-sign bytes and reversed parameter order", () => {
       expect(personalMessageDigest(decoded.message)).toBe(example.digest);
     }
   }
+
+  const messageBytes = "1111111111111111111111111111111111111111";
+  expect(decodePersonalSignParams([inputAddress, `0X${messageBytes}`], "personal_sign")).toEqual({
+    address,
+    message: { format: "hex", value: `0x${messageBytes}` },
+  });
+
   expect(() => decodePersonalSignParams(["hello", ` ${address} `], "personal_sign")).toThrow(
     "valid EIP-155 account address",
   );

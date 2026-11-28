@@ -28,8 +28,8 @@ import { Permissions } from "../permissions/Permissions.js";
 import type { DappScope } from "../permissions/scope.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { createEip155TransactionsAdapter } from "../transactions/eip155/adapter.js";
+import { TransactionMonitor } from "../transactions/eip155/TransactionMonitor.js";
 import type { TransactionsNamespaceAdapters } from "../transactions/namespaceAdapter.js";
-import { TransactionMonitor } from "../transactions/TransactionMonitor.js";
 import { createTransactions } from "../transactions/Transactions.js";
 import { AutoLockController } from "../wallet/AutoLockController.js";
 import { createAccountKeys } from "../wallet/accountKeys.js";
@@ -152,7 +152,9 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     }),
   } as const satisfies TransactionsNamespaceAdapters;
   const transactionMonitor = new TransactionMonitor({
-    adapters: transactionAdapters,
+    chainJsonRpc,
+    transactions: input.persistence.readers.transactions,
+    broadcast: transactionAdapters[EIP155_NAMESPACE].broadcast,
     mutations,
     time: systemTime,
     publishChanged: publishWalletEvent,

@@ -13,7 +13,6 @@ import {
   transactionWrites,
 } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
-import type { TransactionMonitor } from "./TransactionMonitor.js";
 import type {
   Transaction,
   TransactionId,
@@ -48,7 +47,10 @@ type TransactionsOptions = Readonly<{
   mutations: CoreMutationQueue;
   time: Pick<CoreTime, "now">;
   adapters: TransactionsNamespaceAdapters;
-  monitor: Pick<TransactionMonitor, "track" | "stop">;
+  monitor: Readonly<{
+    track(record: PendingTransactionRecord): void;
+    untrack(transactionId: TransactionId): void;
+  }>;
   publishChanged(change: TransactionsChanged): void;
 }>;
 
@@ -72,14 +74,9 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
     if (!params.accounts.getAccount(target.accountId)) throw new AccountNotFoundError(target.accountId);
     if (!params.networks.get(target.chainRef)) throw new NetworkNotFoundError(target.chainRef);
 
-    const { canonicalAddress } = params.accounts.getAddress({
-      chainRef: target.chainRef,
-      accountId: target.accountId,
-    });
     const prepared = await adapter.prepareReplacement({
       target,
       type: input.type,
-      from: canonicalAddress,
     });
 
     return {
@@ -96,44 +93,50 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
     // Recheck before and after RPC-backed preparation because these prerequisites may change while it awaits.
     if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
     if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
-    if (prepared.replacesTransactionId !== undefined) {
-      await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
-    }
+    const replacement =
+      prepared.replacesTransactionId === undefined
+        ? undefined
+        : {
+            target: await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId),
+            type: prepared.replacementType,
+          };
 
-    const { transactionId, signed } = await adapter.withSigningInput(prepared, (signingInput) =>
-      params.mutations.run(async (commit) => {
-        if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
-        if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
-        if (prepared.replacesTransactionId !== undefined) {
-          await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
-        }
+    const { transactionId, signed } = await adapter.withSigningInput(
+      prepared,
+      (signingInput) =>
+        params.mutations.run(async (commit) => {
+          if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
+          if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
+          if (replacement) {
+            await readReplaceableTransaction(params.readers.transactions, replacement.target.transactionId);
+          }
 
-        const signed = await adapter.sign(signingInput);
-        const now = params.time.now();
-        const record: PendingTransactionRecord = {
-          transactionId: globalThis.crypto.randomUUID(),
-          namespace: prepared.namespace,
-          chainRef: prepared.chainRef,
-          accountId: prepared.accountId,
-          initiator: prepared.initiator,
-          ...(prepared.replacesTransactionId === undefined
-            ? {}
-            : { replacesTransactionId: prepared.replacesTransactionId }),
-          ...(prepared.replacementType === undefined ? {} : { replacementType: prepared.replacementType }),
-          hash: signed.hash,
-          transaction: signed.transaction,
-          state: { status: "pending" },
-          recovery: signed.recovery,
-          createdAt: now,
-          updatedAt: now,
-        };
+          const signed = await adapter.sign(signingInput);
+          const now = params.time.now();
+          const record: PendingTransactionRecord = {
+            transactionId: globalThis.crypto.randomUUID(),
+            namespace: prepared.namespace,
+            chainRef: prepared.chainRef,
+            accountId: prepared.accountId,
+            initiator: prepared.initiator,
+            ...(replacement
+              ? { replacesTransactionId: replacement.target.transactionId, replacementType: replacement.type }
+              : {}),
+            hash: signed.hash,
+            transaction: signed.transaction,
+            state: { status: "pending" },
+            recovery: signed.recovery,
+            createdAt: now,
+            updatedAt: now,
+          };
 
-        await commit([transactionWrites.put(record)]);
+          await commit([transactionWrites.put(record)]);
 
-        params.monitor.track(record);
-        params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
-        return { transactionId: record.transactionId, signed };
-      }),
+          params.monitor.track(record);
+          params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
+          return { transactionId: record.transactionId, signed };
+        }),
+      replacement,
     );
 
     const broadcast = await adapter.broadcast(signed);
@@ -151,7 +154,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
 
         await commit([transactionWrites.put(failed)]);
 
-        params.monitor.stop(transactionId);
+        params.monitor.untrack(transactionId);
         params.publishChanged({ type: "transactionsChanged", transactionIds: [transactionId] });
         return failed;
       });

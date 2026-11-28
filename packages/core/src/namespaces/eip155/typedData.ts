@@ -1,8 +1,9 @@
 import { Hex, Solidity, TypedData } from "ox";
 import { z } from "zod";
-import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
+import { invalidDappParams, invalidDappParamsFromZod } from "../../dappConnections/defineDappMethod.js";
 import { RpcInvalidParamsError } from "../../dappConnections/errors.js";
-import { parseDappAddress } from "./rpcHex.js";
+import { parseAddress } from "./address.js";
+import { addHexPrefix } from "./hexPrefix.js";
 import type { Eip155TypedData, Eip155TypedDataField, Eip155TypedDataValue } from "./signingRequest.js";
 
 const TYPED_DATA_FIELD_SCHEMA = z.strictObject({
@@ -22,18 +23,21 @@ export const decodeSignTypedDataV4Params = (params: unknown, method: string) => 
     throw invalidDappParams(method, "expected exactly an address and typed data payload.");
   }
 
-  const address = parseDappAddress(params[0]);
+  const [inputAddress, data] = params;
+  const address = typeof inputAddress === "string" ? parseAddress(addHexPrefix(inputAddress)) : null;
   if (address === null) {
     throw invalidDappParams(method, "expected a valid EIP-155 account address.");
   }
 
-  return { address, ...decodeTypedData(params[1], method) };
+  return { address, ...decodeTypedData(data, method) };
 };
 
 function decodeTypedData(value: unknown, method: string) {
-  const parsed = TYPED_DATA_SCHEMA.parse(parseTypedDataJson(value, method));
+  const parsed = TYPED_DATA_SCHEMA.safeParse(parseTypedDataJson(value, method));
+  if (!parsed.success) throw invalidDappParamsFromZod(method, parsed.error, "typedData");
+
   try {
-    const signedData = projectTypedDataForSigning(parsed, method);
+    const signedData = projectTypedDataForSigning(parsed.data, method);
     const domainChainId = decodeDomainChainId(signedData.domain.chainId, method);
 
     const digest = TypedData.getSignPayload({

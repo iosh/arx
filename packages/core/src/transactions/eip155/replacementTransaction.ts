@@ -1,55 +1,27 @@
-import type { Hex } from "ox/Hex";
-import * as HexNumber from "../../utils/hex.js";
+import { fromNumber, type Hex } from "ox/Hex";
 import type { TransactionReplacementType } from "../types.js";
 import type * as Eip155 from "./types.js";
 
-const CANCEL_GAS = "0x5208" as Hex;
-const BUMP_NUMERATOR = 11n;
-const BUMP_DENOMINATOR = 10n;
-
-const increaseFee = (value: Hex): Hex => {
-  const current = HexNumber.toBigInt(value);
-  const scaled = current * BUMP_NUMERATOR;
-  const roundedUp = (scaled + BUMP_DENOMINATOR - 1n) / BUMP_DENOMINATOR;
-  return HexNumber.fromNumber(roundedUp > current ? roundedUp : current + 1n);
+export const replacementFee = (previous: Hex, estimate: Hex): Hex => {
+  const previousFee = BigInt(previous);
+  // Round the 10% increase up to a whole wei.
+  const increase = (previousFee + 9n) / 10n;
+  const minimumFee = previousFee + (increase > 0n ? increase : 1n);
+  const estimatedFee = BigInt(estimate);
+  return fromNumber(estimatedFee > minimumFee ? estimatedFee : minimumFee);
 };
 
 export const createEip155ReplacementRequest = (input: {
-  target: Eip155.Transaction;
+  target: Eip155.SignableTransaction;
   type: TransactionReplacementType;
-  from: string;
 }): Eip155.TransactionRequest => {
-  const target = input.target.transaction;
+  const target = input.target;
   const cancelling = input.type === "cancel";
-  const replacement = {
-    to: cancelling ? input.from : target.to,
-    value: cancelling ? ("0x0" as Hex) : target.value,
-    data: cancelling ? ("0x" as Hex) : target.data,
-    gas: cancelling ? CANCEL_GAS : target.gas,
-    nonce: target.nonce,
-  };
+  const fields = cancelling
+    ? { to: target.from, value: "0x0" as const, data: "0x" as const }
+    : { to: target.to, value: target.value, data: target.data, gas: target.gas };
 
-  switch (target.type) {
-    case "legacy":
-      return {
-        ...replacement,
-        type: "legacy",
-        gasPrice: increaseFee(target.gasPrice),
-      };
-    case "eip2930":
-      return {
-        ...replacement,
-        type: "eip2930",
-        gasPrice: increaseFee(target.gasPrice),
-        accessList: cancelling ? [] : target.accessList,
-      };
-    case "eip1559":
-      return {
-        ...replacement,
-        type: "eip1559",
-        maxFeePerGas: increaseFee(target.maxFeePerGas),
-        maxPriorityFeePerGas: increaseFee(target.maxPriorityFeePerGas),
-        accessList: cancelling ? [] : target.accessList,
-      };
-  }
+  return target.type === "legacy"
+    ? { ...fields, type: "legacy" }
+    : { ...fields, type: target.type, accessList: cancelling ? [] : target.accessList };
 };

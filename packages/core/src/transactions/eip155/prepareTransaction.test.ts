@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
+import { createChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import type { JsonRpcHttpRequest, JsonRpcHttpTransport } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import { Eip155PriorityFeeExceedsMaxFeeError, Eip155TransactionInvalidError } from "./errors.js";
 import { createEip155TransactionPreparer } from "./prepareTransaction.js";
 
@@ -7,11 +8,12 @@ const CHAIN_REF = "eip155:1";
 const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-const createRpc = (handler: (input: ChainJsonRpcRequest) => unknown | Promise<unknown>) => {
-  const request = vi.fn(async (input: ChainJsonRpcRequest) => handler(input));
-  const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
-  };
+const createRpc = (handler: (input: JsonRpcHttpRequest) => unknown | Promise<unknown>) => {
+  const request = vi.fn(async (input: JsonRpcHttpRequest) => handler(input));
+  const chainJsonRpc = createChainJsonRpc({
+    endpoints: { getRpcEndpoints: () => ["https://rpc.example"] },
+    transport: { request: request as JsonRpcHttpTransport["request"] },
+  });
 
   return { chainJsonRpc, request };
 };
@@ -35,7 +37,6 @@ describe("EIP-155 transaction preparation", () => {
           to: TO,
           value: "0x00",
           data: "0xabcd",
-          nonce: "0x01",
         },
       }),
     ).resolves.toEqual({
@@ -44,7 +45,6 @@ describe("EIP-155 transaction preparation", () => {
       value: "0x00",
       data: "0xabcd",
       gas: "0x5208",
-      nonce: "0x01",
       type: "eip1559",
       maxFeePerGas: "0x22",
       maxPriorityFeePerGas: "0x2",
@@ -55,22 +55,23 @@ describe("EIP-155 transaction preparation", () => {
       "eth_maxPriorityFeePerGas",
       "eth_estimateGas",
     ]);
-    expect(request).toHaveBeenLastCalledWith({
-      chainRef: CHAIN_REF,
-      method: "eth_estimateGas",
-      params: [
-        {
-          from: FROM,
-          to: TO,
-          value: "0x00",
-          data: "0xabcd",
-          type: "0x2",
-          maxFeePerGas: "0x22",
-          maxPriorityFeePerGas: "0x2",
-          accessList: [],
-        },
-      ],
-    });
+    expect(request).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        method: "eth_estimateGas",
+        params: [
+          {
+            from: FROM,
+            to: TO,
+            value: "0x00",
+            data: "0xabcd",
+            type: "0x2",
+            maxFeePerGas: "0x22",
+            maxPriorityFeePerGas: "0x2",
+            accessList: [],
+          },
+        ],
+      }),
+    );
   });
 
   it("does not query RPC for a complete legacy request", async () => {
@@ -89,7 +90,6 @@ describe("EIP-155 transaction preparation", () => {
           value: "0x01",
           data: "0x",
           gas: "0x5208",
-          nonce: "0x01",
           gasPrice: "0x03",
         },
       }),
@@ -99,7 +99,6 @@ describe("EIP-155 transaction preparation", () => {
       value: "0x01",
       data: "0x",
       gas: "0x5208",
-      nonce: "0x01",
       type: "legacy",
       gasPrice: "0x03",
     });
@@ -121,7 +120,6 @@ describe("EIP-155 transaction preparation", () => {
         transaction: {
           type: "eip1559",
           gas: "0x5208",
-          nonce: "0x05",
           maxFeePerGas: "0x40",
         },
       }),
@@ -131,7 +129,6 @@ describe("EIP-155 transaction preparation", () => {
       value: "0x0",
       data: "0x",
       gas: "0x5208",
-      nonce: "0x05",
       type: "eip1559",
       maxFeePerGas: "0x40",
       maxPriorityFeePerGas: "0x2",

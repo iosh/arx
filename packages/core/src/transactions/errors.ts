@@ -18,12 +18,14 @@ export class TransactionReplacementUnavailableError extends ArxBaseError {
   constructor(input: {
     transactionId: TransactionId;
     status: TransactionStatus;
-    reason?: "has_pending_replacement";
+    reason?: "has_pending_replacement" | "nonce_consumed";
   }) {
-    const message =
-      input.reason === "has_pending_replacement"
-        ? `Transaction "${input.transactionId}" already has a pending replacement.`
-        : `Transaction "${input.transactionId}" cannot be replaced while it is ${input.status}.`;
+    let message = `Transaction "${input.transactionId}" cannot be replaced while it is ${input.status}.`;
+    if (input.reason === "has_pending_replacement") {
+      message = `Transaction "${input.transactionId}" already has a pending replacement.`;
+    } else if (input.reason === "nonce_consumed") {
+      message = `The nonce for transaction "${input.transactionId}" has already been used on chain.`;
+    }
     super(message, {
       code: TransactionReplacementUnavailableError.code,
       details: input,

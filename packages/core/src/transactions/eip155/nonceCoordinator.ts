@@ -1,13 +1,14 @@
 import type { Hex } from "ox/Hex";
+import { fromNumber } from "ox/Hex";
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import type { ChainRef } from "../../networks/chainRef.js";
-import * as HexQuantity from "../../utils/hex.js";
 import type { PendingTransactionRecord } from "../persistence.js";
 import type * as Eip155 from "./types.js";
 
 type Eip155NonceInput = Readonly<{
   chainRef: ChainRef;
   transaction: Eip155.PreparedTransaction;
+  replacementNonce?: Hex;
 }>;
 
 type Eip155NonceCoordinator = Readonly<{
@@ -46,7 +47,7 @@ const withSenderQueue = async <T>(
 const getSenderKey = (input: Eip155NonceInput): string => `${input.chainRef}/${input.transaction.from.toLowerCase()}`;
 
 const getNextNonce = (
-  networkNonce: Hex,
+  networkNonce: bigint,
   records: readonly PendingTransactionRecord[],
   input: Eip155NonceInput,
 ): Hex => {
@@ -55,12 +56,12 @@ const getNextNonce = (
 
   for (const record of records) {
     if (record.chainRef !== input.chainRef || record.transaction.from.toLowerCase() !== sender) continue;
-    occupied.add(HexQuantity.toBigInt(record.transaction.nonce));
+    occupied.add(BigInt(record.transaction.nonce));
   }
 
-  let nonce = HexQuantity.toBigInt(networkNonce);
+  let nonce = networkNonce;
   while (occupied.has(nonce)) nonce += 1n;
-  return HexQuantity.fromNumber(nonce);
+  return fromNumber(nonce);
 };
 
 export const createEip155NonceCoordinator = (params: Eip155NonceCoordinatorOptions): Eip155NonceCoordinator => {
@@ -69,9 +70,8 @@ export const createEip155NonceCoordinator = (params: Eip155NonceCoordinatorOptio
   return {
     withTransactionNonce(input, use) {
       return withSenderQueue(tails, getSenderKey(input), async () => {
-        const explicitNonce = input.transaction.nonce;
-        if (explicitNonce !== undefined) {
-          return use({ ...input.transaction, nonce: explicitNonce });
+        if (input.replacementNonce !== undefined) {
+          return use({ ...input.transaction, nonce: input.replacementNonce });
         }
 
         const pendingRecords = await params.listPending();
@@ -80,7 +80,7 @@ export const createEip155NonceCoordinator = (params: Eip155NonceCoordinatorOptio
           method: "eth_getTransactionCount",
           params: [input.transaction.from, "pending"],
         });
-        return use({ ...input.transaction, nonce: getNextNonce(networkNonce, pendingRecords, input) });
+        return use({ ...input.transaction, nonce: getNextNonce(BigInt(networkNonce), pendingRecords, input) });
       });
     },
   };

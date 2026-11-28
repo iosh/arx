@@ -50,7 +50,11 @@ it("approves only signed typed-data fields and rejects inconsistent request data
     message: { details: [{ contents: "hello", ignored: "not signed" }], ignored: "not signed" },
   } as const;
 
-  const pending = request([ADDRESS, JSON.stringify(typedData)]);
+  await expect(request([ADDRESS, JSON.stringify({ ...typedData, primaryType: 1 })])).rejects.toMatchObject({
+    code: "global.rpc.invalid_params",
+    message: expect.stringContaining("typedData.primaryType"),
+  });
+  const pending = request([ADDRESS.slice(2).toUpperCase(), JSON.stringify(typedData)]);
   const [approval] = approvals.list();
   assert(approval?.type === "sign" && approval.request.type === "typedData");
   expect(approval.request.typedData).toEqual({

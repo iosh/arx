@@ -1,4 +1,5 @@
 import type { AccessList } from "ox/AccessList";
+import type { Address } from "ox/Address";
 import type { Hex } from "ox/Hex";
 import type { AccountId } from "../../accounts/accountId.js";
 import type { JsonValue } from "../../errors.js";
@@ -6,11 +7,10 @@ import type { ChainRef } from "../../networks/chainRef.js";
 import type { TransactionId, TransactionInitiator, TransactionReplacementType } from "../types.js";
 
 type TransactionRequestFields = Readonly<{
-  to?: string | null | undefined;
+  to?: Address | null | undefined;
   value?: Hex | undefined;
   data?: Hex | undefined;
   gas?: Hex | undefined;
-  nonce?: Hex | undefined;
 }>;
 
 export type AutoTransactionRequest = TransactionRequestFields & Readonly<{ type: "auto" }>;
@@ -43,12 +43,11 @@ export type TransactionRequest =
   | Eip1559TransactionRequest;
 
 type PreparedTransactionFields = Readonly<{
-  from: string;
-  to: string | null;
+  from: Address;
+  to: Address | null;
   value: Hex;
   data: Hex;
   gas: Hex;
-  nonce?: Hex;
 }>;
 
 export type LegacyPreparedTransaction = PreparedTransactionFields &
@@ -74,9 +73,7 @@ export type Eip1559PreparedTransaction = PreparedTransactionFields &
 
 export type PreparedTransaction = LegacyPreparedTransaction | Eip2930PreparedTransaction | Eip1559PreparedTransaction;
 
-type WithNonce<T> = T extends Readonly<{ nonce?: Hex }> ? Omit<T, "nonce"> & Readonly<{ nonce: Hex }> : never;
-
-export type SignableTransaction = WithNonce<PreparedTransaction>;
+export type SignableTransaction = PreparedTransaction & Readonly<{ nonce: Hex }>;
 
 export type TransactionRecovery = Readonly<{
   rawTransaction: Hex;
@@ -121,6 +118,7 @@ export type TransactionBroadcastFailure = Extract<TransactionFailure, Readonly<{
 export type TransactionState =
   | Readonly<{ status: "pending" }>
   | Readonly<{
+      /** The wallet observed a successful receipt and ended tracking. */
       status: "confirmed";
       confirmation: TransactionConfirmation;
     }>
@@ -130,9 +128,14 @@ export type TransactionState =
     }>
   | Readonly<{
       status: "replaced";
-      replacement: Readonly<{ type: "local"; transactionId: TransactionId }> | Readonly<{ type: "external" }>;
+      replacement:
+        | Readonly<{ type: "local"; transactionId: TransactionId }>
+        | Readonly<{ type: "external"; hash?: Hex }>;
     }>
-  | Readonly<{ status: "dropped" }>;
+  | Readonly<{
+      /** The wallet ended tracking with the on-chain execution result still unknown. */
+      status: "dropped";
+    }>;
 
 export type TerminalTransactionState = Exclude<TransactionState, Readonly<{ status: "pending" }>>;
 
@@ -153,14 +156,7 @@ export type Transaction = Readonly<{
 }>;
 
 export type BroadcastOutcome =
-  | Readonly<{
-      status: "accepted";
-      transactionHash: Hex;
-    }>
-  | Readonly<{
-      status: "unknown";
-      transactionHash: Hex;
-    }>
+  | Readonly<{ status: "pending" }>
   | Readonly<{
       status: "rejected";
       failure: TransactionBroadcastFailure;

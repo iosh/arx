@@ -1,6 +1,5 @@
 export * from "./accounts/index.js";
 export * from "./assets/index.js";
-export * from "./chains/index.js";
 export * from "./dappConnections/errors.js";
 export type { ArxErrorDetails, JsonValue } from "./errors.js";
 export { ArxBaseError, isArxBaseError } from "./errors.js";

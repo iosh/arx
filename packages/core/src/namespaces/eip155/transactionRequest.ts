@@ -1,199 +1,111 @@
-import { Address, Hex } from "ox";
-import type { AccessList } from "ox/AccessList";
+import { type Address, Hex } from "ox";
 import { z } from "zod";
 import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
-import type { ChainRef } from "../../networks/chainRef.js";
 import type * as Eip155 from "../../transactions/eip155/types.js";
-import { decodeChainId, decodeHexBytes, decodeHexNumber } from "./rpcHex.js";
+import { parseAddress } from "./address.js";
+import { chainIdParam } from "./dappChainId.js";
+import { hexQuantity } from "./hexQuantity.js";
 
-const ACCESS_LIST_SCHEMA = z.array(
-  z.strictObject({
-    address: z.string(),
-    storageKeys: z.array(z.string()),
-  }),
-);
-
-const COMMON_TRANSACTION_FIELDS = {
-  from: z.string(),
-  to: z.string().nullable().optional(),
-  value: z.string().optional(),
-  data: z.string().optional(),
-  gas: z.string().optional(),
-  nonce: z.string().optional(),
-  chainId: z.string().optional(),
-  type: z.string().optional(),
-} as const;
-
-const TRANSACTION_DISCRIMINATOR_SCHEMA = z.tuple([
-  z.looseObject({
-    type: z.unknown().optional(),
-    gasPrice: z.unknown().optional(),
-    maxFeePerGas: z.unknown().optional(),
-    maxPriorityFeePerGas: z.unknown().optional(),
-    accessList: z.unknown().optional(),
-  }),
-]);
-
-const AUTO_TRANSACTION_PARAMS_SCHEMA = z.tuple([z.strictObject(COMMON_TRANSACTION_FIELDS)]);
-const LEGACY_TRANSACTION_PARAMS_SCHEMA = z.tuple([
-  z.strictObject({
-    ...COMMON_TRANSACTION_FIELDS,
-    gasPrice: z.string().optional(),
-  }),
-]);
-const EIP2930_TRANSACTION_PARAMS_SCHEMA = z.tuple([
-  z.strictObject({
-    ...COMMON_TRANSACTION_FIELDS,
-    gasPrice: z.string().optional(),
-    accessList: ACCESS_LIST_SCHEMA.optional(),
-  }),
-]);
-const EIP1559_TRANSACTION_PARAMS_SCHEMA = z.tuple([
-  z.strictObject({
-    ...COMMON_TRANSACTION_FIELDS,
-    maxFeePerGas: z.string().optional(),
-    maxPriorityFeePerGas: z.string().optional(),
-    accessList: ACCESS_LIST_SCHEMA.optional(),
-  }),
-]);
-
-type TransactionKind = "auto" | "legacy" | "eip2930" | "eip1559";
-
-type RpcTransactionFields = Readonly<{
-  from: string;
-  to?: string | null | undefined;
-  value?: string | undefined;
-  data?: string | undefined;
-  gas?: string | undefined;
-  nonce?: string | undefined;
-  chainId?: string | undefined;
-}>;
-
-export type DecodedSendTransactionParams = Readonly<{
-  from: string;
-  transaction: Eip155.TransactionRequest;
-  requestedChainRef: ChainRef | undefined;
-}>;
-
-const decodeAddress = (value: string, method: string, field: string): Address.Address => {
-  if (!Address.validate(value, { strict: false })) {
-    throw invalidDappParams(method, `${field} must be a valid 0x-prefixed EIP-155 address.`);
-  }
-  return value;
-};
-
-const decodeAccessList = (
-  entries: z.infer<typeof ACCESS_LIST_SCHEMA> | undefined,
-  method: string,
-): AccessList | undefined => {
-  if (entries === undefined) return undefined;
-
-  return entries.map((entry, entryIndex) => ({
-    address: decodeAddress(entry.address, method, `accessList[${entryIndex}].address`),
-    storageKeys: entry.storageKeys.map((value, keyIndex) => {
-      const storageKey = decodeHexBytes(value, method, `accessList[${entryIndex}].storageKeys[${keyIndex}]`);
-      if (Hex.size(storageKey) !== 32) {
-        throw invalidDappParams(method, `accessList[${entryIndex}].storageKeys[${keyIndex}] must be 32 bytes.`);
-      }
-      return storageKey;
-    }),
-  }));
-};
-
-// Dapp nonce is accepted by the request shape but assigned by the wallet during signing.
-const decodeCommonFields = (request: RpcTransactionFields, method: string) => ({
-  from: decodeAddress(request.from, method, "from"),
-  to: request.to === undefined || request.to === null ? request.to : decodeAddress(request.to, method, "to"),
-  value: request.value === undefined ? undefined : decodeHexNumber(request.value, method, "value"),
-  data: request.data === undefined ? undefined : decodeHexBytes(request.data, method, "data"),
-  gas: request.gas === undefined ? undefined : decodeHexNumber(request.gas, method, "gas"),
-  requestedChainRef: request.chainId === undefined ? undefined : decodeChainId(request.chainId, method).chainRef,
+const address = z.string().transform((value, ctx) => {
+  const parsed = parseAddress(value);
+  if (parsed !== null) return parsed;
+  ctx.addIssue({ code: "custom", message: "Expected a valid EIP-155 address." });
+  return z.NEVER;
 });
 
-const decodeTransactionKind = (params: unknown, method: string): TransactionKind => {
-  const [request] = TRANSACTION_DISCRIMINATOR_SCHEMA.parse(params);
-  const type = request.type === undefined ? undefined : decodeHexNumber(request.type, method, "type");
+const hexBytes = z
+  .string()
+  .toLowerCase()
+  .refine(
+    (value): value is Hex.Hex => Hex.validate(value, { strict: true, even: true }),
+    "Expected complete hexadecimal bytes with a 0x prefix.",
+  );
 
+const sendTransactionParams = z.tuple([
+  z.strictObject({
+    from: address,
+    to: address.nullable().optional(),
+    value: hexQuantity.optional(),
+    data: hexBytes.optional(),
+    gas: hexQuantity.optional(),
+    nonce: z.string().optional(),
+    chainId: chainIdParam.optional(),
+    type: hexQuantity.optional(),
+    gasPrice: hexQuantity.optional(),
+    maxFeePerGas: hexQuantity.optional(),
+    maxPriorityFeePerGas: hexQuantity.optional(),
+    accessList: z
+      .array(
+        z.strictObject({
+          address,
+          storageKeys: z.array(hexBytes.refine((value) => Hex.size(value) === 32, "Expected a 32-byte storage key.")),
+        }),
+      )
+      .optional(),
+  }),
+]);
+
+type RpcTransaction = z.output<typeof sendTransactionParams>[0];
+
+export type DecodedSendTransactionParams = Readonly<{
+  from: Address.Address;
+  transaction: Eip155.TransactionRequest;
+  requestedChainId: bigint | undefined;
+}>;
+
+const decodeTransactionType = (request: RpcTransaction, method: string): Eip155.TransactionRequest["type"] => {
+  const { type, maxFeePerGas, maxPriorityFeePerGas, accessList, gasPrice } = request;
   if (type === "0x0") return "legacy";
   if (type === "0x1") return "eip2930";
   if (type === "0x2") return "eip1559";
-  if (type === "0x3") {
-    throw invalidDappParams(method, "EIP-4844 transaction type 0x3 is not supported.");
-  }
-  if (type === "0x4") {
-    throw invalidDappParams(method, "EIP-7702 transaction type 0x4 is not supported.");
-  }
-  if (type !== undefined) {
-    throw invalidDappParams(method, `transaction type ${type} is not supported.`);
-  }
+  if (type === "0x3") throw invalidDappParams(method, "EIP-4844 transaction type 0x3 is not supported.");
+  if (type === "0x4") throw invalidDappParams(method, "EIP-7702 transaction type 0x4 is not supported.");
+  if (type !== undefined) throw invalidDappParams(method, `transaction type ${type} is not supported.`);
 
-  if (request.maxFeePerGas !== undefined || request.maxPriorityFeePerGas !== undefined) return "eip1559";
-  if (request.accessList !== undefined) return "eip2930";
-  if (request.gasPrice !== undefined) return "legacy";
+  if (maxFeePerGas !== undefined || maxPriorityFeePerGas !== undefined) return "eip1559";
+  if (accessList !== undefined) return "eip2930";
+  if (gasPrice !== undefined) return "legacy";
   return "auto";
 };
 
 export const decodeSendTransactionParams = (params: unknown, method: string): DecodedSendTransactionParams => {
-  switch (decodeTransactionKind(params, method)) {
-    case "auto": {
-      const [request] = AUTO_TRANSACTION_PARAMS_SCHEMA.parse(params);
-      const { from, requestedChainRef, ...fields } = decodeCommonFields(request, method);
+  const [request] = sendTransactionParams.parse(params);
+  const {
+    from,
+    chainId: requestedChainId,
+    to,
+    value,
+    data,
+    gas,
+    gasPrice,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+    accessList,
+  } = request;
+  const type = decodeTransactionType(request, method);
+  if (type === "eip1559" && gasPrice !== undefined) {
+    throw invalidDappParams(method, "gasPrice cannot be used with an EIP-1559 transaction.");
+  }
+  if (type !== "eip1559" && (maxFeePerGas !== undefined || maxPriorityFeePerGas !== undefined)) {
+    throw invalidDappParams(method, "EIP-1559 fee fields require an EIP-1559 transaction.");
+  }
+  if (type === "legacy" && accessList !== undefined) {
+    throw invalidDappParams(method, "accessList cannot be used with a legacy transaction.");
+  }
+
+  const common = { to, value, data, gas };
+  switch (type) {
+    case "auto":
+      return { from, requestedChainId, transaction: { ...common, type } };
+    case "legacy":
+      return { from, requestedChainId, transaction: { ...common, type, gasPrice } };
+    case "eip2930":
+      return { from, requestedChainId, transaction: { ...common, type, gasPrice, accessList } };
+    case "eip1559":
       return {
         from,
-        requestedChainRef,
-        transaction: {
-          type: "auto",
-          ...fields,
-        },
+        requestedChainId,
+        transaction: { ...common, type, maxFeePerGas, maxPriorityFeePerGas, accessList },
       };
-    }
-    case "legacy": {
-      const [request] = LEGACY_TRANSACTION_PARAMS_SCHEMA.parse(params);
-      const { from, requestedChainRef, ...fields } = decodeCommonFields(request, method);
-      return {
-        from,
-        requestedChainRef,
-        transaction: {
-          type: "legacy",
-          ...fields,
-          gasPrice: request.gasPrice === undefined ? undefined : decodeHexNumber(request.gasPrice, method, "gasPrice"),
-        },
-      };
-    }
-    case "eip2930": {
-      const [request] = EIP2930_TRANSACTION_PARAMS_SCHEMA.parse(params);
-      const { from, requestedChainRef, ...fields } = decodeCommonFields(request, method);
-      return {
-        from,
-        requestedChainRef,
-        transaction: {
-          type: "eip2930",
-          ...fields,
-          gasPrice: request.gasPrice === undefined ? undefined : decodeHexNumber(request.gasPrice, method, "gasPrice"),
-          accessList: decodeAccessList(request.accessList, method),
-        },
-      };
-    }
-    case "eip1559": {
-      const [request] = EIP1559_TRANSACTION_PARAMS_SCHEMA.parse(params);
-      const { from, requestedChainRef, ...fields } = decodeCommonFields(request, method);
-      return {
-        from,
-        requestedChainRef,
-        transaction: {
-          type: "eip1559",
-          ...fields,
-          maxFeePerGas:
-            request.maxFeePerGas === undefined
-              ? undefined
-              : decodeHexNumber(request.maxFeePerGas, method, "maxFeePerGas"),
-          maxPriorityFeePerGas:
-            request.maxPriorityFeePerGas === undefined
-              ? undefined
-              : decodeHexNumber(request.maxPriorityFeePerGas, method, "maxPriorityFeePerGas"),
-          accessList: decodeAccessList(request.accessList, method),
-        },
-      };
-    }
   }
 };

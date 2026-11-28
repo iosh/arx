@@ -14,7 +14,7 @@ export type {
 
 export type Eip155PendingTransactionRecord = Omit<Eip155.Transaction, "state"> &
   Readonly<{
-    state: Readonly<{ status: "pending" }>;
+    state: Extract<Eip155.TransactionState, Readonly<{ status: "pending" }>>;
     recovery: Eip155.TransactionRecovery;
   }>;
 

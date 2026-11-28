@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
 import type { CustomNetworkInput, NonEmptyRpcEndpoints } from "../../networks/types.js";
-import { decodeChainId } from "./rpcHex.js";
+import { chainRefFromChainId } from "./chainId.js";
+import { chainIdParam } from "./dappChainId.js";
 
 const trimmed = () =>
   z
@@ -9,52 +9,50 @@ const trimmed = () =>
     .min(1)
     .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
 
-const httpsOrLoopbackHttpUrl = z.url().refine(
-  (value) => {
-    const url = new URL(value);
-    if (url.protocol === "https:") return true;
-    if (url.protocol !== "http:") return false;
-
-    return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-  },
-  { message: "URL must use HTTPS; HTTP is allowed only for loopback hosts" },
+const httpsOrLoopbackHttpUrl = z.union(
+  [z.url({ protocol: /^https$/ }), z.url({ protocol: /^http$/, hostname: /^(localhost|127\.0\.0\.1|\[::1\])$/ })],
+  "Expected an HTTPS URL or a loopback HTTP URL.",
 );
+
+const rpcUrls = z.array(z.unknown()).transform((candidates, ctx): NonEmptyRpcEndpoints => {
+  for (const candidate of candidates) {
+    const parsed = httpsOrLoopbackHttpUrl.safeParse(candidate);
+    if (parsed.success) return [parsed.data];
+  }
+
+  ctx.addIssue({ code: "custom", message: "Expected at least one HTTPS URL or loopback HTTP URL." });
+  return z.NEVER;
+});
 
 const ADD_ETHEREUM_CHAIN_PARAMS_SCHEMA = z.tuple([
   z.object({
-    chainId: z.string(),
+    chainId: chainIdParam,
     chainName: trimmed(),
     nativeCurrency: z.object({
       name: trimmed(),
       symbol: trimmed(),
       decimals: z.number().int().nonnegative(),
     }),
-    rpcUrls: z.array(httpsOrLoopbackHttpUrl).min(1),
-    blockExplorerUrls: z.array(httpsOrLoopbackHttpUrl).optional(),
-    iconUrls: z.array(httpsOrLoopbackHttpUrl).optional(),
+    rpcUrls,
+    blockExplorerUrls: z.array(z.unknown()).nullish(),
   }),
 ]);
 
-const unique = (values: readonly string[]): string[] => [...new Set(values)];
-
-export const decodeAddEthereumChainParams = (params: unknown, method: string): CustomNetworkInput => {
+export const decodeAddEthereumChainParams = (params: unknown): CustomNetworkInput => {
   const [payload] = ADD_ETHEREUM_CHAIN_PARAMS_SCHEMA.parse(params);
-  const { chainRef } = decodeChainId(payload.chainId, method);
-  const [firstRpcUrl, ...remainingRpcUrls] = unique(payload.rpcUrls);
-  if (!firstRpcUrl) throw invalidDappParams(method, "rpcUrls must contain at least one HTTP or HTTPS URL.");
-
-  const defaultRpcEndpoints: NonEmptyRpcEndpoints = [firstRpcUrl, ...remainingRpcUrls];
-  const blockExplorers = payload.blockExplorerUrls
-    ? unique(payload.blockExplorerUrls).map((url) => ({ url }))
-    : undefined;
+  const explorerUrls = new Set<string>();
+  for (const candidate of payload.blockExplorerUrls ?? []) {
+    const parsed = httpsOrLoopbackHttpUrl.safeParse(candidate);
+    if (parsed.success) explorerUrls.add(parsed.data);
+  }
 
   return {
     definition: {
-      chainRef,
+      chainRef: chainRefFromChainId(payload.chainId),
       name: payload.chainName,
       nativeCurrency: payload.nativeCurrency,
-      ...(blockExplorers && blockExplorers.length > 0 ? { blockExplorers } : {}),
+      ...(explorerUrls.size > 0 ? { blockExplorers: Array.from(explorerUrls, (url) => ({ url })) } : {}),
     },
-    defaultRpcEndpoints,
+    defaultRpcEndpoints: payload.rpcUrls,
   };
 };

@@ -1,14 +1,14 @@
 import { Hex, PersonalMessage } from "ox";
 import { invalidDappParams } from "../../dappConnections/defineDappMethod.js";
-import { parseDappAddress } from "./rpcHex.js";
+import { parseAddress } from "./address.js";
+import { addHexPrefix } from "./hexPrefix.js";
 import type { Eip155PersonalMessage } from "./signingRequest.js";
 
-const decodePersonalMessage = (value: string): Eip155PersonalMessage => {
-  const hasPrefix = value.startsWith("0x") || value.startsWith("0X");
-  const body = hasPrefix ? value.slice(2) : value;
-  const hex = `0x${body}`;
+const decodePersonalMessage = (value: string, method: string): Eip155PersonalMessage => {
+  const hex = value.replace(/^(?:0x)?/i, "0x");
 
-  if ((hasPrefix || body.length > 0) && Hex.validate(hex, { strict: true })) {
+  if (value.length > 0 && Hex.validate(hex, { strict: true })) {
+    if (hex.length % 2 !== 0) throw invalidDappParams(method, "message must contain complete hexadecimal bytes.");
     return { format: "hex", value: hex };
   }
 
@@ -26,16 +26,14 @@ export const decodePersonalSignParams = (params: unknown, method: string) => {
     throw invalidDappParams(method, "message and address must be strings.");
   }
 
-  const firstAddress = parseDappAddress(first);
-  const secondAddress = parseDappAddress(second);
-  const legacyOrder = firstAddress !== null && secondAddress === null;
-  const address = legacyOrder ? firstAddress : secondAddress;
-  const message = legacyOrder ? second : first;
+  const secondAddress = parseAddress(addHexPrefix(second));
+  const address = secondAddress ?? parseAddress(addHexPrefix(first));
   if (address === null) {
     throw invalidDappParams(method, "expected a valid EIP-155 account address.");
   }
 
-  return { address, message: decodePersonalMessage(message) };
+  const message = secondAddress === null ? second : first;
+  return { address, message: decodePersonalMessage(message, method) };
 };
 
 export const personalMessageDigest = (message: Eip155PersonalMessage): Hex.Hex => {

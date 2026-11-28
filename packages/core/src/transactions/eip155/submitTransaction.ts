@@ -1,9 +1,6 @@
 import * as Hash from "ox/Hash";
-import type { Hex } from "ox/Hex";
 import * as HexValue from "ox/Hex";
-import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
-import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
-import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
+import * as TxEnvelope from "ox/TxEnvelope";
 import { ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
 import { ChainJsonRpcHttpTransportError } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import { isArxBaseError } from "../../errors.js";
@@ -25,40 +22,14 @@ const signEip155Transaction = async (
 ): Promise<Eip155.SignedTransaction> => {
   try {
     const transaction = input.transaction;
-    const transactionEnvelope = createEip155TransactionEnvelope(input.chainRef, transaction);
-    const signPayload = async (payload: Hex) => {
-      const signature = await signing.signDigest({
-        accountId: input.accountId,
-        digest: HexValue.toBytes(payload),
-      });
-      return {
-        r: HexValue.fromNumber(signature.r, { size: 32 }),
-        s: HexValue.fromNumber(signature.s, { size: 32 }),
-        yParity: signature.yParity,
-      };
-    };
-
-    let rawTransaction: Hex;
-    switch (transactionEnvelope.type) {
-      case "legacy": {
-        const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TxEnvelopeLegacy.getSignPayload(envelope));
-        rawTransaction = TxEnvelopeLegacy.serialize(envelope, { signature });
-        break;
-      }
-      case "eip2930": {
-        const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TxEnvelopeEip2930.getSignPayload(envelope));
-        rawTransaction = TxEnvelopeEip2930.serialize(envelope, { signature });
-        break;
-      }
-      case "eip1559": {
-        const envelope = transactionEnvelope.envelope;
-        const signature = await signPayload(TxEnvelopeEip1559.getSignPayload(envelope));
-        rawTransaction = TxEnvelopeEip1559.serialize(envelope, { signature });
-        break;
-      }
-    }
+    const envelope = createEip155TransactionEnvelope(input.chainRef, transaction);
+    const { r, s, yParity } = await signing.signDigest({
+      accountId: input.accountId,
+      digest: HexValue.toBytes(TxEnvelope.getSignPayload(envelope)),
+    });
+    const rawTransaction = TxEnvelope.serialize(envelope, {
+      signature: { r: HexValue.fromNumber(r, { size: 32 }), s: HexValue.fromNumber(s, { size: 32 }), yParity },
+    });
 
     return {
       chainRef: input.chainRef,
@@ -88,15 +59,15 @@ export const createEip155TransactionSubmitter = (params: {
         rawTransaction: signed.recovery.rawTransaction,
       });
 
-      return { status: "accepted", transactionHash: signed.hash };
+      return { status: "pending" };
     } catch (error) {
       if (error instanceof ChainJsonRpcHttpTransportError) {
-        return {
-          status: "unknown",
-          transactionHash: signed.hash,
-        };
+        return { status: "pending" };
       }
       if (error instanceof ChainJsonRpcResponseError) {
+        if (error.rpcCode === -32000 && error.message.toLowerCase().trim() === "already known") {
+          return { status: "pending" };
+        }
         return {
           status: "rejected",
           failure: {

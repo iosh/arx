@@ -205,13 +205,13 @@ describe("Networks", () => {
 
   it.each([
     "unavailable endpoint",
-    "decimal chain ID",
+    "unsupported chain ID",
   ])("reports the same error in preview and save for %s without installing the network", async (failure) => {
     const { networks, request, commit, changes } = createFixture();
     if (failure === "unavailable endpoint") {
       request.mockRejectedValue(new ChainJsonRpcHttpTransportError("RPC request failed."));
     } else {
-      request.mockResolvedValue("8453");
+      request.mockResolvedValue("0x0");
     }
 
     const endpoint = custom.defaultRpcEndpoints[0];

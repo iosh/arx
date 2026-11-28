@@ -20,9 +20,11 @@ export type Eip155PreparedTransaction = Readonly<{
   chainRef: ChainRef;
   accountId: AccountId;
   initiator: TransactionInitiator;
-  replacesTransactionId?: TransactionId;
-  replacementType?: TransactionReplacementType;
   transaction: Eip155.PreparedTransaction;
-}>;
+}> &
+  (
+    | Readonly<{ replacesTransactionId?: never; replacementType?: never }>
+    | Readonly<{ replacesTransactionId: TransactionId; replacementType: TransactionReplacementType }>
+  );
 
 export type PreparedTransaction = Eip155PreparedTransaction;

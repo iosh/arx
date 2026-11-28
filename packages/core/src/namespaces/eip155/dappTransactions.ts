@@ -11,6 +11,7 @@ import {
 import type { PreparedTransaction } from "../../transactions/preparedTransaction.js";
 import type { Transactions } from "../../transactions/Transactions.js";
 import type { TransactionSubmission } from "../../transactions/types.js";
+import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 import { type AuthorizedAccountDependencies, getAuthorizedAccount } from "./dappAccount.js";
 import { decodeSendTransactionParams } from "./transactionRequest.js";
@@ -27,7 +28,7 @@ export const createEip155DappTransactionHandlers = (
   sendTransaction: defineDappMethod({
     decode: decodeSendTransactionParams,
     execute: async ({ origin, chainRef, params }) => {
-      if (params.requestedChainRef !== undefined && params.requestedChainRef !== chainRef) {
+      if (params.requestedChainId !== undefined && params.requestedChainId !== chainIdFromChainRef(chainRef)) {
         throw invalidDappParams("eth_sendTransaction", "chainId must match the active chain.");
       }
 

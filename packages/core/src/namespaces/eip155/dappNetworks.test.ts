@@ -74,6 +74,13 @@ describe("EIP-155 dapp networks", () => {
     const harness = createHarness();
 
     await expect(harness.request("wallet_switchEthereumChain", [{ chainId: "0x1" }])).resolves.toBeNull();
+    await expect(harness.request("wallet_switchEthereumChain", [{ chainId: "0x01" }])).rejects.toMatchObject({
+      code: "global.rpc.invalid_params",
+      message: expect.stringMatching(/params\[0\]\.chainId.*without leading zeros/),
+    });
+    await expect(harness.request("wallet_switchEthereumChain", [{ chainId: "0x0" }])).rejects.toMatchObject({
+      code: "global.rpc.invalid_params",
+    });
     await expect(harness.request("wallet_switchEthereumChain", [{ chainId: "0x99" }])).rejects.toMatchObject({
       code: "global.rpc.unrecognized_chain",
     });
@@ -99,6 +106,12 @@ describe("EIP-155 dapp networks", () => {
       chainName: "Different Ethereum Metadata",
     };
 
+    await expect(
+      harness.request("wallet_addEthereumChain", [{ ...BASE_REQUEST, rpcUrls: ["not a URL"] }]),
+    ).rejects.toMatchObject({
+      code: "global.rpc.invalid_params",
+      message: expect.stringMatching(/params\[0\]\.rpcUrls: Expected at least one HTTPS URL/),
+    });
     await expect(harness.request("wallet_addEthereumChain", [ethereumRequest])).resolves.toBeNull();
     expect(harness.addCustom).not.toHaveBeenCalled();
     expect(harness.approvals.list()).toEqual([]);

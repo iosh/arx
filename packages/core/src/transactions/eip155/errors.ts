@@ -1,6 +1,21 @@
 import { ArxBaseError } from "../../errors.js";
 import type { ChainRef } from "../../networks/chainRef.js";
 
+export class Eip155CancellationUnavailableError extends ArxBaseError {
+  static readonly code = "eip155.transaction.cancellation_unavailable";
+
+  constructor(chainRef: ChainRef, address: string, reason: "account_has_code" | "earlier_nonce_pending") {
+    const message =
+      reason === "account_has_code"
+        ? "This account has code and cannot cancel a transaction with a self-transfer."
+        : "An earlier nonce must be used on chain before cancelling this transaction.";
+    super(message, {
+      code: Eip155CancellationUnavailableError.code,
+      details: { chainRef, address, reason },
+    });
+  }
+}
+
 const TRANSACTION_TYPE_LABELS = {
   legacy: "legacy",
   eip2930: "EIP-2930",

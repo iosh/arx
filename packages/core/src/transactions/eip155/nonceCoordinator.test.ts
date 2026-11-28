@@ -1,3 +1,4 @@
+import type { Address } from "ox/Address";
 import type { Hex } from "ox/Hex";
 import { describe, expect, it, vi } from "vitest";
 import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
@@ -11,13 +12,12 @@ const OTHER_CHAIN_REF: ChainRef = "eip155:137";
 const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_FROM = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-const transaction = (from: string, nonce?: Hex): Eip155.PreparedTransaction => ({
+const transaction = (from: Address): Eip155.PreparedTransaction => ({
   from,
   to: null,
   value: "0x0",
   data: "0x",
   gas: "0x5208",
-  ...(nonce === undefined ? {} : { nonce }),
   type: "legacy",
   gasPrice: "0x1",
 });
@@ -25,7 +25,7 @@ const transaction = (from: string, nonce?: Hex): Eip155.PreparedTransaction => (
 const pendingRecord = (input: {
   transactionId: string;
   chainRef?: ChainRef;
-  from?: string;
+  from?: Address;
   nonce: Hex;
   replacesTransactionId?: string;
 }): PendingTransactionRecord => ({
@@ -35,7 +35,7 @@ const pendingRecord = (input: {
   accountId: `eip155:${(input.from ?? FROM).slice(2)}`,
   initiator: { type: "wallet" },
   ...(input.replacesTransactionId === undefined ? {} : { replacesTransactionId: input.replacesTransactionId }),
-  transaction: transaction(input.from ?? FROM, input.nonce) as Eip155.SignableTransaction,
+  transaction: { ...transaction(input.from ?? FROM), nonce: input.nonce },
   state: { status: "pending" },
   recovery: { rawTransaction: "0xdeadbeef" },
   createdAt: 1,
@@ -51,21 +51,6 @@ const createRpc = (nonce: Hex) => {
 };
 
 describe("EIP-155 nonce coordination", () => {
-  it("preserves an explicit nonce without reading local or network state", async () => {
-    const { chainJsonRpc, request } = createRpc("0x5");
-    const listPending = vi.fn(async () => []);
-    const coordinator = createEip155NonceCoordinator({ chainJsonRpc, listPending });
-
-    const nonce = await coordinator.withTransactionNonce(
-      { chainRef: CHAIN_REF, transaction: transaction(FROM, "0x9") },
-      async (signable) => signable.nonce,
-    );
-
-    expect(nonce).toBe("0x9");
-    expect(listPending).not.toHaveBeenCalled();
-    expect(request).not.toHaveBeenCalled();
-  });
-
   it("serializes one sender through commit while another sender remains independent", async () => {
     let pending: readonly PendingTransactionRecord[] = [
       pendingRecord({ transactionId: "pending-5", nonce: "0x5" }),

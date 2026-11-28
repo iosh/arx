@@ -50,7 +50,8 @@ const pendingReplacement: PendingTransactionRecord = {
 
 const createFixture = (transaction: Transaction | null = null, pending: readonly PendingTransactionRecord[] = []) => {
   const request = vi.fn(async ({ method }: JsonRpcHttpRequest): Promise<unknown> => {
-    if (method === "eth_getBlockByNumber") return {};
+    if (method === "eth_getBlockByNumber") return { gasLimit: "0x1c9c380" };
+    if (method === "eth_getTransactionCount") return "0x1";
     if (method === "eth_gasPrice") return "0x1";
     throw new Error(`Unexpected RPC method: ${method}`);
   });
@@ -79,7 +80,7 @@ const createFixture = (transaction: Transaction | null = null, pending: readonly
     adapters: { eip155: adapter },
     mutations: createCoreMutationQueue({ commit: async () => {} }),
     time: { now: () => 1 },
-    monitor: { track: () => {}, stop: () => {} },
+    monitor: { track: () => {}, untrack: () => {} },
     publishChanged: () => {},
   });
 
@@ -140,7 +141,7 @@ describe("Transactions", () => {
       transaction: {
         from: ADDRESS,
         to: target.transaction.to,
-        nonce: target.transaction.nonce,
+        gasPrice: "0x2",
       },
     });
   });

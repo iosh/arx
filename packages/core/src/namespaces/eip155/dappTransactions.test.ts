@@ -26,7 +26,6 @@ const PREPARED = {
     value: "0x1",
     data: "0x",
     gas: "0x5208",
-    nonce: "0x0",
     type: "legacy",
     gasPrice: "0x2",
   },
@@ -51,6 +50,7 @@ const createHarness = () => {
     status: "pending",
     transaction: {
       ...PREPARED,
+      transaction: { ...PREPARED.transaction, nonce: "0x0" },
       transactionId: "transaction-1",
       state: { status: "pending" },
       createdAt: 1,
@@ -103,11 +103,15 @@ const legacyRequest = {
 };
 
 describe("EIP-155 dapp transactions", () => {
-  it("decodes transaction kinds and ignores a dapp nonce", () => {
+  it("decodes transaction types and ignores a dapp nonce", () => {
     const cases = [
       {
         request: { from: ADDRESS },
         expected: { type: "auto" },
+      },
+      {
+        request: { from: ADDRESS, accessList: [] },
+        expected: { type: "eip2930", accessList: [] },
       },
       {
         request: legacyRequest,
@@ -171,9 +175,10 @@ describe("EIP-155 dapp transactions", () => {
     expect(harness.submit).toHaveBeenCalledWith(PREPARED);
   });
 
-  it("rejects invalid transaction shapes before preparation", async () => {
+  it("rejects invalid transaction parameters before preparation", async () => {
     const harness = createHarness();
     const invalidRequests = [
+      { ...legacyRequest, chainId: "0x2" },
       { ...legacyRequest, value: "0x01" },
       { ...legacyRequest, maxFeePerGas: "0x2" },
       { ...legacyRequest, type: "0x3" },

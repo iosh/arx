@@ -13,6 +13,7 @@ import type { KeyringNamespaceAdapters } from "../keyring/namespaceAdapter.js";
 import { createEip155AccountSigning } from "../namespaces/eip155/accountSigning.js";
 import { eip155AccountsAdapter } from "../namespaces/eip155/accounts.js";
 import { createEip155AssetsAdapter } from "../namespaces/eip155/assets.js";
+import { createEip155RawTransactionBroadcaster } from "../namespaces/eip155/broadcastRawTransaction.js";
 import { EIP155_DEFAULT_CHAIN_REF, EIP155_NAMESPACE } from "../namespaces/eip155/constants.js";
 import { createEip155DappNamespace } from "../namespaces/eip155/dappRequests.js";
 import { eip155KeyringAdapter } from "../namespaces/eip155/keyring.js";
@@ -133,6 +134,10 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
     endpoints: networks,
     transport: jsonRpcHttpTransport,
   });
+  const broadcastRawTransaction = createEip155RawTransactionBroadcaster({
+    endpoints: networks,
+    transport: jsonRpcHttpTransport,
+  });
   const assets = createAssets({
     accounts,
     networks,
@@ -141,6 +146,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
   const transactionAdapters = {
     [EIP155_NAMESPACE]: createEip155TransactionsAdapter({
       chainJsonRpc,
+      broadcastRawTransaction,
       signing: eip155AccountSigning,
       pendingTransactionsReader: input.persistence.readers.transactions,
     }),
@@ -186,7 +192,7 @@ export const createCoreRuntime = async (input: CreateCoreRuntimeInput): Promise<
 
   const dappNamespaces = {
     [EIP155_NAMESPACE]: createEip155DappNamespace({
-      chainJsonRpc,
+      broadcastRawTransaction,
       dappConnections,
       dappAuthorization,
       accounts,

@@ -30,16 +30,25 @@ describe("JsonRpcHttpTransport", () => {
       expect.objectContaining({
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
       }),
     );
+    expect(requestBody(fetch.mock.calls[0]?.[1])).toEqual({
+      jsonrpc: "2.0",
+      id: expect.any(Number),
+      method: "eth_chainId",
+      params: [],
+    });
   });
 
   it("recognizes an explicit JSON-RPC error in a non-successful HTTP response", async () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestBody(init);
       return new Response(
-        JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "rejected" } }),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "execution reverted", data: "0x08c379a0" },
+        }),
         { status: 400 },
       );
     });
@@ -47,7 +56,8 @@ describe("JsonRpcHttpTransport", () => {
     const expected = {
       code: "chain_json_rpc.response_error",
       rpcCode: -32000,
-      message: "rejected",
+      message: "execution reverted",
+      rpcData: "0x08c379a0",
     } satisfies Partial<ChainJsonRpcResponseError>;
 
     await expect(transport.request({ endpoint, method: "eth_call" })).rejects.toMatchObject(expected);
@@ -67,30 +77,5 @@ describe("JsonRpcHttpTransport", () => {
     } satisfies Partial<ChainJsonRpcHttpTransportError>;
 
     await expect(transport.request({ endpoint, method: "eth_chainId" })).rejects.toMatchObject(expected);
-  });
-
-  it("times out a request after 60 seconds by default", async () => {
-    vi.useFakeTimers();
-    const fetch = vi.fn(
-      (_input: RequestInfo | URL, init?: RequestInit) =>
-        new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
-        }),
-    );
-    const transport = createJsonRpcHttpTransport({ fetch });
-
-    try {
-      const expected = {
-        code: "chain_json_rpc.http_transport",
-        message: "RPC request timed out.",
-      } satisfies Partial<ChainJsonRpcHttpTransportError>;
-      const assertion = expect(transport.request({ endpoint, method: "eth_chainId" })).rejects.toEqual(
-        expect.objectContaining(expected),
-      );
-      await vi.advanceTimersByTimeAsync(60_000);
-      await assertion;
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

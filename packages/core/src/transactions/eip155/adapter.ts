@@ -1,5 +1,6 @@
 import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
+import type { BroadcastEip155RawTransaction } from "../../namespaces/eip155/broadcastRawTransaction.js";
 import { EIP155_NAMESPACE } from "../../namespaces/eip155/constants.js";
 import type { TransactionsNamespaceAdapter } from "../namespaceAdapter.js";
 import type { TransactionsReader } from "../persistence.js";
@@ -11,12 +12,13 @@ import { createEip155TransactionSubmitter } from "./submitTransaction.js";
 
 export const createEip155TransactionsAdapter = (params: {
   chainJsonRpc: ChainJsonRpc;
+  broadcastRawTransaction: BroadcastEip155RawTransaction;
   signing: Eip155AccountSigning;
   pendingTransactionsReader: Pick<TransactionsReader, "listPending">;
 }): TransactionsNamespaceAdapter => {
   const prepareTransaction = createEip155TransactionPreparer({ chainJsonRpc: params.chainJsonRpc });
   const submitTransaction = createEip155TransactionSubmitter({
-    chainJsonRpc: params.chainJsonRpc,
+    broadcastRawTransaction: params.broadcastRawTransaction,
     signing: params.signing,
   });
   const nonceCoordinator = createEip155NonceCoordinator({
@@ -69,10 +71,14 @@ export const createEip155TransactionsAdapter = (params: {
       ),
     sign: submitTransaction.sign,
     broadcast: submitTransaction.broadcast,
-    createSubmission: ({ transaction, broadcast }) =>
-      broadcast.status === "rejected"
+    createSubmission: ({ transaction, broadcast, transactionHash }) => {
+      const { state } = transaction;
+      const included =
+        state.status === "confirmed" || (state.status === "failed" && state.failure.type === "execution");
+      return broadcast.status === "rejected" && !included
         ? { status: "failed", transaction, failure: broadcast.failure }
-        : { status: "pending", transaction, transactionHash: broadcast.transactionHash },
+        : { status: "pending", transaction, transactionHash };
+    },
     inspectPending: monitorTransaction.inspectPending,
     recoverPending: monitorTransaction.recoverPending,
   };

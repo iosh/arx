@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Approvals } from "../../approvals/Approvals.js";
 import type { SendTransactionApproval } from "../../approvals/types.js";
 import { createChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import { createJsonRpcHttpTransport } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import { routeDappRequest } from "../../dappConnections/routeDappRequest.js";
 import { Permissions } from "../../permissions/Permissions.js";
 import type { Transactions } from "../../transactions/Transactions.js";
@@ -64,7 +65,7 @@ const createHarness = () => {
     transactions: { prepare, submit },
   });
 
-  const chainJsonRpc = createChainJsonRpc({ endpoints: createNetworks() });
+  const chainJsonRpc = createChainJsonRpc({ endpoints: createNetworks(), transport: createJsonRpcHttpTransport() });
   const namespaceRequests = {
     namespaceMethods: new Map([["eth_sendTransaction", sendTransaction]]),
     nodeReadMethods: new Set<string>(),

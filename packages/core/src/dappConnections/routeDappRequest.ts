@@ -1,10 +1,6 @@
 import { isApprovalDecisionError } from "../approvals/errors.js";
 import type { ChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
-import {
-  ChainJsonRpcOutcomeUnknownError,
-  ChainJsonRpcResponseError,
-  ChainJsonRpcUnavailableError,
-} from "../chainJsonRpc/errors.js";
+import { ChainJsonRpcResponseError, ChainJsonRpcUnavailableError } from "../chainJsonRpc/errors.js";
 import type { JsonRpcParams } from "../chainJsonRpc/types.js";
 import type { Namespace } from "../namespaces/types.js";
 import { NetworkNotFoundError } from "../networks/errors.js";
@@ -12,7 +8,6 @@ import type { DappRequest, DappRequestMethod } from "./defineDappMethod.js";
 import {
   RpcChainUnavailableError,
   RpcJsonRpcResponseError,
-  RpcOutcomeUnknownError,
   RpcUnsupportedMethodError,
   RpcUserRejectedRequestError,
 } from "./errors.js";
@@ -49,7 +44,6 @@ export const routeDappRequest = async ({
       chainRef: request.chainRef,
       method: request.method,
       ...(request.params === undefined ? {} : { params: request.params as JsonRpcParams }),
-      replay: "allowed",
     });
   } catch (error) {
     if (isApprovalDecisionError(error)) {
@@ -66,10 +60,6 @@ export const routeDappRequest = async ({
 
     if (error instanceof ChainJsonRpcUnavailableError || error instanceof NetworkNotFoundError) {
       throw new RpcChainUnavailableError();
-    }
-
-    if (error instanceof ChainJsonRpcOutcomeUnknownError) {
-      throw new RpcOutcomeUnknownError({ message: "Transaction broadcast outcome is unknown." });
     }
 
     throw error;

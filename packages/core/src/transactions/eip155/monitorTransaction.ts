@@ -76,7 +76,6 @@ const inspectGroup = async (
       chainRef: record.chainRef,
       method: "eth_getTransactionReceipt",
       params: [pendingTransactionHash(record)],
-      replay: "allowed",
     });
     if (receipt) return terminalChangesForWinner(records, record, terminalStateFromReceipt(receipt));
   }
@@ -106,7 +105,6 @@ const recoverGroup = async (
       chainRef: record.chainRef,
       method: "eth_getTransactionByHash",
       params: [hash],
-      replay: "allowed",
     });
     if (visible) continue;
 

@@ -1,3 +1,4 @@
+import type { Hex } from "ox/Hex";
 import type { Namespace } from "../namespaces/types.js";
 import type { PendingTransactionRecord } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
@@ -37,7 +38,11 @@ export type TransactionsNamespaceAdapter = Readonly<{
   withSigningInput<T>(prepared: PreparedTransaction, use: (input: TransactionSigningInput) => Promise<T>): Promise<T>;
   sign(input: TransactionSigningInput): Promise<SignedTransaction>;
   broadcast(signed: SignedTransaction): Promise<TransactionBroadcastOutcome>;
-  createSubmission(input: { transaction: Transaction; broadcast: TransactionBroadcastOutcome }): TransactionSubmission;
+  createSubmission(input: {
+    transaction: Transaction;
+    broadcast: TransactionBroadcastOutcome;
+    transactionHash: Hex;
+  }): TransactionSubmission;
   inspectPending(records: readonly PendingTransactionRecord[]): Promise<PendingTransactionInspection>;
   recoverPending(
     records: readonly PendingTransactionRecord[],

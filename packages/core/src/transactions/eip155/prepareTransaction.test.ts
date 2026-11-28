@@ -70,7 +70,6 @@ describe("EIP-155 transaction preparation", () => {
           accessList: [],
         },
       ],
-      replay: "allowed",
     });
   });
 

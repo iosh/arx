@@ -10,7 +10,6 @@ export const createEip155AssetsAdapter = (options: { chainJsonRpc: ChainJsonRpc 
       chainRef: network.chainRef,
       method: "eth_getBalance",
       params: [address, "latest"],
-      replay: "allowed",
     });
     if (typeof result !== "string") throw new Hex.HexInvalidNumberError();
 

@@ -1,6 +1,8 @@
 import { z } from "zod";
-import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
+import { ChainJsonRpcHttpTransportError } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import { type DappRequestMethod, defineDappMethod, invalidDappParams } from "../../dappConnections/defineDappMethod.js";
+import { RpcOutcomeUnknownError } from "../../dappConnections/errors.js";
+import type { BroadcastEip155RawTransaction } from "./broadcastRawTransaction.js";
 import { decodeHexBytes } from "./rpcHex.js";
 
 const SEND_RAW_TRANSACTION_PARAMS_SCHEMA = z.tuple([z.string()]);
@@ -14,14 +16,19 @@ const decodeSendRawTransactionParams = (params: unknown, method: string) => {
   return encoded;
 };
 
-export const createEip155SendRawTransactionMethod = (chainJsonRpc: ChainJsonRpc): DappRequestMethod =>
+export const createEip155SendRawTransactionMethod = (
+  broadcastRawTransaction: BroadcastEip155RawTransaction,
+): DappRequestMethod =>
   defineDappMethod({
     decode: decodeSendRawTransactionParams,
-    execute: ({ chainRef, params }) =>
-      chainJsonRpc.request({
-        chainRef,
-        method: "eth_sendRawTransaction",
-        params: [params],
-        replay: "forbidden",
-      }),
+    execute: async ({ chainRef, params: rawTransaction }) => {
+      try {
+        return await broadcastRawTransaction({ chainRef, rawTransaction });
+      } catch (error) {
+        if (error instanceof ChainJsonRpcHttpTransportError) {
+          throw new RpcOutcomeUnknownError({ message: "Transaction broadcast outcome is unknown." });
+        }
+        throw error;
+      }
+    },
   });

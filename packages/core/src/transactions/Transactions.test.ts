@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ChainJsonRpc, ChainJsonRpcRequest } from "../chainJsonRpc/ChainJsonRpc.js";
+import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
+import type { JsonRpcHttpRequest, JsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { ACCOUNT_ID, ADDRESS, createAccounts, createNetworks } from "../namespaces/eip155/__tests__/fixtures.js";
+import { createEip155RawTransactionBroadcaster } from "../namespaces/eip155/broadcastRawTransaction.js";
 import { createCoreMutationQueue } from "../persistence/mutationQueue.js";
 import { createEip155TransactionsAdapter } from "./eip155/adapter.js";
 import type { PendingTransactionRecord, TransactionsReader } from "./persistence.js";
@@ -47,14 +49,14 @@ const pendingReplacement: PendingTransactionRecord = {
 };
 
 const createFixture = (transaction: Transaction | null = null, pending: readonly PendingTransactionRecord[] = []) => {
-  const request = vi.fn(async ({ method }: ChainJsonRpcRequest): Promise<unknown> => {
+  const request = vi.fn(async ({ method }: JsonRpcHttpRequest): Promise<unknown> => {
     if (method === "eth_getBlockByNumber") return {};
     if (method === "eth_gasPrice") return "0x1";
     throw new Error(`Unexpected RPC method: ${method}`);
   });
-  const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
-  };
+  const networks = createNetworks();
+  const rpcOptions = { endpoints: networks, transport: { request: request as JsonRpcHttpTransport["request"] } };
+  const chainJsonRpc = createChainJsonRpc(rpcOptions);
   const reader: TransactionsReader = {
     get: async () => transaction,
     list: async () => ({ transactions: [] }),
@@ -62,6 +64,7 @@ const createFixture = (transaction: Transaction | null = null, pending: readonly
   };
   const adapter = createEip155TransactionsAdapter({
     chainJsonRpc,
+    broadcastRawTransaction: createEip155RawTransactionBroadcaster(rpcOptions),
     pendingTransactionsReader: reader,
     signing: {
       signDigest: async () => {
@@ -72,7 +75,7 @@ const createFixture = (transaction: Transaction | null = null, pending: readonly
   const transactions = createTransactions({
     readers: { transactions: reader },
     accounts: createAccounts(),
-    networks: createNetworks(),
+    networks,
     adapters: { eip155: adapter },
     mutations: createCoreMutationQueue({ commit: async () => {} }),
     time: { now: () => 1 },

@@ -30,14 +30,3 @@ export class ChainJsonRpcUnavailableError extends ArxBaseError {
     });
   }
 }
-
-export class ChainJsonRpcOutcomeUnknownError extends ArxBaseError {
-  static readonly code = "chain_json_rpc.outcome_unknown";
-
-  constructor(cause?: unknown) {
-    super("The RPC request outcome is unknown and the request was not replayed.", {
-      code: ChainJsonRpcOutcomeUnknownError.code,
-      cause,
-    });
-  }
-}

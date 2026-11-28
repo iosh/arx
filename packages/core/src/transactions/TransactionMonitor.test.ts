@@ -46,6 +46,13 @@ const replacementRecord: PendingTransactionRecord = {
   updatedAt: 2,
 };
 
+const confirmation = {
+  blockHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  blockNumber: "0x1",
+  transactionIndex: "0x0",
+  gasUsed: "0x5208",
+} as const;
+
 type ScheduledTask = {
   delayMs: number;
   task(): void;
@@ -70,7 +77,7 @@ const createHarness = (input?: {
   const scheduled: ScheduledTask[] = [];
   const events: string[][] = [];
   const commits: TransactionRecord[][] = [];
-  const inspectPending = vi.fn(
+  const inspectPending = vi.fn<TransactionsNamespaceAdapter["inspectPending"]>(
     async () => input?.inspection?.shift() ?? { status: "checked" as const, terminalChanges: [] },
   );
   const recoverPending = vi.fn(
@@ -120,12 +127,6 @@ const createHarness = (input?: {
 describe("TransactionMonitor", () => {
   it("recovers one chain batch and commits its terminal changes atomically", async () => {
     const { hash: originalHash, ...olderPendingRecord } = pendingRecord;
-    const confirmation = {
-      blockHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      blockNumber: "0x1" as const,
-      transactionIndex: "0x0" as const,
-      gasUsed: "0x5208" as const,
-    };
     const harness = createHarness({
       recovery: [{ status: "unavailable" }, { status: "checked", terminalChanges: [] }],
       inspection: [
@@ -180,22 +181,52 @@ describe("TransactionMonitor", () => {
     expect(harness.events).toEqual([[pendingRecord.transactionId, replacementRecord.transactionId]]);
   });
 
-  it("checks pending records in separate chainRef batches", async () => {
+  it("confirms transactions on a healthy chain while another chain is still waiting for a response", async () => {
     const otherChainRecord: PendingTransactionRecord = {
       ...pendingRecord,
       transactionId: "transaction-3",
       chainRef: "eip155:10",
     };
     const harness = createHarness();
+    const firstChain = Promise.withResolvers<PendingTransactionInspection>();
+    const noChanges: PendingTransactionInspection = { status: "checked", terminalChanges: [] };
+    const otherChainInspections: PendingTransactionInspection[] = [
+      noChanges,
+      {
+        status: "checked",
+        terminalChanges: [
+          { transactionId: otherChainRecord.transactionId, state: { status: "confirmed", confirmation } },
+        ],
+      },
+    ];
+    harness.inspectPending.mockImplementation(async ([record]) => {
+      if (record?.chainRef === pendingRecord.chainRef) return firstChain.promise;
+      return otherChainInspections.shift() ?? unexpected();
+    });
 
     harness.monitor.track(pendingRecord);
     harness.monitor.track(otherChainRecord);
     expect(harness.scheduled.map(({ delayMs }) => delayMs)).toEqual([TRANSACTION_INSPECTION_INTERVAL_MS]);
 
-    harness.scheduled[0]?.task();
-    await flush();
+    try {
+      harness.scheduled[0]?.task();
+      await flush();
+      expect(harness.commits).toEqual([]);
 
-    expect(harness.inspectPending.mock.calls).toEqual([[[pendingRecord]], [[otherChainRecord]]]);
-    expect(harness.recoverPending).not.toHaveBeenCalled();
+      harness.scheduled[1]?.task();
+      await flush();
+      expect(harness.commits).toMatchObject([
+        [{ transactionId: otherChainRecord.transactionId, state: { status: "confirmed" } }],
+      ]);
+      const firstChainCalls = harness.inspectPending.mock.calls.filter(([records]) => records.includes(pendingRecord));
+      expect(firstChainCalls).toHaveLength(1);
+    } finally {
+      firstChain.resolve(noChanges);
+    }
+
+    await flush();
+    harness.scheduled[2]?.task();
+    await flush();
+    expect(harness.inspectPending.mock.calls.at(-1)?.[0]).toEqual([pendingRecord]);
   });
 });

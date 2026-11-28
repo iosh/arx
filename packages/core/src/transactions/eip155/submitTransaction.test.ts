@@ -3,15 +3,17 @@ import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
 import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
 import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
 import { describe, expect, it, vi } from "vitest";
-import type { ChainJsonRpc, ChainJsonRpcRequest } from "../../chainJsonRpc/ChainJsonRpc.js";
-import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
+import { ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
+import { ChainJsonRpcHttpTransportError } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
+import { createEip155RawTransactionBroadcaster } from "../../namespaces/eip155/broadcastRawTransaction.js";
 import { chainRefFromChainId, MAX_EIP155_CHAIN_ID } from "../../namespaces/eip155/chainId.js";
 import { Eip155InvalidChainIdError } from "../../namespaces/eip155/errors.js";
 import { createEip155TransactionSubmitter } from "./submitTransaction.js";
 import type * as Eip155 from "./types.js";
 
 const CHAIN_REF = "eip155:1";
+const RPC_ENDPOINT = "https://rpc.example";
 const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FROM = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const TO = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -38,13 +40,13 @@ const signedTransaction = (rawTransaction: `0x${string}` = "0xdeadbeef"): Eip155
   recovery: { rawTransaction },
 });
 
-const createRpc = (handler: (input: ChainJsonRpcRequest) => unknown | Promise<unknown>) => {
-  const request = vi.fn(async (input: ChainJsonRpcRequest) => handler(input));
-  const chainJsonRpc: ChainJsonRpc = {
-    request: async <TResult>(input: ChainJsonRpcRequest) => (await request(input)) as TResult,
-  };
-
-  return { chainJsonRpc, request };
+const createRpc = () => {
+  const request = vi.fn().mockRejectedValue(new Error("Unexpected RPC request."));
+  const broadcastRawTransaction = createEip155RawTransactionBroadcaster({
+    endpoints: { getRpcEndpoints: () => [RPC_ENDPOINT] },
+    transport: { request },
+  });
+  return { broadcastRawTransaction, request };
 };
 
 const createSigning = () => {
@@ -61,12 +63,10 @@ const createSigning = () => {
 
 describe("EIP-155 transaction submission", () => {
   it("signs a legacy transaction with the account signature", async () => {
-    const { chainJsonRpc } = createRpc(() => {
-      throw new Error("Unexpected RPC request");
-    });
+    const { broadcastRawTransaction } = createRpc();
     const { signing, signDigest } = createSigning();
     signDigest.mockResolvedValue({ r: 1n, s: 2n, yParity: 1, bytes: new Uint8Array(64) });
-    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const submitter = createEip155TransactionSubmitter({ broadcastRawTransaction, signing });
     const chainRef = chainRefFromChainId(MAX_EIP155_CHAIN_ID);
     const transaction = {
       from: FROM,
@@ -108,11 +108,9 @@ describe("EIP-155 transaction submission", () => {
   });
 
   it("signs an EIP-2930 transaction with its access list", async () => {
-    const { chainJsonRpc } = createRpc(() => {
-      throw new Error("Unexpected RPC request");
-    });
+    const { broadcastRawTransaction } = createRpc();
     const { signing } = createSigning();
-    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const submitter = createEip155TransactionSubmitter({ broadcastRawTransaction, signing });
     const transaction = {
       from: FROM,
       to: TO,
@@ -141,12 +139,10 @@ describe("EIP-155 transaction submission", () => {
     );
   });
 
-  it("signs and broadcasts an EIP-1559 transaction without replaying the raw submission", async () => {
-    const { chainJsonRpc, request } = createRpc(({ method }) => {
-      throw new Error(`Unexpected RPC method: ${method}`);
-    });
+  it("signs and broadcasts an EIP-1559 transaction", async () => {
+    const { broadcastRawTransaction, request } = createRpc();
     const { signing } = createSigning();
-    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const submitter = createEip155TransactionSubmitter({ broadcastRawTransaction, signing });
     const signed = await submitter.sign({
       chainRef: CHAIN_REF,
       accountId: ACCOUNT_ID,
@@ -182,19 +178,17 @@ describe("EIP-155 transaction submission", () => {
       },
     );
     expect(request).toHaveBeenCalledWith({
-      chainRef: CHAIN_REF,
+      endpoint: RPC_ENDPOINT,
       method: "eth_sendRawTransaction",
       params: [signed.recovery.rawTransaction],
-      replay: "forbidden",
     });
   });
 
   it("returns the signed hash when raw broadcast outcome is unknown", async () => {
-    const { chainJsonRpc } = createRpc(() => {
-      throw new ChainJsonRpcOutcomeUnknownError();
-    });
+    const { broadcastRawTransaction, request } = createRpc();
+    request.mockRejectedValueOnce(new ChainJsonRpcHttpTransportError("RPC connection lost."));
     const { signing } = createSigning();
-    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const submitter = createEip155TransactionSubmitter({ broadcastRawTransaction, signing });
     const rawTransaction = "0xdeadbeef" as const;
 
     await expect(submitter.broadcast(signedTransaction(rawTransaction))).resolves.toEqual({
@@ -204,15 +198,16 @@ describe("EIP-155 transaction submission", () => {
   });
 
   it("maps an explicit raw broadcast rejection to a transaction failure", async () => {
-    const { chainJsonRpc } = createRpc(() => {
-      throw new ChainJsonRpcResponseError({
+    const { broadcastRawTransaction, request } = createRpc();
+    request.mockRejectedValueOnce(
+      new ChainJsonRpcResponseError({
         rpcCode: -32_000,
         message: "insufficient funds",
         data: { available: "0x0" },
-      });
-    });
+      }),
+    );
     const { signing } = createSigning();
-    const submitter = createEip155TransactionSubmitter({ chainJsonRpc, signing });
+    const submitter = createEip155TransactionSubmitter({ broadcastRawTransaction, signing });
 
     await expect(submitter.broadcast(signedTransaction())).resolves.toEqual({
       status: "rejected",

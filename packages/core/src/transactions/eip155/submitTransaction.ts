@@ -4,10 +4,11 @@ import * as HexValue from "ox/Hex";
 import * as TxEnvelopeEip1559 from "ox/TxEnvelopeEip1559";
 import * as TxEnvelopeEip2930 from "ox/TxEnvelopeEip2930";
 import * as TxEnvelopeLegacy from "ox/TxEnvelopeLegacy";
-import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
-import { ChainJsonRpcOutcomeUnknownError, ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
+import { ChainJsonRpcResponseError } from "../../chainJsonRpc/errors.js";
+import { ChainJsonRpcHttpTransportError } from "../../chainJsonRpc/JsonRpcHttpTransport.js";
 import { isArxBaseError } from "../../errors.js";
 import type { Eip155AccountSigning } from "../../namespaces/eip155/accountSigning.js";
+import type { BroadcastEip155RawTransaction } from "../../namespaces/eip155/broadcastRawTransaction.js";
 import { isAccountSigningUnavailableError } from "../../wallet/accountKeys.js";
 import { Eip155TransactionSigningError, Eip155TransactionSigningUnavailableError } from "./errors.js";
 import { createEip155TransactionEnvelope } from "./transactionEnvelope.js";
@@ -75,23 +76,21 @@ const signEip155Transaction = async (
 };
 
 export const createEip155TransactionSubmitter = (params: {
-  chainJsonRpc: ChainJsonRpc;
+  broadcastRawTransaction: BroadcastEip155RawTransaction;
   signing: Eip155AccountSigning;
 }): Eip155TransactionSubmitter => ({
   sign: (input) => signEip155Transaction(input, params.signing),
 
   async broadcast(signed) {
     try {
-      await params.chainJsonRpc.request({
+      await params.broadcastRawTransaction({
         chainRef: signed.chainRef,
-        method: "eth_sendRawTransaction",
-        params: [signed.recovery.rawTransaction],
-        replay: "forbidden",
+        rawTransaction: signed.recovery.rawTransaction,
       });
 
       return { status: "accepted", transactionHash: signed.hash };
     } catch (error) {
-      if (error instanceof ChainJsonRpcOutcomeUnknownError) {
+      if (error instanceof ChainJsonRpcHttpTransportError) {
         return {
           status: "unknown",
           transactionHash: signed.hash,

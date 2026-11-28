@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createChainJsonRpc } from "../chainJsonRpc/ChainJsonRpc.js";
+import { createJsonRpcHttpTransport } from "../chainJsonRpc/JsonRpcHttpTransport.js";
 import { ACCOUNT_ID, ADDRESS, createAccounts, createNetworks } from "../namespaces/eip155/__tests__/fixtures.js";
 import { createEip155AssetsAdapter } from "../namespaces/eip155/assets.js";
 import { HexInvalidNumberError } from "../utils/hex.js";
@@ -11,7 +12,7 @@ const createFixture = (result: unknown) => {
     const request = JSON.parse(input?.body as string) as { id: number };
     return Response.json({ jsonrpc: "2.0", id: request.id, result });
   });
-  const chainJsonRpc = createChainJsonRpc({ endpoints: networks, fetch });
+  const chainJsonRpc = createChainJsonRpc({ endpoints: networks, transport: createJsonRpcHttpTransport({ fetch }) });
   const assets = createAssets({
     accounts: createAccounts(),
     networks,

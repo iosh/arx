@@ -79,7 +79,6 @@ export const createEip155NonceCoordinator = (params: Eip155NonceCoordinatorOptio
           chainRef: input.chainRef,
           method: "eth_getTransactionCount",
           params: [input.transaction.from, "pending"],
-          replay: "allowed",
         });
         return use({ ...input.transaction, nonce: getNextNonce(networkNonce, pendingRecords, input) });
       });

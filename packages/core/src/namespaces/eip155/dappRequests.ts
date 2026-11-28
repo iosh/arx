@@ -5,7 +5,6 @@ import {
   AccountNotFoundError,
 } from "../../accounts/errors.js";
 import type { Approvals } from "../../approvals/Approvals.js";
-import type { ChainJsonRpc } from "../../chainJsonRpc/ChainJsonRpc.js";
 import type { DappConnections } from "../../dappConnections/DappConnections.js";
 import { decodeNoParams, defineDappMethod } from "../../dappConnections/defineDappMethod.js";
 import { RpcUnauthorizedError } from "../../dappConnections/errors.js";
@@ -19,6 +18,7 @@ import type { DappScope } from "../../permissions/scope.js";
 import type { Transactions } from "../../transactions/Transactions.js";
 import { WalletLockedError } from "../../wallet/errors.js";
 import type { Eip155AccountSigning } from "./accountSigning.js";
+import type { BroadcastEip155RawTransaction } from "./broadcastRawTransaction.js";
 import { chainIdFromChainRef } from "./chainId.js";
 import { EIP155_NAMESPACE } from "./constants.js";
 import type { AuthorizedAccountDependencies } from "./dappAccount.js";
@@ -29,7 +29,7 @@ import { createEip155SendRawTransactionMethod } from "./eth_sendRawTransaction.j
 
 type CreateEip155DappNamespaceOptions = AuthorizedAccountDependencies &
   Readonly<{
-    chainJsonRpc: ChainJsonRpc;
+    broadcastRawTransaction: BroadcastEip155RawTransaction;
     dappConnections: Pick<DappConnections, "getConnectionState" | "selectNetwork">;
     dappAuthorization: Readonly<{
       requestAccountAccess: DappAuthorization["requestAccountAccess"];
@@ -124,7 +124,7 @@ export const createEip155DappNamespace = (options: CreateEip155DappNamespaceOpti
     approvals: options.approvals,
     transactions: options.transactions,
   });
-  const sendRawTransaction = createEip155SendRawTransactionMethod(options.chainJsonRpc);
+  const sendRawTransaction = createEip155SendRawTransactionMethod(options.broadcastRawTransaction);
   const networkHandlers = createEip155DappNetworkHandlers({
     networks: options.networks,
     dappConnections: options.dappConnections,

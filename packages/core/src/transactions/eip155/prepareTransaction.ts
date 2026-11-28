@@ -83,7 +83,6 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
       chainRef,
       method: "eth_getBlockByNumber",
       params: ["latest", false],
-      replay: "allowed",
     });
     return block.baseFeePerGas;
   };
@@ -92,7 +91,6 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
     params.chainJsonRpc.request<Hex>({
       chainRef,
       method: "eth_gasPrice",
-      replay: "allowed",
     });
 
   const completeEip1559Fees = async (
@@ -108,7 +106,6 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
       (await params.chainJsonRpc.request<Hex>({
         chainRef,
         method: "eth_maxPriorityFeePerGas",
-        replay: "allowed",
       }));
     const maxFeePerGas =
       requested.maxFeePerGas ??
@@ -133,7 +130,6 @@ export const createEip155TransactionPreparer = (params: { chainJsonRpc: ChainJso
         chainRef,
         method: "eth_estimateGas",
         params: [gasEstimateRequest(transaction)],
-        replay: "allowed",
       }));
 
     return {

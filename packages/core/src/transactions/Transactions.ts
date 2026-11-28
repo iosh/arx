@@ -10,14 +10,12 @@ import {
   type PendingTransactionRecord,
   type TransactionRecord,
   type TransactionsReader,
-  transactionRecordToTransaction,
   transactionWrites,
 } from "./persistence.js";
 import type { PreparedTransaction, PrepareTransactionInput } from "./preparedTransaction.js";
 import type { TransactionMonitor } from "./TransactionMonitor.js";
 import type {
   Transaction,
-  TransactionBroadcastOutcome,
   TransactionId,
   TransactionPage,
   TransactionQuery,
@@ -102,7 +100,7 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
       await readReplaceableTransaction(params.readers.transactions, prepared.replacesTransactionId);
     }
 
-    const { pending, signed } = await adapter.withSigningInput(prepared, (signingInput) =>
+    const { transactionId, signed } = await adapter.withSigningInput(prepared, (signingInput) =>
       params.mutations.run(async (commit) => {
         if (!params.accounts.getAccount(prepared.accountId)) throw new AccountNotFoundError(prepared.accountId);
         if (!params.networks.get(prepared.chainRef)) throw new NetworkNotFoundError(prepared.chainRef);
@@ -132,61 +130,55 @@ export const createTransactions = (params: TransactionsOptions): Transactions =>
 
         await commit([transactionWrites.put(record)]);
 
+        params.monitor.track(record);
         params.publishChanged({ type: "transactionsChanged", transactionIds: [record.transactionId] });
-        return { pending: record, signed };
+        return { transactionId: record.transactionId, signed };
       }),
     );
 
-    let broadcast: TransactionBroadcastOutcome;
-    try {
-      broadcast = await adapter.broadcast(signed);
-    } catch (error) {
-      params.monitor.track(pending);
-      throw error;
-    }
+    const broadcast = await adapter.broadcast(signed);
+    let transaction: Transaction;
+    if (broadcast.status === "rejected") {
+      transaction = await params.mutations.run(async (commit) => {
+        const current = await readTransaction(params.readers.transactions, transactionId);
+        if (current.state.status !== "pending") return current;
 
-    if (broadcast.status !== "rejected") {
-      params.monitor.track(pending);
-      return adapter.createSubmission({
-        transaction: transactionRecordToTransaction(pending),
-        broadcast,
-      });
-    }
-
-    try {
-      return await params.mutations.run(async (commit) => {
-        const { recovery: _recovery, ...transaction } = pending;
         const failed: TransactionRecord = {
-          ...transaction,
+          ...current,
           state: { status: "failed", failure: broadcast.failure },
           updatedAt: params.time.now(),
         };
 
         await commit([transactionWrites.put(failed)]);
 
-        params.monitor.stop(failed.transactionId);
-        params.publishChanged({ type: "transactionsChanged", transactionIds: [failed.transactionId] });
-        return adapter.createSubmission({
-          transaction: transactionRecordToTransaction(failed),
-          broadcast,
-        });
+        params.monitor.stop(transactionId);
+        params.publishChanged({ type: "transactionsChanged", transactionIds: [transactionId] });
+        return failed;
       });
-    } catch (error) {
-      params.monitor.track(pending);
-      throw error;
+    } else {
+      transaction = await readTransaction(params.readers.transactions, transactionId);
     }
+    return adapter.createSubmission({ transaction, broadcast, transactionHash: signed.hash });
   },
 
   get: (transactionId) => params.readers.transactions.get(transactionId),
   list: (query) => params.readers.transactions.list(query),
 });
 
+const readTransaction = async (
+  reader: Pick<TransactionsReader, "get">,
+  transactionId: TransactionId,
+): Promise<Transaction> => {
+  const transaction = await reader.get(transactionId);
+  if (!transaction) throw new TransactionNotFoundError(transactionId);
+  return transaction;
+};
+
 const readReplaceableTransaction = async (
   reader: Pick<TransactionsReader, "get" | "listPending">,
   transactionId: TransactionId,
 ): Promise<Transaction> => {
-  const target = await reader.get(transactionId);
-  if (!target) throw new TransactionNotFoundError(transactionId);
+  const target = await readTransaction(reader, transactionId);
   if (target.state.status !== "pending") {
     throw new TransactionReplacementUnavailableError({
       transactionId,
